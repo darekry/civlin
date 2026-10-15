@@ -42,6 +42,26 @@ faithful to the Windows release.
   `CivLin.gpr` → reimplement in `src/` on top of SDL3. Do not check in
   Ghidra lock files (`CivLin.lock`, `*.lock~`).
 
+## RE workflow (Ghidra → src)
+
+- Start from known points: already-named functions, string literals
+  (`civfonts.fon`, `CivData*.rsc`, `DO NOT delete any *.rsc files`),
+  Win16 imports (`_LOPEN`, `_LREAD`, `LOADRESOURCE`, `FINDRESOURCE`),
+  or callers from the previous frontier. Follow calls AND xrefs/data-refs
+  outward (callees + callers), batch-decompile each new `FUN_*`.
+- Name in Ghidra as soon as behavior is clear (`Module_VerbNoun`,
+  e.g. `Rsc_OpenContainer`, `Map_FillRect`); keep `Orig FUN_seg_off`
+  + address in every `src/*.h` comment so the RE map survives.
+- Triage per function:
+  - OS-free logic (parsing, tables, RNG, rect math, format decoding)
+    → port 1:1 to `src/` immediately, staying close to decompiler output.
+  - Win16/64-bit-sensitive (segments, `__far` pointers, DOS ints,
+    `SELECTPALETTE`, window handles, direct memory-mapped buffers)
+    → stub returning `CIV_ERR_UNSUPPORTED` / `RSC_ERR_UNSUPPORTED`
+    with a `TODO: Orig ...` comment describing the missing piece.
+- Close the loop: implement → `make clean && make CC=clang-24` must pass
+  with zero warnings → `nm -g civlin` shows the new symbols.
+
 ## Git (one repo at root, `git init` done 2026-10-15)
 
 - Tracked: `src/`, `tools/`, `AGENTS.md`, `.gitignore`, future build/docs.

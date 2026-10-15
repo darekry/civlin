@@ -16,6 +16,16 @@
  *   Ctrl_RadioGroupSetSel @ 1058:0e7f
  * Menu strings: 14b0:0010 "&Save Game\tCtrl+S", 14b0:0092 "&Auto Save",
  *   14d0:0028 "Save First".
+ * Tracked dialogs (renamed 2026-10-15):
+ *   Dlg_CreateTracked  @ 1098:124f (CREATEDIALOG + MAKEPROCINSTANCE +
+ *     palette copy + push to 1420:1ea0 stack, count 1420:1ec8; 30+ callers)
+ *   Dlg_DestroyTracked @ 1098:1612 (DESTROYWINDOW + FREEPROCINSTANCE +
+ *     GLOBALFREE + pop)
+ * Intro/sequence player (renamed 2026-10-15):
+ *   Anim_PumpIfActive  @ 10b0:0000 (runs Anim_AdvanceFrames when a sequence
+ *     is active @ 1420:1f40; wrapped by Sys_Yield @ 1098:0157, see sys.h)
+ *   Anim_AdvanceFrames @ 10b0:0461 (timed frame opcodes 1..0xe: palette,
+ *     blits, sound, port switches; nonzero = sequence finished)
  */
 #ifndef CIVLIN_DIALOG_H
 #define CIVLIN_DIALOG_H
@@ -42,5 +52,13 @@ civ_error_t dialog_ctrl_radio_set(int first_id, int last_id, int selected_id);
 win16_msg_result_t dialog_ctrl_paint_button(int msg, long wparam, long lparam);
 win16_msg_result_t dialog_ctrl_paint_static(int msg, long wparam, long lparam);
 win16_msg_result_t dialog_ctrl_paint_user(int msg, long wparam, long lparam);
+
+/* Tracked dialog layer (stubs; dialog ctx stack TBD). */
+civ_error_t dlg_create_tracked(int dlg_id, unsigned flags);
+void dlg_destroy_tracked(void);
+
+/* Sequence player (stubs). anim_advance_frames: 0 = busy, nonzero = done. */
+civ_error_t anim_pump_if_active(void);
+int anim_advance_frames(void);
 
 #endif /* CIVLIN_DIALOG_H */

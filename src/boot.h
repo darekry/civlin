@@ -1,9 +1,13 @@
 /* Boot sequence (WinMain equivalent) -> SDL3.
  *
- * Ghidra anchors (civ.exe, NE Win3.x), renamed 2026-10-15:
+ * Ghidra anchors (civ.exe, NE Win3.x), renamed 2026-10-15 (Orig -> New):
  *   WinMain                  @ 1008:0000  (entry; main while loop)
  *   WinMain_Shutdown         @ 1008:0329  (KILLTIMER/FREEPROCINSTANCE/
  *                              DESTROYWINDOW/REMOVEFONTRESOURCE)
+ *   Sys_GetCurrentDrive      @ 1000:11bb  (drive -> g_nCurrentDrive;
+ *                              see sys.h, boot_setup_paths)
+ *   Sys_BuildCurrentDirPath  @ 1000:2826  (curdir -> g_szBasePath;
+ *                              see sys.h, boot_setup_paths)
  *   Sys_CheckFreeMemory      @ 11e8:0000  (GETFREESPACE + 1420:43b8 msg)
  *   App_RegisterWindowClasses@ 1098:06f8  (REGISTERCLASS x4, calls
  *                              Ctrl_RegisterCustomClasses, GETSYSTEMMETRICS)
@@ -15,19 +19,24 @@
  *                              _HREAD 0xE360; called 5x with 1420:00b1,
  *                              00be, 00cb, 00d8, 00e5 = CivData0..4.rsc)
  *   Art_MaybeConvertArtwork  @ 10b8:0000  (1420:20a9 prompt)
+ *   Game_InitGlobalTables    @ 11e8:0337  (key remap, map buffer, Rng_Init,
+ *                              string tables; see sys.h, boot_init_tables)
  *   Init_UnitFontTables      @ 10e8:2d46  (FIRSTMOVE/PILLAGE/font map)
  *   Main_RunStartupSequence  @ 11e0:0000  (calls NewGame_Wizard)
  *   GfxPort_Create           @ 10d0:0000  (GR_PortOpen : gr_port.c)
  *   GfxPort_SetActive        @ 10d0:0956
  *   MainPort_GetOrCreate     @ 1098:114a
+ *   WdwMap_Open              @ 1208:0af1  (see map.h, boot_open_windows)
+ *   WdwSmMap_Open            @ 1210:025b  (see map.h, boot_open_windows)
+ *   WdwStatus_Open           @ 1218:0386  (see map.h, boot_open_windows)
  *   Menu_InitMainBar         @ 1048:0000  (CHECKMENUITEM/MODIFYMENU)
  *   Cursor_Set               @ 1098:096c
  *   Game_TurnLoopTick        @ 1088:0000  (while body; see gameloop in game.h)
  *
- * WinMain order reproduced by boot_run(): memory check -> window classes ->
- * timer/accel/font -> 5x RSC -> video caps -> artwork -> prefs -> palette ->
- * unit/font tables -> ports/map windows -> menu bar -> cursor ->
- * event/turn loop (caller-owned, see game.h).
+ * WinMain order reproduced by boot_run(): drive/path setup -> memory check ->
+ * window classes -> timer/accel/font -> 5x RSC -> video caps -> artwork ->
+ * prefs -> palette -> global tables -> unit/font tables -> ports/map windows
+ * -> menu bar -> cursor -> event/turn loop (caller-owned, see game.h).
  */
 #ifndef CIVLIN_BOOT_H
 #define CIVLIN_BOOT_H
@@ -40,7 +49,9 @@
  * the caller (main.c); loop ownership stays with the caller too. */
 civ_error_t boot_run(SDL_Window *win, SDL_Renderer *ren);
 
-/* Single steps, in WinMain order (each UNSUPPORTED until implemented). */
+/* Single steps, in WinMain order (each UNSUPPORTED until implemented,
+ * except boot_setup_paths which is live via sys.h). */
+civ_error_t boot_setup_paths(void);
 civ_error_t boot_check_memory(void);
 civ_error_t boot_register_classes(void);
 civ_error_t boot_load_fonts(void);

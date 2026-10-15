@@ -55,6 +55,75 @@ static uint32_t rd_u32le(const uint8_t *p)
            ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
 }
 
+/* Orig mult table @ 0x3d00 is {1, 0x100, ...}; plain shifts are the
+ * 64-bit-Linux equivalent (no __far segment carry). */
+uint16_t rsc_read_u16le(rsc_cursor_t *cur)
+{
+    uint16_t v = 0;
+
+    /* ResMgr_ReadU16 @ 1190:1953 (+ twin @ 1190:19c9): two ascending
+     * bytes, mult 1 then 0x100. */
+    if (!cur || !cur->ptr || cur->ptr + 2 > cur->end)
+        return 0;
+    v = (uint16_t)cur->ptr[0] | ((uint16_t)cur->ptr[1] << 8);
+    cur->ptr += 2;
+    return v;
+}
+
+uint32_t rsc_read_u32le(rsc_cursor_t *cur)
+{
+    uint32_t v = 0;
+
+    /* ResMgr_ReadU32 @ 1190:1a3f: four ascending bytes. */
+    if (!cur || !cur->ptr || cur->ptr + 4 > cur->end)
+        return 0;
+    v = rd_u32le(cur->ptr);
+    cur->ptr += 4;
+    return v;
+}
+
+int rsc_cmp_type(const uint8_t tag_a[4], const uint8_t tag_b[4])
+{
+    int i;
+
+    /* ResMgr_CmpType @ 1190:1533: all 4 bytes must match. */
+    if (!tag_a || !tag_b)
+        return 0;
+    for (i = 0; i < 4; i++) {
+        if (tag_a[i] != tag_b[i])
+            return 0;
+    }
+    return 1;
+}
+
+static int ascii_lower(int c)
+{
+    /* FUN_1000_1978 equivalent for the A-Z range used by res names. */
+    if (c >= 'A' && c <= 'Z')
+        return c + ('a' - 'A');
+    return c;
+}
+
+int rsc_cmp_name(const char *a, const char *b)
+{
+    int i;
+
+    /* ResMgr_CmpName @ 1190:0e72: NULL-safe (0/0 miss), NUL/NUL early
+     * stop, case-insensitive, compares bytes 1..0x1f (byte 0 is the
+     * length prefix in the on-disk header, skipped by callers). */
+    if (!a || !b)
+        return 0;
+    for (i = 1; i < 0x20; i++) {
+        int ca = (unsigned char)a[i];
+        int cb = (unsigned char)b[i];
+        if (ca == 0 && cb == 0)
+            break;
+        if (ascii_lower(ca) != ascii_lower(cb))
+            return 0;
+    }
+    return 1;
+}
+
 /* memmem for the marker scan. */
 static int has_marker(const uint8_t *data, size_t size)
 {
@@ -199,8 +268,13 @@ rsc_error_t rsc_record_data(const rsc_file_t *f, size_t i,
     (void)i;
     (void)data;
     (void)size;
-    /* Framing not yet decoded (see header comment): refuse instead of
-     * returning a guessed slice. */
+    /* TODO: full type-dir walk per ResMgr_LoadRsc @ 1190:0000 (header
+     * u32+u32 then u16 count via rsc_read_u16le, per-type 4-char tag +
+     * counts, per-record 0x32-B header with file-off @ +4). The integer
+     * readers above are already 1:1; the list manager (file list @
+     * 1420:b2c0, type list @ 1420:b2c2, GLOBALALLOC nodes) and lazy
+     * ResMgr_LoadToMem @ 1190:0fda (_LLSEEK/_HREAD) need the Linux file
+     * + malloc equivalents before carving is safe. */
     return RSC_ERR_UNSUPPORTED;
 }
 

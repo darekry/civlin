@@ -26,3 +26,12 @@ civ_error_t video_present(SDL_Renderer *ren)
 void video_shutdown(void)
 {
 }
+
+civ_error_t palette_animate_range(int first, int count)
+{
+    (void)first;
+    (void)count;
+    /* TODO: Palette_AnimateRange @ 1090:0376 (RGB triples + ANIMATEPALETTE;
+     * SDL_Palette equivalent on the active 8-bit surface). */
+    return CIV_ERR_UNSUPPORTED;
+}

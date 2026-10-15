@@ -6,7 +6,15 @@
 #include "dialog.h"
 #include "game.h"
 #include "map.h"
+#include "sys.h"
 #include "video.h"
+
+civ_error_t boot_setup_paths(void)
+{
+    /* WinMain prologue: Sys_GetCurrentDrive @ 1000:11bb +
+     * Sys_BuildCurrentDirPath @ 1000:2826 (see sys.h). */
+    return sys_init_paths();
+}
 
 civ_error_t boot_check_memory(void)
 {
@@ -58,7 +66,9 @@ civ_error_t boot_init_palette(void)
 
 civ_error_t boot_init_tables(void)
 {
-    /* TODO: Init_UnitFontTables @ 10e8:2d46. */
+    /* TODO: Game_InitGlobalTables @ 11e8:0337 (key remap, 64 KB map buffer,
+     * Rng_Init, string tables via 11f8:0080) + Init_UnitFontTables @
+     * 10e8:2d46. */
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -66,8 +76,8 @@ civ_error_t boot_open_windows(SDL_Window *win, SDL_Renderer *ren)
 {
     civ_error_t err;
 
-    /* TODO: GfxPort_Create @ 10d0:0000 + WdwMap/SmMap/Status opens
-     * (@ 1208:0af1, 1210:025b, 1218:0386). */
+    /* TODO: GfxPort_Create @ 10d0:0000 + WdwMap_Open @ 1208:0af1,
+     * WdwSmMap_Open @ 1210:025b, WdwStatus_Open @ 1218:0386 (see map.h). */
     err = video_init(win, ren);
     if (err != CIV_OK)
         return err;
@@ -91,6 +101,7 @@ civ_error_t boot_init_menu(void)
 civ_error_t boot_run(SDL_Window *win, SDL_Renderer *ren)
 {
     static civ_error_t (*const steps[])(void) = {
+        boot_setup_paths,
         boot_check_memory,
         boot_register_classes,
         boot_load_fonts,

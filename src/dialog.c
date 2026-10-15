@@ -86,3 +86,32 @@ win16_msg_result_t dialog_ctrl_paint_user(int msg, long wparam, long lparam)
     /* TODO: Ctrl_PaintRandomUser @ 1058:0440. */
     return WIN16_MSG_DEFAULT;
 }
+
+civ_error_t dlg_create_tracked(int dlg_id, unsigned flags)
+{
+    (void)dlg_id;
+    (void)flags;
+    /* TODO: Dlg_CreateTracked @ 1098:124f (CREATEDIALOG + MAKEPROCINSTANCE,
+     * centering, GETDC, palette, push to 1420:1ea0 stack). */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+void dlg_destroy_tracked(void)
+{
+    /* TODO: Dlg_DestroyTracked @ 1098:1612 (DESTROYWINDOW +
+     * FREEPROCINSTANCE + GLOBALFREE + pop). */
+}
+
+civ_error_t anim_pump_if_active(void)
+{
+    /* TODO: Anim_PumpIfActive @ 10b0:0000 (Anim_AdvanceFrames when a sequence
+     * is active @ 1420:1f40). */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+int anim_advance_frames(void)
+{
+    /* TODO: Anim_AdvanceFrames @ 10b0:0461 (frame opcodes 1..0xe). Stub
+     * reports done so future wait-loops terminate. */
+    return 1;
+}
