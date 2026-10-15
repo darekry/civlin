@@ -72,7 +72,10 @@ civ_error_t video_present(SDL_Renderer *ren)
      * validate). Error mapping (consistent across video.c): NULL ->
      * NOENT; SDL_RenderPresent fail -> IO; NOMEM only from host
      * allocation paths (SDL_CreatePalette / malloc probe), never from
-     * present/blit. */
+     * present/blit. Z2 dump synthetic ok (doc only): rsc_dump
+     * present_frame (64x64 palette gradient via gfx_indexed_to_texture +
+     * SDL_RenderTexture + this present) passes incl. dummy video; 4x2
+     * surface read-back via gfx_indexed_to_surface passes. */
     if (!ren)
         return CIV_ERR_NOENT;
     if (!SDL_RenderPresent(ren))
@@ -223,10 +226,14 @@ civ_error_t gfx_port_present_rect(gfx_port_t *port, SDL_Renderer *ren,
      * 0xcc0020 (SRCCOPY) to the screen maps to SDL_RenderTexture (NULL
      * rect = whole texture via NULL src/dst, else rect as dst with NULL
      * src); VALIDATERECT is a no-op on SDL3 (no HWND/dirty-region to
-     * validate). Y2 HoF/show present path (see halloffame.h Y2 flow):
+     * validate). Y2 HoF/show path (see halloffame.h Y2 flow):
      * HoF_Show @ 1080:0119 (dialog 0x94) + HoF_VictoryCeremony @ 1080:06ff
      * (pyramid frames) present through here after palette_apply_to_port
-     * @ 1200:00a8/1090:0376. Error mapping: NULL -> NOENT, missing
+     * @ 1200:00a8/1090:0376. Z2 dump synthetic ok (doc only, Blit @
+     * 10d0:08f1 / AllocBitmap @ 10d0:0cfa impls untouched): rsc_dump
+     * present_frame (64x64 gradient via gfx_indexed_to_texture +
+     * SDL_RenderTexture + video_present) shares this present core and
+     * passes on dummy video. Error mapping: NULL -> NOENT, missing
      * tex/size fail -> BAD_DATA, SDL_RenderTexture fail -> IO (NOMEM
      * never from present, only from CreatePalette/Texture alloc paths). */
     SDL_FRect dst;

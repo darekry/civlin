@@ -93,7 +93,7 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `boot_init_tables` | PARTIAL | 1090:0488, 11c8:0000, 11e0:0000, 11e8:0337, 11f8:0080, 1420:b394 | has TODO |
 | `boot_init_unit_font_tables` | STUB | 10e8:0000, 10e8:2d46 |  |
 | `cursor_set` | NOOP | 1048:0000, 1098:096c |  |
-| `boot_open_windows` | PARTIAL | 10d0:0000, 1208:0af1, 1210:025b, 1218:0386 | has TODO |
+| `boot_open_windows` | PARTIAL | 1098:114a, 10d0:0000, 1208:0af1, 1210:025b, 1218:0386 | has TODO |
 | `menu_init_mainbar` | STUB | 1048:0000, 14b0:0010, 14b0:0092, 14d0:0028 | has TODO |
 | `boot_init_menu` | PARTIAL | 1048:0000, 1098:096c |  |
 | `dos_drive_ready` | LIVE | 1000:1184 |  |
@@ -101,7 +101,7 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `font_enum_families_init` | STUB | 1008:0e99, 1420:00a4 |  |
 | `config_load_prefs` | STUB | 1008:0b4a | has TODO |
 | `config_save_prefs` | STUB | 1000:116a, 1000:1184, 1008:0bbf | has TODO |
-| `boot_run` | PARTIAL |  |  |
+| `boot_run` | PARTIAL | 1008:0000, 1008:0e99, 1098:06f8, 11e8:0000 |  |
 | `boot_shutdown` | LIVE | 1008:0000, 1008:0329, 1008:0d68, 1208:0af1 |  |
 | `art_maybe_convert_artwork` | STUB | 10b8:0000, 10b8:079d, 1420:20a9 |  |
 | `main_run_startup_sequence` | STUB | 10e8:0000, 1108:0243, 1130:000e, 11e0:0000, 11e0:0221, 1420:435b |  |
@@ -152,9 +152,9 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 
 | Function | State | Orig addr | Note |
 |---|---|---|---|
-| `game_init` | PARTIAL |  | has TODO |
-| `game_new` | STUB |  | has TODO |
-| `game_tick` | STUB | 1008:0d68 | has TODO |
+| `game_init` | LIVE | 12d8:24ee, 12d8:42f6, 12d8:42fe, 12d8:4300 |  |
+| `game_new` | STUB | 1028:0000, 10e8:0000 | has TODO |
+| `game_tick` | PARTIAL | 1008:0000, 1008:0329, 1008:0d68, 1088:0000, 1208:0af1 | has TODO |
 | `game_turn_tick` | STUB | 1088:0000, 1088:1d99, 11f0:0000 | has TODO |
 | `game_process_game_end` | STUB | 1040:1137, 1088:0b6d, 1180:0000, 1188:07ad | has TODO |
 | `game_spawn_uprisings` | STUB | 1088:0be9, 1110:16c0, 11c0:12c8, 11c8:003d | has TODO |
@@ -202,8 +202,10 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 
 | Function | State | Orig addr | Note |
 |---|---|---|---|
+| `gfx_probe_rsc_image` | LIVE | 1190:0a29 |  |
+| `gfx_probe_head_hex` | LIVE | 1000:2928, 1190:0a29 |  |
 | `gfx_godpal_count` | LIVE |  |  |
-| `gfx_godpal_get` | STUB | 1090:0488 | has TODO |
+| `gfx_godpal_get` | STUB | 1090:0488, 1420:9966 | has TODO |
 
 ### `src/halloffame.c`
 
@@ -215,7 +217,7 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `HoF_Save` | STUB | 1080:0092, 1420:14f5 | has TODO |
 | `HoF_Show` | STUB | 1080:0119, 1420:1502, 1420:153e, 1420:1572 | has TODO |
 | `HoF_TryInsert` | LIVE |  |  |
-| `HoF_VictoryCeremony` | STUB | 1080:06ff, 1150:019e | has TODO |
+| `HoF_VictoryCeremony` | STUB | 1080:06ff, 10d0:0854, 1150:019e | has TODO |
 | `City_ShowTopFive` | STUB | 1080:099b, 1420:159c, 1420:5500 | has TODO |
 | `Hof_CalcInterimScore` | LIVE |  |  |
 | `Hof_CalcFinalScore` | STUB | 1040:1137 | has TODO |
@@ -321,8 +323,8 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `rsc_tag_printable` | LIVE |  |  |
 | `rsc_find_dir` | LIVE |  |  |
 | `rsc_record_data` | PARTIAL | 1190:0000 |  |
-| `rsc_image_count` | LIVE |  |  |
-| `rsc_get_indexed` | STUB | 10d0:0cfa, 1190:0fda | has TODO |
+| `rsc_image_count` | PARTIAL |  |  |
+| `rsc_get_indexed` | LIVE | 1190:0fda |  |
 | `rsc_decode_bitmap` | LIVE |  |  |
 | `rsc_free_res_list` | LIVE | 1190:0c92, 1190:10e6 |  |
 | `rsc_mgr_dispose` | LIVE | 1190:10e6, 1190:113f |  |
@@ -330,8 +332,10 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `rsc_get_type_count` | LIVE | 1190:0978 |  |
 | `rsc_load_to_mem` | LIVE | 1000:272a, 1190:0fda |  |
 | `rsc_table_name` | LIVE |  |  |
+| `rsc_dir_needs_streaming` | LIVE |  |  |
+| `rsc_read_dir_chunked` | LIVE |  |  |
 | `rsc_drop_file` | LIVE |  |  |
-| `rsc_load_rsc` | LIVE | 1190:0000 |  |
+| `rsc_load_rsc` | LIVE | 1190:0000, 1190:0501 |  |
 | `rsc_load_rsc_disk` | LIVE | 1190:0501 |  |
 | `rsc_read_u16_disk` | LIVE | 1000:272a, 1190:1abe, 1420:3d00 |  |
 | `rsc_read_u16_disk2` | LIVE | 1190:1b47 |  |
@@ -365,6 +369,15 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `save_xfer_block` | LIVE | 10f8:0fcf |  |
 | `save_xfer_array` | LIVE | 10f8:1035 |  |
 | `save_xfer_strided` | LIVE | 10f8:10bd |  |
+| `civ_save_ctx_init` | LIVE |  |  |
+| `civ_save_ctx_add` | LIVE |  |  |
+| `save_live_check` | LIVE |  |  |
+| `save_live_copy_one` | LIVE |  |  |
+| `save_xfer_words_live` | LIVE | 10f8:0f40, 1310:0008 |  |
+| `save_xfer_block_live` | LIVE | 10f8:0fcf |  |
+| `save_xfer_array_live` | LIVE | 10f8:1035 |  |
+| `save_xfer_strided_live` | LIVE | 10f8:10bd |  |
+| `save_marshal_fields_live` | LIVE | 10f8:090c |  |
 
 ### `src/sys.c`
 
@@ -419,7 +432,7 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `gfx_port_create` | STUB | 10d0:0000, 10d0:0cfa | has TODO |
 | `gfx_port_alloc_bitmap` | LIVE | 10d0:0000, 10d0:08f1, 10d0:0cfa |  |
 | `gfx_port_set_active` | STUB | 10d0:0956 | has TODO |
-| `gfx_port_present_rect` | LIVE | 10d0:0854 |  |
+| `gfx_port_present_rect` | LIVE | 1080:0119, 10d0:0854 |  |
 | `gfx_port_blit` | PARTIAL | 10d0:08f1 | has TODO |
 | `mainport_get_or_create` | STUB | 1098:114a, 10d0:0956, 1208:0af1, 1210:025b, 1218:0386 | has TODO |
 | `gfx_port_fill_or_copy` | STUB | 10b0:0461, 10b8:079d, 10d0:0854 | has TODO |

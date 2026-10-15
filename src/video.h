@@ -40,6 +40,13 @@
 
 civ_error_t video_init(SDL_Window *win, SDL_Renderer *ren);
 civ_error_t video_blit_indexed(SDL_Renderer *ren, SDL_Texture *tex, int x, int y);
+/* Orig present tail @ 10d0:0854 (BITBLT rop 0xcc0020 SRCCOPY +
+ * VALIDATERECT no-op on SDL3). Z2 dump synthetic ok (no assets, see
+ * rsc_dump.c + gfx_indexed.h): 64x64 palette gradient via
+ * gfx_indexed_to_texture + SDL_RenderTexture + SDL_RenderPresent passes
+ * (1 frame, incl. SDL_VIDEODRIVER=dummy = no crash); 4x2 surface path
+ * via gfx_indexed_to_surface verified by format/dims/pixel/palette
+ * read-back. NULL ren -> NOENT; SDL_RenderPresent fail -> IO. */
 civ_error_t video_present(SDL_Renderer *ren);
 void video_shutdown(void);
 
@@ -101,7 +108,12 @@ civ_error_t gfx_port_set_active(gfx_port_t *port);
  * dirty-region validation needed, no HWND to validate). Y2 HoF/show path:
  * HoF_Show @ 1080:0119 (dialog 0x94) + HoF_VictoryCeremony @ 1080:06ff
  * (pyramid frames) present through here after palette_apply_to_port
- * (see halloffame.h Y2 flow). Error mapping (consistent across video.c):
+ * (see halloffame.h Y2 flow). Z2 dump synthetic ok (doc only, no impl
+ * change; Blit @ 10d0:08f1 / AllocBitmap @ 10d0:0cfa impls untouched):
+ * rsc_dump present_frame (64x64 palette gradient via
+ * gfx_indexed_to_texture + SDL_RenderTexture + video_present) passes on
+ * dummy video; this port path shares the same SDL_RenderTexture present
+ * core. Error mapping (consistent across video.c):
  * NULL port/renderer -> NOENT (NULL rect = full port, kept); missing
  * backing texture / SDL_GetTextureSize fail -> BAD_DATA;
  * SDL_RenderTexture fail -> IO (SDL_GetError logged by caller; NOMEM only

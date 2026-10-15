@@ -977,6 +977,53 @@ static void rsc_table_name(const uint8_t *table, size_t table_size,
     out[n] = '\0';
 }
 
+/* Z1: GLOBALCOMPACT analog (Orig GLOBALCOMPACT @ 1000:xxxx < 1500000 ->
+ * ResMgr_LoadRscDisk @ 1190:0501). True when the EOF directory would not
+ * fit the buffered _HREAD 0xE360 (dir_size > 0xE360) or the container hits
+ * the orig low-memory threshold (file_size >= 1500000; Civdata3.rsc
+ * 1433655 B sits just below it). No globals, no SDL, no exit. */
+int rsc_dir_needs_streaming(size_t dir_size, size_t file_size)
+{
+    if (dir_size > RSC_LOAD_BUF_SIZE)
+        return 1;
+    if (file_size >= RSC_GLOBALCOMPACT_THRESH)
+        return 1;
+    return 0;
+}
+
+/* Z1: File_ReadChunk @ 1000:272a loop behind the buffered path for large
+ * dirs (Orig ResMgr_LoadRsc @ 1190:0000 _HREAD 0xE360; large dirs stream in
+ * 0xE360 chunks, mirroring the ResMgr_LoadRscDisk @ 1190:0501 path).
+ * Seeks to dir_off then repeats file_read_chunk() until dir_size bytes are
+ * gathered. Returns RSC_OK on full read, RSC_ERR_NOENT on bad args,
+ * RSC_ERR_IO on seek/short read. Read-only, no globals/SDL/exit. */
+rsc_error_t rsc_read_dir_chunked(FILE *fp, size_t dir_off, uint8_t *dst,
+                                 size_t dir_size)
+{
+    size_t got = 0;
+
+    if (!fp || !dst)
+        return RSC_ERR_NOENT;
+    if (dir_size == 0)
+        return RSC_ERR_TRUNCATED;
+    if (fseek(fp, (long)dir_off, SEEK_SET) != 0)
+        return RSC_ERR_IO;
+    while (got < dir_size) {
+        size_t want = dir_size - got;
+        size_t chunk = want > RSC_LOAD_BUF_SIZE ? RSC_LOAD_BUF_SIZE : want;
+        size_t n;
+        /* long dir_off is safe here: dir_off+dir_size == file_size <= LONG_MAX
+         * on supported containers (all 5 CivData < 1.5 MiB). */
+        if (chunk == 0)
+            break;
+        n = file_read_chunk(fp, dst + got, chunk);
+        if (n != chunk)
+            return RSC_ERR_IO;
+        got += n;
+    }
+    return RSC_OK;
+}
+
 /* Remove the most-recently added file node and its children (load failure
  * cleanup, no leak; restores counts). dir must be mgr->files head (as
  * rsc_add_file prepends). */
@@ -1017,16 +1064,18 @@ static void rsc_drop_file(rsc_mgr_t *mgr, rsc_dir_t *dir,
 rsc_error_t rsc_load_rsc(rsc_mgr_t *mgr, const char *path)
 {
     /* ResMgr_LoadRsc @ 1190:0000 (OpenResFile): _LOPEN + _HREAD 0xE360
-     * into GLOBALALLOC (fallback to LoadRscDisk when GLOBALCOMPACT <
-     * 1500000), then u32/u32/u16-equivalent + per-type tag/count + 12-B
-     * records -> 0x32-B nodes via rsc_add_file/type/new_resource. Linux:
-     * fopen(rb) + ftell size + fread 16-B header + malloc dir_size
-     * (<= 0xE360, no GLOBALALLOC) + file_read_chunk the EOF directory +
-     * BE walk (two passes: count types/total to find the string table,
-     * then create nodes with table names and len-0 derivation). Called 5x
-     * from WinMain @ 1008:0000 (CivData sizes 181519/729188/959728/
-     * 1433655/144102, dirs 10608/358/766/3621/63). Read-only, validated
-     * vs sizes, no exit/globals/SDL. */
+     * into GLOBALALLOC (fallback to LoadRscDisk @ 1190:0501 when
+     * GLOBALCOMPACT < 1500000), then u32/u32/u16-equivalent + per-type
+     * tag/count + 12-B records -> 0x32-B nodes via rsc_add_file/type/
+     * new_resource. Linux (Z1): fopen(rb) + ftell size + 16-B header via
+     * variant-tolerant BE32 (LE only if BE invalid) + malloc dir_size (no
+     * GLOBALALLOC) + rsc_read_dir_chunked() the EOF directory (one
+     * File_ReadChunk @ 1000:272a when <= 0xE360, chunk loop otherwise) +
+     * BE walk (two passes + rsc_rec_file_off/rsc_rec_len + len-0 last to
+     * EOF). Falls back to rsc_load_rsc_disk() when dir_size > 0xE360
+     * (GLOBALCOMPACT analog). Called 5x from WinMain @ 1008:0000 (CivData
+     * sizes 181519/729188/959728/1433655/144102, dirs 10608/358/766/3621/
+     * 63). Read-only, validated vs sizes, no exit/globals/SDL. */
     FILE *fp = NULL;
     long file_size_l = 0;
     size_t file_size = 0;
@@ -1080,35 +1129,67 @@ rsc_error_t rsc_load_rsc(rsc_mgr_t *mgr, const char *path)
         fclose(fp);
         return RSC_ERR_BAD_MAGIC;
     }
+    /* Z1 variant-tolerant header: BE first (canonical), LE only if BE
+     * dir_size is out of range but LE lands on a matching header copy.
+     * Both endians tried per Z1 BE-vs-LE diagnosis; LE never validates on
+     * the 5 CivData (LE sizes 0x66010000.. huge), so BE always wins there. */
     hdr_unk0 = rsc_be32(hdr + 4);
     hdr_unk1 = rsc_be32(hdr + 8);
     dir_size32 = rsc_be32(hdr + 12);
     dir_size = (size_t)dir_size32;
-    if (dir_size < RSC_DIR_MIN_SIZE || dir_size > RSC_LOAD_BUF_SIZE ||
-        dir_size > file_size) {
-        fclose(fp);
-        return RSC_ERR_TRUNCATED;
+    if (dir_size < RSC_DIR_MIN_SIZE || dir_size > file_size) {
+        /* BE invalid: probe LE before failing (LE never validates on the 5
+         * CivData, but this proves the BE-vs-LE diagnosis instead of
+         * assuming it; hdr bytes are left untouched so the later header-copy
+         * memcmp still compares raw on-disk bytes). */
+        uint32_t le_size = rsc_le32(hdr + 12);
+        if (le_size >= RSC_DIR_MIN_SIZE && (size_t)le_size <= file_size) {
+            size_t le_off = file_size - (size_t)le_size;
+            uint8_t probe[RSC_DIR_HDR_SIZE];
+            if (le_off >= RSC_DIR_HDR_SIZE &&
+                fseek(fp, (long)le_off, SEEK_SET) == 0 &&
+                file_read_chunk(fp, probe, sizeof(probe)) == sizeof(probe) &&
+                memcmp(probe, kMagic, 4) == 0 &&
+                memcmp(probe, hdr, RSC_DIR_HDR_SIZE) == 0) {
+                hdr_unk0 = rsc_le32(hdr + 4);
+                hdr_unk1 = rsc_le32(hdr + 8);
+                dir_size32 = le_size;
+                dir_size = (size_t)le_size;
+            } else {
+                fclose(fp);
+                return RSC_ERR_TRUNCATED;
+            }
+        } else {
+            fclose(fp);
+            return RSC_ERR_TRUNCATED;
+        }
     }
     dir_off = file_size - dir_size;
     if (dir_off < RSC_DIR_HDR_SIZE || dir_off + dir_size != file_size) {
         fclose(fp);
         return RSC_ERR_TRUNCATED;
     }
+    /* Z1 fallback wiring (GLOBALCOMPACT analog): oversize dirs stream via
+     * ResMgr_LoadRscDisk @ 1190:0501 instead of failing TRUNCATED. */
+    if (rsc_dir_needs_streaming(dir_size, file_size)) {
+        fclose(fp);
+        return rsc_load_rsc_disk(mgr, path);
+    }
     dirbuf = (uint8_t *)malloc(dir_size);
     if (!dirbuf) {
         fclose(fp);
         return RSC_ERR_NOMEM;
     }
-    /* _HREAD 0xE360 equivalent: seek to dir_off (payloads precede it). */
-    if (fseek(fp, (long)dir_off, SEEK_SET) != 0) {
-        free(dirbuf);
-        fclose(fp);
-        return RSC_ERR_IO;
-    }
-    if (file_read_chunk(fp, dirbuf, dir_size) != dir_size) {
-        free(dirbuf);
-        fclose(fp);
-        return RSC_ERR_IO;
+    /* _HREAD 0xE360 equivalent via File_ReadChunk @ 1000:272a: single read
+     * when dir_size <= 0xE360 (all 5 CivData), chunk loop otherwise. */
+    {
+        rsc_error_t cr =
+            rsc_read_dir_chunked(fp, dir_off, dirbuf, dir_size);
+        if (cr != RSC_OK) {
+            free(dirbuf);
+            fclose(fp);
+            return cr;
+        }
     }
     if (memcmp(dirbuf, kMagic, 4) != 0 ||
         memcmp(dirbuf, hdr, RSC_DIR_HDR_SIZE) != 0) {
@@ -1194,27 +1275,37 @@ rsc_error_t rsc_load_rsc(rsc_mgr_t *mgr, const char *path)
                 recs_base + (rec_cursor + r) * RSC_DIR_REC_SIZE;
             uint16_t id = rsc_be16(rec + 0);
             uint16_t name_off = rsc_be16(rec + 2);
-            uint32_t file_off = rsc_be24(rec + 5);
-            uint32_t len = (uint32_t)rsc_be16(rec + 10);
+            /* Z1 unified on-disk duality (both families BE24/BE16). */
+            uint32_t file_off = rsc_rec_file_off(rec);
+            uint32_t len = rsc_rec_len(rec);
             char name[32];
             rsc_res_t *res = NULL;
+            int is_last_overall =
+                (t + 1 == ntypes) && (r + 1 == nrec);
             if (len == 0) {
                 if (r + 1 < nrec) {
-                    uint32_t nxt =
-                        rsc_be24(rec + RSC_DIR_REC_SIZE + 5);
+                    uint32_t nxt = rsc_rec_file_off(rec + RSC_DIR_REC_SIZE);
                     if (nxt > file_off)
                         len = nxt - file_off;
-                } else if (dir_off > (size_t)file_off) {
-                    uint32_t tail =
-                        (uint32_t)(dir_off - (size_t)file_off);
-                    len = tail;
+                } else if (file_size > (size_t)file_off) {
+                    /* Z1 last-to-EOF (truncated tails carve to EOF). */
+                    uint64_t tail =
+                        (uint64_t)file_size - (uint64_t)file_off;
+                    len = tail > 0xFFFFFFFFu ? 0xFFFFFFFFu : (uint32_t)tail;
                 }
             }
             if (file_off > file_size || len > file_size - file_off) {
-                rsc_drop_file(mgr, dir, old_file_count, old_type_count);
-                free(dirbuf);
-                fclose(fp);
-                return RSC_ERR_TRUNCATED;
+                /* Z1 truncated-tail tolerance: last overall clamps to EOF
+                 * (civdata0/Civdata3 tails); non-last stays TRUNCATED
+                 * (dir_off+len vs size violation, see Z1 table). */
+                if (is_last_overall && file_off < file_size) {
+                    len = (uint32_t)(file_size - (size_t)file_off);
+                } else {
+                    rsc_drop_file(mgr, dir, old_file_count, old_type_count);
+                    free(dirbuf);
+                    fclose(fp);
+                    return RSC_ERR_TRUNCATED;
+                }
             }
             rsc_table_name(table, table_size, name_off, name);
             res = rsc_new_resource(type, id, file_off, len, name);
@@ -1236,13 +1327,17 @@ rsc_error_t rsc_load_rsc(rsc_mgr_t *mgr, const char *path)
 
 rsc_error_t rsc_load_rsc_disk(rsc_mgr_t *mgr, const char *path)
 {
-    /* ResMgr_LoadRscDisk @ 1190:0501: streaming twin of LoadRsc (taken
-     * when GLOBALCOMPACT < 1500000). Same BE walk via File_ReadChunk
-     * (FUN_1000_272a): 16-B header (magic + U32Disk x3) + 14-B extra +
-     * types (tag via fread + count/unk via ReadU16Disk) + 12-B records
-     * (id via ReadU16Disk, name-off via ReadU16Disk2, file-off BE24 + len
-     * BE16 via fread, len-0 derived as in LoadRsc) + string-table names
-     * via save/restore seeks. Same validation/cleanup as buffered. */
+    /* ResMgr_LoadRscDisk @ 1190:0501: streaming twin of LoadRsc (taken when
+     * GLOBALCOMPACT < 1500000; Z1 len-to-EOF + duality unified, no 0xE360
+     * cap). Same BE walk via File_ReadChunk (FUN_1000_272a): 16-B header
+     * (magic + U32Disk x3 variant-tolerant BE, LE only if BE invalid) +
+     * 14-B extra + types (tag via fread + count/unk via ReadU16Disk) +
+     * 12-B records (id via ReadU16Disk, name-off via ReadU16Disk2,
+     * file-off BE24 @ +5 / len BE16 @ +10 on-disk for BOTH families via
+     * rsc_rec helpers, u32 @ +4/+8 is the in-memory node only, len-0 last
+     * to EOF as in LoadRsc) + string-table names via save/restore seeks.
+     * Same validation/cleanup as buffered (no 0xE360 cap, so large dirs
+     * stream). */
     FILE *fp = NULL;
     long file_size_l = 0;
     size_t file_size = 0;
@@ -1322,14 +1417,62 @@ rsc_error_t rsc_load_rsc_disk(rsc_mgr_t *mgr, const char *path)
     hdr[15] = (uint8_t)dir_size32;
     dir_size = (size_t)dir_size32;
     if (dir_size < RSC_DIR_MIN_SIZE || dir_size > file_size) {
-        fclose(fp);
-        return RSC_ERR_TRUNCATED;
+        /* Z1 BE-vs-LE probe: byte-swap the BE size (hdr bytes unchanged)
+         * and accept LE only when it lands on a matching header copy.
+         * LE never validates on the 5 CivData; this documents the check. */
+        uint32_t le_swapped = ((dir_size32 & 0xFFu) << 24) |
+                              (((dir_size32 >> 8) & 0xFFu) << 16) |
+                              (((dir_size32 >> 16) & 0xFFu) << 8) |
+                              ((dir_size32 >> 24) & 0xFFu);
+        size_t le_size = (size_t)le_swapped;
+        int le_ok = 0;
+        if (le_swapped >= RSC_DIR_MIN_SIZE && le_size <= file_size) {
+            size_t le_off = file_size - le_size;
+            long cur_pos = ftell(fp);
+            uint8_t probe[RSC_DIR_HDR_SIZE];
+            if (le_off >= RSC_DIR_HDR_SIZE && cur_pos == (long)RSC_DIR_HDR_SIZE &&
+                fseek(fp, (long)le_off, SEEK_SET) == 0 &&
+                file_read_chunk(fp, probe, sizeof(probe)) == sizeof(probe) &&
+                memcmp(probe, hdr, sizeof(hdr)) == 0) {
+                uint32_t le_unk0 = ((hdr_unk0 & 0xFFu) << 24) |
+                                   (((hdr_unk0 >> 8) & 0xFFu) << 16) |
+                                   (((hdr_unk0 >> 16) & 0xFFu) << 8) |
+                                   ((hdr_unk0 >> 24) & 0xFFu);
+                uint32_t le_unk1 = ((hdr_unk1 & 0xFFu) << 24) |
+                                   (((hdr_unk1 >> 8) & 0xFFu) << 16) |
+                                   (((hdr_unk1 >> 16) & 0xFFu) << 8) |
+                                   ((hdr_unk1 >> 24) & 0xFFu);
+                hdr_unk0 = le_unk0;
+                hdr_unk1 = le_unk1;
+                dir_size32 = le_swapped;
+                dir_size = le_size;
+                hdr[4] = (uint8_t)(hdr_unk0 >> 24);
+                hdr[5] = (uint8_t)(hdr_unk0 >> 16);
+                hdr[6] = (uint8_t)(hdr_unk0 >> 8);
+                hdr[7] = (uint8_t)hdr_unk0;
+                hdr[8] = (uint8_t)(hdr_unk1 >> 24);
+                hdr[9] = (uint8_t)(hdr_unk1 >> 16);
+                hdr[10] = (uint8_t)(hdr_unk1 >> 8);
+                hdr[11] = (uint8_t)hdr_unk1;
+                hdr[12] = (uint8_t)(dir_size32 >> 24);
+                hdr[13] = (uint8_t)(dir_size32 >> 16);
+                hdr[14] = (uint8_t)(dir_size32 >> 8);
+                hdr[15] = (uint8_t)dir_size32;
+                le_ok = 1;
+            }
+        }
+        if (!le_ok) {
+            fclose(fp);
+            return RSC_ERR_TRUNCATED;
+        }
     }
     dir_off = file_size - dir_size;
     if (dir_off < RSC_DIR_HDR_SIZE || dir_off + dir_size != file_size) {
         fclose(fp);
         return RSC_ERR_TRUNCATED;
     }
+    /* Z1: streaming has no 0xE360 cap (this is the fallback target when
+     * rsc_dir_needs_streaming() is true). */
     dir_end = dir_off + dir_size;
     if (fseek(fp, (long)dir_off, SEEK_SET) != 0) {
         fclose(fp);
@@ -1475,8 +1618,10 @@ rsc_error_t rsc_load_rsc_disk(rsc_mgr_t *mgr, const char *path)
                     fclose(fp);
                     return RSC_ERR_IO;
                 }
-                /* tail: unk u8 @ +0 (= rec +4), file-off BE24 @ +1..+3
-                 * (= rec +5..+7), unk BE16 @ +4..+5, len BE16 @ +6..+7. */
+                /* Z1 unified tail (both families; u32 @ +4/+8 is the
+                 * in-memory node only, never on-disk): unk u8 @ +0
+                 * (= rec +4), file-off BE24 @ +1..+3 (= rec +5..+7),
+                 * unk BE16 @ +4..+5, len BE16 @ +6..+7 (= rec +10..+11). */
                 file_off = rsc_be24(tail + 1);
                 len = (uint32_t)rsc_be16(tail + 6);
                 rec_end = ftell(fp);
@@ -1496,7 +1641,7 @@ rsc_error_t rsc_load_rsc_disk(rsc_mgr_t *mgr, const char *path)
                             return RSC_ERR_IO;
                         }
                         {
-                            uint32_t nxt_off = rsc_be24(nxt + 5);
+                            uint32_t nxt_off = rsc_rec_file_off(nxt);
                             if (nxt_off > file_off)
                                 len = nxt_off - file_off;
                         }
@@ -1506,14 +1651,29 @@ rsc_error_t rsc_load_rsc_disk(rsc_mgr_t *mgr, const char *path)
                             fclose(fp);
                             return RSC_ERR_IO;
                         }
-                    } else if (dir_off > (size_t)file_off) {
-                        len = (uint32_t)(dir_off - (size_t)file_off);
+                    } else if (file_size > (size_t)file_off) {
+                        /* Z1 last-to-EOF (truncated tails carve to EOF). */
+                        uint64_t tail64 =
+                            (uint64_t)file_size - (uint64_t)file_off;
+                        len = tail64 > 0xFFFFFFFFu ? 0xFFFFFFFFu
+                                                   : (uint32_t)tail64;
                     }
                 }
                 if (file_off > file_size || len > file_size - file_off) {
-                    rsc_drop_file(mgr, dir, old_file_count, old_type_count);
-                    fclose(fp);
-                    return RSC_ERR_TRUNCATED;
+                    /* Z1 truncated-tail tolerance: last overall record
+                     * (t+1==ntypes && r+1==nrec, both in scope) clamps to
+                     * EOF (civdata0/Civdata3 tails); non-last overruns
+                     * stay TRUNCATED (dir_off+len vs size violation). */
+                    int is_last_overall =
+                        (t + 1 == ntypes) && (r + 1 == nrec);
+                    if (is_last_overall && file_off < file_size) {
+                        len = (uint32_t)(file_size - (size_t)file_off);
+                    } else {
+                        rsc_drop_file(mgr, dir, old_file_count,
+                                      old_type_count);
+                        fclose(fp);
+                        return RSC_ERR_TRUNCATED;
+                    }
                 }
                 /* Name via string-table seek (save/restore, read-only). */
                 if (name_off == 0xFFFFu) {
@@ -1578,6 +1738,120 @@ rsc_error_t rsc_load_rsc_disk(rsc_mgr_t *mgr, const char *path)
     }
     fclose(fp);
     return RSC_OK;
+}
+
+/* Z1 fallback entry (no new Orig address; decision wrapper over
+ * ResMgr_LoadRsc @ 1190:0000 + ResMgr_LoadRscDisk @ 1190:0501, Orig
+ * GLOBALCOMPACT @ 1000:xxxx < 1500000). Tries buffered first; when the
+ * buffered attempt fails with TRUNCATED/UNSUPPORTED and the container
+ * needs streaming (rsc_dir_needs_streaming: dir_size > 0xE360 or
+ * file_size >= 1500000), retries via streaming and returns that result.
+ * Buffered success or non-size failures (IO/NOMEM/BAD_MAGIC/RANGE/NOENT)
+ * return directly with no second attempt (mgr keeps the buffered partial
+ * cleanup semantics; no double-add because buffered drops its file node on
+ * failure before the retry). Read-only, no exit/globals/SDL. */
+rsc_error_t rsc_load_rsc_auto(rsc_mgr_t *mgr, const char *path)
+{
+    FILE *fp = NULL;
+    long file_size_l = 0;
+    size_t file_size = 0;
+    uint8_t hdr[RSC_DIR_HDR_SIZE];
+    size_t dir_size = 0;
+    size_t dir_off = 0;
+    rsc_error_t br = RSC_OK;
+
+    if (!mgr || !path)
+        return RSC_ERR_NOENT;
+    /* Peek header/size up-front for the GLOBALCOMPACT analog without
+     * loading anything (read-only). Failure here falls through to the
+     * normal buffered attempt, which will report the IO error itself. */
+    fp = fopen(path, "rb");
+    if (fp) {
+        if (fseek(fp, 0, SEEK_END) == 0) {
+            file_size_l = ftell(fp);
+            if (file_size_l >= 0)
+                file_size = (size_t)file_size_l;
+        }
+        if (file_size >= RSC_DIR_HDR_SIZE &&
+            fseek(fp, 0, SEEK_SET) == 0 &&
+            file_read_chunk(fp, hdr, sizeof(hdr)) == sizeof(hdr) &&
+            memcmp(hdr, kMagic, 4) == 0) {
+            if (rsc_parse_hdr_variant(hdr, file_size, &dir_off, &dir_size) ==
+                    RSC_OK &&
+                rsc_dir_needs_streaming(dir_size, file_size)) {
+                fclose(fp);
+                return rsc_load_rsc_disk(mgr, path);
+            }
+            /* Small-dir fast path: still go through buffered below so the
+             * single implementation stays canonical. */
+            if (dir_size > RSC_LOAD_BUF_SIZE) {
+                /* Variant parse above succeeded but dir is oversize while
+                 * rsc_parse_hdr_variant on the 16-B prefix alone cannot
+                 * know file_size context: hdr here is only 16 B, so this
+                 * branch is defensive (full-file parse happens inside
+                 * rsc_load_rsc); stream directly. */
+                fclose(fp);
+                return rsc_load_rsc_disk(mgr, path);
+            }
+        }
+        fclose(fp);
+    }
+    br = rsc_load_rsc(mgr, path);
+    if (br == RSC_OK)
+        return RSC_OK;
+    if (br != RSC_ERR_TRUNCATED && br != RSC_ERR_UNSUPPORTED)
+        return br;
+    /* Buffered failed for a possibly-size reason: re-peek (read-only) and
+     * retry streaming only when streaming is indicated; otherwise return
+     * the original buffered error (preserves truncated root-cause for
+     * civdata0/Civdata3 payload overruns, which stream would also hit). */
+    fp = fopen(path, "rb");
+    if (!fp)
+        return br;
+    do {
+        long sz = 0;
+        uint8_t h[RSC_DIR_HDR_SIZE];
+        size_t ds = 0;
+        size_t doff = 0;
+        if (fseek(fp, 0, SEEK_END) != 0)
+            break;
+        sz = ftell(fp);
+        if (sz < 0)
+            break;
+        if ((size_t)sz < RSC_DIR_HDR_SIZE)
+            break;
+        if (fseek(fp, 0, SEEK_SET) != 0)
+            break;
+        if (file_read_chunk(fp, h, sizeof(h)) != sizeof(h))
+            break;
+        if (memcmp(h, kMagic, 4) != 0)
+            break;
+        /* Full-file variant parse needs the whole 16-B + size context;
+         * reuse the on-disk size: read dir_size BE/LE tolerant. */
+        {
+            uint32_t be = rsc_be32(h + 12);
+            uint32_t le = rsc_le32(h + 12);
+            size_t fsz = (size_t)sz;
+            int be_ok = (be >= RSC_DIR_MIN_SIZE && (size_t)be <= fsz);
+            int le_ok = (le >= RSC_DIR_MIN_SIZE && (size_t)le <= fsz);
+            if (be_ok) {
+                ds = (size_t)be;
+                doff = fsz - ds;
+            } else if (le_ok) {
+                ds = (size_t)le;
+                doff = fsz - ds;
+            } else {
+                break;
+            }
+            (void)doff;
+            if (rsc_dir_needs_streaming(ds, fsz)) {
+                fclose(fp);
+                return rsc_load_rsc_disk(mgr, path);
+            }
+        }
+    } while (0);
+    fclose(fp);
+    return br;
 }
 
 uint16_t rsc_read_u16_disk(FILE *fp)
