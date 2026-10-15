@@ -5,6 +5,10 @@
 
 SDL_Surface *gfx_indexed_to_surface(const rsc_indexed_t *img)
 {
+    /* Strict 8-bit + palette gate for the packet H rsc_get_indexed plan
+     * (see gfx_indexed.h): rejects non-8-bit, empty, or pixel-less views
+     * before touching SDL, so a future ResMgr producer cannot smuggle a
+     * malformed slice into an INDEX8 surface. */
     SDL_Surface *surf = NULL;
     SDL_Palette *pal = NULL;
     SDL_Color colors[256];

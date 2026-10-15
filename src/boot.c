@@ -1,11 +1,15 @@
 /* Boot sequence. Order mirrors WinMain @ 1008:0000; see boot.h for anchors.
  * No exit() here; no globals. Each step delegates to its owning module. */
+#include <stdint.h>
+#include <stdlib.h>
+
 #include "boot.h"
 
 #include "audio.h"
 #include "dialog.h"
 #include "game.h"
 #include "map.h"
+#include "newgame.h"
 #include "sys.h"
 #include "video.h"
 
@@ -69,10 +73,69 @@ civ_error_t boot_init_palette(void)
 
 civ_error_t boot_init_tables(void)
 {
-    /* TODO: Game_InitGlobalTables @ 11e8:0337 (key remap, 64 KB map buffer,
-     * Rng_Init, string tables via 11f8:0080) + Init_UnitFontTables @
-     * 10e8:2d46. */
+    /* Orig: FUN_11e8_0337 @ 11e8:0337 -> Game_InitGlobalTables. Called
+     * once from WinMain after Palette_Init @ 1090:0488, before
+     * Main_RunStartupSequence @ 11e0:0000. Orig shape: key-remap loop +
+     * mem_alloc_lock(64000) -> 1420:b394/b396 + Rng_Init @ 11c8:0000 +
+     * string tables via Tribe_GetNameList @ 11f8:0080 (see newgame.h).
+     * Mixed port: OS-free parts 1:1 below; Win16 GLOBALALLOC lock
+     * selector semantics (-> 1420:b394/b396 far ptr, persistent) have no
+     * Linux equivalent -> overall CIV_ERR_UNSUPPORTED. No globals (probe
+     * buffer is malloc'd + freed here; the persistent 64 KB owner lives
+     * in map.h CIV_MAP_BUF_LEN); read-only; no exit(). */
+    uint8_t key_remap[256];
+    unsigned i;
+    void *probe;
+
+    /* 1) Key-remap loop (OS-free shape 1:1; exact remap pairs TBD from
+     * the 11e8:0337 dump, so identity skeleton for now). */
+    for (i = 0; i < sizeof(key_remap); i++)
+        key_remap[i] = (uint8_t)i;
+    (void)key_remap; /* consumed once the dump gives the remap pairs */
+
+    /* 2) Rng_Init @ 11c8:0000 (live via sys.h). */
+    rng_init();
+
+    /* 3) mem_alloc_lock(64000) probe: proves the host can hold the
+     * 1420:b394/b396 map buffer (see map.h CIV_MAP_BUF_LEN). Freed
+     * at once because the persistent locked handle needs the Win16
+     * selector bridge (UNSUPPORTED below). */
+    probe = malloc(64000u);
+    if (!probe)
+        return CIV_ERR_NOMEM;
+    free(probe);
+
+    /* 4) String-table anchor (see newgame.h): exercises the
+     * Tribe_GetNameList @ 11f8:0080 dependency without requiring the
+     * seg 1420 dump yet (still NULL stub). */
+    (void)tribe_get_name_list(0);
+
+    /* 5) Sibling tables (see below): Init_UnitFontTables @ 10e8:2d46. */
+    (void)boot_init_unit_font_tables();
+
+    /* TODO: Win16 GLOBALALLOC lock semantics (-> 1420:b394/b396). */
     return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t boot_init_unit_font_tables(void)
+{
+    /* Orig: FUN_10e8_2d46 @ 10e8:2d46 -> Init_UnitFontTables. Sibling of
+     * NewGame_Wizard @ 10e8:0000; loads FIRSTMOVE/PILLAGE/font-map
+     * tables. Segment dump has no decoded table bytes yet, so no pure
+     * tables/memcpy port is possible -> stub CIV_ERR_UNSUPPORTED.
+     * Read-only; no globals; no exit(). */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+void cursor_set(int cursor_id)
+{
+    /* Orig: FUN_1098_096c @ 1098:096c -> Cursor_Set. (cursor_id) void,
+     * called after Menu_InitMainBar @ 1048:0000. LOADCURSOR + SETCURSOR
+     * Win16 cursor install -> SDL3 system-cursor bridge TBD (future
+     * SDL_CreateSystemCursor owner documented in boot.h/video.h; impl
+     * stays here per packet I scope, video.* untouched). Stub: takes
+     * the id for WinMain-order fidelity, installs nothing. */
+    (void)cursor_id;
 }
 
 civ_error_t boot_open_windows(SDL_Window *win, SDL_Renderer *ren)
@@ -90,11 +153,26 @@ civ_error_t boot_open_windows(SDL_Window *win, SDL_Renderer *ren)
     return CIV_ERR_UNSUPPORTED;
 }
 
+civ_error_t menu_init_mainbar(void)
+{
+    /* Orig: FUN_1048_0000 @ 1048:0000 -> Menu_InitMainBar.
+     * TODO: CHECKMENUITEM + MODIFYMENU main-bar build/update ("&Save
+     * Game\tCtrl+S" @ 14b0:0010, "&Auto Save" @ 14b0:0092, "Save First"
+     * @ 14d0:0028; see dialog.h). Win16 USER menu handles -> SDL3 menu
+     * TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
 civ_error_t boot_init_menu(void)
 {
     civ_error_t err;
 
-    /* TODO: Menu_InitMainBar @ 1048:0000 + Cursor_Set @ 1098:096c. */
+    /* WinMain menu step: Menu_InitMainBar @ 1048:0000 + Cursor_Set @
+     * 1098:096c (cursor_set() stub in this file; SDL cursor TBD).
+     * dialog_init owns the DLGPROC layer. */
+    err = menu_init_mainbar();
+    if (err != CIV_OK)
+        return err;
     err = dialog_init();
     if (err != CIV_OK)
         return err;

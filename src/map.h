@@ -132,11 +132,20 @@ civ_error_t status_format_gold_row(char *dst, size_t cap);
 
 /* --- window opens / view refresh (stubs; Win16 windowing TBD) --- */
 
-/* WdwMap_Open @ 1208:0af1. */
+/* Orig: FUN_1208_0AF1 @ 1208:0af1 -> map_open_main (WdwMap_Open).
+ * Creates the main map window (CREATEWINDOW "CIVILIZATION"), sets scroll
+ * ranges, selects the GfxPort/DC, starts the 200 ms SETTIMER, logs
+ * "WdwMapOpen ...wdwmap.c". Win16 USER/GDI -> SDL3 window TBD; stub
+ * returns CIV_ERR_UNSUPPORTED. */
 civ_error_t map_open_main(void);
-/* WdwSmMap_Open @ 1210:025b. */
+/* Orig: FUN_1210_025B @ 1210:025b -> map_open_small (WdwSmMap_Open).
+ * Creates the "World Map" child window. Win16 -> SDL3 TBD; stub returns
+ * CIV_ERR_UNSUPPORTED. */
 civ_error_t map_open_small(void);
-/* WdwStatus_Open @ 1218:0386. */
+/* Orig: FUN_1218_0386 @ 1218:0386 -> map_open_status (WdwStatus_Open).
+ * Creates the "Status" child window; feeds WdwStatus_Refresh @ 1218:0801
+ * + Game_UpdateStatusPanel @ 1088:13d5. Win16 -> SDL3 TBD; stub returns
+ * CIV_ERR_UNSUPPORTED. */
 civ_error_t map_open_status(void);
 /* WdwStatus_Refresh @ 1218:0801. */
 civ_error_t map_refresh_status(void);

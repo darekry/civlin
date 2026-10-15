@@ -76,9 +76,45 @@ civ_error_t boot_check_video(void);
 civ_error_t boot_maybe_convert_artwork(void);
 civ_error_t boot_load_prefs(void);
 civ_error_t boot_init_palette(void);
+/* Packet I: global tables (mixed OS-free port + Win16 stub).
+ *
+ * Orig: FUN_11e8_0337 @ 11e8:0337 -> Game_InitGlobalTables. Called once
+ *   from WinMain after Palette_Init @ 1090:0488, before
+ *   Main_RunStartupSequence @ 11e0:0000. Orig shape: key-remap loop +
+ *   mem_alloc_lock(64000) -> 1420:b394/b396 + Rng_Init @ 11c8:0000
+ *   (see sys.h rng_init) + string tables via Tribe_GetNameList @
+ *   11f8:0080 (see newgame.h). Linux port: remap loop (identity
+ *   skeleton, exact pairs TBD from dump) + rng_init() + malloc(64000)
+ *   probe are live in boot.c; Win16 GLOBALALLOC lock selector semantics
+ *   (-> 1420:b394/b396 far ptr) have no Linux equivalent -> overall
+ *   CIV_ERR_UNSUPPORTED until the map-buffer owner (see map.h
+ *   CIV_MAP_BUF_LEN) takes the persistent allocation. No globals here;
+ *   no exit(). */
 civ_error_t boot_init_tables(void);
+/* Orig: FUN_10e8_2d46 @ 10e8:2d46 -> Init_UnitFontTables. Sibling of
+ *   NewGame_Wizard @ 10e8:0000; loads FIRSTMOVE/PILLAGE/font-map tables
+ *   (exact table bytes/offsets TBD from segment dump; pure memcpy when
+ *   decoded). Win16 resource/selector load TBD -> stub
+ *   CIV_ERR_UNSUPPORTED. */
+civ_error_t boot_init_unit_font_tables(void);
+/* Orig: FUN_1098_096c @ 1098:096c -> Cursor_Set. (cursor_id) void, called
+ *   after Menu_InitMainBar @ 1048:0000. LOADCURSOR + SETCURSOR Win16
+ *   cursor install -> SDL3 system-cursor bridge TBD (see video.h for the
+ *   future SDL_CreateSystemCursor owner; impl stays in boot.c per packet
+ *   I scope, video.* untouched). Stub: records nothing, returns void. */
+void cursor_set(int cursor_id);
 civ_error_t boot_open_windows(SDL_Window *win, SDL_Renderer *ren);
 civ_error_t boot_init_menu(void);
+
+/* Packet G: main menu bar (stub).
+ *
+ * Orig: FUN_1048_0000 @ 1048:0000 -> Menu_InitMainBar. Builds/updates the
+ *   WinMain menu bar via CHECKMENUITEM + MODIFYMENU (menu strings such as
+ *   "&Save Game\tCtrl+S" @ 14b0:0010, "&Auto Save" @ 14b0:0092 live in
+ *   segment 14b0; "Save First" @ 14d0:0028, see dialog.h). Win16 USER menu
+ *   handles -> SDL3 menu TBD; stub CIV_ERR_UNSUPPORTED. Called from
+ *   boot_init_menu ahead of Cursor_Set @ 1098:096c. */
+civ_error_t menu_init_mainbar(void);
 
 void boot_shutdown(void);
 

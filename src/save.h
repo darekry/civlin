@@ -77,19 +77,38 @@ civ_error_t save_prompt_open(civ_save_dialog_t *out);
 /* Orig: FUN_1130_0194 @ 1130:0194, now save_prompt_save in Ghidra */
 civ_error_t save_prompt_save(civ_save_dialog_t *out);
 
-/* --- low-level file layer (KERNEL _LOPEN/_LREAD/_LWRITE/_LLSEEK/_LCLOSE) --- */
+/* --- low-level file layer (KERNEL _LOPEN/_LREAD/_LWRITE/_LLSEEK/_LCLOSE) ---
+ * Packet L: Ghidra display (PascalCase) <-> C name (snake_case, canonical):
+ *   Save_FileOpen  @ 1140:0139 <-> save_file_open
+ *   Save_FileSize  @ 1140:0295 <-> save_file_size
+ *   Save_FileRead  @ 1140:019d <-> save_file_read
+ *   Save_FileWrite @ 1140:0245 <-> save_file_write
+ *   Save_FileClose @ 1140:037c <-> save_file_close
+ * Callers: save_serialize @ 10f8:02bd, save_deserialize @ 10f8:0000,
+ * HoF_Load @ 1080:0023, HoF_Save @ 1080:0092. */
 
-/* Orig: FUN_1140_0139 @ 1140:0139, now save_file_open — returns handle or WIN16_HFILE_ERROR */
+/* Orig: FUN_1140_0139 @ 1140:0139, Ghidra display Save_FileOpen -> save_file_open.
+ * Wraps _LOPEN via File_OpenWrapper @ 1000:2ad9 (fopen "rb"/"wb" twin);
+ * write_mode 0 = OF_READ, nonzero = OF_WRITE/OFCREATE. Returns handle
+ * or WIN16_HFILE_ERROR. */
 win16_handle save_file_open(const char *path, int write_mode);
-/* Orig: FUN_1140_0295 @ 1140:0295, now save_file_size — via _LLSEEK, -1 on error */
+/* Orig: FUN_1140_0295 @ 1140:0295, Ghidra display Save_FileSize -> save_file_size.
+ * Via _LLSEEK (fseek/ftell twin file_seek_wrapper); position-preserving;
+ * -1 on error. Accepted image sizes (checked by save_deserialize
+ * @ 10f8:0000, not here): 0x1a2ba / 0x1a2b8 / 0x18de0. */
 long save_file_size(win16_handle h);
-/* Orig: FUN_1140_019d @ 1140:019d, now save_file_read — chunked read, 0 ok / 1 eof-err */
+/* Orig: FUN_1140_019d @ 1140:019d, Ghidra display Save_FileRead -> save_file_read.
+ * Chunked 0x8000 via _HREAD/_LREAD (= File_ReadChunk fread twin);
+ * 0 ok / 1 eof-short. */
 int save_file_read(win16_handle h, uint8_t *dst, unsigned long len,
                    unsigned long *out_read);
-/* Orig: FUN_1140_0245 @ 1140:0245, now save_file_write — chunked write, 0 ok / 1 short-write */
+/* Orig: FUN_1140_0245 @ 1140:0245, Ghidra display Save_FileWrite -> save_file_write.
+ * Chunked 0x8000 via _HWRITE/_LWRITE (= File_WriteChunk fwrite twin);
+ * 0 ok / 1 short-write. */
 int save_file_write(win16_handle h, const uint8_t *src, unsigned long len,
                     unsigned long *out_written);
-/* Orig: FUN_1140_037c @ 1140:037c, now save_file_close */
+/* Orig: FUN_1140_037c @ 1140:037c, Ghidra display Save_FileClose -> save_file_close.
+ * Wraps _LCLOSE via File_CloseWrapper @ 1000:1f7c (fclose NULL-safe twin). */
 void save_file_close(win16_handle h);
 
 /* Orig: FUN_1000_2ad9 @ 1000:2ad9 -> File_OpenWrapper.

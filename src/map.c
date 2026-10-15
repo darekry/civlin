@@ -189,20 +189,26 @@ civ_error_t status_format_gold_row(char *dst, size_t cap)
 
 civ_error_t map_open_main(void)
 {
-    /* TODO: WdwMap_Open @ 1208:0af1 (CREATEWINDOW CIVILIZATION, scroll
-     * ranges 0xa00/0x640, GfxPort, SETTIMER 200ms). */
+    /* TODO: Orig FUN_1208_0AF1 @ 1208:0af1 -> WdwMap_Open () -> handle.
+     * CREATEWINDOW "CIVILIZATION" + scroll ranges + GfxPort select +
+     * SETTIMER 200 ms, logs "WdwMapOpen ...wdwmap.c". Win16 USER/GDI ->
+     * SDL3 window TBD. */
     return CIV_ERR_UNSUPPORTED;
 }
 
 civ_error_t map_open_small(void)
 {
-    /* TODO: WdwSmMap_Open @ 1210:025b (CREATEWINDOW World Map child). */
+    /* TODO: Orig FUN_1210_025B @ 1210:025b -> WdwSmMap_Open (child
+     * "World Map"). CREATEWINDOW child; Win16 -> SDL3 TBD. */
     return CIV_ERR_UNSUPPORTED;
 }
 
 civ_error_t map_open_status(void)
 {
-    /* TODO: WdwStatus_Open @ 1218:0386 (CREATEWINDOW Status child). */
+    /* TODO: Orig FUN_1218_0386 @ 1218:0386 -> WdwStatus_Open (child
+     * "Status"); feeds WdwStatus_Refresh @ 1218:0801 +
+     * Game_UpdateStatusPanel @ 1088:13d5. CREATEWINDOW child; Win16 ->
+     * SDL3 TBD. */
     return CIV_ERR_UNSUPPORTED;
 }
 

@@ -279,20 +279,30 @@ rsc_error_t rsc_record_data(const rsc_file_t *f, size_t i,
     (void)i;
     (void)data;
     (void)size;
-    /* TODO: full type-dir walk per ResMgr_LoadRsc @ 1190:0000 (header
-     * u32+u32 then u16 count via rsc_read_u16le, per-type 4-char tag +
-     * counts, per-record 0x32-B header with file-off @ +4). The integer
-     * readers above are already 1:1; the list manager (file list @
-     * 1420:b2c0, type list @ 1420:b2c2, GLOBALALLOC nodes) and lazy
-     * ResMgr_LoadToMem @ 1190:0fda (_LLSEEK/_HREAD) need the Linux file
-     * + malloc equivalents before carving is safe. */
+    /* TODO Orig FUN_1190_0000 @ 1190:0000 (ResMgr_LoadRsc) full walk needed
+     * before carving is safe. Packet H pins the exact offsets: file header
+     * u32 unk0 + u32 unk1 + u16 type-dir count (via rsc_read_u32le x2 +
+     * rsc_read_u16le); per-type 4-char tag + u16 res-count + u16 unk;
+     * per-record 0x32-B header (id u16 @ +0, name-off u16 @ +2, file-off
+     * u32 @ +4, len u32 @ +8, name len u8 @ +0xc capped 0x1f + chars @
+     * +0xd, loaded @ +0x2d, handle @ +0x2e). Minimal version (TBD): pick
+     * record i, bounds-check file-off + len <= f->size, return borrowed
+     * slice f->data + file-off (valid while rsc_file lives, no copy). The
+     * integer readers + list manager (file list @ 1420:b2c0, type list @
+     * 1420:b2c2) are already 1:1; the walk must still be validated against
+     * all 5 CivData files, so this stays RSC_ERR_UNSUPPORTED. */
+    if (!f || !data || !size)
+        return RSC_ERR_NOENT;
     return RSC_ERR_UNSUPPORTED;
 }
 
 size_t rsc_image_count(const rsc_file_t *f)
 {
     (void)f;
-    /* No record passes strict DIB validation in v1 (see header comment). */
+    /* Packet H strict validation plan (see rsc_loader.h): rsc_record_data
+     * slice must succeed first, then 8-bit + palette checks (width > 0,
+     * height > 0, width*height <= slice len, bpp == 8, pal 1..255 present,
+     * pixel indices < pal_count). No record passes yet, so count stays 0. */
     return 0;
 }
 
@@ -301,6 +311,13 @@ rsc_error_t rsc_get_indexed(const rsc_file_t *f, size_t i, rsc_indexed_t *out)
     (void)f;
     (void)i;
     (void)out;
+    /* TODO Orig ResMgr image payload via ResMgr_LoadToMem @ 1190:0fda +
+     * GfxPort bitmap @ 10d0:0cfa chain: needs the rsc_record_data slice
+     * plus the strict 8-bit + palette validation above (mirrored in
+     * gfx_indexed_to_surface). Until then UNSUPPORTED (NOENT on bad args
+     * to stay NULL-safe). */
+    if (!f || !out)
+        return RSC_ERR_NOENT;
     return RSC_ERR_UNSUPPORTED;
 }
 
@@ -577,4 +594,158 @@ rsc_error_t rsc_load_to_mem(rsc_mgr_t *mgr, rsc_res_t *res, FILE *fp)
     if (!mgr || !res || !fp)
         return RSC_ERR_NOENT;
     return RSC_ERR_UNSUPPORTED;
+}
+
+/* --- Packet H: ResMgr full walk + dispose (segment 1190) --- */
+
+rsc_error_t rsc_load_rsc(rsc_mgr_t *mgr, const char *path)
+{
+    (void)mgr;
+    (void)path;
+    /* TODO Orig FUN_1190_0000 @ 1190:0000 (ResMgr_LoadRsc / OpenResFile):
+     * _LOPEN(path) + _HREAD 0xE360 bytes into a GLOBALALLOC buffer, then
+     * parse: u32 unk0 + u32 unk1 + u16 type-dir count (rsc_read_u32le x2 +
+     * rsc_read_u16le), per-type 4-char tag + u16 res-count + u16 unk, per
+     * record 0x32-B header (id @ +0, name-off @ +2, file-off @ +4, len @
+     * +8, name len @ +0xc capped 0x1f). Nodes via rsc_add_file (@
+     * 1190:1692) / rsc_add_type (@ 1190:13a8) / rsc_new_resource (@
+     * 1190:12ee). Called 5x from WinMain @ 1008:0000 with CivData0..4.
+     * Linux wiring TBD: file_open_wrapper + file_read_chunk + same
+     * constructors. Read-only when implemented; no exit, no globals. */
+    if (!mgr || !path)
+        return RSC_ERR_NOENT;
+    return RSC_ERR_UNSUPPORTED;
+}
+
+rsc_error_t rsc_load_rsc_disk(rsc_mgr_t *mgr, const char *path)
+{
+    (void)mgr;
+    (void)path;
+    /* TODO Orig FUN_1190_0501 @ 1190:0501 (ResMgr_LoadRscDisk): same
+     * directory walk as ResMgr_LoadRsc @ 1190:0000 but streaming via
+     * File_ReadChunk (FUN_1000_272a @ 1000:272a, _HREAD/_LREAD) instead of
+     * one 0xE360 buffered read; taken when GLOBALCOMPACT reports <
+     * 1500000 bytes free. Linux wiring TBD: fopen + rsc_read_u16_disk /
+     * rsc_read_u32_disk streaming into rsc_add_file / rsc_add_type /
+     * rsc_new_resource. */
+    if (!mgr || !path)
+        return RSC_ERR_NOENT;
+    return RSC_ERR_UNSUPPORTED;
+}
+
+uint16_t rsc_read_u16_disk(FILE *fp)
+{
+    /* ResMgr_ReadU16Disk @ 1190:1abe: 2-byte LE fetch via File_ReadChunk
+     * (FUN_1000_272a @ 1000:272a). Mult table @ 0x3d00 is {1, 0x100};
+     * plain shifts are the Linux equivalent. 0 on NULL fp / short read
+     * (mirrors the truncated-cursor 0 in rsc_read_u16le). */
+    uint8_t buf[2];
+    if (!fp)
+        return 0;
+    if (file_read_chunk(fp, buf, sizeof(buf)) != sizeof(buf))
+        return 0;
+    return (uint16_t)buf[0] | ((uint16_t)buf[1] << 8);
+}
+
+uint16_t rsc_read_u16_disk2(FILE *fp)
+{
+    /* ResMgr_ReadU16Disk2 @ 1190:1b47: identical twin of ReadU16Disk (orig
+     * uses this slot for the record name-off field @ +2). Same 2-byte LE
+     * fetch via File_ReadChunk; separate symbol for RE-map fidelity. */
+    uint8_t buf[2];
+    if (!fp)
+        return 0;
+    if (file_read_chunk(fp, buf, sizeof(buf)) != sizeof(buf))
+        return 0;
+    return (uint16_t)buf[0] | ((uint16_t)buf[1] << 8);
+}
+
+uint32_t rsc_read_u32_disk(FILE *fp)
+{
+    /* ResMgr_ReadU32Disk @ 1190:1bcb: 4-byte LE fetch via File_ReadChunk
+     * (same shape as ResMgr_ReadU32 @ 1190:1a3f, mult 1/100/10000..).
+     * 0 on NULL fp / short read. */
+    uint8_t buf[4];
+    if (!fp)
+        return 0;
+    if (file_read_chunk(fp, buf, sizeof(buf)) != sizeof(buf))
+        return 0;
+    return (uint32_t)buf[0] | ((uint32_t)buf[1] << 8) |
+           ((uint32_t)buf[2] << 16) | ((uint32_t)buf[3] << 24);
+}
+
+rsc_dir_t *rsc_add_file_disk(rsc_mgr_t *mgr, FILE *fp)
+{
+    /* ResMgr_AddFileDisk @ 1190:1570 (disk AddRFile): reads the 10-byte
+     * file header (u32 unk0 + u32 unk1 + u16 type-dir count) via
+     * File_ReadChunk (FUN_1000_272a @ 1000:272a; fread equiv) and delegates
+     * node alloc/link to rsc_add_file (ResMgr_AddFile @ 1190:1692).
+     * Consumes exactly 10 bytes on success; NULL on bad mgr/fp, short
+     * read (truncated header), or NOMEM. */
+    uint8_t hdr[10];
+    uint32_t unk0;
+    uint32_t unk1;
+    uint16_t type_count;
+    if (!mgr || !fp)
+        return NULL;
+    if (file_read_chunk(fp, hdr, sizeof(hdr)) != sizeof(hdr))
+        return NULL;
+    unk0 = (uint32_t)hdr[0] | ((uint32_t)hdr[1] << 8) |
+           ((uint32_t)hdr[2] << 16) | ((uint32_t)hdr[3] << 24);
+    unk1 = (uint32_t)hdr[4] | ((uint32_t)hdr[5] << 8) |
+           ((uint32_t)hdr[6] << 16) | ((uint32_t)hdr[7] << 24);
+    type_count = (uint16_t)hdr[8] | ((uint16_t)hdr[9] << 8);
+    return rsc_add_file(mgr, unk0, unk1, type_count);
+}
+
+rsc_error_t rsc_dump_stats(const rsc_mgr_t *mgr, FILE *out)
+{
+    /* ResMgr_DumpStats @ 1190:17d0: debug dump via FUN_1000_2c9c @
+     * 1000:2c9c in orig. OS-free port: totals + one line per file node.
+     * fprintf is the Linux equivalent of the orig debug-print path. */
+    const rsc_dir_t *d;
+    unsigned ntypes = 0;
+    unsigned nres = 0;
+    FILE *dst;
+    if (!mgr)
+        return RSC_ERR_NOENT;
+    dst = out ? out : stdout;
+    for (d = mgr->files; d; d = d->next) {
+        const rsc_type_t *t;
+        unsigned dt = 0;
+        unsigned dr = 0;
+        for (t = d->types; t; t = t->next) {
+            const rsc_res_t *r;
+            dt++;
+            for (r = t->head; r; r = r->next)
+                dr++;
+        }
+        ntypes += dt;
+        nres += dr;
+        if (fprintf(dst, "rsc: file unk0=%lu unk1=%lu types=%u res=%u\n",
+                    (unsigned long)d->unk0, (unsigned long)d->unk1,
+                    dt, dr) < 0)
+            return RSC_ERR_IO;
+    }
+    if (fprintf(dst, "rsc: files=%u types=%u res=%u\n",
+                (unsigned)mgr->file_count, ntypes, nres) < 0)
+        return RSC_ERR_IO;
+    return RSC_OK;
+}
+
+void rsc_dispose_manager(rsc_mgr_t **pmgr, FILE **pfp)
+{
+    /* ResMgr_Dispose @ 1190:0c92 (CDisposeResourceMgr): _LCLOSE every open
+     * resource handle + free all file/type/res lists. Linux: fclose (the
+     * File_CloseWrapper @ 1000:1f7c equiv, NULL-safe) then rsc_mgr_free
+     * (payload + node frees). Double-pointer form clears the caller's
+     * handles to NULL so a second dispose is a no-op. */
+    if (pfp && *pfp) {
+        fclose(*pfp);
+        *pfp = NULL;
+    }
+    if (pmgr && *pmgr) {
+        rsc_mgr_free(*pmgr);
+        *pmgr = NULL;
+    }
 }

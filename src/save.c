@@ -1,10 +1,15 @@
 /* CivLin SAVE/LOAD. See save.h for Orig FUN_* -> new name mapping.
  * RLL codec (save_pack/save_unpack, Orig FUN_10f8_05da/040a) is decoded
  * and implemented natively below. Marshal/xfer need live Win16 segments,
- * so they stay UNSUPPORTED stubs. No I/O happens yet. */
+ * so they stay UNSUPPORTED stubs. Packet L file I/O (save_file_* @ 1140)
+ * is implemented below on POSIX fds — the HFILE-native twin of the FILE*
+ * File_* wrappers (same Win16 imports, same chunk/contract semantics). */
+#define _POSIX_C_SOURCE 200809L
 #include "save.h"
 
+#include <fcntl.h>
 #include <string.h>
+#include <unistd.h>
 
 civ_error_t save_prompt_open(civ_save_dialog_t *out)
 {
@@ -30,52 +35,127 @@ civ_error_t save_prompt_save(civ_save_dialog_t *out)
 
 win16_handle save_file_open(const char *path, int write_mode)
 {
-    (void)path;
-    (void)write_mode;
-    /* TODO: map to fopen(); semantics from Ghidra save_file_open
-     * (Orig FUN_1140_0139 @ 1140:0139). */
-    return WIN16_HFILE_ERROR;
+    /* Save_FileOpen, Orig FUN_1140_0139 @ 1140:0139: wraps _LOPEN via
+     * File_OpenWrapper @ 1000:2ad9. Linux twin: open() with the same
+     * contract as file_open_wrapper (fopen "rb"/"wb"): NULL/empty path
+     * fails; write_mode 0 = OF_READ, nonzero = OF_WRITE|OFCREATE|TRUNC.
+     * HFILE transport (int fd) for save_serialize @ 10f8:02bd (write),
+     * save_deserialize @ 10f8:0000 (read), HoF_Load @ 1080:0023 (read),
+     * HoF_Save @ 1080:0092 (write). Returns fd or WIN16_HFILE_ERROR. */
+    int fd;
+
+    if (!path || !*path)
+        return WIN16_HFILE_ERROR;
+    if (write_mode)
+        fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    else
+        fd = open(path, O_RDONLY);
+    return fd < 0 ? WIN16_HFILE_ERROR : fd;
 }
 
 long save_file_size(win16_handle h)
 {
-    (void)h;
-    /* TODO: fseek/ftell; semantics from Ghidra save_file_size
-     * (Orig FUN_1140_0295 @ 1140:0295). */
-    return -1L;
+    /* Save_FileSize, Orig FUN_1140_0295 @ 1140:0295: via _LLSEEK (fseek/
+     * ftell twin file_seek_wrapper). Position-preserving size probe:
+     * save SEEK_CUR, seek SEEK_END for size, restore cursor — mirrors
+     * _LLSEEK(0,1) / _LLSEEK(0,2) / _LLSEEK(saved,0). Returns size or -1
+     * on bad handle/seek failure (mirrors _LLSEEK HFILE_ERROR). Accepted
+     * .sav image sizes are checked by the caller save_deserialize
+     * @ 10f8:0000, not here: 0x1a2ba canonical, 0x1a2b8 alt,
+     * 0x18de0 small-map. */
+    off_t cur;
+    off_t end;
+
+    if (h < 0)
+        return -1L;
+    cur = lseek(h, 0, SEEK_CUR);
+    if (cur == (off_t)-1)
+        return -1L;
+    end = lseek(h, 0, SEEK_END);
+    if (end == (off_t)-1)
+        return -1L;
+    if (lseek(h, cur, SEEK_SET) == (off_t)-1)
+        return -1L;
+    return (long)end;
 }
 
 int save_file_read(win16_handle h, uint8_t *dst, unsigned long len,
                    unsigned long *out_read)
 {
-    (void)h;
-    (void)dst;
-    (void)len;
+    /* Save_FileRead, Orig FUN_1140_019d @ 1140:019d: chunked 0x8000 via
+     * _HREAD/_LREAD (= File_ReadChunk fread twin file_read_chunk in
+     * rsc_loader.h). Loop 1:1 with orig: 0x8000-byte chunks until len
+     * satisfied or short read (EOF/error). Returns 0 when total == len,
+     * 1 on short/EOF/bad args. Used by save_deserialize @ 10f8:0000 and
+     * HoF_Load @ 1080:0023. */
+    unsigned long total = 0;
+
     if (out_read)
         *out_read = 0;
-    /* TODO: chunked 0x8000 reads; see Ghidra save_file_read
-     * (Orig FUN_1140_019d @ 1140:019d). */
-    return 1;
+    if (len == 0)
+        return 0;
+    if (h < 0 || !dst)
+        return 1;
+    while (total < len) {
+        unsigned long left = len - total;
+        unsigned long want =
+            left > CIV_SAVE_READ_CHUNK ? CIV_SAVE_READ_CHUNK : left;
+        ssize_t n = read(h, dst + total, (size_t)want);
+
+        if (n <= 0)
+            break;
+        total += (unsigned long)n;
+        if ((unsigned long)n < want)
+            break;
+    }
+    if (out_read)
+        *out_read = total;
+    return total == len ? 0 : 1;
 }
 
 int save_file_write(win16_handle h, const uint8_t *src, unsigned long len,
                     unsigned long *out_written)
 {
-    (void)h;
-    (void)src;
-    (void)len;
+    /* Save_FileWrite, Orig FUN_1140_0245 @ 1140:0245: chunked 0x8000 via
+     * _HWRITE/_LWRITE (= File_WriteChunk fwrite twin file_write_chunk in
+     * sys.h). Same 0x8000 segment-bound chunking as the read path above;
+     * partial writes accumulate until len satisfied or error. Returns 0
+     * when total == len, 1 on short/error/bad args. Used by
+     * save_serialize @ 10f8:02bd and HoF_Save @ 1080:0092. */
+    unsigned long total = 0;
+
     if (out_written)
         *out_written = 0;
-    /* TODO: chunked writes; see Ghidra save_file_write
-     * (Orig FUN_1140_0245 @ 1140:0245). */
-    return 1;
+    if (len == 0)
+        return 0;
+    if (h < 0 || !src)
+        return 1;
+    while (total < len) {
+        unsigned long left = len - total;
+        unsigned long want =
+            left > CIV_SAVE_READ_CHUNK ? CIV_SAVE_READ_CHUNK : left;
+        ssize_t n = write(h, src + total, (size_t)want);
+
+        if (n <= 0)
+            break;
+        total += (unsigned long)n;
+        if ((unsigned long)n < want)
+            break;
+    }
+    if (out_written)
+        *out_written = total;
+    return total == len ? 0 : 1;
 }
 
 void save_file_close(win16_handle h)
 {
-    (void)h;
-    /* TODO: fclose(); see Ghidra save_file_close
-     * (Orig FUN_1140_037c @ 1140:037c). */
+    /* Save_FileClose, Orig FUN_1140_037c @ 1140:037c: wraps _LCLOSE via
+     * File_CloseWrapper @ 1000:1f7c (fclose NULL-safe twin). HFILE
+     * transport: close() on valid fd, no-op on WIN16_HFILE_ERROR /
+     * negative (mirrors file_close_wrapper NULL-safe no-op). Errors
+     * ignored (void return, as in orig and file_close_wrapper). */
+    if (h >= 0)
+        close(h);
 }
 
 FILE *file_open_wrapper(const char *path, int write_mode)

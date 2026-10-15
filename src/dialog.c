@@ -42,21 +42,32 @@ civ_error_t dialog_menuz(const char *title, const char *items_text,
 
 civ_error_t dialog_ctrl_register(void)
 {
-    /* TODO: Ctrl_RegisterCustomClasses @ 1058:0b4d. */
+    /* Orig: FUN_1058_0b4d @ 1058:0b4d -> Ctrl_RegisterCustomClasses.
+     * TODO: REGISTERCLASS "RanDoMRadio" (str @ 0xac6), "RanDoMStatic"
+     * (@ 0xad2), "RanDoMUser" (@ 0xadf), "Region" (@ 0xaea) + shared
+     * brushes/pens. Win16 USER/GDI -> SDL3 widget bridge TBD. */
     return CIV_ERR_UNSUPPORTED;
 }
 
 void dialog_ctrl_free(void)
 {
-    /* TODO: Ctrl_FreeGdiObjects @ 1058:0d71. */
+    /* Orig: FUN_1058_0d71 @ 1058:0d71 -> Ctrl_FreeGdiObjects.
+     * TODO: DELETEOBJECT the brushes/pens from Ctrl_RegisterCustomClasses;
+     * SDL resource release TBD. */
 }
 
 civ_error_t dialog_ctrl_radio_set(int first_id, int last_id, int selected_id)
 {
-    (void)first_id;
-    (void)last_id;
-    (void)selected_id;
-    /* TODO: Ctrl_RadioGroupSetSel @ 1058:0e7f. */
+    /* Orig: FUN_1058_0e7f @ 1058:0e7f -> Ctrl_RadioGroupSetSel.
+     * OS-free selection-index math ported 1:1 (empty/inverted range and
+     * out-of-range selection rejected); the BM_SETCHECK fan-out over
+     * first..last via SendDlgItemMessage stays Win16 -> stub. */
+    if (last_id < first_id)
+        return CIV_ERR_RANGE;
+    if (selected_id < first_id || selected_id > last_id)
+        return CIV_ERR_RANGE;
+    /* TODO: SendDlgItemMessage(hDlg, id in first..last, BM_SETCHECK,
+     * selected ? 1 : 0) -> SDL3 radio-group bridge TBD. */
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -65,7 +76,9 @@ win16_msg_result_t dialog_ctrl_paint_button(int msg, long wparam, long lparam)
     (void)msg;
     (void)wparam;
     (void)lparam;
-    /* TODO: Ctrl_PaintCustomButton @ 1058:0000. */
+    /* Orig: FUN_1058_0000 @ 1058:0000 -> Ctrl_PaintCustomButton.
+     * TODO (owner-draw): frame + glyph + pressed-state brush via
+     * BITBLT/FILLRECT/SELECTOBJECT -> SDL3 blit TBD. */
     return WIN16_MSG_DEFAULT;
 }
 
@@ -74,7 +87,8 @@ win16_msg_result_t dialog_ctrl_paint_static(int msg, long wparam, long lparam)
     (void)msg;
     (void)wparam;
     (void)lparam;
-    /* TODO: Ctrl_PaintRandomStatic @ 1058:04f6. */
+    /* Orig: FUN_1058_04f6 @ 1058:04f6 -> Ctrl_PaintRandomStatic.
+     * TODO (owner-draw RanDoMStatic label): TEXTOUT + frame -> SDL3 TBD. */
     return WIN16_MSG_DEFAULT;
 }
 
@@ -83,7 +97,52 @@ win16_msg_result_t dialog_ctrl_paint_user(int msg, long wparam, long lparam)
     (void)msg;
     (void)wparam;
     (void)lparam;
-    /* TODO: Ctrl_PaintRandomUser @ 1058:0440. */
+    /* Orig: FUN_1058_0440 @ 1058:0440 -> Ctrl_PaintRandomUser.
+     * TODO (owner-draw RanDoMUser canvas): custom blits -> SDL3 TBD. */
+    return WIN16_MSG_DEFAULT;
+}
+
+win16_msg_result_t dialog_ctrl_radio_proc(int msg, long wparam, long lparam)
+{
+    (void)msg;
+    (void)wparam;
+    (void)lparam;
+    /* Orig: FUN_1058_06ab @ 1058:06ab -> RANDOMRADIOPROC (WndProc for the
+     * RanDoMRadio class; Customize-World editor buttons). TODO: Win16
+     * USER message dispatch (WM_PAINT via Ctrl_PaintCustomButton, click/
+     * focus -> Ctrl_RadioGroupSetSel) -> SDL3 widget TBD. */
+    return WIN16_MSG_DEFAULT;
+}
+
+win16_msg_result_t dialog_ctrl_static_proc(int msg, long wparam, long lparam)
+{
+    (void)msg;
+    (void)wparam;
+    (void)lparam;
+    /* Orig: FUN_1058_081a @ 1058:081a -> RANDOMSTATICPROC (WndProc for
+     * RanDoMStatic). TODO: label paint via Ctrl_PaintRandomStatic ->
+     * SDL3 TBD. */
+    return WIN16_MSG_DEFAULT;
+}
+
+win16_msg_result_t dialog_ctrl_user_proc(int msg, long wparam, long lparam)
+{
+    (void)msg;
+    (void)wparam;
+    (void)lparam;
+    /* Orig: FUN_1058_0921 @ 1058:0921 -> RANDOMUSERPROC (WndProc for
+     * RanDoMUser). TODO: canvas paint via Ctrl_PaintRandomUser ->
+     * SDL3 TBD. */
+    return WIN16_MSG_DEFAULT;
+}
+
+win16_msg_result_t dialog_ctrl_region_proc(int msg, long wparam, long lparam)
+{
+    (void)msg;
+    (void)wparam;
+    (void)lparam;
+    /* Orig: FUN_1058_09f6 @ 1058:09f6 -> REGIONPROC (WndProc for the
+     * Region class). TODO: Win16 USER dispatch -> SDL3 TBD. */
     return WIN16_MSG_DEFAULT;
 }
 
@@ -91,28 +150,38 @@ civ_error_t dlg_create_tracked(int dlg_id, unsigned flags)
 {
     (void)dlg_id;
     (void)flags;
-    /* TODO: Dlg_CreateTracked @ 1098:124f (CREATEDIALOG + MAKEPROCINSTANCE,
-     * centering, GETDC, palette, push to 1420:1ea0 stack). */
+    /* Orig: FUN_1098_124f @ 1098:124f -> Dlg_CreateTracked.
+     * TODO: CREATEDIALOG + MAKEPROCINSTANCE(DLGPROC/CIVDIALOGPROC) +
+     * centering + GETDC/SELECTPALETTE/REALIZEPALETTE copy + push HWND/ctx
+     * onto the tracked stack @ 1420:1ea0, count @ 1420:1ec8 (30+ callers)
+     * -> SDL3 window TBD. */
     return CIV_ERR_UNSUPPORTED;
 }
 
 void dlg_destroy_tracked(void)
 {
-    /* TODO: Dlg_DestroyTracked @ 1098:1612 (DESTROYWINDOW +
-     * FREEPROCINSTANCE + GLOBALFREE + pop). */
+    /* Orig: FUN_1098_1612 @ 1098:1612 -> Dlg_DestroyTracked.
+     * TODO: DESTROYWINDOW + FREEPROCINSTANCE + GLOBALFREE of the ctx +
+     * pop from 1420:1ea0/1ec8 -> SDL3 TBD. */
 }
 
 civ_error_t anim_pump_if_active(void)
 {
-    /* TODO: Anim_PumpIfActive @ 10b0:0000 (Anim_AdvanceFrames when a sequence
-     * is active @ 1420:1f40). */
+    /* Orig: FUN_10b0_0000 @ 10b0:0000 -> Anim_PumpIfActive.
+     * TODO: while a sequence is active (flag @ 1420:1f40) run
+     * Anim_AdvanceFrames; wrapped by Sys_Yield @ 1098:0157 (see sys.h).
+     * SDL timer/frame pump TBD. */
     return CIV_ERR_UNSUPPORTED;
 }
 
 int anim_advance_frames(void)
 {
-    /* TODO: Anim_AdvanceFrames @ 10b0:0461 (frame opcodes 1..0xe). Stub
-     * reports done so future wait-loops terminate. */
+    /* Orig: FUN_10b0_0461 @ 10b0:0461 -> Anim_AdvanceFrames. Timed frame
+     * script, opcodes 1..0xe: palette fades/selects, offscreen blits,
+     * sound triggers (via Sound_PlayId @ 1150:00c9), port switches (GR
+     * port layer). Returns nonzero when the sequence is finished.
+     * TODO: full script engine -> SDL TBD. Stub reports done so future
+     * wait-loops terminate. */
     return 1;
 }
 

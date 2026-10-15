@@ -61,8 +61,12 @@ civ_error_t newgame_pick_competition(int *civ_count_out);
  * Tribe-name table read with param 0x94 at the newgame_pick_tribe call
  * site (resource/buffer meaning TBD: 0x94 = 148 could be a string-table
  * id or a MenuZ text-buffer length, see Ghidra). OS-free string table
- * (segment 1420 dump TBD): index selects the tribe, returns the
- * NUL-terminated name, NULL when out of range or not yet dumped. */
+ * (segment 1420 dump TBD 2026-10-15: no tribe-name block decoded yet,
+ * so no 1:1 table port possible; FIRSTMOVE/PILLAGE/font-map tables also
+ * pending via boot_init_unit_font_tables @ 10e8:2d46): index selects
+ * the tribe, returns the NUL-terminated name, NULL when out of range or
+ * not yet dumped. Packet I scope: doc-only extension; stub body in
+ * newgame.c untouched (still returns NULL). Read-only. */
 const char *tribe_get_name_list(int index);
 civ_error_t newgame_pick_tribe(const civ_newgame_settings_t *ctx, int *civ_out);
 civ_error_t newgame_customize_world(civ_newgame_settings_t *ctx);

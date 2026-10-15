@@ -20,6 +20,15 @@
 
 #include "rsc_loader.h"
 
+/* Packet H note: future rsc_get_indexed @ 1190:xxxx (ResMgr image payload
+ * via ResMgr_LoadToMem @ 1190:0fda + GfxPort bitmap @ 10d0:0cfa chain)
+ * feeds this bridge. Strict validation plan (enforced here AND at the
+ * rsc_get_indexed producer): 8-bit only (bpp == 8), width > 0, height > 0,
+ * pixels != NULL, width*height bytes addressable, pal_count 0..255
+ * (0 = no palette attached), every pixel index < pal_count when a palette
+ * is present. rsc_image_count stays 0 / rsc_get_indexed stays
+ * RSC_ERR_UNSUPPORTED until that producer chain is proven against the 5
+ * CivData files. */
 SDL_Surface *gfx_indexed_to_surface(const rsc_indexed_t *img);
 SDL_Texture *gfx_indexed_to_texture(SDL_Renderer *ren, const rsc_indexed_t *img);
 

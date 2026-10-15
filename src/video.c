@@ -73,6 +73,27 @@ civ_error_t gfx_port_create(SDL_Renderer *ren, int w, int h, gfx_port_t **out)
     return CIV_ERR_UNSUPPORTED;
 }
 
+civ_error_t gfx_port_alloc_bitmap(SDL_Renderer *ren, int w, int h,
+                                  SDL_Texture **out)
+{
+    if (out)
+        *out = NULL;
+    (void)ren;
+    (void)w;
+    (void)h;
+    if (!out)
+        return CIV_ERR_NOENT;
+    if (w <= 0 || h <= 0)
+        return CIV_ERR_RANGE;
+    /* TODO: Orig FUN_10d0_0cfa @ 10d0:0cfa -> GfxPort_AllocBitmap (bitmap
+     * helper behind GfxPort_Create @ 10d0:0000 / GR_PortOpen). GETDC +
+     * CREATECOMPATIBLEDC + bitmap select into the new port (~0x20-word
+     * struct: DC + compatible DC + bitmap + clip rect + palette refs).
+     * SDL3 TBD: SDL_CreateTexture streaming/target + select as the port
+     * backing store (8-bit INDEX8 keeps palette animation possible). */
+    return CIV_ERR_UNSUPPORTED;
+}
+
 civ_error_t gfx_port_set_active(gfx_port_t *port)
 {
     (void)port;
@@ -108,5 +129,20 @@ civ_error_t gfx_port_blit(gfx_port_t *dst, const gfx_port_t *src,
         return CIV_ERR_NOENT;
     /* TODO: Orig FUN_10d0_08f1 @ 10d0:08f1 -> GfxPort_Blit. Port-to-port
      * BITBLT (0xcc0020 rop family); SDL blit TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t mainport_get_or_create(SDL_Renderer *ren, gfx_port_t **out)
+{
+    if (out)
+        *out = NULL;
+    (void)ren;
+    if (!ren || !out)
+        return CIV_ERR_NOENT;
+    /* TODO: Orig FUN_1098_114A @ 1098:114a -> MainPort_GetOrCreate () ->
+     * port/DC. GETDC + SELECTPALETTE/REALIZEPALETTE + GfxPort_SetActive
+     * @ 10d0:0956 bridge, called before WdwMap_Open @ 1208:0af1 /
+     * WdwSmMap_Open @ 1210:025b / WdwStatus_Open @ 1218:0386 in
+     * boot_open_windows. SDL3 render-target select TBD. */
     return CIV_ERR_UNSUPPORTED;
 }

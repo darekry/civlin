@@ -34,9 +34,14 @@ civ_error_t newgame_pick_tribe(const civ_newgame_settings_t *ctx, int *civ_out)
 const char *tribe_get_name_list(int index)
 {
     (void)index;
-    /* TODO: Orig FUN_11f8_0080 @ 11f8:0080 (tribe-name table, param 0x94
-     * at the newgame_pick_tribe call site; strings live in segment 1420
-     * — dump pending, then return &table[index]). */
+    /* Orig: FUN_11f8_0080 @ 11f8:0080 -> Tribe_GetNameList. Packet I:
+     * seg 1420 dump has no decoded tribe-name block yet (FIRSTMOVE /
+     * PILLAGE / font-map tables also pending via boot_init_unit_font_
+     * tables @ 10e8:2d46), and the 0x94 call-site param meaning is still
+     * TBD (string-table id vs MenuZ buffer length), so no 1:1 table port
+     * is possible. Keeps the NULL stub (also NULL for out-of-range
+     * index); doc extended in newgame.h without breaking this stub.
+     * Read-only; no globals; no exit(). */
     return NULL;
 }
 

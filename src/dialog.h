@@ -45,7 +45,26 @@ civ_error_t dialog_menuz(const char *title, const char *items_text,
                          int preselect, int *out_index);
 
 /* Custom control layer (segment 1058; owner-drawn widgets for the
- * Customize-World editor). */
+ * Customize-World editor).
+ *
+ * Orig: FUN_1058_0b4d @ 1058:0b4d -> Ctrl_RegisterCustomClasses.
+ *   REGISTERCLASS x4: "RanDoMRadio" (string @ 0xac6), "RanDoMStatic"
+ *   (@ 0xad2), "RanDoMUser" (@ 0xadf), "Region" (@ 0xaea); creates the
+ *   shared GDI brushes/pens the paint procs select into the DC.
+ *   Win16 USER/GDI -> SDL3 widget bridge TBD; stub CIV_ERR_UNSUPPORTED.
+ * Orig: FUN_1058_0d71 @ 1058:0d71 -> Ctrl_FreeGdiObjects.
+ *   Deletes the brushes/pens created above (DELETEOBJECT loop).
+ *   Win16 GDI handle teardown -> SDL resource release TBD; stub (void).
+ * Orig: FUN_1058_0000 @ 1058:0000 -> Ctrl_PaintCustomButton (owner-draw
+ *   button renderer: frame + glyph + pressed-state brush; GDI BITBLT/
+ *   FILLRECT -> SDL blit TBD; stub).
+ * Orig: FUN_1058_0440 @ 1058:0440 -> Ctrl_PaintRandomUser (RanDoMUser
+ *   body paint; stub, owner-draw TBD).
+ * Orig: FUN_1058_04f6 @ 1058:04f6 -> Ctrl_PaintRandomStatic (RanDoMStatic
+ *   label paint; stub, owner-draw TBD).
+ * Orig: FUN_1058_0e7f @ 1058:0e7f -> Ctrl_RadioGroupSetSel (first/last/
+ *   selected id math is OS-free and ported 1:1 as range validation;
+ *   the BM_SETCHECK/SendMessage fan-out stays Win16 -> stub part). */
 civ_error_t dialog_ctrl_register(void);
 void dialog_ctrl_free(void);
 civ_error_t dialog_ctrl_radio_set(int first_id, int last_id, int selected_id);
@@ -53,7 +72,28 @@ win16_msg_result_t dialog_ctrl_paint_button(int msg, long wparam, long lparam);
 win16_msg_result_t dialog_ctrl_paint_static(int msg, long wparam, long lparam);
 win16_msg_result_t dialog_ctrl_paint_user(int msg, long wparam, long lparam);
 
-/* Tracked dialog layer (stubs; dialog ctx stack TBD). */
+/* Custom-control WndProcs (segment 1058; window procs of the classes
+ * above, used by the Customize-World editor; all Win16 USER message
+ * dispatch -> SDL3 event/widget TBD; stubs returning WIN16_MSG_DEFAULT).
+ * Orig: FUN_1058_06ab @ 1058:06ab -> RANDOMRADIOPROC (RanDoMRadio buttons).
+ * Orig: FUN_1058_081a @ 1058:081a -> RANDOMSTATICPROC (RanDoMStatic label).
+ * Orig: FUN_1058_0921 @ 1058:0921 -> RANDOMUSERPROC (RanDoMUser canvas).
+ * Orig: FUN_1058_09f6 @ 1058:09f6 -> REGIONPROC (Region selector). */
+win16_msg_result_t dialog_ctrl_radio_proc(int msg, long wparam, long lparam);
+win16_msg_result_t dialog_ctrl_static_proc(int msg, long wparam, long lparam);
+win16_msg_result_t dialog_ctrl_user_proc(int msg, long wparam, long lparam);
+win16_msg_result_t dialog_ctrl_region_proc(int msg, long wparam, long lparam);
+
+/* Tracked dialog layer (stubs; dialog ctx stack TBD).
+ *
+ * Orig: FUN_1098_124f @ 1098:124f -> Dlg_CreateTracked. CREATEDIALOG +
+ *   MAKEPROCINSTANCE(DLGPROC/CIVDIALOGPROC) + palette copy (GETDC/
+ *   SELECTPALETTE/REALIZEPALETTE) + centering + push HWND/ctx onto the
+ *   tracked stack @ 1420:1ea0, count @ 1420:1ec8. 30+ callers.
+ *   Win16 USER/GDI -> SDL3 window TBD; stub CIV_ERR_UNSUPPORTED.
+ * Orig: FUN_1098_1612 @ 1098:1612 -> Dlg_DestroyTracked. DESTROYWINDOW +
+ *   FREEPROCINSTANCE + GLOBALFREE of the ctx + pop from 1420:1ea0/1ec8.
+ *   Stub (void). */
 civ_error_t dlg_create_tracked(int dlg_id, unsigned flags);
 void dlg_destroy_tracked(void);
 
@@ -71,7 +111,17 @@ void dlg_destroy_tracked(void);
  * Win16 WINHELP -> SDL3 help viewer TBD. */
 civ_error_t dialog_open_help(const char *topic);
 
-/* Sequence player (stubs). anim_advance_frames: 0 = busy, nonzero = done. */
+/* Sequence player (stubs). anim_advance_frames: 0 = busy, nonzero = done.
+ *
+ * Orig: FUN_10b0_0000 @ 10b0:0000 -> Anim_PumpIfActive. Runs
+ *   Anim_AdvanceFrames while a sequence is active (flag @ 1420:1f40);
+ *   wrapped by Sys_Yield @ 1098:0157 (see sys.h). Timer/frame pump ->
+ *   SDL timer TBD; stub CIV_ERR_UNSUPPORTED.
+ * Orig: FUN_10b0_0461 @ 10b0:0461 -> Anim_AdvanceFrames. Timed frame
+ *   script, opcodes 1..0xe: palette fades/selects, offscreen blits,
+ *   sound triggers (Sound_PlayId @ 1150:00c9 bridge), port switches
+ *   (GR port layer, see video.h). Returns nonzero when the sequence is
+ *   finished. Full script engine -> SDL TBD; stub (reports done). */
 civ_error_t anim_pump_if_active(void);
 int anim_advance_frames(void);
 

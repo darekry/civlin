@@ -50,12 +50,22 @@ civ_error_t palette_init(void);
  * fades); SDL_Palette equivalent on the active 8-bit surface TBD. */
 civ_error_t palette_animate_range(int first, int count);
 
-/* GfxPort_* @ 10d0:0000/0956/0854/08f1 (stubs). Opaque drawing port: the
- * original port struct holds ~0x20 words (DC + compatible DC + bitmap via
- * 10d0:0cfa + clip rect + palette refs); field map not yet decoded, so the
- * struct stays opaque until the 10d0:0cfa allocator is RE'd.	SDL_Texture
- * + SDL render-target bridge TBD. */
+/* GfxPort_* @ 10d0:0000/0956/0854/08f1 + bitmap @ 10d0:0cfa (stubs).
+ * Opaque drawing port: the original port struct holds ~0x20 words (DC +
+ * compatible DC + bitmap via 10d0:0cfa + clip rect + palette refs); field
+ * map not yet decoded, so the struct stays opaque until the 10d0:0cfa
+ * allocator is RE'd.	SDL_Texture + SDL render-target bridge TBD. */
 typedef struct gfx_port gfx_port_t;
+
+/* Orig: FUN_10d0_0cfa @ 10d0:0cfa -> gfx_port_alloc_bitmap
+ * (GfxPort_AllocBitmap; bitmap helper behind GfxPort_Create @ 10d0:0000 /
+ * GR_PortOpen). Orig path: GETDC + CREATECOMPATIBLEDC + bitmap select
+ * into the fresh port (dimensions from the port open request). SDL3 TBD:
+ * streaming INDEX8 or target-capable RGBA texture selected into the port
+ * (palette re-applied via SDL_SetPaletteColors on present). NULL out
+ * reports NOENT; w/h <= 0 reports RANGE; otherwise UNSUPPORTED. */
+civ_error_t gfx_port_alloc_bitmap(SDL_Renderer *ren, int w, int h,
+                                  SDL_Texture **out);
 
 /* Orig: FUN_10d0_0000 @ 10d0:0000 -> gfx_port_create (GfxPort_Create /
  * GR_PortOpen). GETDC + CREATECOMPATIBLEDC + bitmap via 10d0:0cfa. NULL
@@ -79,5 +89,14 @@ civ_error_t gfx_port_present_rect(gfx_port_t *port, SDL_Renderer *ren,
  * ports report NOENT (NULL src_rect = whole source, kept). */
 civ_error_t gfx_port_blit(gfx_port_t *dst, const gfx_port_t *src,
                           const SDL_Rect *src_rect, int dst_x, int dst_y);
+
+/* Orig: FUN_1098_114A @ 1098:114a -> mainport_get_or_create
+ * (MainPort_GetOrCreate). Returns the main port/DC: GETDC +
+ * SELECTPALETTE/REALIZEPALETTE + GfxPort_SetActive @ 10d0:0956 bridge.
+ * Called before WdwMap_Open @ 1208:0af1 / WdwSmMap_Open @ 1210:025b /
+ * WdwStatus_Open @ 1218:0386 in boot_open_windows (see boot.h). SDL3
+ * render-target select TBD; stub returns CIV_ERR_UNSUPPORTED. NULL
+ * renderer/out reports NOENT. */
+civ_error_t mainport_get_or_create(SDL_Renderer *ren, gfx_port_t **out);
 
 #endif /* CIVLIN_VIDEO_H */

@@ -45,7 +45,25 @@ typedef enum civ_sound_id {
 
 civ_error_t audio_init(void);
 
-/* Raw filename playback (Sound_PlayFile @ 1150:00a0). */
+/* Packet K: MCI open/close + raw file playback (stubs; SDL audio TBD).
+ *
+ * Orig: FUN_1150_001c @ 1150:001c -> Sound_MciOpen. MCISENDCOMMAND 0x803
+ *   (MCI_OPEN) for WAV; callee of audio_init. Win16 MCI -> SDL3 audio
+ *   device TBD; stub CIV_ERR_UNSUPPORTED.
+ * Orig: FUN_1150_0066 @ 1150:0066 -> Sound_MciClose. MCISENDCOMMAND 0x804
+ *   (MCI_CLOSE); callee of audio_shutdown. Win16 MCI -> SDL3 teardown
+ *   TBD; stub (void).
+ * Orig: FUN_1150_00a0 @ 1150:00a0 -> Sound_PlayFile. Raw SNDPLAYSOUND
+ *   playback of a WAV name; callee of Sound_PlayId (audio_play_id) after
+ *   normalize + map + 0x80, disk gate via Dos_DriveReady @ 1000:1184
+ *   (see boot.h; Linux: always ready). Read-only vs unpacked WAVs;
+ *   SDL3 WAV playback TBD; stub CIV_ERR_UNSUPPORTED (NULL -> NOENT). */
+civ_error_t sound_mci_open(void);
+void sound_mci_close(void);
+civ_error_t sound_play_file(const char *wav_name);
+
+/* Raw filename playback (Sound_PlayFile @ 1150:00a0). Thin wrapper over
+ * sound_play_file; kept for callers that already use audio_play. */
 civ_error_t audio_play(const char *wav_name);
 
 /* ID playback (Sound_PlayId @ 1150:00c9). Honors the STOP/silent rules;
