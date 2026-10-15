@@ -50,6 +50,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 
 #include "civ_common.h"
 #include "win16_compat.h"
@@ -90,6 +91,17 @@ int save_file_write(win16_handle h, const uint8_t *src, unsigned long len,
                     unsigned long *out_written);
 /* Orig: FUN_1140_037c @ 1140:037c, now save_file_close */
 void save_file_close(win16_handle h);
+
+/* Orig: FUN_1000_2ad9 @ 1000:2ad9 -> File_OpenWrapper.
+ * Thin _LOPEN wrapper used by save_file_open @ 1140:0139. Linux
+ * equivalent: fopen(path, write_mode ? "wb" : "rb"); write_mode 0 =
+ * OF_READ, nonzero = OF_WRITE/OFCREATE (exact OF_ flag mapping TBD, see
+ * Ghidra). Returns the stream, NULL on bad args or fopen failure. */
+FILE *file_open_wrapper(const char *path, int write_mode);
+/* Orig: FUN_1000_1f7c @ 1000:1f7c -> File_CloseWrapper.
+ * Thin _LCLOSE wrapper used by save_file_close @ 1140:037c. Linux
+ * equivalent: fclose(fp); NULL-safe no-op. */
+void file_close_wrapper(FILE *fp);
 
 /* --- serialize layer (game state <-> flat 0x1a2ba image) --- */
 

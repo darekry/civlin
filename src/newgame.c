@@ -31,6 +31,15 @@ civ_error_t newgame_pick_tribe(const civ_newgame_settings_t *ctx, int *civ_out)
     return CIV_ERR_UNSUPPORTED;
 }
 
+const char *tribe_get_name_list(int index)
+{
+    (void)index;
+    /* TODO: Orig FUN_11f8_0080 @ 11f8:0080 (tribe-name table, param 0x94
+     * at the newgame_pick_tribe call site; strings live in segment 1420
+     * — dump pending, then return &table[index]). */
+    return NULL;
+}
+
 civ_error_t newgame_customize_world(civ_newgame_settings_t *ctx)
 {
     if (!ctx)

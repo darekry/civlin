@@ -96,4 +96,13 @@ civ_error_t worldgen_build_ocean_links(int yield);
 civ_error_t worldgen_copy_rect(int src_x, int src_y, unsigned w_bytes,
                                 int h, int dst_x, int dst_y);
 
+/* Orig: FUN_1128_16d0 @ 1128:16d0 -> Path_CheckContinentLink.
+ * Gate inside worldgen_build_continent_links @ 1028:12c6: for an
+ * ocean(10)/land corner pair sharing one continent id, returns a cost
+ * that links only when < 0x14 (else the direction bits at +4 stay
+ * clear). Params: tile position plus continent id under test. OS-free
+ * grid walk over the tile buffer (no Win16); exact distance metric TBD,
+ * see Ghidra. Stub returns 0x14 (no link). */
+int path_check_continent_link(int x, int y, int continent);
+
 #endif /* CIVLIN_WORLDGEN_H */

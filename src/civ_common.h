@@ -31,4 +31,17 @@ const char *civ_strerror(civ_error_t err);
 char *util_str_copy(char *dst, const char *src);
 char *util_str_append(char *dst, const char *src);
 
+/* Orig: FUN_1000_2928 @ 1000:2928 -> Util_IntToDec.
+ * Integer -> decimal string for game_append_year_text @ 1088:1dd0
+ * (called as FUN_1000_2928(..., 10): abs(g_nYear) + "BC"/"AD" onto the
+ * 12d8:24fa line buffer). OS-free base-10 conversion (repeated div/mod
+ * by 10, sign only for base 10); generic radix 2..36 via the same loop.
+ * Returns dst (NULL when dst is NULL). */
+char *util_int_to_dec(char *dst, int value, int base);
+
+/* Orig: FUN_1000_1978 @ 1000:1978 -> Util_ToLower.
+ * ASCII tolower used by ResMgr_CmpName @ 1190:0e72 (case-insensitive
+ * 0x1f-char compare). OS-free: 'A'..'Z' -> +32, all else unchanged. */
+int util_to_lower(int c);
+
 #endif /* CIVLIN_COMMON_H */

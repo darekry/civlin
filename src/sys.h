@@ -83,6 +83,20 @@ int sys_current_drive(void);
 const char *sys_base_path(void);
 /* Sys_Yield @ 1098:0157. Pumps the OS message queue (SDL_PumpEvents). */
 void sys_yield(void);
+/* Orig: FUN_1108_0000 @ 1108:0000 -> Sys_PumpMessages.
+ * Win16 PEEKMESSAGE pump called from unit_wait_for_orders @ 11c0:0ec2
+ * (blink-and-pump modal until 11e8:02fb input or 1328:0012 mode change)
+ * and alongside the 28 sys_drain_input call sites. Linux equivalent:
+ * SDL_PumpEvents. Returns 1 when a message was dispatched, 0 when the
+ * queue was empty. Distinct from sys_yield (Anim pump @ 10b0:0000) and
+ * sys_drain_input (state clear + queue drain, see game.h). */
+int sys_pump_messages(void);
+/* Orig: FUN_1000_137f @ 1000:137f -> Sys_GetClientRect.
+ * Client-rect helper behind the status frame calculators @ 1218:0956 /
+ * 0a06 (GLOBALLOCK on the status-port handle, then rect out). Linux
+ * equivalent TBD (SDL_GetWindowSize on the status view). Params are the
+ * client width/height outputs; 0 on missing rect. */
+civ_error_t sys_get_client_rect(int *w_out, int *h_out);
 /* Sys_CheckRuntimeMemory @ 11e8:0075. UNSUPPORTED (needs window + RAM
  * thresholds; SDL_GetSystemRAM equivalent TBD). */
 civ_error_t sys_check_runtime_memory(void);

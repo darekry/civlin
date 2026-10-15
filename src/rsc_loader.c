@@ -1,6 +1,7 @@
 /* CivLin RSC container probe (v1 implementation). See rsc_loader.h for the
  * documented format. Read-only: never writes to civ1win/ or unpacked/. */
 #include "rsc_loader.h"
+#include "civ_common.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -98,10 +99,9 @@ int rsc_cmp_type(const uint8_t tag_a[4], const uint8_t tag_b[4])
 
 static int ascii_lower(int c)
 {
-    /* FUN_1000_1978 equivalent for the A-Z range used by res names. */
-    if (c >= 'A' && c <= 'Z')
-        return c + ('a' - 'A');
-    return c;
+    /* FUN_1000_1978 @ 1000:1978 single source: util_to_lower
+     * (see civ_common.h) for the A-Z range used by res names. */
+    return util_to_lower(c);
 }
 
 int rsc_cmp_name(const char *a, const char *b)
@@ -122,6 +122,17 @@ int rsc_cmp_name(const char *a, const char *b)
             return 0;
     }
     return 1;
+}
+
+size_t file_read_chunk(FILE *fp, uint8_t *dst, size_t len)
+{
+    /* File_ReadChunk @ 1000:272a: streaming read behind
+     * ResMgr_ReadU16Disk @ 1190:1abe / U16Disk2 @ 1190:1b47 / U32Disk @
+     * 1190:1bcb (orig _HREAD/_LREAD on the resource handle). fread is
+     * the Linux equivalent; short counts on EOF/error. */
+    if (!fp || !dst || len == 0)
+        return 0;
+    return fread(dst, 1, len, fp);
 }
 
 /* memmem for the marker scan. */

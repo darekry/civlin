@@ -84,6 +84,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 
 typedef enum rsc_error {
     RSC_OK = 0,
@@ -141,6 +142,14 @@ uint16_t rsc_read_u16le(rsc_cursor_t *cur);
 uint32_t rsc_read_u32le(rsc_cursor_t *cur);
 int rsc_cmp_type(const uint8_t tag_a[4], const uint8_t tag_b[4]);
 int rsc_cmp_name(const char *a, const char *b);
+
+/* Orig: FUN_1000_272a @ 1000:272a -> File_ReadChunk.
+ * Disk-streaming read behind ResMgr_ReadU16Disk @ 1190:1abe,
+ * ResMgr_ReadU16Disk2 @ 1190:1b47 and ResMgr_ReadU32Disk @ 1190:1bcb
+ * (orig via _HREAD/_LREAD on the resource file handle). Linux
+ * equivalent: fread(fp, dst, len); returns bytes actually read (short
+ * on EOF/error, 0 on NULL fp/dst or len == 0). */
+size_t file_read_chunk(FILE *fp, uint8_t *dst, size_t len);
 
 /* Loads the whole file into memory (largest observed: Civdata3.rsc,
  * ~1.4 MiB — fine). Returns RSC_ERR_*; *out is NULL on error. */

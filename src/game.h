@@ -104,6 +104,14 @@ civ_error_t status_draw_tech_icons(int civ, int progress, int x, int y);
  * 5 callers (status panel, 1018:015d, 1138:0000, 11b0:0000, 11b8:14e5). */
 civ_error_t game_append_year_text(void);
 
+/* Orig: FUN_11a8_0cb1 @ 11a8:0cb1 -> Gfx_DrawTechIcon.
+ * 9-icon blitter called from status_draw_tech_icons @ 1088:1a82
+ * (src/game.h:92 frontier). Params: index 0..8 (tech-progress slot),
+ * x/y pixel origin in the status port, palette = GDI palette/select
+ * object for the blit (exact SELECTPALETTE arg order TBD, see Ghidra).
+ * Win16 GDI blit (SELECTPALETTE + BITBLT) -> SDL texture blit TBD. */
+civ_error_t gfx_draw_tech_icon(int index, int x, int y, int palette);
+
 /* Orig: FUN_1098_0dda @ 1098:0dda -> status_font_height.
  * GETTEXTMETRICS wrapper returning tmHeight (local_24[0]); the status
  * panel keeps it as line stride (local_8, x2 for the civ block).
@@ -170,6 +178,22 @@ civ_error_t unit_wait_for_orders(int civ, int unit_idx);
  * the player or is seen by the player (6305 bit). Caller:
  * Civ_ProcessUnitMoves @ 11f0:030c. */
 civ_error_t unit_maybe_center_view(int civ, int unit_idx);
+
+/* Orig: FUN_1078_4f0f @ 1078:4f0f -> Unit_AIPlayerTurn.
+ * civ==0 delegate inside unit_choose_order @ 1078:1480; caller of
+ * unit_step_toward_goal @ 1128:0000 (@ 1078:55d3). Game logic: picks the
+ * human-civ unit order. Returns an order code from the dispatch list in
+ * this header (0x00 idle/none, 0x20 force-sleep/reset, 0x62/0x66/0x68
+ * city/fortify/sentry, 0x69..0x75 move/attack variants, 0xffff no-path).
+ * Stub returns 0x20 (idle) until the order tables are decoded. */
+int unit_ai_player_turn(int civ, int unit_idx);
+
+/* Orig: FUN_11c0_12c8 @ 11c0:12c8 -> Unit_RevealArea.
+ * Area-reveal wrapper: caller of unit_update_visibility @ 11c0:0395
+ * (single-tile seen-bits/diplomacy/minimap update). Takes the map
+ * position plus owning civ; fans out to unit_update_visibility per
+ * tile/unit in the affected area (exact radius TBD, see Ghidra). */
+civ_error_t unit_reveal_area(int x, int y, int civ);
 
 /* Orig: FUN_11f0_4ea0 @ 11f0:4ea0 -> sys_drain_input.
  * Clears 1420:1d44..1d50 + 12b0:004c and drains PEEKMESSAGE queues

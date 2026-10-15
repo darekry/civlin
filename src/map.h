@@ -82,6 +82,30 @@ civ_error_t wdwstatus_calc_upper_rect(civ_rect_t *out);
  * DAT_12d8_45fb) (second text row). */
 civ_error_t wdwstatus_calc_lower_rect(civ_rect_t *out);
 
+/* Orig: FUN_1128_10de @ 1128:10de -> Path_FindCorridor.
+ * Corridor pather called from unit_step_toward_goal @ 1128:0000 with a
+ * 999-step budget. Params: owning civ, unit index (record at
+ * 1420:62fc + civ*0x600 + idx*0xc, goal at +5/+6), max_steps search
+ * budget. Pure grid search over the 64 KB tile buffer (no Win16).
+ * Returns a direction 1..8, 0 (arrived/exhausted), or 0xffff (no
+ * path); exact corridor-writeback layout TBD, see Ghidra. */
+int path_find_corridor(int civ, int unit_idx, int max_steps);
+
+/* Orig: FUN_1128_081c @ 1128:081c -> Path_IsPassable.
+ * Passability check used by unit_step_toward_goal @ 1128:0000 after the
+ * corridor probe. Params: owning civ plus tile coordinates. OS-free:
+ * 1 when the tile can be entered, 0 otherwise (OOB is 0). */
+int path_is_passable(int civ, int x, int y);
+
+/* Orig: FUN_11f8_0278 @ 11f8:0278 -> Text_DrawStatusRow.
+ * Status-panel text row called with the wdwstatus frame rects above
+ * (upper @ 1088:1479 + DAT_12d8_45f4, lower @ 1088:1536 + DAT_12d8_45fb).
+ * Params: NUL-terminated string, destination frame rect, slot selecting
+ * the text row (which DAT_12d8_* source / font row). GDI TEXTOUT ->
+ * SDL text render TBD. */
+civ_error_t text_draw_status_row(const char *str, const civ_rect_t *rect,
+                                 int slot);
+
 /* --- window opens / view refresh (stubs; Win16 windowing TBD) --- */
 
 /* WdwMap_Open @ 1208:0af1. */

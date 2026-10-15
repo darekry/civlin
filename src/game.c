@@ -109,6 +109,19 @@ civ_error_t game_append_year_text(void)
     return CIV_ERR_UNSUPPORTED;
 }
 
+civ_error_t gfx_draw_tech_icon(int index, int x, int y, int palette)
+{
+    (void)index;
+    (void)x;
+    (void)y;
+    (void)palette;
+    /* TODO: Orig FUN_11a8_0cb1 @ 11a8:0cb1 (9-icon GDI blitter: index
+     * 0..8, x/y origin, palette select; BITBLT the icon cell, then the
+     * status_draw_tech_icons caller advances to the next slot). Needs
+     * the icon-cell source rects + SDL texture bridge. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
 int status_font_height(void)
 {
     /* TODO: FUN_1098_0dda @ 1098:0dda (GETTEXTMETRICS tmHeight). */
@@ -159,6 +172,28 @@ civ_error_t unit_maybe_center_view(int civ, int unit_idx)
     (void)civ;
     (void)unit_idx;
     /* TODO: FUN_11f0_44d4 @ 11f0:44d4 (1110:1461 when player/seen). */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+int unit_ai_player_turn(int civ, int unit_idx)
+{
+    (void)civ;
+    (void)unit_idx;
+    /* TODO: Orig FUN_1078_4f0f @ 1078:4f0f (civ==0 delegate from
+     * unit_choose_order @ 1078:1480; drives unit_step_toward_goal @
+     * 1128:0000 at 1078:55d3, then maps the step/dir state to an order
+     * code from the game.h dispatch list). Game-logic stub: idle. */
+    return 0x20;
+}
+
+civ_error_t unit_reveal_area(int x, int y, int civ)
+{
+    (void)x;
+    (void)y;
+    (void)civ;
+    /* TODO: Orig FUN_11c0_12c8 @ 11c0:12c8 (area reveal; fans out to
+     * unit_update_visibility @ 11c0:0395 per tile/unit, then posts
+     * diplomacy/minimap updates from the 0395 tail). */
     return CIV_ERR_UNSUPPORTED;
 }
 

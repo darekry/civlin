@@ -57,6 +57,13 @@ civ_error_t newgame_wizard_run(civ_newgame_settings_t *out);
 /* Single steps (each = text build + Dialog_MenuZ_Modal). */
 civ_error_t newgame_pick_difficulty(civ_difficulty_t *out);
 civ_error_t newgame_pick_competition(int *civ_count_out);
+/* Orig: FUN_11f8_0080 @ 11f8:0080 -> Tribe_GetNameList.
+ * Tribe-name table read with param 0x94 at the newgame_pick_tribe call
+ * site (resource/buffer meaning TBD: 0x94 = 148 could be a string-table
+ * id or a MenuZ text-buffer length, see Ghidra). OS-free string table
+ * (segment 1420 dump TBD): index selects the tribe, returns the
+ * NUL-terminated name, NULL when out of range or not yet dumped. */
+const char *tribe_get_name_list(int index);
 civ_error_t newgame_pick_tribe(const civ_newgame_settings_t *ctx, int *civ_out);
 civ_error_t newgame_customize_world(civ_newgame_settings_t *ctx);
 civ_error_t newgame_finalize(const civ_newgame_settings_t *settings);

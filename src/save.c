@@ -78,6 +78,24 @@ void save_file_close(win16_handle h)
      * (Orig FUN_1140_037c @ 1140:037c). */
 }
 
+FILE *file_open_wrapper(const char *path, int write_mode)
+{
+    /* File_OpenWrapper @ 1000:2ad9: _LOPEN thin wrapper used by
+     * save_file_open @ 1140:0139. fopen is the Linux equivalent
+     * (write_mode ? "wb" : "rb"); NULL on bad args or open failure. */
+    if (!path || !*path)
+        return NULL;
+    return fopen(path, write_mode ? "wb" : "rb");
+}
+
+void file_close_wrapper(FILE *fp)
+{
+    /* File_CloseWrapper @ 1000:1f7c: _LCLOSE thin wrapper used by
+     * save_file_close @ 1140:037c. fclose; NULL-safe no-op. */
+    if (fp)
+        fclose(fp);
+}
+
 civ_error_t save_serialize(const char *path)
 {
     (void)path;

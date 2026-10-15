@@ -148,6 +148,28 @@ void sys_yield(void)
     SDL_PumpEvents();
 }
 
+int sys_pump_messages(void)
+{
+    /* Sys_PumpMessages @ 1108:0000: Win16 PEEKMESSAGE loop (pumped in
+     * unit_wait_for_orders @ 11c0:0ec2 until input/mode change) maps to
+     * a single SDL_PumpEvents pass; v1 reports an empty queue (event
+     * dispatch via SDL_PollEvent TBD with the modal-wait rewrite). */
+    SDL_PumpEvents();
+    return 0;
+}
+
+civ_error_t sys_get_client_rect(int *w_out, int *h_out)
+{
+    if (!w_out || !h_out)
+        return CIV_ERR_NOENT;
+    *w_out = 0;
+    *h_out = 0;
+    /* TODO: Orig FUN_1000_137f @ 1000:137f (GLOBALLOCK the status-port
+     * handle -> client RECT for 1218:0956/0a06). Needs the SDL status
+     * view + SDL_GetWindowSize mapping. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
 civ_error_t sys_check_runtime_memory(void)
 {
     /* TODO: Sys_CheckRuntimeMemory @ 11e8:0075 (GETFREESPACE <1000000 /

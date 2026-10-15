@@ -122,6 +122,41 @@ civ_error_t wdwstatus_calc_lower_rect(civ_rect_t *out)
     return CIV_ERR_UNSUPPORTED;
 }
 
+int path_find_corridor(int civ, int unit_idx, int max_steps)
+{
+    (void)civ;
+    (void)unit_idx;
+    (void)max_steps;
+    /* TODO: Orig FUN_1128_10de @ 1128:10de (corridor grid search with a
+     * max_steps budget, 999 from unit_step_toward_goal @ 1128:0000;
+     * writes the corridor + falls back to 0xffff/no-path clearing
+     * 6302/6304). Pure tile-buffer logic, no Win16; decode pending. */
+    return 0xffff;
+}
+
+int path_is_passable(int civ, int x, int y)
+{
+    /* Path_IsPassable @ 1128:081c (v1 pure port): bounds gate only.
+     * The full sea/land/ZOC/occupancy gating lives in the caller
+     * (unit_step_toward_goal @ 1128:0000: 0x1a3a vs 1110:16c0 sea match,
+     * 11c0:23fd ZOC, 1110:18ce/16ee occupancy); TBD here. */
+    (void)civ;
+    return map_get_tile(x, y) != -1;
+}
+
+civ_error_t text_draw_status_row(const char *str, const civ_rect_t *rect,
+                                 int slot)
+{
+    (void)str;
+    (void)rect;
+    (void)slot;
+    /* TODO: Orig FUN_11f8_0278 @ 11f8:0278 (GDI TEXTOUT of the status
+     * row string into the 1218:0956/0a06 frame; slot selects the
+     * DAT_12d8_45f4/45fb source row + font). Needs the font/text
+     * SDL bridge. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
 civ_error_t map_open_main(void)
 {
     /* TODO: WdwMap_Open @ 1208:0af1 (CREATEWINDOW CIVILIZATION, scroll

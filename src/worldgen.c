@@ -102,3 +102,14 @@ civ_error_t worldgen_copy_rect(int src_x, int src_y, unsigned w_bytes,
     /* TODO: FUN_1028_1dfb @ 1028:1dfb (dword memcpy with stride wrap). */
     return CIV_ERR_UNSUPPORTED;
 }
+
+int path_check_continent_link(int x, int y, int continent)
+{
+    (void)x;
+    (void)y;
+    (void)continent;
+    /* TODO: Orig FUN_1128_16d0 @ 1128:16d0 (continent-link cost for the
+     * 1028:12c6 ocean/land corner pairs; links only when < 0x14).
+     * Pure tile-buffer walk; metric decode pending, so report no link. */
+    return 0x14;
+}
