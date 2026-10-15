@@ -31,7 +31,82 @@ civ_error_t palette_animate_range(int first, int count)
 {
     (void)first;
     (void)count;
-    /* TODO: Palette_AnimateRange @ 1090:0376 (RGB triples + ANIMATEPALETTE;
-     * SDL_Palette equivalent on the active 8-bit surface). */
+    /* TODO: Orig FUN_1090_0376 @ 1090:0376 -> Palette_AnimateRange (RGB
+     * triples + flag byte, then ANIMATEPALETTE; callers: opcode 1 + 0xe
+     * from MainPort_ApplyPalette @ 1200:00a8 and Anim_AdvanceFrames @
+     * 10b0:0461; SDL_Palette equivalent on the active 8-bit surface). */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t video_check_driver_caps(SDL_Renderer *ren)
+{
+    if (!ren)
+        return CIV_ERR_NOENT;
+    /* TODO: Orig FUN_1008_059a @ 1008:059a -> Video_CheckDriverCaps.
+     * GETDEVICECAPS checklist @ 1420:0af4 (palette/raster caps) maps to
+     * SDL3 renderer caps (output size + pixel format + target-texture
+     * support checks TBD). */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t palette_init(void)
+{
+    /* TODO: Orig FUN_1090_0488 @ 1090:0488 -> Palette_Init. LOGPALETTE
+     * 0x300 + 0xec RGB entries from godpal.c -> CREATEPALETTE, handle to
+     * DAT_1420_9966 (SELECTPALETTE/REALIZEPALETTE at each port present).
+     * SDL3: SDL_SetPaletteColors on the 8-bit surfaces TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t gfx_port_create(SDL_Renderer *ren, int w, int h, gfx_port_t **out)
+{
+    if (out)
+        *out = NULL;
+    (void)ren;
+    (void)w;
+    (void)h;
+    if (!out)
+        return CIV_ERR_NOENT;
+    /* TODO: Orig FUN_10d0_0000 @ 10d0:0000 -> GfxPort_Create (GR_PortOpen).
+     * GETDC + CREATECOMPATIBLEDC + bitmap via 10d0:0cfa; port struct ~0x20
+     * words. SDL_Texture bridge TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t gfx_port_set_active(gfx_port_t *port)
+{
+    (void)port;
+    if (!port)
+        return CIV_ERR_NOENT;
+    /* TODO: Orig FUN_10d0_0956 @ 10d0:0956 -> GfxPort_SetActive. Selects
+     * the drawing port/DC; SDL render-target select TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t gfx_port_present_rect(gfx_port_t *port, SDL_Renderer *ren,
+                                  const SDL_Rect *rect)
+{
+    (void)port;
+    (void)ren;
+    (void)rect;
+    if (!port || !ren)
+        return CIV_ERR_NOENT;
+    /* TODO: Orig FUN_10d0_0854 @ 10d0:0854 -> GfxPort_PresentRect. BITBLT
+     * rop 0xcc0020 (SRCCOPY) + VALIDATERECT; SDL_RenderTexture rect TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t gfx_port_blit(gfx_port_t *dst, const gfx_port_t *src,
+                          const SDL_Rect *src_rect, int dst_x, int dst_y)
+{
+    (void)dst;
+    (void)src;
+    (void)src_rect;
+    (void)dst_x;
+    (void)dst_y;
+    if (!dst || !src)
+        return CIV_ERR_NOENT;
+    /* TODO: Orig FUN_10d0_08f1 @ 10d0:08f1 -> GfxPort_Blit. Port-to-port
+     * BITBLT (0xcc0020 rop family); SDL blit TBD. */
     return CIV_ERR_UNSUPPORTED;
 }

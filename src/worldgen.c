@@ -1,6 +1,8 @@
 /* Worldgen stubs. */
 #include "worldgen.h"
 
+#include <string.h>
+
 civ_error_t worldgen_generate_random(void)
 {
     /* TODO: Map_GenerateRandomOrLoad @ 1028:0000 param==0 (Sound_PlayId(4)
@@ -13,14 +15,44 @@ civ_error_t worldgen_load_preset(const uint8_t *image, size_t len)
 {
     (void)image;
     (void)len;
-    /* TODO: Map_GenerateRandomOrLoad param!=0 (HMEMCPY 64000B + tail). */
+    /* TODO: Map_GenerateRandomOrLoad param!=0: WorldGen_CopyPreset @ 10b8:079d
+     * (HMEMCPY 64000B, see worldgen_copy_preset) + tail Map_FillRect @
+     * 1028:1d15 / Map_LabelContinents @ 1028:0a93. Map buffer owned via
+     * map.h (parallel agent), so the copy target is not wired yet. */
     return CIV_ERR_UNSUPPORTED;
 }
 
 civ_error_t worldgen_load_earth(void)
 {
-    /* TODO: FUN_1108_0243 earth-map load. */
+    /* TODO: Orig FUN_1108_0243 @ 1108:0243 (WorldGen_LoadEarth, choice 3 Play
+     * on EARTH from MainMenu_WndProc @ 11e0:0221). Preset 64000B via
+     * WorldGen_CopyPreset @ 10b8:079d + tail 1028:1d15/0a93. Preset image
+     * source TBD (RSC entry vs file read); takes no caller buffer. Win16
+     * resource/file load -> stub. */
     return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t worldgen_prepare_earth(void)
+{
+    /* TODO: Orig neighbour @ 1108:01bc (WorldGen_PrepareEarth), adjacent to
+     * FUN_1108_0243. Exact role TBD from decompile near 1108:0243
+     * (presumed setup/prompt around the EARTH load). Win16 -> stub. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t worldgen_copy_preset(uint8_t *dst, const uint8_t *src, size_t len)
+{
+    /* Orig FUN_10b8_079d @ 10b8:079d (WorldGen_CopyPreset): HMEMCPY 64000B
+     * preset, callee of Map_GenerateRandomOrLoad @ 1028:0000 param!=0 path.
+     * OS-free -> ported 1:1. Segment-neighbour Art_MaybeConvertArtwork @
+     * 10b8:0000 (1420:20a9 prompt; boot_maybe_convert_artwork, see boot.h)
+     * gates artwork conversion before this copy. */
+    if (!dst || !src)
+        return CIV_ERR_NOENT;
+    if (len != CIV_MAP_PRESET_BYTES)
+        return CIV_ERR_RANGE;
+    memcpy(dst, src, len);
+    return CIV_OK;
 }
 
 civ_error_t worldgen_customize(void)

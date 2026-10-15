@@ -96,6 +96,24 @@ void file_close_wrapper(FILE *fp)
         fclose(fp);
 }
 
+long file_seek_wrapper(FILE *fp, long offset, int origin)
+{
+    /* File_SeekWrapper @ 1000:xxxx (packet E): _LLSEEK thin wrapper used
+     * by save_file_size @ 1140:0295 and the ResMgr_LoadToMem @ 1190:0fda
+     * payload path. fseek + ftell is the Linux equivalent; origin passes
+     * through to SEEK_SET/SEEK_CUR/SEEK_END (DOS _LLSEEK 0/1/2 match).
+     * Returns new offset, -1 on NULL fp, bad origin, or seek/tell error. */
+    long pos;
+    if (!fp)
+        return -1L;
+    if (origin != SEEK_SET && origin != SEEK_CUR && origin != SEEK_END)
+        return -1L;
+    if (fseek(fp, offset, origin) != 0)
+        return -1L;
+    pos = ftell(fp);
+    return pos < 0 ? -1L : pos;
+}
+
 civ_error_t save_serialize(const char *path)
 {
     (void)path;

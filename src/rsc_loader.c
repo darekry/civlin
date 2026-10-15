@@ -303,3 +303,278 @@ rsc_error_t rsc_get_indexed(const rsc_file_t *f, size_t i, rsc_indexed_t *out)
     (void)out;
     return RSC_ERR_UNSUPPORTED;
 }
+
+/* --- Packet E: ResMgr list manager (segment 1190, OS-free 1:1) --- */
+
+rsc_mgr_t *rsc_mgr_new(void)
+{
+    /* Manager alloc (replaces globals @ 1420:b2bc/b2be/b2c0/b2c2).
+     * calloc zeroes files/file_count/type_count (orig globals start 0). */
+    return (rsc_mgr_t *)calloc(1, sizeof(rsc_mgr_t));
+}
+
+static void rsc_free_res_list(rsc_res_t *head, int drop_payload_only)
+{
+    /* Shared free path behind ResMgr_ZapRes @ 1190:10e6 (drop payload,
+     * loaded=0/handle=0, keep node when drop_payload_only) and
+     * ResMgr_Dispose @ 1190:0c92 (free node when !drop_payload_only). */
+    rsc_res_t *cur = head;
+    while (cur) {
+        rsc_res_t *next = cur->next;
+        free(cur->payload);
+        cur->payload = NULL;
+        cur->payload_len = 0;
+        cur->loaded = 0;
+        cur->handle = 0;
+        if (!drop_payload_only)
+            free(cur);
+        cur = next;
+    }
+}
+
+void rsc_mgr_dispose(rsc_mgr_t *mgr)
+{
+    /* ResMgr_ZapRes @ 1190:10e6 / ResMgr_Release @ 1190:113f equiv:
+     * frees every payload (orig frees +0x2e via FREERESOURCE/GLOBALFREE),
+     * clears loaded +0x2d / handle +0x2e, keeps file/type/res nodes so
+     * directory walks still work. NULL-safe no-op. */
+    rsc_dir_t *d;
+    if (!mgr)
+        return;
+    for (d = mgr->files; d; d = d->next) {
+        rsc_type_t *t;
+        for (t = d->types; t; t = t->next)
+            rsc_free_res_list(t->head, 1);
+    }
+}
+
+void rsc_mgr_free(rsc_mgr_t *mgr)
+{
+    /* ResMgr_Dispose @ 1190:0c92 / CDisposeResourceMgr equiv without
+     * _LCLOSE (caller closes its own FILE*): dispose payloads, then free
+     * res nodes, type nodes, file nodes, mgr. NULL-safe. */
+    rsc_dir_t *d;
+    if (!mgr)
+        return;
+    rsc_mgr_dispose(mgr);
+    d = mgr->files;
+    while (d) {
+        rsc_dir_t *dnext = d->next;
+        rsc_type_t *t = d->types;
+        while (t) {
+            rsc_type_t *tnext = t->next;
+            rsc_free_res_list(t->head, 0);
+            free(t);
+            t = tnext;
+        }
+        free(d);
+        d = dnext;
+    }
+    free(mgr);
+}
+
+rsc_dir_t *rsc_add_file(rsc_mgr_t *mgr, uint32_t unk0, uint32_t unk1,
+                        uint16_t type_count)
+{
+    /* ResMgr_AddFile @ 1190:1692 (AddRFile): malloc 0x12-B file node.
+     * Orig reads u32+u32 then u16 count from the buffer cursor
+     * (rsc_read_u32le x2 + rsc_read_u16le) and links the node at
+     * DAT_1420_b2c0. Here the three header values arrive as params. */
+    rsc_dir_t *d;
+    if (!mgr)
+        return NULL;
+    d = (rsc_dir_t *)calloc(1, sizeof(*d));
+    if (!d)
+        return NULL;
+    d->unk0 = unk0;
+    d->unk1 = unk1;
+    d->type_count = type_count;
+    d->types = NULL;
+    d->next = mgr->files;
+    mgr->files = d;
+    mgr->file_count++;
+    return d;
+}
+
+rsc_type_t *rsc_add_type(rsc_mgr_t *mgr, rsc_dir_t *dir,
+                         const uint8_t tag[4])
+{
+    /* ResMgr_AddType @ 1190:13a8 (AddType): malloc 10-B type node.
+     * Orig walks list @ DAT_1420_b2c2 with ResMgr_CmpType @ 1190:1533
+     * to avoid duplicates; duplicate handling TBD (currently links
+     * unconditionally, matching the NewResource link step). */
+    rsc_type_t *t;
+    if (!mgr || !dir || !tag)
+        return NULL;
+    t = (rsc_type_t *)calloc(1, sizeof(*t));
+    if (!t)
+        return NULL;
+    memcpy(t->tag, tag, 4);
+    t->count = 0;
+    t->head = NULL;
+    t->next = dir->types;
+    dir->types = t;
+    mgr->type_count++;
+    return t;
+}
+
+rsc_res_t *rsc_new_resource(rsc_type_t *type, uint16_t id, uint32_t file_off,
+                            uint32_t len, const char *name)
+{
+    /* ResMgr_NewResource @ 1190:12ee (NewResource): malloc 0x32-B res node,
+     * links into type list, count at +4 (type->count++). Name stored
+     * length-prefixed: [0]=len capped 0x1f, [1..len]=chars, NUL-padded,
+     * so rsc_cmp_name (which skips byte 0) matches 1:1. */
+    rsc_res_t *r;
+    size_t n = 0;
+    if (!type)
+        return NULL;
+    r = (rsc_res_t *)calloc(1, sizeof(*r));
+    if (!r)
+        return NULL;
+    r->id = id;
+    r->name_off = 0;
+    r->file_off = file_off;
+    r->len = len;
+    if (name)
+        n = strlen(name);
+    if (n > 0x1f)
+        n = 0x1f;
+    r->name[0] = (char)n;
+    if (n > 0)
+        memcpy(&r->name[1], name, n);
+    memset(&r->name[1 + n], 0, sizeof(r->name) - 1 - n);
+    r->loaded = 0;
+    r->handle = 0;
+    r->payload = NULL;
+    r->payload_len = 0;
+    r->next = type->head;
+    type->head = r;
+    type->count++;
+    return r;
+}
+
+rsc_dir_t *rsc_find_file(const rsc_mgr_t *mgr, unsigned index)
+{
+    /* ResMgr_FindFile @ 1190:1180: walk file list @ DAT_1420_b2c0.
+     * Decompiler shape: cur = head; while (cur && i-- > 0) cur = cur->next. */
+    const rsc_dir_t *cur;
+    if (!mgr)
+        return NULL;
+    cur = mgr->files;
+    while (cur && index-- > 0)
+        cur = cur->next;
+    return (rsc_dir_t *)cur;
+}
+
+rsc_type_t *rsc_find_type(const rsc_mgr_t *mgr, const uint8_t tag[4])
+{
+    /* ResMgr_FindType @ 1190:121d: walk type list(s) (@ DAT_1420_b2c2
+     * global in orig; here every dir->types), tag compare via
+     * rsc_cmp_type (ResMgr_CmpType @ 1190:1533, 4-byte equality). */
+    const rsc_dir_t *d;
+    if (!mgr || !tag)
+        return NULL;
+    for (d = mgr->files; d; d = d->next) {
+        const rsc_type_t *t;
+        for (t = d->types; t; t = t->next) {
+            if (rsc_cmp_type(t->tag, tag))
+                return (rsc_type_t *)t;
+        }
+    }
+    return NULL;
+}
+
+rsc_res_t *rsc_find_by_handle(const rsc_mgr_t *mgr, uint16_t handle)
+{
+    /* ResMgr_FindByHandle @ 1190:0ee5: walk all types/res, match handle
+     * @ +0x2e. Handle 0 means "not loaded" (rsc_new_resource init) and
+     * never matches, mirroring the orig loaded-flag guard. */
+    const rsc_dir_t *d;
+    if (!mgr || handle == 0)
+        return NULL;
+    for (d = mgr->files; d; d = d->next) {
+        const rsc_type_t *t;
+        for (t = d->types; t; t = t->next) {
+            const rsc_res_t *r;
+            for (r = t->head; r; r = r->next) {
+                if (r->handle == handle)
+                    return (rsc_res_t *)r;
+            }
+        }
+    }
+    return NULL;
+}
+
+uint16_t rsc_get_type_count(const rsc_mgr_t *mgr)
+{
+    /* ResMgr_GetTypeCount @ 1190:0978: returns type-count @ DAT_1420_b2bc. */
+    return mgr ? mgr->type_count : 0;
+}
+
+rsc_res_t *rsc_get_res_indexed(const rsc_type_t *type, unsigned index)
+{
+    /* ResMgr_GetIndexed @ 1190:0a29: Nth res in type list (zero-based).
+     * Decompiler shape matches rsc_find_file: counted list walk. */
+    const rsc_res_t *cur;
+    if (!type)
+        return NULL;
+    cur = type->head;
+    while (cur && index-- > 0)
+        cur = cur->next;
+    return (rsc_res_t *)cur;
+}
+
+rsc_res_t *rsc_get_by_id(const rsc_type_t *type, uint16_t id)
+{
+    /* ResMgr_GetById @ 1190:0aea: linear walk matching id @ +0x00. */
+    const rsc_res_t *cur;
+    if (!type)
+        return NULL;
+    for (cur = type->head; cur; cur = cur->next) {
+        if (cur->id == id)
+            return (rsc_res_t *)cur;
+    }
+    return NULL;
+}
+
+rsc_res_t *rsc_get_by_name(const rsc_type_t *type, const char *name)
+{
+    /* ResMgr_GetByName @ 1190:0bbe: linear walk via rsc_cmp_name
+     * (ResMgr_CmpName @ 1190:0e72: case-insensitive, 0x1f max, NUL/NUL
+     * stop, skips byte 0 length prefix). The plain-C key is wrapped
+     * into length-prefixed form on the stack before comparing. */
+    char key[0x20];
+    size_t n = 0;
+    const rsc_res_t *cur;
+    if (!type || !name)
+        return NULL;
+    n = strlen(name);
+    if (n > 0x1f)
+        n = 0x1f;
+    key[0] = (char)n;
+    if (n > 0)
+        memcpy(&key[1], name, n);
+    memset(&key[1 + n], 0, sizeof(key) - 1 - n);
+    for (cur = type->head; cur; cur = cur->next) {
+        if (rsc_cmp_name(cur->name, key))
+            return (rsc_res_t *)cur;
+    }
+    return NULL;
+}
+
+rsc_error_t rsc_load_to_mem(rsc_mgr_t *mgr, rsc_res_t *res, FILE *fp)
+{
+    (void)mgr;
+    (void)res;
+    (void)fp;
+    /* TODO Orig FUN_1190_0fda @ 1190:0fda (ResMgr_LoadToMem / RestoMem):
+     * _LLSEEK(res->file_off @ +0x04) + _HREAD(res->len @ +0x08) payload
+     * into GLOBALALLOC buffer, sets loaded flag +0x2d = 1 and handle
+     * +0x2e. Needs container file-handle plumbing from ResMgr_LoadRsc
+     * @ 1190:0000 / ResMgr_LoadRscDisk @ 1190:0501 (Linux: file_seek_wrapper
+     * + file_read_chunk + malloc, then payload/handle assignment). */
+    if (!mgr || !res || !fp)
+        return RSC_ERR_NOENT;
+    return RSC_ERR_UNSUPPORTED;
+}

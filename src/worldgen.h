@@ -17,8 +17,16 @@
  *   Map_GetTile @ 11e8:0dcf / Map_SetTile @ 11e8:0e19 (see map.h)
  *   Map_FillRect @ 1028:1d15 / Map_DrawRectBorder @ 1028:1ca7 (see map.h)
  *   Rng_Range @ 11c8:003d / Sys_Yield @ 1098:0157 (see sys.h)
- *   FUN_1108_0243 @ 1108:0243 (Play on EARTH map load; from MainMenu dispatch;
- *     still FUN_*, next RE frontier with 1108:01bc neighbour)
+ *   WorldGen_LoadEarth @ 1108:0243 (Orig FUN_1108_0243; choice 3 Play on
+ *     EARTH from MainMenu_WndProc @ 11e0:0221; preset 64000B via 10b8:079d
+ *     + tail 1028:1d15/0a93)
+ *   WorldGen_PrepareEarth @ 1108:01bc (Orig neighbour of 1108:0243; exact
+ *     role TBD from decompile near 1108:0243)
+ *   WorldGen_CopyPreset @ 10b8:079d (Orig FUN_10b8_079d; HMEMCPY 64000B
+ *     preset, callee of Map_GenerateRandomOrLoad param!=0; segment-neighbour
+ *     Art_MaybeConvertArtwork @ 10b8:0000 with the 1420:20a9 prompt gates
+ *     artwork before this copy -- stub lives in boot.h/boot.c, see link
+ *     on worldgen_copy_preset below)
  *   Custom editor: NewGame_Wizard steps 3/4 + Ctrl_* @ 1058:xxxx
  *     (RANDOMRADIOPROC @ 1058:06ab, RANDOMSTATICPROC @ 1058:081a,
  *      RANDOMUSERPROC @ 1058:0921, REGIONPROC @ 1058:09f6)
@@ -41,11 +49,34 @@
 /* Random-map pipeline (Map_GenerateRandomOrLoad param==0 path). */
 civ_error_t worldgen_generate_random(void);
 
-/* Preset load (param!=0 path: 64000B image + 1028:1d15/0a93 tail). */
+/* Preset load (param!=0 path: 64000B image + 1028:1d15/0a93 tail).
+ * First step is WorldGen_CopyPreset @ 10b8:079d below. */
 civ_error_t worldgen_load_preset(const uint8_t *image, size_t len);
 
-/* Play on EARTH (FUN_1108_0243). */
+/* Orig: FUN_1108_0243 @ 1108:0243 -> worldgen_load_earth (WorldGen_LoadEarth).
+ * Play on EARTH (MainMenu choice 3 via MainMenu_WndProc @ 11e0:0221).
+ * Preset path: 64000B image via WorldGen_CopyPreset @ 10b8:079d, then tail
+ * Map_FillRect @ 1028:1d15 / Map_LabelContinents @ 1028:0a93.
+ * Params: orig takes no caller buffer (preset source TBD -- RSC entry or
+ * file image, NOT a caller-supplied pointer); takes void here so
+ * mainmenu_dispatch can call it directly. Win16 file/resource load ->
+ * stub CIV_ERR_UNSUPPORTED. */
 civ_error_t worldgen_load_earth(void);
+
+/* Orig: FUN_1108_01bc @ 1108:01bc -> worldgen_prepare_earth
+ * (WorldGen_PrepareEarth). Adjacent routine immediately before
+ * WorldGen_LoadEarth @ 1108:0243 in the same 1108 segment; exact role TBD
+ * from decompile near 1108:0243 (presumed pre/post step around the EARTH
+ * load -- setup, prompt, or buffer init). Win16 -> stub. */
+civ_error_t worldgen_prepare_earth(void);
+
+/* Orig: FUN_10b8_079d @ 10b8:079d -> worldgen_copy_preset (WorldGen_CopyPreset).
+ * HMEMCPY 64000B preset block; callee of Map_GenerateRandomOrLoad @ 1028:0000
+ * param!=0 path. Segment-neighbour Art_MaybeConvertArtwork @ 10b8:0000
+ * (1420:20a9 prompt; stub boot_maybe_convert_artwork in boot.h/boot.c,
+ * owned by the parallel agent -- not redeclared here) gates artwork
+ * conversion before this copy. OS-free memcpy wrapper -> ported 1:1. */
+civ_error_t worldgen_copy_preset(uint8_t *dst, const uint8_t *src, size_t len);
 
 /* Custom-world editor (wizard steps 3/4 + 1058 controls). */
 civ_error_t worldgen_customize(void);

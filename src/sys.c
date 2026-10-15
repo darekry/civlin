@@ -170,6 +170,18 @@ civ_error_t sys_get_client_rect(int *w_out, int *h_out)
     return CIV_ERR_UNSUPPORTED;
 }
 
+civ_error_t status_measure_row(int *h_out)
+{
+    if (!h_out)
+        return CIV_ERR_NOENT;
+    *h_out = 0;
+    /* TODO: Orig FUN_1138_0269 @ 1138:0269 (Status_MeasureRow:
+     * GETTEXTMETRICS tmHeight variant; feeds the status-row stride
+     * alongside status_font_height @ 1098:0dda; needs SDL text-metrics
+     * bridge). */
+    return CIV_ERR_UNSUPPORTED;
+}
+
 civ_error_t sys_check_runtime_memory(void)
 {
     /* TODO: Sys_CheckRuntimeMemory @ 11e8:0075 (GETFREESPACE <1000000 /
@@ -177,4 +189,14 @@ civ_error_t sys_check_runtime_memory(void)
      * 1420:44ff, once each via 1420:43b4/43b6). Needs a parent window +
      * SDL_GetSystemRAM mapping. */
     return CIV_ERR_UNSUPPORTED;
+}
+
+size_t file_write_chunk(FILE *fp, const uint8_t *src, size_t len)
+{
+    /* File_WriteChunk @ 1000:xxxx (packet E): _HWRITE/_LWRITE thin wrapper
+     * complementing File_ReadChunk @ 1000:272a (file_read_chunk). fwrite
+     * is the Linux equivalent; short counts on error/disk-full. */
+    if (!fp || !src || len == 0)
+        return 0;
+    return fwrite(src, 1, len, fp);
 }

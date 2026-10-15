@@ -12,6 +12,8 @@
  *   Game_UpdateStatusPanel @ 1088:13d5 (status bar redraw; also called from
  *     Map_RefreshAllViews, Civ_ProcessUnitMoves, WdwStatus_Refresh)
  *   Game_DoPollutionAndWonderRace @ 1088:1e32 (pollution + AI wonder race)
+ *   Game_PickWonderForAI @ 1170:3181 (tech-table wonder pick, callee of
+ *     Game_DoPollutionAndWonderRace per game.c pollution tail)
  *   Game_CalcProgressThreshold @ 1088:1d99 (pure: sum i*(7-diff)/2+1)
  *   Civ_ProcessUnitMoves @ 11f0:0000 (per-civ unit turn; 1 = needs UI pump)
  *   Sys_CheckRuntimeMemory @ 11e8:0075 (per-civ memory warning; see sys.h)
@@ -67,16 +69,100 @@ civ_error_t game_tick(civ_game_t *g);
  * scoring every 0x32 turns, endings via HoF path (sets quit_flag). */
 civ_error_t game_turn_tick(civ_game_t *g);
 
-/* Turn phases (stubs; game state TBD). Param is the HoF slot on game end. */
+/* --- Game-end / turn batch (frontier 2026-10-15) ---
+ * OS-free logic is ported 1:1 with explicit params (no globals, no Win16);
+ * Win16-sensitive tails stay CIV_ERR_UNSUPPORTED with TODO Orig refs.
+ * Owned-module calls (HoF/worldgen/map/sys/dialog) are documented, not
+ * linked, so the parallel map/sys/HoF/worldgen rewrites stay decoupled. */
+
+/* Orig FUN_1088_0b6d @ 1088:0b6d -> Game_ProcessGameEnd.
+ * End-of-game flow (stub): unless quit==2, runs the 1188:07ad + 1180:0000
+ * teardown pair, computes the final score via 1040:1137, then the HoF path
+ * HoF_VictoryCeremony / HoF_Load / HoF_TryInsert / HoF_Save (see
+ * halloffame.h, owned by parallel agent). Win16 dialogs + ceremony
+ * frames + file I/O -> stub.
+ * Param hof_slot is the HoF slot context on game end (exact slot/index
+ * encoding TBD, see Ghidra callers in Game_TurnLoopTick). */
 civ_error_t game_process_game_end(int hof_slot);
-/* Per-turn barbarian/guerrilla/native spawns. */
+
+/* Orig FUN_1088_0be9 @ 1088:0be9 -> Game_SpawnUprisings.
+ * Per-turn barbarian/guerrilla/native spawns (stub tail).
+ * Head (OS-free, see game_uprising_rng_scale below): difficulty-gated
+ * Rng_Range @ 11c8:003d draws for candidate tiles. Tile gates via
+ * 1110:16c0 / 1110:18ce / 1110:1dbd (land/occupancy/distance checks, exact
+ * predicates TBD), spawn reveal via Unit_RevealArea @ 11c0:12c8 (see
+ * unit_reveal_area in this header). Tail (Win16 stub): Travellers /
+ * Barbarian / Native / Guerrilla message + dialog pump -> UNSUPPORTED. */
 civ_error_t game_spawn_uprisings(void);
-/* Per-turn civ power scores + rank table. */
-civ_error_t game_update_power_rankings(void);
+
+/* Orig Rng_Range @ 11c8:003d scaling used by Game_SpawnUprisings @
+ * 1088:0be9 head -> game_uprising_rng_scale. OS-free 1:1 (implemented):
+ * (rand15 * n) >> 15, 0 when n <= 0. Takes the raw rand15 draw
+ * explicitly so game.c needs no sys.h/global RNG state; callers pass
+ * rng_next_raw() output (or a test vector). */
+unsigned game_uprising_rng_scale(unsigned rand15, int n);
+
+/* Power inputs for Orig FUN_1088_108a @ 1088:108a.
+ * cities = live city count, territory = land/territory score,
+ * treasury = gold stock (divided by 0x20 in the score), tech =
+ * pre-weighted tech contribution (sum of tech weights, table TBD). */
+typedef struct civ_power_state {
+    int cities;
+    int territory;
+    int treasury;
+    int tech;
+} civ_power_state_t;
+
+/* Orig FUN_1088_108a @ 1088:108a score kernel -> game_calc_power_score.
+ * OS-free 1:1 (implemented): cities*8 + territory + treasury/0x20 + tech.
+ * Integer division; callers pass non-negative game values. */
+int game_calc_power_score(int cities, int territory, int treasury, int tech);
+
+/* Orig FUN_1088_108a @ 1088:108a -> Game_UpdatePowerRankings.
+ * OS-free 1:1 (implemented): scores_out[i] = game_calc_power_score(...)
+ * per civ, then rank_out[i] = 0-based rank (0 = strongest; ties break to
+ * the lower civ index, stable O(n^2) like the decompiler loops). The
+ * 0x3e84 base + 0x1a rank-table region holds these outputs (exact byte
+ * stride/packing TBD, see Ghidra); the 12a8:000c rebellion flag update
+ * in the same function is Win16/game-state owned and NOT done here.
+ * Params: states/scores_out/rank_out are n_civs arrays. Returns CIV_OK,
+ * CIV_ERR_NOENT on NULL, CIV_ERR_RANGE on n_civs <= 0. */
+civ_error_t game_update_power_rankings(const civ_power_state_t *states,
+                                       int n_civs, int *scores_out,
+                                       int *rank_out);
+
 /* Status bar redraw (Game_UpdateStatusPanel @ 1088:13d5). */
 civ_error_t game_update_status_panel(void);
-/* Pollution spread + AI wonder race. */
+
+/* Orig FUN_1088_1e32 @ 1088:1e32 head (12d8:42f0) ->
+ * game_accum_pollution. OS-free 1:1 (implemented): pollution-counter
+ * accumulation (orig 16-bit word add, wraps; unsigned preserves wrap).
+ * Caller adds per-turn production, then (in the full function) calls
+ * Map_SpreadPollution @ 1028:1afd (worldgen.h, parallel-owned). */
+unsigned game_accum_pollution(unsigned counter, unsigned produced);
+
+/* Orig FUN_1088_1e32 @ 1088:1e32 -> Game_DoPollutionAndWonderRace.
+ * Mixed (stub tail): OS-free head accumulates 12d8:42f0 via
+ * game_accum_pollution above, then Map_SpreadPollution @ 1028:1afd
+ * (worldgen.h, parallel-owned). Wonder-race head picks via
+ * Game_PickWonderForAI @ 1170:3181 (game_pick_wonder_for_ai below).
+ * Tail (Win16 stub): "... builds ..." message + shield deduction +
+ * dialog pump -> UNSUPPORTED. */
 civ_error_t game_do_pollution_and_wonder_race(void);
+
+/* Orig FUN_1170_3181 @ 1170:3181 -> Game_PickWonderForAI.
+ * OS-free 1:1 (implemented): tech-table wonder pick, callee of
+ * Game_DoPollutionAndWonderRace @ 1088:1e32 per game.c:79.
+ * Eligible[w] = !wonder_done[w] && (prereq < 0 || (0 <= prereq < n_tech
+ * && tech_owned[prereq] != 0)). Out-of-range prereq (>= n_tech) is
+ * ineligible (unknown tech). Returns the eligible[roll % eligible_count]
+ * wonder index (pass roll=0 for first-fit); -1 when no wonder qualifies
+ * or on NULL/bad counts. Exact wonder/tech table ids TBD, see Ghidra;
+ * roll is the pre-scaled Rng_Range draw so no sys.h dependency. */
+int game_pick_wonder_for_ai(const int *tech_owned, int n_tech,
+                            const int *wonder_prereq,
+                            const int *wonder_done, int n_wonders,
+                            unsigned roll);
 /* Per-civ unit turn (Civ_ProcessUnitMoves @ 11f0:0000, 0x500a bytes).
  * Returns 1 when the UI must pump (orig early-returns the tick),
  * 0 when the civ is done. Stub returns 0. */
@@ -205,6 +291,19 @@ civ_error_t sys_drain_input(void);
 /* Game_CalcProgressThreshold @ 1088:1d99 (pure 1:1): the sum over
  * i = 0..n of i * (7 - difficulty), halved, plus 1. */
 unsigned game_calc_progress_threshold(int n, int difficulty);
+
+/* --- packet D (2026-10-15): info popup ---
+ * New helper only; existing HoF-end functions above untouched. */
+
+/* Orig: FUN_11f0_468c @ 11f0:468c -> Unit_ShowInfoPopup.
+ * Unit/city info popup called when turn==0 && difficulty==0 (new-game
+ * tutorial hint path out of Game_TurnLoopTick / Civ_ProcessUnitMoves;
+ * see header top), and from WdwStatus_Refresh @ 1218:0801 via
+ * Game_UpdateStatusPanel. Measures with status_font_height @ 1098:0dda
+ * (@ 11f0:4754) and draws via the Dialog_MenuZ_Modal @ 1220:0156 family.
+ * Params: owning civ + unit index (unit record 1420:62fc layout, see
+ * header top). Win16 dialog + GDI text -> SDL TBD; stub. */
+civ_error_t unit_show_info_popup(int civ, int unit_idx);
 
 void game_shutdown(civ_game_t *g);
 

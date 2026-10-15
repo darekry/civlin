@@ -57,8 +57,48 @@ win16_msg_result_t dialog_ctrl_paint_user(int msg, long wparam, long lparam);
 civ_error_t dlg_create_tracked(int dlg_id, unsigned flags);
 void dlg_destroy_tracked(void);
 
+/* --- packet F string anchors + help (2026-10-15) ---
+ * "civhelp.hlp" -> CIV_HELP_FILE_NAME (WINHELP bridge TBD, exact Orig
+ * FUN_* TBD; the call site issues WINHELP on the help file, read-only).
+ * Reference-only (owned elsewhere, NOT redefined here): "civ.prf"
+ * (boot.h CIV_PREFS_FILE), "OPENING.wav" (audio.h), "famehall.civ"
+ * (halloffame.h CIV_HOF_FILE), "civfonts.fon" + "CivData0..4.rsc"
+ * (boot.h / rsc_loader.h). MPLOGO.BMP has NO filename string (NE
+ * resource or RSC frame, see title.h). */
+#define CIV_HELP_FILE_NAME "civhelp.hlp"
+
+/* WINHELP(CIV_HELP_FILE_NAME) bridge (stub; topic NULL = contents page).
+ * Win16 WINHELP -> SDL3 help viewer TBD. */
+civ_error_t dialog_open_help(const char *topic);
+
 /* Sequence player (stubs). anim_advance_frames: 0 = busy, nonzero = done. */
 civ_error_t anim_pump_if_active(void);
 int anim_advance_frames(void);
+
+/* --- diplomacy + wait-prompt (packet D 2026-10-15) ---
+ * Posted from unit_update_visibility @ 11c0:0395 tail (contact when a unit
+ * first sees a foreign unit/city) and unit_wait_for_orders @ 11c0:0ec2
+ * blink loop. All Win16 dialog/GDI -> SDL TBD; stubs. */
+
+/* Orig: FUN_1168_0a07 @ 1168:0a07 -> Diplomacy_PostContact.
+ * Posts the first-contact diplomacy dialog from unit_update_visibility @
+ * 11c0:0395 (seen-bits x*0x32+y+10 flip / city-spot path). Params: foreign
+ * civ + contacting unit index (unit record 1420:62fc layout, see game.h).
+ * Win16 modal dialog pump -> SDL modal TBD. */
+civ_error_t diplomacy_post_contact(int civ, int unit_idx);
+
+/* Orig: FUN_1078_455c @ 1078:455c -> Diplomacy_EvalBribe.
+ * Second diplomacy post from the 11c0:0395 visibility tail (bribe/diplomat
+ * evaluation path; diplomat type 0x19, city bribe scan in
+ * unit_choose_order @ 1078:1480 context). Same (civ, unit_idx) contract
+ * as above. */
+civ_error_t diplomacy_eval_bribe(int civ, int unit_idx);
+
+/* Orig: FUN_10d8_00e0 @ 10d8:00e0 -> UI_DrawEndTurnPrompt.
+ * Draws "End of Turn / Press Return" (alternates with the unit sprite blink
+ * via 1110:0448/0dba + 1210:07ae in unit_wait_for_orders @ 11c0:0ec2 on the
+ * Sys_GetTickScaled % 0x3c 0x1e-phase clock; blit via 10d0:0854). GDI
+ * TEXTOUT + BITBLT -> SDL text/blit TBD. */
+civ_error_t ui_draw_end_turn_prompt(void);
 
 #endif /* CIVLIN_DIALOG_H */

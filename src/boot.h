@@ -11,9 +11,14 @@
  *   Sys_CheckFreeMemory      @ 11e8:0000  (GETFREESPACE + 1420:43b8 msg)
  *   App_RegisterWindowClasses@ 1098:06f8  (REGISTERCLASS x4, calls
  *                              Ctrl_RegisterCustomClasses, GETSYSTEMMETRICS)
- *   Font_EnumFamiliesInit    @ 1008:0e99  (ENUMFONTFAMILIES)
+ *   Font_EnumFamiliesInit    @ 1008:0e99  (ENUMFONTFAMILIES +
+ *                              ADDFONTRESOURCE civfonts.fon @ 1420:00a4/00fe)
  *   Video_CheckDriverCaps    @ 1008:059a  (GETDEVICECAPS; 1420:0af4 checklist)
- *   Config_LoadPrefs         @ 1008:0b4a  (_LOPEN/_LREAD prefs file)
+ *   Config_LoadPrefs         @ 1008:0b4a  (_LOPEN/_LREAD prefs file civ.prf)
+ *   Config_SavePrefs         @ 1008:0bbf  (guarded by Dos_DriveReady @
+ *                              1000:1184 + Dos_SetPath @ 1000:116a)
+ *   Dos_DriveReady           @ 1000:1184  (drive-ready guard; Linux: always 1)
+ *   Dos_SetPath              @ 1000:116a  (chdir guard; Linux: no-op CIV_OK)
  *   Palette_Init             @ 1090:0488  (CREATEPALETTE, godpal.c)
  *   ResMgr_LoadRsc           @ 1190:0000  (OpenResFile : resmgr.c; _LOPEN/
  *                              _HREAD 0xE360; called 5x with 1420:00b1,
@@ -32,6 +37,17 @@
  *   Menu_InitMainBar         @ 1048:0000  (CHECKMENUITEM/MODIFYMENU)
  *   Cursor_Set               @ 1098:096c
  *   Game_TurnLoopTick        @ 1088:0000  (while body; see gameloop in game.h)
+ *
+ * String literals (packet F anchors; read-only reference, never written):
+ *   1420:00a4/00fe "civfonts.fon" -> CIV_FONT_FILE (font init, below)
+ *   1420:00b1/00be/00cb/00d8/00e5 "CivData0..4.rsc" -> rsc_loader
+ *     (ResMgr_LoadRsc @ 1190:0000; DO NOT delete any *.rsc files)
+ *   "civ.prf" -> CIV_PREFS_FILE (Config_LoadPrefs/SavePrefs, below)
+ *   "civhelp.hlp" -> dialog_open_help (see dialog.h; WINHELP bridge TBD)
+ *   "OPENING.wav" @ 1420:3114 -> audio (see audio.h; table @ 1150:0266)
+ *   "famehall.civ" @ 1420:14e8 -> halloffame (see halloffame.h; ref only)
+ *   MPLOGO.BMP: NO filename string in the binary -> NE resource or RSC
+ *     frame (see title.h; ref only, NOT a file load)
  *
  * WinMain order reproduced by boot_run(): drive/path setup -> memory check ->
  * window classes -> timer/accel/font -> 5x RSC -> video caps -> artwork ->
@@ -65,5 +81,44 @@ civ_error_t boot_open_windows(SDL_Window *win, SDL_Renderer *ren);
 civ_error_t boot_init_menu(void);
 
 void boot_shutdown(void);
+
+/* Packet F: font / prefs / DOS guards (anchors above). Win16-backed entries
+ * are stubs (CIV_ERR_UNSUPPORTED); DOS guards are OS-free 1:1 ports. */
+
+/* Startup asset names (packet F string literals; read-only, never written). */
+#define CIV_FONT_FILE "civfonts.fon" /* 1420:00a4/00fe via ADDFONTRESOURCE */
+#define CIV_PREFS_FILE "civ.prf"     /* Config_LoadPrefs @ 1008:0b4a */
+
+/* Orig: FUN_1008_0e99 @ 1008:0e99 -> font_enum_families_init
+ * (Font_EnumFamiliesInit). ENUMFONTFAMILIES enumeration callback +
+ * ADDFONTRESOURCE(CIV_FONT_FILE). Win16 GDI font-table install -> SDL3
+ * text backend TBD; stub. */
+civ_error_t font_enum_families_init(void);
+
+/* Orig: FUN_1008_0b4a @ 1008:0b4a -> config_load_prefs (Config_LoadPrefs).
+ * _LOPEN (OF_READ) + _LREAD of CIV_PREFS_FILE from the base path, then
+ * option-struct fill with built-in defaults when missing/short. Prefs
+ * field map not yet decoded; stub. Read-only: never creates civ.prf. */
+civ_error_t config_load_prefs(void);
+
+/* Orig: FUN_1008_0bbf @ 1008:0bbf -> config_save_prefs (Config_SavePrefs).
+ * Guarded by dos_drive_ready @ 1000:1184 (must be ready) + dos_set_path @
+ * 1000:116a (cwd in place) before the _LCREAT/_LWRITE of CIV_PREFS_FILE.
+ * Win16 file-handle path -> stdio bridge TBD; stub. */
+civ_error_t config_save_prefs(void);
+
+/* Orig: FUN_1000_1184 @ 1000:1184 -> dos_drive_ready (Dos_DriveReady).
+ * Drive-ready guard checked before the Config_SavePrefs @ 1008:0bbf and
+ * Sound_PlayId @ 1150:00c9 disk paths (see sys.h `0 < drive` note).
+ * OS-free Linux equivalent: no removable-drive concept -> always 1
+ * (ready). Implemented 1:1. */
+int dos_drive_ready(int drive);
+
+/* Orig: FUN_1000_116a @ 1000:116a -> dos_set_path (Dos_SetPath). Chdir
+ * guard paired with dos_drive_ready before Config_SavePrefs writes
+ * civ.prf. Linux equivalent: no drive letters, cwd owned by the launcher
+ * -> no-op returning CIV_OK (NULL path reports NOENT instead of crashing
+ * like the original far-pointer fault). Implemented 1:1. */
+civ_error_t dos_set_path(int drive, const char *path);
 
 #endif /* CIVLIN_BOOT_H */

@@ -157,6 +157,36 @@ civ_error_t text_draw_status_row(const char *str, const civ_rect_t *rect,
     return CIV_ERR_UNSUPPORTED;
 }
 
+civ_error_t status_format_main_row(char *dst, size_t cap)
+{
+    (void)dst;
+    (void)cap;
+    /* TODO: Orig FUN_1138_0000 @ 1138:0000 (Status_FormatMainRow: formats
+     * the main status line into 12d8:24fa via game_append_year_text @
+     * 1088:1dd0, then Text_DrawStatusRow @ 11f8:0278; needs GDI font /
+     * TEXTOUT SDL bridge). */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t status_format_second_row(char *dst, size_t cap)
+{
+    (void)dst;
+    (void)cap;
+    /* TODO: Orig FUN_11b0_0000 @ 11b0:0000 (Status_FormatSecondRow: second
+     * status line, second game_append_year_text caller; same 12d8:24fa +
+     * 11f8:0278 path as above). */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t status_format_gold_row(char *dst, size_t cap)
+{
+    (void)dst;
+    (void)cap;
+    /* TODO: Orig FUN_11b8_14e5 @ 11b8:14e5 (Status_FormatGoldRow: gold/city
+     * row; same 12d8:24fa + 11f8:0278 path; field layout TBD). */
+    return CIV_ERR_UNSUPPORTED;
+}
+
 civ_error_t map_open_main(void)
 {
     /* TODO: WdwMap_Open @ 1208:0af1 (CREATEWINDOW CIVILIZATION, scroll

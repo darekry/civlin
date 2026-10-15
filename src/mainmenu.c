@@ -2,6 +2,7 @@
 #include "mainmenu.h"
 
 #include "save.h"
+#include "worldgen.h"
 
 civ_error_t mainmenu_run(civ_mainmenu_choice_t *out)
 {
@@ -23,8 +24,9 @@ civ_error_t mainmenu_dispatch(civ_mainmenu_choice_t choice)
         /* TODO: save_prompt_open @ 1130:000e; -1 -> choice stays invalid. */
         return save_prompt_open(&dlg);
     case CIV_MENU_EARTH:
-        /* TODO: FUN_1108_0243 earth-map load; nonzero -> invalid choice. */
-        return CIV_ERR_UNSUPPORTED;
+        /* Orig FUN_1108_0243 @ 1108:0243 -> worldgen_load_earth (see
+         * worldgen.h WorldGen_LoadEarth); nonzero -> invalid choice. */
+        return worldgen_load_earth();
     case CIV_MENU_HALL:
         /* TODO: HoF_Load @ 1080:0023 + HoF_Show @ 1080:0119. */
         return CIV_ERR_UNSUPPORTED;

@@ -33,7 +33,7 @@ const char *sound_map_id_to_wav(int file_id)
     /* Sound_MapIdToWav @ 1150:019e; names @ 1420:3080..315a. Gaps fall to
      * the table default @ 1150:025b = silent (NULL). */
     switch (file_id) {
-    case 0x83: return "OPENING.wav";
+    case 0x83: return CIV_OPENING_WAV_NAME;
     case 0x85: return "LINC.wav";
     case 0x86: return "MONT.wav";
     case 0x87: return "RAMS.wav";

@@ -102,6 +102,21 @@ FILE *file_open_wrapper(const char *path, int write_mode);
  * Thin _LCLOSE wrapper used by save_file_close @ 1140:037c. Linux
  * equivalent: fclose(fp); NULL-safe no-op. */
 void file_close_wrapper(FILE *fp);
+/* Orig: FUN_1000_xxxx @ 1000:xxxx -> File_SeekWrapper (packet E).
+ * Thin _LLSEEK wrapper complementing File_OpenWrapper @ 1000:2ad9,
+ * File_CloseWrapper @ 1000:1f7c and File_ReadChunk @ 1000:272a
+ * (rsc_loader.h). Used by save_file_size @ 1140:0295 and the future
+ * ResMgr_LoadToMem @ 1190:0fda payload path (rsc_load_to_mem). Linux
+ * equivalent: fseek(fp, offset, origin) + ftell; origin maps 1:1 to
+ * SEEK_SET/SEEK_CUR/SEEK_END (orig _LLSEEK 0/1/2 match DOS). Returns the
+ * new file offset, or -1 on bad args / seek / tell failure (mirrors
+ * _LLSEEK HFILE_ERROR). */
+long file_seek_wrapper(FILE *fp, long offset, int origin);
+/* Win16 file-import map (KERNEL, packet E): _LOPEN -> file_open_wrapper,
+ * _LCLOSE -> file_close_wrapper, _LLSEEK -> file_seek_wrapper (above),
+ * _LREAD/_HREAD -> file_read_chunk (rsc_loader.h) / save_file_read
+ * (chunked 0x8000 @ 1140:019d), _LWRITE/_HWRITE -> file_write_chunk
+ * (sys.h) / save_file_write (chunked @ 1140:0245). */
 
 /* --- serialize layer (game state <-> flat 0x1a2ba image) --- */
 

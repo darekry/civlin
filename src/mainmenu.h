@@ -38,7 +38,9 @@ typedef enum civ_mainmenu_choice {
  * while choice<0 || choice>3) and returns the raw choice. */
 civ_error_t mainmenu_run(civ_mainmenu_choice_t *out);
 
-/* Dispatches one choice to load/earth/hall/quit/new-game. */
+/* Dispatches one choice to load/earth/hall/quit/new-game.
+ * CIV_MENU_EARTH (3) -> worldgen_load_earth (Orig FUN_1108_0243 @ 1108:0243,
+ * see worldgen.h); nonzero result keeps the menu choice invalid. */
 civ_error_t mainmenu_dispatch(civ_mainmenu_choice_t choice);
 
 #endif /* CIVLIN_MAINMENU_H */

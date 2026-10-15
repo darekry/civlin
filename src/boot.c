@@ -30,8 +30,9 @@ civ_error_t boot_register_classes(void)
 
 civ_error_t boot_load_fonts(void)
 {
-    /* TODO: Font_EnumFamiliesInit @ 1008:0e99 + ADDFONTRESOURCE(civfonts.fon). */
-    return CIV_ERR_UNSUPPORTED;
+    /* WinMain font step: Font_EnumFamiliesInit @ 1008:0e99 +
+     * ADDFONTRESOURCE(CIV_FONT_FILE) (see boot.h). */
+    return font_enum_families_init();
 }
 
 civ_error_t boot_load_resources(void)
@@ -42,7 +43,9 @@ civ_error_t boot_load_resources(void)
 
 civ_error_t boot_check_video(void)
 {
-    /* TODO: Video_CheckDriverCaps @ 1008:059a (SDL3 renderer caps equiv). */
+    /* TODO: Video_CheckDriverCaps @ 1008:059a (see video.h
+     * video_check_driver_caps; renderer threading TBD, so this step stays
+     * UNSUPPORTED until boot_open_windows owns an SDL_Renderer to check). */
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -54,14 +57,14 @@ civ_error_t boot_maybe_convert_artwork(void)
 
 civ_error_t boot_load_prefs(void)
 {
-    /* TODO: Config_LoadPrefs @ 1008:0b4a. */
-    return CIV_ERR_UNSUPPORTED;
+    /* WinMain prefs step: Config_LoadPrefs @ 1008:0b4a (see boot.h). */
+    return config_load_prefs();
 }
 
 civ_error_t boot_init_palette(void)
 {
-    /* TODO: Palette_Init @ 1090:0488 (godpal.c). */
-    return CIV_ERR_UNSUPPORTED;
+    /* WinMain palette step: Palette_Init @ 1090:0488 (see video.h). */
+    return palette_init();
 }
 
 civ_error_t boot_init_tables(void)
@@ -95,6 +98,54 @@ civ_error_t boot_init_menu(void)
     err = dialog_init();
     if (err != CIV_OK)
         return err;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+/* --- Packet F: font / prefs / DOS guards (see boot.h anchors) --- */
+
+int dos_drive_ready(int drive)
+{
+    /* Orig: FUN_1000_1184 @ 1000:1184 -> Dos_DriveReady. OS-free Linux
+     * equivalent: no removable-drive concept -> always ready (1). */
+    (void)drive;
+    return 1;
+}
+
+civ_error_t dos_set_path(int drive, const char *path)
+{
+    /* Orig: FUN_1000_116a @ 1000:116a -> Dos_SetPath. Linux: no drive
+     * letters, cwd owned by the launcher -> no-op. */
+    (void)drive;
+    if (!path)
+        return CIV_ERR_NOENT;
+    return CIV_OK;
+}
+
+civ_error_t font_enum_families_init(void)
+{
+    /* TODO: Orig FUN_1008_0e99 @ 1008:0e99 -> Font_EnumFamiliesInit.
+     * ENUMFONTFAMILIES enumeration callback + ADDFONTRESOURCE(CIV_FONT_FILE
+     * "civfonts.fon" @ 1420:00a4/00fe). Win16 GDI font-table install ->
+     * SDL3 text backend TBD. Read-only: never writes to civ1win/. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t config_load_prefs(void)
+{
+    /* TODO: Orig FUN_1008_0b4a @ 1008:0b4a -> Config_LoadPrefs. _LOPEN
+     * (OF_READ) + _LREAD of CIV_PREFS_FILE "civ.prf" from the base path
+     * (see sys_base_path), then option-struct fill with built-in defaults
+     * when the file is missing/short. Prefs field map not yet decoded.
+     * Read-only: never creates civ.prf. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t config_save_prefs(void)
+{
+    /* TODO: Orig FUN_1008_0bbf @ 1008:0bbf -> Config_SavePrefs. Guarded by
+     * dos_drive_ready @ 1000:1184 (must be ready) + dos_set_path @
+     * 1000:116a (cwd in place) before the _LCREAT/_LWRITE of CIV_PREFS_FILE
+     * "civ.prf". Win16 file-handle path -> stdio bridge TBD. */
     return CIV_ERR_UNSUPPORTED;
 }
 

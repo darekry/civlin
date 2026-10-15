@@ -106,6 +106,30 @@ int path_is_passable(int civ, int x, int y);
 civ_error_t text_draw_status_row(const char *str, const civ_rect_t *rect,
                                  int slot);
 
+/* --- status-text rows (packet D 2026-10-15) ---
+ * Row formatters write the NUL-terminated status line into the shared
+ * 12d8:24fa line buffer (see game_append_year_text @ 1088:1dd0), then the
+ * caller blits via Text_DrawStatusRow @ 11f8:0278 into the 1218:0956/0a06
+ * frames. All three need the GDI font selection + TEXTOUT -> SDL text
+ * bridge; stubs. */
+
+/* Orig: FUN_1138_0000 @ 1138:0000 -> Status_FormatMainRow.
+ * Formats the main status line (caller of game_append_year_text @
+ * 1088:1dd0 per game.h:104; year + progress text into 12d8:24fa).
+ * Orig writes the fixed 12d8:24fa buffer directly; explicit dst/cap
+ * keeps the Linux side free of globals. */
+civ_error_t status_format_main_row(char *dst, size_t cap);
+
+/* Orig: FUN_11b0_0000 @ 11b0:0000 -> Status_FormatSecondRow.
+ * Second status line (second game_append_year_text caller; same 12d8:24fa
+ * buffer contract as above). Exact field layout TBD, see Ghidra. */
+civ_error_t status_format_second_row(char *dst, size_t cap);
+
+/* Orig: FUN_11b8_14e5 @ 11b8:14e5 -> Status_FormatGoldRow.
+ * Gold/city row (third game_append_year_text caller family; same buffer).
+ * Exact gold/city field layout TBD, see Ghidra. */
+civ_error_t status_format_gold_row(char *dst, size_t cap);
+
 /* --- window opens / view refresh (stubs; Win16 windowing TBD) --- */
 
 /* WdwMap_Open @ 1208:0af1. */

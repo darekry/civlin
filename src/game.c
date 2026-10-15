@@ -44,25 +44,71 @@ civ_error_t game_turn_tick(civ_game_t *g)
 civ_error_t game_process_game_end(int hof_slot)
 {
     (void)hof_slot;
-    /* TODO: Game_ProcessGameEnd @ 1088:0b6d (1188:07ad + 1180:0000 unless
-     * quit==2, 1040:1137 score, HoF_VictoryCeremony/Load/TryInsert/Save). */
+    /* TODO: Orig FUN_1088_0b6d @ 1088:0b6d (unless quit==2 run 1188:07ad +
+     * 1180:0000 teardown, score via 1040:1137, then HoF_VictoryCeremony /
+     * HoF_Load / HoF_TryInsert / HoF_Save; see game.h). Win16 dialogs +
+     * ceremony frames + famehall.civ I/O (halloffame.h, parallel-owned). */
     return CIV_ERR_UNSUPPORTED;
 }
 
 civ_error_t game_spawn_uprisings(void)
 {
-    /* TODO: Game_SpawnUprisings @ 1088:0be9 (difficulty-gated random tiles
-     * via 1110:16c0/18ce/1dbd, units via 11c0:12c8, Travellers/Barbarian
-     * /Native/Guerrilla messages). */
+    /* TODO: Orig FUN_1088_0be9 @ 1088:0be9. OS-free head (Rng_Range @
+     * 11c8:003d draws, see game_uprising_rng_scale) + tile gates 1110:16c0
+     * /18ce/1dbd + Unit_RevealArea @ 11c0:12c8 are documented in game.h;
+     * Travellers/Barbarian/Native/Guerrilla message + dialog tail needs
+     * Win16 dialogs + map buffer writes (map.h, parallel-owned). */
     return CIV_ERR_UNSUPPORTED;
 }
 
-civ_error_t game_update_power_rankings(void)
+unsigned game_uprising_rng_scale(unsigned rand15, int n)
 {
-    /* TODO: Game_UpdatePowerRankings @ 1088:108a (scores = cities*8 +
-     * territory + treasury/0x20 + tech weights; rank table 0x3e84+0x1a;
-     * 12a8:000c rebellion flag). */
-    return CIV_ERR_UNSUPPORTED;
+    /* Rng_Range @ 11c8:003d scaling used by Game_SpawnUprisings @
+     * 1088:0be9 head: (rand15 * n) >> 15. n <= 0 guard is a Linux-side
+     * addition (orig callers pass n > 0); rand15 is the caller's
+     * rng_next_raw() draw masked to 0x7FFF. */
+    if (n <= 0)
+        return 0;
+    return (rand15 * (unsigned)n) >> 15;
+}
+
+int game_calc_power_score(int cities, int territory, int treasury, int tech)
+{
+    /* Game_UpdatePowerRankings @ 1088:108a kernel: cities*8 + territory +
+     * treasury/0x20 + tech. */
+    return cities * 8 + territory + treasury / 0x20 + tech;
+}
+
+civ_error_t game_update_power_rankings(const civ_power_state_t *states,
+                                       int n_civs, int *scores_out,
+                                       int *rank_out)
+{
+    /* Orig FUN_1088_108a @ 1088:108a (scores + rank table 0x3e84+0x1a;
+     * 12a8:000c rebellion flag is Win16/game-state owned, not done here).
+     * Decompiler shape: linear score pass, then nested-loop ranking. */
+    int i;
+    int j;
+
+    if (!states || !scores_out || !rank_out)
+        return CIV_ERR_NOENT;
+    if (n_civs <= 0)
+        return CIV_ERR_RANGE;
+    for (i = 0; i < n_civs; i++)
+        scores_out[i] = game_calc_power_score(states[i].cities,
+                                              states[i].territory,
+                                              states[i].treasury,
+                                              states[i].tech);
+    for (i = 0; i < n_civs; i++) {
+        int rank = 0;
+
+        for (j = 0; j < n_civs; j++) {
+            if (scores_out[j] > scores_out[i] ||
+                (scores_out[j] == scores_out[i] && j < i))
+                rank++;
+        }
+        rank_out[i] = rank;
+    }
+    return CIV_OK;
 }
 
 civ_error_t game_update_status_panel(void)
@@ -73,12 +119,74 @@ civ_error_t game_update_status_panel(void)
     return CIV_ERR_UNSUPPORTED;
 }
 
+unsigned game_accum_pollution(unsigned counter, unsigned produced)
+{
+    /* Game_DoPollutionAndWonderRace @ 1088:1e32 head (12d8:42f0 word add).
+     * Orig wraps at 16 bits; unsigned addition preserves the wrap. */
+    return counter + produced;
+}
+
 civ_error_t game_do_pollution_and_wonder_race(void)
 {
-    /* TODO: Game_DoPollutionAndWonderRace @ 1088:1e32 (12d8:42f0 pollution
-     * counter + Map_SpreadPollution, wonder pick via 1170:3181/tech tables,
-     * "... builds ..." message, shield deduction). */
+    /* TODO: Orig FUN_1088_1e32 @ 1088:1e32. OS-free head (12d8:42f0 via
+     * game_accum_pollution + Map_SpreadPollution @ 1028:1afd, see
+     * worldgen.h parallel-owned) + wonder pick via Game_PickWonderForAI @
+     * 1170:3181 (game_pick_wonder_for_ai below, implemented) are in game.h;
+     * "... builds ..." message + shield deduction + dialog tail needs Win16
+     * UI + city state. */
     return CIV_ERR_UNSUPPORTED;
+}
+
+int game_pick_wonder_for_ai(const int *tech_owned, int n_tech,
+                            const int *wonder_prereq,
+                            const int *wonder_done, int n_wonders,
+                            unsigned roll)
+{
+    /* Orig FUN_1170_3181 @ 1170:3181, callee of Game_DoPollutionAndWonderRace
+     * @ 1088:1e32. Decompiler shape: linear tech-table scan for eligible
+     * wonders, then indexed pick among them. Two passes avoid any heap. */
+    int eligible = 0;
+    int want;
+    int i;
+    int seen;
+
+    if (!tech_owned || !wonder_prereq || !wonder_done)
+        return -1;
+    if (n_tech <= 0 || n_wonders <= 0)
+        return -1;
+    for (i = 0; i < n_wonders; i++) {
+        int req = wonder_prereq[i];
+
+        if (wonder_done[i])
+            continue;
+        if (req < 0)
+            eligible++;
+        else if (req < n_tech && tech_owned[req] != 0)
+            eligible++;
+    }
+    if (eligible == 0)
+        return -1;
+    want = (int)(roll % (unsigned)eligible);
+    seen = 0;
+    for (i = 0; i < n_wonders; i++) {
+        int req = wonder_prereq[i];
+        int ok;
+
+        if (wonder_done[i])
+            continue;
+        if (req < 0)
+            ok = 1;
+        else if (req < n_tech && tech_owned[req] != 0)
+            ok = 1;
+        else
+            ok = 0;
+        if (!ok)
+            continue;
+        if (seen == want)
+            return i;
+        seen++;
+    }
+    return -1;
 }
 
 int civ_process_unit_moves(int civ)
@@ -213,6 +321,17 @@ unsigned game_calc_progress_threshold(int n, int difficulty)
     for (i = 0; i <= n; i++)
         acc += (unsigned)i * (unsigned)(7 - difficulty);
     return acc / 2u + 1u;
+}
+
+civ_error_t unit_show_info_popup(int civ, int unit_idx)
+{
+    (void)civ;
+    (void)unit_idx;
+    /* TODO: Orig FUN_11f0_468c @ 11f0:468c (Unit_ShowInfoPopup: turn==0 &&
+     * difficulty==0 popup; font via status_font_height @ 1098:0dda at
+     * 11f0:4754, modal via Dialog_MenuZ_Modal @ 1220:0156 family; needs
+     * SDL dialog + text bridge). */
+    return CIV_ERR_UNSUPPORTED;
 }
 
 void game_shutdown(civ_game_t *g)

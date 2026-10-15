@@ -39,6 +39,8 @@
 #define CIVLIN_SYS_H
 
 #include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
 
 #include "civ_common.h"
 
@@ -97,8 +99,41 @@ int sys_pump_messages(void);
  * equivalent TBD (SDL_GetWindowSize on the status view). Params are the
  * client width/height outputs; 0 on missing rect. */
 civ_error_t sys_get_client_rect(int *w_out, int *h_out);
+/* Orig: FUN_1138_0269 @ 1138:0269 -> Status_MeasureRow.
+ * GETTEXTMETRICS variant in the status_font_height @ 1098:0dda chain
+ * (derives the status-row line stride kept as local_8, x2 for the civ
+ * block; callers: 1138 row formatters + status panel @ 1088:1460 +
+ * Unit_ShowInfoPopup @ 11f0:4754 + Dialog_MenuZ_Modal @ 1220:0b88 via
+ * status_font_height). Linux equivalent TBD (SDL_ttf measurement;
+ * SDL_GetText stub). Returns CIV_OK + *h_out on success. */
+civ_error_t status_measure_row(int *h_out);
 /* Sys_CheckRuntimeMemory @ 11e8:0075. UNSUPPORTED (needs window + RAM
  * thresholds; SDL_GetSystemRAM equivalent TBD). */
 civ_error_t sys_check_runtime_memory(void);
+
+/* --- Packet E: Win16 file/resource imports (KERNEL) ---
+ * File map (with save.h + rsc_loader.h):
+ *   _LOPEN  -> file_open_wrapper  (save.h, FUN_1000_2ad9 @ 1000:2ad9)
+ *   _LCLOSE -> file_close_wrapper (save.h, FUN_1000_1f7c @ 1000:1f7c)
+ *   _LLSEEK -> file_seek_wrapper  (save.h, FUN_1000_xxxx @ 1000:xxxx)
+ *   _LREAD/_HREAD   -> file_read_chunk  (rsc_loader.h, FUN_1000_272a
+ *     @ 1000:272a; streaming read behind ResMgr_ReadU16Disk @ 1190:1abe /
+ *     U16Disk2 @ 1190:1b47 / U32Disk @ 1190:1bcb)
+ *   _LWRITE/_HWRITE -> file_write_chunk (below; streaming write behind
+ *     save_file_write @ 1140:0245 chunked path)
+ * Resource map (KERNEL resource funcs -> rsc_loader.h ResMgr layer):
+ *   FINDRESOURCE  -> rsc_find_type / rsc_get_by_id / rsc_get_by_name
+ *   LOADRESOURCE  -> rsc_load_to_mem (stub @ 1190:0fda; _LLSEEK+_HREAD)
+ *   LOCKRESOURCE  -> res->payload after load (no selector on Linux)
+ *   UNLOCKRESOURCE/FREERESOURCE -> rsc_mgr_dispose/free (payload free +
+ *     loaded/handle clear; see ResMgr_ZapRes @ 1190:10e6, ResMgr_Dispose
+ *     @ 1190:0c92, ResMgr_Release @ 1190:113f). */
+
+/* Orig: FUN_1000_xxxx @ 1000:xxxx -> File_WriteChunk (packet E).
+ * Thin _HWRITE/_LWRITE wrapper complementing File_ReadChunk @ 1000:272a
+ * (file_read_chunk in rsc_loader.h). Linux equivalent: fwrite(src, 1,
+ * len, fp); returns bytes actually written (short on error/disk-full,
+ * 0 on NULL fp/src or len == 0). */
+size_t file_write_chunk(FILE *fp, const uint8_t *src, size_t len);
 
 #endif /* CIVLIN_SYS_H */

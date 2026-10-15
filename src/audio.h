@@ -10,6 +10,14 @@
  *   Sound_MapIdToWav @ 1150:019e (jump table @ 1150:0266, 41 entries for
  *                       IDs 0x83..0xAB; names @ 1420:3080..315a, dump-confirmed)
  *
+ * String literal anchor (packet F): "OPENING.wav" @ 1420:3114
+ * (CIV_OPENING_WAV_NAME, via the 1150:0266 jump-table names @
+ * 1420:3080..315a). Other packet-F literals live with their owners:
+ * civfonts.fon + CivData0..4.rsc (boot.h / rsc_loader.h), civ.prf
+ * (boot.h), civhelp.hlp (dialog.h), famehall.civ (halloffame.h);
+ * MPLOGO.BMP has no filename string (NE resource / RSC frame, see
+ * title.h). All asset reads are read-only.
+ *
  * ID normalization in Sound_PlayId (disassembly @ 1150:014f..016d):
  *   0x13..0x20 -> -= 0x0e; 4 -> 3; 0x29 -> 0x28.
  * Mapped IDs: 0x83 OPENING, 0x85..0x92 leaders LINC/MONT/RAMS/SHAK/NAPO/
@@ -23,6 +31,9 @@
 #define CIVLIN_AUDIO_H
 
 #include "civ_common.h"
+
+/* Packet F string literal: "OPENING.wav" @ 1420:3114 (read-only). */
+#define CIV_OPENING_WAV_NAME "OPENING.wav"
 
 /* Sound IDs (SI values for Sound_PlayId; file IDs are SI+0x80). */
 typedef enum civ_sound_id {

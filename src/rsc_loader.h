@@ -172,4 +172,159 @@ rsc_error_t rsc_record_data(const rsc_file_t *f, size_t i,
 size_t rsc_image_count(const rsc_file_t *f);
 rsc_error_t rsc_get_indexed(const rsc_file_t *f, size_t i, rsc_indexed_t *out);
 
+/* --- Packet E: ResMgr list manager (segment 1190, OS-free 1:1) ---
+ * Win16 imports behind this layer (KERNEL):
+ *   _LOPEN/_LCLOSE  -> file_open_wrapper/file_close_wrapper (save.h)
+ *   _LREAD/_HREAD   -> file_read_chunk (above, FUN_1000_272a @ 1000:272a)
+ *   _LWRITE/_HWRITE -> file_write_chunk (sys.h, fwrite equiv)
+ *   _LLSEEK         -> file_seek_wrapper (save.h, fseek/ftell equiv)
+ *   LOADRESOURCE/FINDRESOURCE/LOCKRESOURCE/UNLOCKRESOURCE/FREERESOURCE
+ *     -> rsc_find_type/rsc_get_by_id/rsc_get_by_name/rsc_load_to_mem below
+ *     (orig GLOBAL handles; Linux uses malloc'd nodes + payload pointers).
+ *
+ * Orig node sizes (packed Win16, far ptrs = 4 B):
+ *   file node 0x12 B (AddRFile; list @ DAT_1420_b2c0; u32+u32 then u16 count)
+ *   type node 0x10 B (AddType; list @ DAT_1420_b2c2; 4-char tag + counts)
+ *   res  node 0x32 B (NewResource; id u16 @ +0, name-off u16 @ +2,
+ *     file-off u32 @ +4, len u32 @ +8, name-len u8 + chars @ +0xc capped
+ *     0x1f, loaded flag @ +0x2d, handle @ +0x2e).
+ * Linux structs use native pointers (larger); field ORDER and on-disk
+ * offsets (+0x2d/+0x2e etc.) are preserved in comments. No globals:
+ * caller owns an rsc_mgr_t (zero-initialised or via rsc_mgr_new) and
+ * passes it explicitly (orig globals @ 1420:b2b4/b2b8/b2b6/b2ba/b2bc/
+ * b2be/b2c0/b2c2 dropped).
+ *
+ * Name mapping (Orig FUN_seg_off @ seg:off -> C name; Ghidra display
+ * name is Module_VerbNoun Pascal, C name is snake_case per save.h note):
+ *   FUN_1190_1692 @ 1190:1692 ResMgr_AddFile      -> rsc_add_file
+ *   FUN_1190_13a8 @ 1190:13a8 ResMgr_AddType       -> rsc_add_type
+ *   FUN_1190_12ee @ 1190:12ee ResMgr_NewResource   -> rsc_new_resource
+ *   FUN_1190_1180 @ 1190:1180 ResMgr_FindFile      -> rsc_find_file
+ *   FUN_1190_121d @ 1190:121d ResMgr_FindType      -> rsc_find_type
+ *   FUN_1190_0ee5 @ 1190:0ee5 ResMgr_FindByHandle  -> rsc_find_by_handle
+ *   FUN_1190_0978 @ 1190:0978 ResMgr_GetTypeCount  -> rsc_get_type_count
+ *   FUN_1190_0a29 @ 1190:0a29 ResMgr_GetIndexed    -> rsc_get_res_indexed
+ *     (renamed with _res_ infix: rsc_get_indexed above is the v1 image view)
+ *   FUN_1190_0aea @ 1190:0aea ResMgr_GetById       -> rsc_get_by_id
+ *   FUN_1190_0bbe @ 1190:0bbe ResMgr_GetByName     -> rsc_get_by_name
+ *   FUN_1190_0fda @ 1190:0fda ResMgr_LoadToMem     -> rsc_load_to_mem (stub)
+ *   FUN_1190_10e6 @ 1190:10e6 ResMgr_ZapRes        -> rsc_mgr_dispose covers
+ *     free path (payload free + loaded=0/handle=0, no _LCLOSE here)
+ *   FUN_1190_0c92 @ 1190:0c92 ResMgr_Dispose       -> rsc_mgr_dispose/free
+ * All find/get/add are OS-free linked-list walks (implemented 1:1);
+ * only LoadToMem needs file offsets + _LLSEEK/_HREAD (stub). */
+
+typedef struct rsc_res rsc_res_t;
+typedef struct rsc_type rsc_type_t;
+typedef struct rsc_dir rsc_dir_t;
+typedef struct rsc_mgr rsc_mgr_t;
+
+/* Res node (orig 0x32 B). name[0] is the length prefix (u8, capped 0x1f)
+ * so rsc_cmp_name(a->name, key) works directly (it skips byte 0 and
+ * compares 1..0x1f case-insensitively, NUL/NUL stop). Linux-only
+ * payload/payload_len/next are appended after the orig tail. */
+struct rsc_res {
+    uint16_t id;               /* +0x00 */
+    uint16_t name_off;         /* +0x02 string-area offset */
+    uint32_t file_off;         /* +0x04 payload offset in container */
+    uint32_t len;              /* +0x08 payload length */
+    char name[0x20];           /* +0x0c: [0]=len, [1..len]=chars, NUL-padded */
+    uint8_t loaded;            /* +0x2d */
+    uint16_t handle;           /* +0x2e (0 == not loaded) */
+    uint8_t *payload;          /* Linux only (malloc'd by load path) */
+    size_t payload_len;        /* Linux only */
+    rsc_res_t *next;
+};
+
+/* Type node (orig 0x10 B: tag[4] + count + far ptrs). */
+struct rsc_type {
+    uint8_t tag[4];
+    uint16_t count;            /* res count in this type (orig +4) */
+    rsc_res_t *head;
+    rsc_type_t *next;
+};
+
+/* File node (orig 0x12 B: u32 unk0 + u32 unk1 + u16 type-dir count). */
+struct rsc_dir {
+    uint32_t unk0;
+    uint32_t unk1;
+    uint16_t type_count;       /* header u16 (expected types) */
+    rsc_type_t *types;
+    rsc_dir_t *next;
+};
+
+/* Manager (replaces globals @ 1420:b2bc/b2be/b2c0/b2c2; no globals). */
+struct rsc_mgr {
+    rsc_dir_t *files;
+    uint16_t file_count;       /* DAT_1420_b2be equiv */
+    uint16_t type_count;       /* DAT_1420_b2bc equiv (total linked types) */
+};
+
+/* Lifecycle (OS-free malloc/free; NULL-safe; no exit). */
+rsc_mgr_t *rsc_mgr_new(void);
+void rsc_mgr_free(rsc_mgr_t *mgr);      /* ResMgr_Dispose @ 1190:0c92 equiv
+                                         * (frees nodes + payloads; caller
+                                         * closes its own FILE*, no _LCLOSE) */
+void rsc_mgr_dispose(rsc_mgr_t *mgr);   /* Alias of free-path behind
+                                         * ResMgr_ZapRes @ 1190:10e6 /
+                                         * ResMgr_Release @ 1190:113f:
+                                         * drops payloads, clears
+                                         * loaded/handle, keeps nodes. */
+
+/* Orig: FUN_1190_1692 @ 1190:1692 -> ResMgr_AddFile (AddRFile).
+ * OS-free node alloc/link: malloc 0x12-B file node, stores u32+u32+u16,
+ * prepends to mgr->files, bumps file_count. Returns node or NULL (NOMEM
+ * or bad mgr). */
+rsc_dir_t *rsc_add_file(rsc_mgr_t *mgr, uint32_t unk0, uint32_t unk1,
+                        uint16_t type_count);
+/* Orig: FUN_1190_13a8 @ 1190:13a8 -> ResMgr_AddType (AddType).
+ * OS-free: malloc 10-B type node, copies 4-char tag, links into
+ * dir->types, bumps mgr->type_count. NULL on bad args/NOMEM. */
+rsc_type_t *rsc_add_type(rsc_mgr_t *mgr, rsc_dir_t *dir,
+                         const uint8_t tag[4]);
+/* Orig: FUN_1190_12ee @ 1190:12ee -> ResMgr_NewResource (NewResource).
+ * OS-free: malloc 0x32-B res node, fills id/file_off/len + length-prefixed
+ * name (truncated to 0x1f, NUL-padded), loaded=0/handle=0/payload=NULL,
+ * links into type->head, bumps type->count. NULL on bad args/NOMEM. */
+rsc_res_t *rsc_new_resource(rsc_type_t *type, uint16_t id, uint32_t file_off,
+                            uint32_t len, const char *name);
+
+/* Orig: FUN_1190_1180 @ 1190:1180 -> ResMgr_FindFile.
+ * OS-free list walk: zero-based index into mgr->files (decompiler shows
+ * sequential traversal with counter; orig key appears ordinal). NULL on
+ * bad mgr or out-of-range. */
+rsc_dir_t *rsc_find_file(const rsc_mgr_t *mgr, unsigned index);
+/* Orig: FUN_1190_121d @ 1190:121d -> ResMgr_FindType.
+ * OS-free: walks every dir->types, tag compare via rsc_cmp_type
+ * (ResMgr_CmpType @ 1190:1533). NULL on bad args/miss. */
+rsc_type_t *rsc_find_type(const rsc_mgr_t *mgr, const uint8_t tag[4]);
+/* Orig: FUN_1190_0ee5 @ 1190:0ee5 -> ResMgr_FindByHandle.
+ * OS-free: walks all types/res, matches handle @ +0x2e. Handle 0 never
+ * matches (means "not loaded"). NULL on bad mgr/miss. */
+rsc_res_t *rsc_find_by_handle(const rsc_mgr_t *mgr, uint16_t handle);
+
+/* Orig: FUN_1190_0978 @ 1190:0978 -> ResMgr_GetTypeCount.
+ * OS-free getter: mgr->type_count (DAT_1420_b2bc equiv); 0 on NULL mgr. */
+uint16_t rsc_get_type_count(const rsc_mgr_t *mgr);
+/* Orig: FUN_1190_0a29 @ 1190:0a29 -> ResMgr_GetIndexed.
+ * OS-free: Nth res in type->head (zero-based). NULL on bad type/OOR. */
+rsc_res_t *rsc_get_res_indexed(const rsc_type_t *type, unsigned index);
+/* Orig: FUN_1190_0aea @ 1190:0aea -> ResMgr_GetById.
+ * OS-free: linear walk matching id @ +0x00. NULL on bad type/miss. */
+rsc_res_t *rsc_get_by_id(const rsc_type_t *type, uint16_t id);
+/* Orig: FUN_1190_0bbe @ 1190:0bbe -> ResMgr_GetByName.
+ * OS-free: linear walk via rsc_cmp_name (ResMgr_CmpName @ 1190:0e72,
+ * case-insensitive 0x1f, NUL/NUL stop). Key is a plain C string; it is
+ * wrapped into length-prefixed form internally. NULL on bad args/miss. */
+rsc_res_t *rsc_get_by_name(const rsc_type_t *type, const char *name);
+
+/* Orig: FUN_1190_0fda @ 1190:0fda -> ResMgr_LoadToMem (RestoMem).
+ * Win16-sensitive STUB: orig does _LLSEEK(file_off) + _HREAD(len) payload,
+ * sets loaded flag +0x2d = 1 and handle +0x2e. Needs container offsets +
+ * file handle plumbing (see ResMgr_LoadRsc @ 1190:0000 /
+ * ResMgr_LoadRscDisk @ 1190:0501); Linux payload malloc + file_seek_wrapper
+ * + file_read_chunk wiring TBD. Always RSC_ERR_UNSUPPORTED (NULL-safe:
+ * RSC_ERR_NOENT on bad args). */
+rsc_error_t rsc_load_to_mem(rsc_mgr_t *mgr, rsc_res_t *res, FILE *fp);
+
 #endif /* CIVLIN_RSC_LOADER_H */

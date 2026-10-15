@@ -115,3 +115,40 @@ int anim_advance_frames(void)
      * reports done so future wait-loops terminate. */
     return 1;
 }
+
+civ_error_t dialog_open_help(const char *topic)
+{
+    (void)topic;
+    /* TODO: WINHELP(CIV_HELP_FILE_NAME "civhelp.hlp") bridge (exact Orig
+     * FUN_* TBD). Win16 WINHELP -> SDL3 help viewer TBD. Read-only: never
+     * writes civhelp.hlp. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t diplomacy_post_contact(int civ, int unit_idx)
+{
+    (void)civ;
+    (void)unit_idx;
+    /* TODO: Orig FUN_1168_0a07 @ 1168:0a07 (Diplomacy_PostContact: posts
+     * first-contact diplomacy from unit_update_visibility @ 11c0:0395;
+     * needs Win16 modal dialog + SDL bridge). */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t diplomacy_eval_bribe(int civ, int unit_idx)
+{
+    (void)civ;
+    (void)unit_idx;
+    /* TODO: Orig FUN_1078_455c @ 1078:455c (Diplomacy_EvalBribe: second
+     * diplomacy post from the 11c0:0395 visibility tail; diplomat 0x19 /
+     * bribe path; needs Win16 dialog + SDL bridge). */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t ui_draw_end_turn_prompt(void)
+{
+    /* TODO: Orig FUN_10d8_00e0 @ 10d8:00e0 (UI_DrawEndTurnPrompt: "End of
+     * Turn / Press Return" vs sprite blink in unit_wait_for_orders @
+     * 11c0:0ec2 + 10d0:0854 blit; needs GDI TEXTOUT/BITBLT SDL bridge). */
+    return CIV_ERR_UNSUPPORTED;
+}
