@@ -236,6 +236,36 @@ civ_error_t gfx_decode_rle(const uint8_t *src, size_t src_len,
     return CIV_OK;
 }
 
+int gfx_rle_expand_cvpc(const uint8_t *src, size_t src_len,
+                        uint8_t *dst, size_t dst_cap,
+                        uint32_t *w_out, uint32_t *h_out,
+                        uint8_t *bpp_out, uint8_t *pal_out)
+{
+    /* AB2 CvPc RLE-expand-then-probe @ 10f8:040a + 1198:xxxx (OS-free,
+     * no SDL, no exit, no globals). Confirmed CvPc head BB DF 06 45...
+     * is binary RLE, not raw INDEX8 (raw probe reports BAD_DATA/RANGE,
+     * so the 6 + 3*pal + w*h gate skips it); expand via gfx_decode_rle
+     * (tag < 0x80 repeat / >= 0x80 literal, save_rll @ 10f8:05da/040a)
+     * into caller-owned dst, then re-probe expanded bytes via
+     * gfx_probe_rsc_image for w/h/bpp/pal (filled even on gate failure
+     * so the caller can log the reason). Src borrowed (valid while the
+     * container lives), dst caller-owned; bounds-checked both sides. */
+    size_t out_len = 0;
+    civ_error_t dr;
+
+    if (!src || !dst || dst_cap == 0)
+        return -1;
+    dr = gfx_decode_rle(src, src_len, dst, dst_cap, &out_len);
+    if (dr != CIV_OK)
+        return -1;
+    /* Re-probe fills w/h/bpp/pal even when the expanded bytes still
+     * fail the raw gate; result is for caller logging, len still valid. */
+    (void)gfx_probe_rsc_image(dst, out_len, w_out, h_out, bpp_out, pal_out);
+    if (out_len > (size_t)0x7fffffff)
+        return -1;
+    return (int)out_len;
+}
+
 civ_error_t gfx_decode_raw(const uint8_t *data, size_t size,
                            rsc_indexed_t *out)
 {
@@ -320,11 +350,13 @@ civ_error_t gfx_godpal_get(int index, uint8_t rgb[3])
      * DAT_1420_9966 @ 1420:9966). Byte payload not yet dumped from
      * godpal.c / DAT_1420_9966 (unpacked/civ.exe present locally, dump
      * pending), so no static const table is emitted here (no fake bytes);
-     * Ghidra dump steps: open unpacked/civ.exe (CivLin.gpr, program
-     * "civ.exe"), go to DAT_1420_9966 @ 1420:9966, select 0xec*3 = 0x2c4
-     * RGB bytes, export as C array, cross-check vs godpal.c (count 0xec,
-     * order, LOGPALETTE 0x300 zero tail past 0xec), then paste as static
-     * const kGodpal[0xec][3] + fill *rgb from the table.
+     * Ghidra dump steps (CivLin.gpr, Ghidra 12.1.2, program "civ.exe"):
+     * open CivLin.gpr in 12.1.2, double-click "civ.exe" (unpacked/civ.exe,
+     * NE Win3.x), Symbol Tree / Go To DAT_1420_9966 @ 1420:9966, Listing
+     * select exactly 0xec*3 = 0x2c4 RGB bytes (236 x R,G,B, no alpha),
+     * Copy Special -> C Array (or Bytes export + xxd -i), cross-check vs
+     * godpal.c (count 0xec, order, LOGPALETTE 0x300 zero tail past 0xec),
+     * then paste as static const kGodpal[0xec][3] + fill *rgb from table.
      * SDL3 consumer: SDL_SetPaletteColors via palette_apply_to_port @
      * 1200:00a8/1090:0376 / palette_animate_range @ 1090:0376 (see
      * video.h). Bounds above stay live. */

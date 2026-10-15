@@ -112,6 +112,29 @@ int gfx_probe_head_hex(char *dst, size_t cap,
 civ_error_t gfx_decode_rle(const uint8_t *src, size_t src_len,
                            uint8_t *dst, size_t dst_cap, size_t *out_len);
 
+/* Orig: FUN_10f8_040a @ 10f8:040a RLLDecode (via gfx_decode_rle above) +
+ * FUN_1198_xxxx @ 1198:xxxx raw gate (via gfx_probe_rsc_image above) ->
+ * gfx_rle_expand_cvpc (CvPc RLE-expand-then-probe, OS-free, no SDL).
+ * Confirmed: CvPc payload BB DF 06 45... is binary RLE, not raw INDEX8
+ * (raw probe on the slice reports BAD_DATA/RANGE: w/h zero or bpp != 8,
+ * so the strict 6 + 3*pal + w*h gate correctly skips it; expand first,
+ * then re-probe). Expands src[0..src_len) via gfx_decode_rle (tag < 0x80
+ * repeat next byte N times / tag >= 0x80 copy N-0x80 literals, save_rll
+ * @ 10f8:05da/040a) into caller-owned dst[0..dst_cap), then re-probes
+ * the expanded bytes via gfx_probe_rsc_image for w/h/bpp/pal (filled
+ * even when the expanded bytes still fail the raw gate; caller logs the
+ * reason via civ_strerror separately). Bounds: never reads past src_len,
+ * never writes past dst_cap; dst is caller-owned (malloc/free
+ * caller-side, e.g. rsc_dump 4 MiB scratch), src is borrowed (valid
+ * while the container lives). Returns expanded byte count (>= 0, fits
+ * int) or -1 on NULL src/dst, dst_cap == 0, decode failure (TRUNCATED
+ * dst overrun / short tag tail), or expanded len > INT_MAX. No SDL, no
+ * exit, no globals, read-only assets. */
+int gfx_rle_expand_cvpc(const uint8_t *src, size_t src_len,
+                        uint8_t *dst, size_t dst_cap,
+                        uint32_t *w_out, uint32_t *h_out,
+                        uint8_t *bpp_out, uint8_t *pal_out);
+
 /* Orig: FUN_1198_xxxx @ 1198:xxxx Rsc_DecodeBitmap -> gfx_decode_raw
  * (raw INDEX8 decoder, OS-free 1:1 port; no Win16, no SDL, no exit, no
  * globals). Payload layout (all LE, same as rsc_decode_bitmap in
@@ -141,11 +164,17 @@ civ_error_t gfx_decode_raw(const uint8_t *data, size_t size,
  * (unpacked/ local-only, never committed, holds civ.exe + 5 RSC) and
  * contains the DAT_1420_9966 bytes, but the 0x2c4 dump has not been
  * extracted yet -> TODO dump, do not hardcode fake bytes here.
- * Ghidra dump steps (no fake data):
- *   1. Open unpacked/civ.exe in Ghidra 12.1.2 (CivLin.gpr, program "civ.exe").
- *   2. Go to DAT_1420_9966 @ 1420:9966 (Memory view / Symbol Tree).
- *   3. Select 0xec*3 = 0x2c4 bytes (236 entries x R,G,B, no alpha).
- *   4. Copy as C array / export bytes; cross-check vs godpal.c source
+ * Ghidra dump steps (CivLin.gpr, Ghidra 12.1.2, program "civ.exe",
+ * DAT_1420_9966 @ 1420:9966, no fake data):
+ *   1. Open CivLin.gpr in Ghidra 12.1.2 (File -> Open Project ->
+ *      CivLin.gpr, local-only, never committed), double-click "civ.exe"
+ *      (unpacked/civ.exe import, NE Win3.x Borland C++ 1991).
+ *   2. In Symbol Tree / Go To (G) open DAT_1420_9966 @ 1420:9966
+ *      (segment 1420 offset 0x9966; Listing shows LOGPALETTE source).
+ *   3. In Listing select exactly 0xec*3 = 0x2c4 bytes at 1420:9966
+ *      (236 entries x R,G,B, no alpha; selection length reads 0x2c4).
+ *   4. Right-click -> Copy Special -> C Array (or Window -> Bytes ->
+ *      Export 0x2c4 bytes, then xxd -i); cross-check vs godpal.c source
  *      (order + count 0xec, LOGPALETTE 0x300 tail past 0xec is zero).
  *   5. Paste as static const uint8_t kGodpal[0xec][3] in gfx_indexed.c
  *      (read-only table, no globals beyond file-static const) + wire

@@ -34,6 +34,7 @@
 #include <SDL3/SDL.h>
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "gfx_indexed.h"
@@ -123,6 +124,227 @@ static int dump_validate_images(const rsc_file_t *f, const char *path)
     return 0;
 }
 
+/* AB2 STR# caller-side entry fetch (rsc_strlist_get plan, OS-free,
+ * read-only, no SDL, no exit, no globals). Orig: FUN_1198_xxxx @
+ * 1198:xxxx Rsc_DecodeStrList entry slot (Pascal u8 len + bytes, count BE
+ * via ResMgr_ReadU16 @ 1190:1953). sl is a borrowed view from
+ * rsc_decode_strlist (valid while the container lives); idx is
+ * zero-based. Returns RSC_OK with *s_out/*len_out on the idx-th entry,
+ * RSC_ERR_NOENT on NULL sl/s_out (NULL len_out = skip), RSC_ERR_RANGE
+ * on idx >= count or a truncated walk. */
+static rsc_error_t dump_strlist_get(const rsc_strlist_t *sl, unsigned idx,
+                                    const uint8_t **s_out, size_t *len_out)
+{
+    const uint8_t *p = NULL;
+    size_t remaining = 0;
+    unsigned k = 0;
+
+    if (!sl || !s_out)
+        return RSC_ERR_NOENT;
+    if ((size_t)idx >= (size_t)sl->count)
+        return RSC_ERR_RANGE;
+    p = sl->body;
+    remaining = sl->body_len;
+    for (k = 0; k < idx; k++) {
+        uint8_t len = 0;
+
+        if (remaining < 1)
+            return RSC_ERR_RANGE;
+        len = *p;
+        p++;
+        remaining--;
+        if ((size_t)len > remaining)
+            return RSC_ERR_RANGE;
+        p += (size_t)len;
+        remaining -= (size_t)len;
+    }
+    if (remaining < 1)
+        return RSC_ERR_RANGE;
+    {
+        uint8_t len = *p;
+
+        if ((size_t)len > remaining - 1u)
+            return RSC_ERR_RANGE;
+        *s_out = p + 1;
+        if (len_out)
+            *len_out = (size_t)len;
+    }
+    return RSC_OK;
+}
+
+/* AB2 STR# full walk (read-only, OS-free, no SDL, no exit, no globals).
+ * Orig: FUN_1198_xxxx @ 1198:xxxx Rsc_DecodeStrList (u16 count BE @ +0,
+ * then count x u8 len + bytes). Walks every directory slice via
+ * rsc_record_data (borrowed, valid while rsc_file lives) and decodes via
+ * rsc_decode_strlist; non-STR# slices fail decode and are skipped (not
+ * images, never fail validation). On civdata0 this hits all 32 STR#
+ * recs (5-type variety: STR#/TEXT/GDAT/KDAT/CvPc); on CvD1/2/3/4 there
+ * are no STR# slices so nothing logs. Each string logs as
+ * strlist rec[i][k] len=N "text" (%.*s, Pascal len <= 255 fits int).
+ * Never writes civ1win//unpacked/ (borrowed slices only). Returns 0. */
+static int dump_strlist_all(const rsc_file_t *f)
+{
+    size_t decoded = 0;
+
+    if (!f)
+        return 0;
+    for (size_t i = 0; i < 8192u; i++) {
+        const uint8_t *data = NULL;
+        size_t size = 0;
+        rsc_strlist_t sl;
+        rsc_error_t dr = rsc_record_data(f, i, &data, &size);
+
+        if (dr == RSC_ERR_RANGE || dr == RSC_ERR_UNSUPPORTED)
+            break;
+        if (dr != RSC_OK)
+            continue;
+        if (rsc_decode_strlist(data, size, &sl) != RSC_OK)
+            continue;
+        decoded++;
+        printf("  strlist rec[%zu]: count=%u\n", i, (unsigned)sl.count);
+        for (unsigned k = 0; k < (unsigned)sl.count; k++) {
+            const uint8_t *s = NULL;
+            size_t slen = 0;
+
+            if (dump_strlist_get(&sl, k, &s, &slen) != RSC_OK)
+                continue;
+            printf("    strlist rec[%zu][%u] len=%zu \"%.*s\"\n", i, k,
+                   slen, (int)slen, (const char *)s);
+        }
+    }
+    if (decoded == 0)
+        printf("  strlist: no STR# slices\n");
+    return 0;
+}
+
+/* AB2 TEXT caller-side needle search (rsc_text_find plan, OS-free,
+ * read-only, no SDL, no exit, no globals). Orig: FUN_1198_xxxx @
+ * 1198:xxxx Rsc_DecodeText slot (single NUL-terminated C string per
+ * slice hypothesis; 398 TEXT recs civdata0 unk 0x01b6). t is a borrowed
+ * view from rsc_decode_text (text[len] is the NUL inside the slice);
+ * needle is a plain C string. Returns pointer into t->text on hit, NULL
+ * on NULL args or miss (strstr on the NUL-terminated borrowed text). */
+static const char *dump_text_find(const rsc_text_t *t, const char *needle)
+{
+    if (!t || !t->text || !needle)
+        return NULL;
+    return strstr(t->text, needle);
+}
+
+/* AB2 TEXT full walk (read-only, OS-free, no SDL, no exit, no globals).
+ * Orig: FUN_1198_xxxx @ 1198:xxxx Rsc_DecodeText (one dialog string per
+ * slice; e.g. menu @ 1420:435b, difficulty @ 2a5a). Walks every slice
+ * via rsc_record_data (borrowed) + rsc_decode_text; non-TEXT slices fail
+ * decode and are skipped. Logs only " 90%" hits via dump_text_find
+ * (rsc_text_find plan) to avoid the 398-line flood: at most 10 hit lines,
+ * then a hits/logged summary. Never writes assets. Returns 0. */
+static int dump_text_all(const rsc_file_t *f)
+{
+    size_t hits = 0;
+    size_t logged = 0;
+
+    if (!f)
+        return 0;
+    for (size_t i = 0; i < 8192u; i++) {
+        const uint8_t *data = NULL;
+        size_t size = 0;
+        rsc_text_t txt;
+        rsc_error_t dr = rsc_record_data(f, i, &data, &size);
+
+        if (dr == RSC_ERR_RANGE || dr == RSC_ERR_UNSUPPORTED)
+            break;
+        if (dr != RSC_OK)
+            continue;
+        if (rsc_decode_text(data, size, &txt) != RSC_OK)
+            continue;
+        if (!dump_text_find(&txt, " 90%"))
+            continue;
+        hits++;
+        if (logged < 10u) {
+            printf("  text rec[%zu]: \"%s\"\n", i, txt.text);
+            logged++;
+        }
+    }
+    if (hits > 0)
+        printf("  text \" 90%%\" hits=%zu (logged %zu, cap 10)\n", hits,
+               logged);
+    else
+        printf("  text \" 90%%\" hits=0\n");
+    return 0;
+}
+
+/* AB2 CvPc RLE probe (read-only, OS-free, no SDL, no exit, no globals).
+ * Orig: FUN_10f8_040a @ 10f8:040a RLLDecode (via gfx_decode_rle tag
+ * < 0x80 repeat / >= 0x80 literal) + FUN_1198_xxxx @ 1198:xxxx raw gate
+ * (via gfx_probe_rsc_image). Confirmed CvPc head BB DF 06 45... is
+ * binary RLE, not raw INDEX8 (raw probe reports BAD_DATA/RANGE). Walks
+ * directory slices via rsc_record_data (borrowed), filters to BB DF
+ * heads (size >= 2, data[0] == 0xBB, data[1] == 0xDF), caps at 4
+ * slices/file (same cap as the head16 probe above) to avoid flooding
+ * Civdata3 (148 CvPc). Per hit logs head16 via gfx_probe_head_hex +
+ * raw probe reason w/h/bpp/pal via gfx_probe_rsc_image, then
+ * RLE-expand-then-probe via gfx_rle_expand_cvpc into a caller-owned
+ * 4 MiB malloc scratch (no globals, freed before return) and logs
+ * expand len + expanded probe w/h/bpp/pal. Never writes assets. */
+static int dump_cvpc_probe(const rsc_file_t *f)
+{
+    const size_t kExpandCap = 4u * 1024u * 1024u;
+    uint8_t *expand = NULL;
+    size_t logged = 0;
+
+    if (!f)
+        return 0;
+    expand = (uint8_t *)malloc(kExpandCap);
+    if (!expand) {
+        printf("  cvpc: out of memory\n");
+        return 0;
+    }
+    for (size_t i = 0; i < 8192u && logged < 4u; i++) {
+        const uint8_t *data = NULL;
+        size_t size = 0;
+        char head[64];
+        uint32_t w = 0;
+        uint32_t h = 0;
+        uint8_t bpp = 0;
+        uint8_t pal = 0;
+        civ_error_t pr;
+        int exp_len = -1;
+        uint32_t ew = 0;
+        uint32_t eh = 0;
+        uint8_t ebpp = 0;
+        uint8_t epal = 0;
+        civ_error_t epr;
+        rsc_error_t dr = rsc_record_data(f, i, &data, &size);
+
+        if (dr == RSC_ERR_RANGE || dr == RSC_ERR_UNSUPPORTED)
+            break;
+        if (dr != RSC_OK)
+            continue;
+        if (size < 2 || data[0] != 0xBBu || data[1] != 0xDFu)
+            continue;
+        gfx_probe_head_hex(head, sizeof(head), data, size, 16);
+        pr = gfx_probe_rsc_image(data, size, &w, &h, &bpp, &pal);
+        exp_len =
+            gfx_rle_expand_cvpc(data, size, expand, kExpandCap, &ew, &eh,
+                                &ebpp, &epal);
+        if (exp_len < 0) {
+            printf("  cvpc rec[%zu] head16=%s probe=%s w=%u h=%u bpp=%u pal=%u expand=FAIL\n",
+                   i, head, civ_strerror(pr), w, h, bpp, pal);
+        } else {
+            epr = gfx_probe_rsc_image(expand, (size_t)exp_len, &ew, &eh,
+                                      &ebpp, &epal);
+            printf("  cvpc rec[%zu] head16=%s probe=%s w=%u h=%u bpp=%u pal=%u expand=%d exp_probe=%s ew=%u eh=%u ebpp=%u epal=%u\n",
+                   i, head, civ_strerror(pr), w, h, bpp, pal, exp_len,
+                   civ_strerror(epr), ew, eh, ebpp, epal);
+        }
+        logged++;
+    }
+    if (logged == 0)
+        printf("  cvpc: no BB DF slices\n");
+    free(expand);
+    return 0;
+}
+
 /* Y2 buffered manager walk (read-only): ResMgr_LoadRsc @ 1190:0000 via
  * rsc_load_rsc() on the same path (no writes, no globals, no exit).
  * Prints type/resource totals; failure here fails validation. */
@@ -172,6 +394,12 @@ static int dump_one(const char *path)
                    rec.unknown_b);
     }
     failures |= dump_validate_images(f, path);
+    /* AB2 per-file dumps (read-only, OS-free; civdata0 covers the 5-type
+     * variety STR#/TEXT/GDAT/KDAT/CvPc; synthetic ok below still passes
+     * as these return 0 and never fail validation on skips). */
+    failures |= dump_strlist_all(f);
+    failures |= dump_text_all(f);
+    failures |= dump_cvpc_probe(f);
     rsc_close(f);
     failures |= dump_validate_mgr(path);
     return failures ? 1 : 0;

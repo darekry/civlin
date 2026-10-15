@@ -436,6 +436,82 @@ rsc_error_t rsc_decode_kdat(const uint8_t *data, size_t size,
 rsc_error_t rsc_decode_cvpc(const uint8_t *data, size_t size,
                             rsc_cvpc_t *out);
 
+/* --- AB1: string/table lookup (segment 1198/1190, OS-free) ---
+ * Confirmed from dump head16 (read-only, no asset writes): civdata0
+ * rec[3] `0F 54 68 65...` = 0x0F + "The Corporation" 15 B STR# u8 len;
+ * rec[1] " 90% Science)" ASCII TEXT; rec[2] "  80% Tax," ASCII TEXT.
+ * Container: civdata0 rsrcRSED STR#(32,unk 0x002a)/TEXT(398,unk 0x01b6)/
+ * GDAT(6,unk 0x146a)/KDAT(13,unk 0x14be)/CvPc(3,unk 0x1566). Slices are
+ * borrowed via rsc_record_data (valid while rsc_file lives). Rules: C17,
+ * zero SDL, no exit(), no globals, borrowed slices. */
+
+/* Orig: FUN_1198_xxxx @ 1198:xxxx -> Rsc_StrListCount.
+ * STR# count accessor (32 recs civdata0): u16 BE count @ +0 (BE to match
+ * rsc_read_u16le BE via ResMgr_ReadU16 @ 1190:1953). OS-free port: bounds
+ * only, no walk. NOENT on NULL data/out, TRUNCATED when size < 2,
+ * otherwise *out = BE16(data+0). Borrowed slice, no SDL/exit/globals. */
+rsc_error_t rsc_strlist_count(const uint8_t *data, size_t size,
+                              uint16_t *out);
+/* Orig: FUN_1198_xxxx @ 1198:xxxx -> Rsc_StrListGet.
+ * STR# index->string via u8 len walk (e.g. rec[3] 0x0F +
+ * "The Corporation"): u16 BE count @ +0, then count entries of (u8 len +
+ * len bytes); trailing bytes after the list are allowed (ignored, same as
+ * rsc_decode_strlist). OS-free port 1:1: overflow-safe walk, bounds on
+ * every entry. NOENT on NULL data/str/len and on index OOR
+ * (index >= count), TRUNCATED when size < 2 or any visited entry overruns
+ * the slice, otherwise borrowed *str (first char, NOT the len byte) +
+ * *len (valid while container lives). No SDL/exit/globals. */
+rsc_error_t rsc_strlist_get(const uint8_t *data, size_t size,
+                            unsigned index, const uint8_t **str,
+                            size_t *len);
+/* Orig: FUN_1198_xxxx @ 1198:xxxx -> Rsc_TextFind.
+ * TEXT substring scan (398 recs civdata0, unk 0x01b6; e.g. menu @
+ * 1420:435b, difficulty @ 1420:2a5a; observed " 90% Science)",
+ * "  80% Tax,"). Portable memmem over the borrowed slice: first offset at
+ * which needle occurs, or -1. Returns (long)offset on hit, -1 on miss and
+ * on bad args (NULL data/needle, needle_len == 0, needle_len > size).
+ * Empty haystack (size == 0) is a miss (-1). No SDL/exit/globals. */
+long rsc_text_find(const uint8_t *data, size_t size,
+                   const uint8_t *needle, size_t needle_len);
+/* Orig: FUN_1198_xxxx @ 1198:xxxx -> Rsc_GdatDetail (STUB).
+ * GDAT detail (6 recs, unk 0x146a; terrain-table hypothesis: weights @
+ * 1420:17d6 *3 + 1420:17d8, moisture @ 1420:12b8/1420:12bc). Field stride
+ * TBD: needs Ghidra compare vs the 1198 table decoder before any field
+ * split (endian/stride unknown; no fake). Stub: NOENT on NULL
+ * data/entry/entry_len, TRUNCATED when size == 0, otherwise
+ * RSC_ERR_UNSUPPORTED with *entry/*entry_len untouched. Borrowed slice,
+ * no SDL/exit/globals, C17. */
+rsc_error_t rsc_gdat_detail(const uint8_t *data, size_t size,
+                            unsigned index, const uint8_t **entry,
+                            size_t *entry_len);
+/* Orig: FUN_1198_xxxx @ 1198:xxxx -> Rsc_KdatDetail (STUB).
+ * KDAT detail (13 recs, unk 0x14be; table hypothesis, stride unknown).
+ * Layout TBD via Ghidra 1198 compare; caller logs the rsc_record_data
+ * slice head 16 B via gfx_probe_head_hex (read-only, no asset writes).
+ * Stub: NOENT on NULL data/entry/entry_len, TRUNCATED when size == 0,
+ * otherwise RSC_ERR_UNSUPPORTED with *entry/*entry_len untouched (no
+ * decode fake). Borrowed slice, no SDL/exit/globals, C17. */
+rsc_error_t rsc_kdat_detail(const uint8_t *data, size_t size,
+                            unsigned index, const uint8_t **entry,
+                            size_t *entry_len);
+/* Orig: FUN_1198_xxxx @ 1198:xxxx -> Rsc_StringLookup (dispatcher).
+ * Generic string lookup by 4-char type tag via rsc_cmp_type
+ * (ResMgr_CmpType @ 1190:1533). OS-free dispatcher port, borrowed slices:
+ * STR# dispatches to rsc_strlist_get (#2, count #1 inside the walk;
+ * trailing allowed; NOENT OOR / TRUNCATED passthrough); TEXT with
+ * index == 0 returns the whole NUL-terminated string via rsc_decode_text
+ * (len = NUL offset; substring search itself stays in rsc_text_find #3,
+ * e.g. " 90%" / menu 1420:435b / difficulty 1420:2a5a) and index != 0 is
+ * NOENT (single string per slice hypothesis); GDAT dispatches to
+ * rsc_gdat_detail #4 (stub UNSUPPORTED); KDAT to rsc_kdat_detail #5
+ * (stub UNSUPPORTED); CvPc/unknown tags validate (NOENT on NULL
+ * tag/data/str/len, TRUNCATED when size == 0) then UNSUPPORTED with
+ * *str/*len untouched (CvPc: no fake, images_strict=0 proves no raw
+ * INDEX8 at slice start). No SDL/exit/globals, C17. */
+rsc_error_t rsc_string_lookup(const uint8_t tag[4], const uint8_t *data,
+                              size_t size, unsigned index,
+                              const uint8_t **str, size_t *len);
+
 /* --- Packet E: ResMgr list manager (segment 1190, OS-free 1:1) ---
  * Win16 imports behind this layer (KERNEL):
  *   _LOPEN/_LCLOSE  -> file_open_wrapper/file_close_wrapper (save.h)

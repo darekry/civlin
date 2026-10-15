@@ -794,6 +794,167 @@ rsc_error_t rsc_decode_cvpc(const uint8_t *data, size_t size,
     return RSC_ERR_UNSUPPORTED;
 }
 
+/* --- AB1: string/table lookup (segment 1198/1190, OS-free) --- */
+
+rsc_error_t rsc_strlist_count(const uint8_t *data, size_t size,
+                              uint16_t *out)
+{
+    /* Rsc_StrListCount @ 1198:xxxx: STR# u16 BE count @ +0 (32 recs
+     * civdata0; BE to match rsc_read_u16le BE via ResMgr_ReadU16 @
+     * 1190:1953). Caller slices via rsc_record_data (borrowed, valid while
+     * rsc_file lives). OS-free port, no SDL/exit/globals. */
+    if (!data || !out)
+        return RSC_ERR_NOENT;
+    if (size < 2)
+        return RSC_ERR_TRUNCATED;
+    *out = rsc_be16(data);
+    return RSC_OK;
+}
+
+rsc_error_t rsc_strlist_get(const uint8_t *data, size_t size,
+                            unsigned index, const uint8_t **str,
+                            size_t *len)
+{
+    /* Rsc_StrListGet @ 1198:xxxx: index->string via u8 len walk (e.g.
+     * civdata0 rec[3] 0x0F + "The Corporation" 15 B). Orig Pascal-list
+     * shape: u16 BE count @ +0 then (u8 len + len bytes) per entry;
+     * trailing bytes after the list are allowed (ignored, same as
+     * rsc_decode_strlist). Overflow-safe, bounds on every visited entry.
+     * Borrowed *str+*len (valid while container lives). */
+    uint16_t count = 0;
+    const uint8_t *p = NULL;
+    size_t remaining = 0;
+    unsigned i = 0;
+
+    if (!data || !str || !len)
+        return RSC_ERR_NOENT;
+    if (size < 2)
+        return RSC_ERR_TRUNCATED;
+    count = rsc_be16(data);
+    if ((unsigned)index >= (unsigned)count)
+        return RSC_ERR_NOENT;
+    p = data + 2;
+    remaining = size - 2;
+    for (i = 0; i < (unsigned)count; i++) {
+        uint8_t slen = 0;
+        if (remaining < 1)
+            return RSC_ERR_TRUNCATED;
+        slen = *p;
+        p++;
+        remaining--;
+        if ((size_t)slen > remaining)
+            return RSC_ERR_TRUNCATED;
+        if (i == (unsigned)index) {
+            *str = p;
+            *len = (size_t)slen;
+            return RSC_OK;
+        }
+        p += (size_t)slen;
+        remaining -= (size_t)slen;
+    }
+    return RSC_ERR_NOENT;
+}
+
+long rsc_text_find(const uint8_t *data, size_t size,
+                   const uint8_t *needle, size_t needle_len)
+{
+    /* Rsc_TextFind @ 1198:xxxx: TEXT slice scan (398 recs civdata0, unk
+     * 0x01b6; e.g. menu @ 1420:435b, difficulty @ 1420:2a5a; observed
+     * " 90% Science)", "  80% Tax,"). Portable memmem: byte loop with
+     * memcmp at each offset (no GNU memmem, no SDL/exit/globals). */
+    size_t i = 0;
+
+    if (!data || !needle)
+        return -1;
+    if (needle_len == 0 || size < needle_len)
+        return -1;
+    for (i = 0; i + needle_len <= size; i++) {
+        if (memcmp(data + i, needle, needle_len) == 0)
+            return (long)i;
+    }
+    return -1;
+}
+
+rsc_error_t rsc_gdat_detail(const uint8_t *data, size_t size,
+                            unsigned index, const uint8_t **entry,
+                            size_t *entry_len)
+{
+    /* Rsc_GdatDetail @ 1198:xxxx STUB (6 recs, unk 0x146a; terrain-table
+     * hypothesis: weights @ 1420:17d6 *3 + 1420:17d8, moisture @
+     * 1420:12b8/1420:12bc). Stride TBD via Ghidra 1198 compare; no fake:
+     * *entry/*entry_len untouched on UNSUPPORTED. Borrowed slice, no
+     * SDL/exit/globals, C17. */
+    (void)index;
+    if (!data || !entry || !entry_len)
+        return RSC_ERR_NOENT;
+    if (size == 0)
+        return RSC_ERR_TRUNCATED;
+    return RSC_ERR_UNSUPPORTED;
+}
+
+rsc_error_t rsc_kdat_detail(const uint8_t *data, size_t size,
+                            unsigned index, const uint8_t **entry,
+                            size_t *entry_len)
+{
+    /* Rsc_KdatDetail @ 1198:xxxx STUB (13 recs, unk 0x14be; table
+     * hypothesis, stride unknown). Layout TBD via Ghidra 1198 compare;
+     * caller logs rsc_record_data slice head 16 B via gfx_probe_head_hex
+     * (read-only, no asset writes). No fake: *entry/*entry_len untouched
+     * on UNSUPPORTED. Borrowed slice, no SDL/exit/globals, C17. */
+    (void)index;
+    if (!data || !entry || !entry_len)
+        return RSC_ERR_NOENT;
+    if (size == 0)
+        return RSC_ERR_TRUNCATED;
+    return RSC_ERR_UNSUPPORTED;
+}
+
+rsc_error_t rsc_string_lookup(const uint8_t tag[4], const uint8_t *data,
+                              size_t size, unsigned index,
+                              const uint8_t **str, size_t *len)
+{
+    /* Rsc_StringLookup @ 1198:xxxx dispatcher via rsc_cmp_type
+     * (ResMgr_CmpType @ 1190:1533). STR# -> rsc_strlist_get (#2, count #1
+     * inside); TEXT index 0 -> whole string via rsc_decode_text (substring
+     * search itself stays in rsc_text_find #3, e.g. " 90%" / menu
+     * 1420:435b / difficulty 1420:2a5a); GDAT/KDAT -> detail stubs #4/#5;
+     * CvPc/unknown -> UNSUPPORTED with outs untouched (no fake). */
+    static const uint8_t kStrHash[4] = {'S', 'T', 'R', '#'};
+    static const uint8_t kText[4] = {'T', 'E', 'X', 'T'};
+    static const uint8_t kGdat[4] = {'G', 'D', 'A', 'T'};
+    static const uint8_t kKdat[4] = {'K', 'D', 'A', 'T'};
+    static const uint8_t kCvPc[4] = {'C', 'v', 'P', 'c'};
+    rsc_text_t txt;
+
+    if (!tag || !data || !str || !len)
+        return RSC_ERR_NOENT;
+    if (rsc_cmp_type(tag, kStrHash))
+        return rsc_strlist_get(data, size, index, str, len);
+    if (rsc_cmp_type(tag, kText)) {
+        rsc_error_t dr;
+        if (index != 0)
+            return RSC_ERR_NOENT;
+        dr = rsc_decode_text(data, size, &txt);
+        if (dr != RSC_OK)
+            return dr;
+        *str = (const uint8_t *)txt.text;
+        *len = txt.len;
+        return RSC_OK;
+    }
+    if (rsc_cmp_type(tag, kGdat))
+        return rsc_gdat_detail(data, size, index, str, len);
+    if (rsc_cmp_type(tag, kKdat))
+        return rsc_kdat_detail(data, size, index, str, len);
+    if (rsc_cmp_type(tag, kCvPc)) {
+        if (size == 0)
+            return RSC_ERR_TRUNCATED;
+        return RSC_ERR_UNSUPPORTED;
+    }
+    if (size == 0)
+        return RSC_ERR_TRUNCATED;
+    return RSC_ERR_UNSUPPORTED;
+}
+
 /* --- Packet E: ResMgr list manager (segment 1190, OS-free 1:1) --- */
 
 rsc_mgr_t *rsc_mgr_new(void)
