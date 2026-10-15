@@ -8,6 +8,13 @@ civ_error_t dialog_init(void)
 
 win16_msg_result_t dlg_proc(int msg, long wparam, long lparam)
 {
+    /* Orig FUN_1098_16E2 @ 1098:16e2 -> DLGPROC. Generic dialog proc
+     * (NE export DLGPROC, ordinal TBD from NE export table;
+     * MAKEPROCINSTANCE target in Dlg_CreateTracked @ 1098:124f).
+     * (msg, wparam, lparam) -> WIN16_MSG_HANDLED when consumed else
+     * WIN16_MSG_DEFAULT (DefDlgProc). Message table TBD (expected
+     * WM_INITDIALOG / WM_COMMAND / WM_PAINT, see dialog.h); Win16 USER
+     * -> SDL3 modal TBD. No globals, no exit(), read-only. */
     (void)msg;
     (void)wparam;
     (void)lparam;
@@ -16,6 +23,12 @@ win16_msg_result_t dlg_proc(int msg, long wparam, long lparam)
 
 win16_msg_result_t civ_dialog_proc(int msg, long wparam, long lparam)
 {
+    /* Orig FUN_1098_1838 @ 1098:1838 -> CIVDIALOGPROC. Civ-specific
+     * dialog proc (NE export CIVDIALOGPROC, ordinal TBD; second
+     * MAKEPROCINSTANCE target in Dlg_CreateTracked @ 1098:124f).
+     * Same handled/default contract as DLGPROC above; palette-aware
+     * centering path (GETDC/SELECTPALETTE/REALIZEPALETTE in the create
+     * path). Win16 -> SDL3 TBD. No globals, no exit(), read-only. */
     (void)msg;
     (void)wparam;
     (void)lparam;
@@ -220,4 +233,23 @@ civ_error_t ui_draw_end_turn_prompt(void)
      * Turn / Press Return" vs sprite blink in unit_wait_for_orders @
      * 11c0:0ec2 + 10d0:0854 blit; needs GDI TEXTOUT/BITBLT SDL bridge). */
     return CIV_ERR_UNSUPPORTED;
+}
+
+int dialog_menuz_id_to_index(int button_id)
+{
+    /* Orig: Dialog_MenuZ_Modal @ 1220:0156 button-id math (500-based
+     * RanDoMRadio ids; DAT_1418_0002 preselect / DAT_1418_0004 cancel).
+     * OS-free: id - 500, -1 when below base. No Win16, no globals. */
+    if (button_id < CIV_DIALOG_MENUZ_BASE_ID)
+        return -1;
+    return button_id - CIV_DIALOG_MENUZ_BASE_ID;
+}
+
+int dialog_menuz_index_to_id(int index)
+{
+    /* Orig: Dialog_MenuZ_Modal @ 1220:0156 button-id math, inverse of above
+     * (500 + index for the radio-button control id). -1 on negative index. */
+    if (index < 0)
+        return -1;
+    return CIV_DIALOG_MENUZ_BASE_ID + index;
 }

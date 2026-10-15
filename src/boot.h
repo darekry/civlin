@@ -68,8 +68,21 @@ civ_error_t boot_run(SDL_Window *win, SDL_Renderer *ren);
 /* Single steps, in WinMain order (each UNSUPPORTED until implemented,
  * except boot_setup_paths which is live via sys.h). */
 civ_error_t boot_setup_paths(void);
+/* Boot memory step: delegates to Sys_CheckFreeMemory @ 11e8:0000 (see
+ * sys.h sys_check_free_memory). Stub CIV_ERR_UNSUPPORTED until the
+ * SDL_GetSystemRAM mapping lands. */
 civ_error_t boot_check_memory(void);
+/* Boot window-class step: delegates to App_RegisterWindowClasses @
+ * 1098:06f8 (below). Stub CIV_ERR_UNSUPPORTED until the SDL3 window
+ * mapping lands. */
 civ_error_t boot_register_classes(void);
+/* Orig: FUN_1098_06f8 @ 1098:06f8 -> App_RegisterWindowClasses.
+ * Registers the 4 WinMain window classes via REGISTERCLASS, then the
+ * custom controls via Ctrl_RegisterCustomClasses @ 1058:0b4d (see
+ * dialog.h) and caches GETSYSTEMMETRICS. Win16 USER -> SDL3 TBD; stub
+ * CIV_ERR_UNSUPPORTED. Owns the registration; boot_register_classes
+ * delegates to it. No globals, no exit(), read-only. */
+civ_error_t app_register_window_classes(void);
 civ_error_t boot_load_fonts(void);
 civ_error_t boot_load_resources(void);
 civ_error_t boot_check_video(void);

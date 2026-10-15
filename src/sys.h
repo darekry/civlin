@@ -60,6 +60,20 @@ void rng_init(void);
 /* Util_Clamp @ 11c8:0063. */
 int util_clamp(int v, int lo, int hi);
 
+/* Orig: FUN_1000_29ea @ 1000:29ea -> Util_Progress.
+ * Continent-link progress percent (orig scales the counter to the 0x1248
+ * progress-bar range). OS-free 1:1 port: done * 100 / total, clamped to
+ * 0..100; 0 when total <= 0 or done <= 0, 100 when done >= total. Pure
+ * counter/total calc, no Win16, no globals, no exit(). */
+int util_progress(int done, int total);
+
+/* Orig: FUN_1000_2c9c @ 1000:2c9c -> Debug_Print.
+ * Debug-dump print behind ResMgr_DumpStats @ 1190:17d0. OS-free 1:1 port:
+ * fprintf wrapper (vfprintf of fmt to stdout, stderr when fmt is NULL-safe
+ * guarded). Returns bytes written, -1 on NULL fmt or output error. No
+ * globals, no exit(), never writes game assets. */
+int debug_print(const char *fmt, ...);
+
 /* --- DOS drive/dir (adapted; see header note) --- */
 
 /* Dos_GetCurrentDrive @ 1000:1252. Always 0 on Linux (no drives). */
@@ -95,9 +109,11 @@ void sys_yield(void);
 int sys_pump_messages(void);
 /* Orig: FUN_1000_137f @ 1000:137f -> Sys_GetClientRect.
  * Client-rect helper behind the status frame calculators @ 1218:0956 /
- * 0a06 (GLOBALLOCK on the status-port handle, then rect out). Linux
- * equivalent TBD (SDL_GetWindowSize on the status view). Params are the
- * client width/height outputs; 0 on missing rect. */
+ * 0a06 (w_out, h_out via GLOBALLOCK on the status-port handle, then rect
+ * out). Linux equivalent TBD (SDL_GetWindowSize on the status view).
+ * Params are the client width/height outputs; NULL either -> NOENT
+ * (orig faulted on a bad far pointer). Zeroes outputs then stub
+ * CIV_ERR_UNSUPPORTED until the SDL status-view mapping lands. */
 civ_error_t sys_get_client_rect(int *w_out, int *h_out);
 /* Orig: FUN_1138_0269 @ 1138:0269 -> Status_MeasureRow.
  * GETTEXTMETRICS variant in the status_font_height @ 1098:0dda chain
@@ -110,6 +126,13 @@ civ_error_t status_measure_row(int *h_out);
 /* Sys_CheckRuntimeMemory @ 11e8:0075. UNSUPPORTED (needs window + RAM
  * thresholds; SDL_GetSystemRAM equivalent TBD). */
 civ_error_t sys_check_runtime_memory(void);
+/* Orig: FUN_11e8_0000 @ 11e8:0000 -> Sys_CheckFreeMemory.
+ * Boot-time free-memory check (GETFREESPACE against the required floor,
+ * MESSAGEBOX with the 1420:43b8 text on shortfall). Linux equivalent TBD
+ * (SDL_GetSystemRAM mapping, no Win16 selector). Stub
+ * CIV_ERR_UNSUPPORTED; owns the check, boot_check_memory (see boot.h)
+ * delegates to it. No globals, no exit(). */
+civ_error_t sys_check_free_memory(void);
 
 /* --- Packet E: Win16 file/resource imports (KERNEL) ---
  * File map (with save.h + rsc_loader.h):

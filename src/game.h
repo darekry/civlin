@@ -305,6 +305,80 @@ unsigned game_calc_progress_threshold(int n, int difficulty);
  * header top). Win16 dialog + GDI text -> SDL TBD; stub. */
 civ_error_t unit_show_info_popup(int civ, int unit_idx);
 
+/* --- packet O (2026-10-15): combat/unit tactical ---
+ * Anchors: unit_choose_order @ 1078:1480 (combat odds via
+ *   Combat_ResolveAttack + 11c0:1bc3), unit_step_toward_goal @
+ *   1128:0000 (ZOC gate 11c0:23fd in neighbour scoring),
+ *   unit_update_visibility @ 11c0:0395 (city spot via 1110:180e/16ee
+ *   -> 11c0:0000/11c8:00c4, contact flip 11c0:1ee1). Map_/City_
+ *   names below are packet-O kernels owned here per task scope; the
+ *   parallel map/sys/save/dialog rewrites must not duplicate them.
+ *   OS-free kernels take explicit params (no globals, read-only);
+ *   Win16/city-state tails stay CIV_ERR_UNSUPPORTED with TODO Orig. */
+
+/* Orig Combat_ResolveAttack @ TBD (near unit_choose_order @ 1078:1480
+ * combat-odds tail with 11c0:1bc3; exact seg:off TBD from decompile)
+ * -> Combat_ResolveAttack (combat_resolve_attack). OS-free odds math
+ * (attacker/defender strength, terrain, veteran) once decoded; stub
+ * for now with formula doc. Expected shape: odds_out (0..100) =
+ * f(atk_strength vs def_strength * terrain * veteran); the 11c0:1bc3
+ * helper (combat_calc_odds below) does the final atk/(atk+def) scale.
+ * Returns CIV_OK + odds, CIV_ERR_NOENT on NULL odds_out, else
+ * CIV_ERR_UNSUPPORTED until the multipliers are decoded. */
+civ_error_t combat_resolve_attack(int atk_strength, int def_strength,
+                                  int terrain_bonus, int vet_bonus,
+                                  int *odds_out);
+
+/* Orig FUN_11c0_1bc3 @ 11c0:1bc3 -> Combat_CalcOdds (combat_calc_odds).
+ * Tactical scoring helper in the unit_choose_order @ 1078:1480 combat
+ * tail (with Combat_ResolveAttack above). OS-free 1:1 v1 (implemented):
+ * percent odds from effective strengths, atk*100/(atk+def); exact
+ * veteran/terrain pre-scale + rounding TBD vs decompiler. Returns
+ * 0..100, -1 on negative strengths or both zero. */
+int combat_calc_odds(int atk_eff, int def_eff);
+
+/* Orig FUN_11c0_16a4 @ 11c0:16a4 -> Unit_FoundCityIfHome
+ * (unit_found_city_if_home). Type 0x1a settler founds via 11c0:16a4
+ * when home (home-city field +10/6307 in the 1420:62fc record layout,
+ * see header top). Needs city records 0x1c bytes at 1420:5500
+ * (+owner/size) + map tile claim; stub. */
+civ_error_t unit_found_city_if_home(int civ, int unit_idx);
+
+/* Orig FUN_11c0_23fd @ 11c0:23fd -> Map_CheckZOC (map_check_zoc).
+ * ZOC gate in unit_step_toward_goal @ 1128:0000 neighbour scoring.
+ * OS-free 1:1 (implemented): 8-neighbour enemy scan; nonzero
+ * enemy_map cell = enemy unit. Sea/land match (0x1a3a vs 1110:16c0),
+ * occupancy (1110:18ce/16ee/199b) and 1110:1dbd gates stay in the
+ * caller. Params: enemy_map is w*h row-major (read-only). Returns
+ * 1 = ZOC-blocked (enemy adjacent), 0 = clear, -1 on NULL/bad size
+ * or (x,y) out of bounds. */
+int map_check_zoc(const int *enemy_map, int w, int h, int x, int y);
+
+/* Orig FUN_11c0_0000 @ 11c0:0000 -> City_SpotReveal (city_spot_reveal).
+ * Spots cities in the unit_update_visibility @ 11c0:0395 tail via
+ * 1110:180e/16ee -> 11c0:0000/11c8:00c4 (sibling
+ * city_update_visibility below). Needs city records 1420:5500 +
+ * seen-bits; stub. */
+civ_error_t city_spot_reveal(int x, int y, int civ);
+
+/* Orig FUN_11c8_00c4 @ 11c8:00c4 -> City_UpdateVisibility
+ * (city_update_visibility). Second spot helper in the same 0395 tail
+ * (sibling of city_spot_reveal above). Needs city records + seen-bits;
+ * stub. */
+civ_error_t city_update_visibility(int x, int y, int civ);
+
+/* Orig FUN_11c8_02ec @ 11c8:02ec -> Unit_FindDiplomatTarget
+ * (unit_find_diplomat_target). Type 0x0e with no goal picks the
+ * nearest visible player diplomat (caller unit_choose_order @
+ * 1078:1480). OS-free 1:1 (implemented): linear scan for the minimum
+ * Chebyshev distance max(|dx|,|dy|) among visible[i] != 0; ties break
+ * to the lower index. Arrays dx/dy/visible are length n (read-only);
+ * (ux,uy) is the seeker tile. Returns the diplomat index, -1 when none
+ * qualifies or on NULL/n <= 0. Exact distance metric TBD vs decompiler
+ * (Chebyshev matches the 1128:0000 step scoring). */
+int unit_find_diplomat_target(int ux, int uy, const int *dx, const int *dy,
+                              const int *visible, int n);
+
 void game_shutdown(civ_game_t *g);
 
 #endif /* CIVLIN_GAME_H */

@@ -137,21 +137,48 @@ long file_seek_wrapper(FILE *fp, long offset, int origin);
  * (chunked 0x8000 @ 1140:019d), _LWRITE/_HWRITE -> file_write_chunk
  * (sys.h) / save_file_write (chunked @ 1140:0245). */
 
-/* --- serialize layer (game state <-> flat 0x1a2ba image) --- */
+/* --- serialize layer (game state <-> flat 0x1a2ba image) ---
+ * Packet N: marshal + RLL + file wiring (stubs until live ctx mapped).
+ * save_serialize @ 10f8:02bd flow: alloc 0x1a2ba image (LocalAlloc,
+ *   err 1420:2cac "Could not allocate buffer for saving") -> marshal via
+ *   save_marshal_fields @ 10f8:090c (direction save) -> RLL-encode via
+ *   save_pack @ 10f8:05da (save_rll_encode core) -> save_file_open O_WRITE
+ *   @ 1140:0139 -> save_file_write @ 1140:0245 -> save_file_close @
+ *   1140:037c. save_deserialize @ 10f8:0000 flow: GLOBALALLOC 0xa2ba
+ *   scratch -> save_file_open O_READ -> save_file_size @ 1140:0295 (accept
+ *   0x1a2ba / 0x1a2b8 / 0x18de0, else err 1420:2c74 "Could not load saved
+ *   game. Corrupted or out of memory.") -> save_file_read @ 1140:019d ->
+ *   RLL-decode via save_unpack @ 10f8:040a (save_rll_decode core) ->
+ *   marshal via save_marshal_fields (direction load) -> close. Both are
+ *   UNSUPPORTED stubs: RLL codec + file I/O below are ported, live-ctx
+ *   marshal wiring is TBD, no globals taken here. */
 
-/* Orig: FUN_10f8_02bd @ 10f8:02bd, now save_serialize — pack + write .sav */
+/* Orig: FUN_10f8_02bd @ 10f8:02bd, now save_serialize — pack + write .sav.
+ * Stub: validates path (NOENT on NULL/empty), else UNSUPPORTED; read-only
+ * (no file touched until wiring lands). */
 civ_error_t save_serialize(const char *path);
-/* Orig: FUN_10f8_0000 @ 10f8:0000, now save_deserialize — read + unpack .sav */
+/* Orig: FUN_10f8_0000 @ 10f8:0000, now save_deserialize — read + unpack .sav.
+ * Stub: validates path (NOENT on NULL/empty), else UNSUPPORTED; read-only.
+ * Size gate lives here when wired (not in save_file_size): 0x1a2ba
+ * canonical, 0x1a2b8 alt (cond word), 0x18de0 small-map. */
 civ_error_t save_deserialize(const char *path);
 
 /* Pack/unpack are RLL codecs (not game pack). Log strings:
  *   save_pack    "RLLEncode ... load c"   Orig FUN_10f8_05da @ 10f8:05da
  *   save_unpack  "RLLDecode ... load c"   Orig FUN_10f8_040a @ 10f8:040a
  * Tag byte: <0x80 = repeat next byte N times; >=0x80 = copy N-0x80 literals.
- * Wire sizes: canonical 0x1a2ba, alt 0x1a2b8 (cond word), small-map 0x18de0. */
-/* Orig: FUN_10f8_05da @ 10f8:05da, now save_pack (RLL encode, called from save_serialize) */
+ * Wire sizes: canonical 0x1a2ba, alt 0x1a2b8 (cond word), small-map 0x18de0.
+ * Packet N: save_pack/save_unpack are thin legacy wrappers over the ported
+ *   save_rll_encode/save_rll_decode below (same tag scheme, same 0x7f chunk
+ *   cap). Legacy signatures are kept for the RE map (out_image/out_len vs
+ *   image/len); they carry no caller buffer for the native src/dst/cap
+ *   triple, so no trivial delegate is possible until the marshal flat image
+ *   + heap owner are wired — stubs document the wrapper relationship. */
+/* Orig: FUN_10f8_05da @ 10f8:05da, now save_pack (RLL encode, called from save_serialize).
+ * Stub: NOENT on NULL out params, else UNSUPPORTED; read-only. */
 civ_error_t save_pack(const uint8_t **out_image, size_t *out_len);
-/* Orig: FUN_10f8_040a @ 10f8:040a, now save_unpack (RLL decode, called from save_deserialize) */
+/* Orig: FUN_10f8_040a @ 10f8:040a, now save_unpack (RLL decode, called from save_deserialize).
+ * Stub: NOENT on NULL image, else UNSUPPORTED; read-only. */
 civ_error_t save_unpack(const uint8_t *image, size_t len);
 
 /* --- RLL codec, native form (new API, implemented next) --- */
@@ -161,23 +188,56 @@ civ_error_t save_rll_encode(const uint8_t *src, size_t src_len,
 civ_error_t save_rll_decode(const uint8_t *src, size_t src_len,
                             uint8_t *dst, size_t dst_cap, size_t *out_len);
 
-/* --- field marshaller (game ctx <-> flat image) --- */
+/* --- field marshaller (game ctx <-> flat image) ---
+ * Packet N: save_marshal_fields @ 10f8:090c is the ordered xfer driver. Stub:
+ *   direction via g_nSaveDirection @ 1310:0008 (0 = save: live -> image,
+ *   1 = load: image -> live), small/large variant via g_nSaveVariant @
+ *   1310:0000 (pre-word at image +0x0, live 1310:0000), image cursor via
+ *   g_nSaveCursorOff @ 1420:a2d6 with base @ 1420:a2da. Ordered calls below
+ *   (image offsets CIV_SAVE_OFF_*): words/block/array/strided then the
+ *   0xfa00 map block at +0xa8ba. No globals taken here (caller-owned image
+ *   + cap); live segments 12d8/12d0/1248/1290/1298/1308/1350/1388/1390/
+ *   13c0/13e8/1420 have no Linux mapping yet -> UNSUPPORTED. */
 /* Orig: FUN_10f8_090c @ 10f8:090c, now save_marshal_fields.
  * Direction by Ghidra g_nSaveDirection @ 1310:0008 (0=save,1=load);
  * variant by g_nSaveVariant @ 1310:0000. Cursor g_nSaveCursorOff @
- * 1420:a2d6, base g_nSaveBaseOff @ 1420:a2da. */
+ * 1420:a2d6, base g_nSaveBaseOff @ 1420:a2da.
+ * Stub: NOENT on NULL image, TRUNCATED when cap < CIV_SAVE_BUF_MIN
+ * (smallest accepted wire size), else UNSUPPORTED; read-only (no write
+ * on stub path). */
 civ_error_t save_marshal_fields(uint8_t *image, size_t cap);
-/* Orig: FUN_10f8_0f40 @ 10f8:0f40, now save_xfer_words — count WORDS (x2 bytes) */
+/* Orig: FUN_10f8_0f40 @ 10f8:0f40, now save_xfer_words — count WORDS (x2 bytes).
+ * OS-free image-cursor half ported 1:1: len = words*2 with overflow guard,
+ * bounds-check *cursor + len <= cap (TRUNCATED on overrun), advance *cursor
+ * by len, return CIV_OK. seg:off is the live Win16 far anchor (directional
+ * memcpy live<->image window by g_nSaveDirection, memcpy on Linux not
+ * HMEMCPY/mem_copy_far); no selector dereference here — retained for the RE
+ * map, live wiring lands with save_marshal_fields. NOENT on NULL
+ * image/cursor. */
 civ_error_t save_xfer_words(uint8_t *image, size_t cap, size_t *cursor,
                             uint16_t seg, uint16_t off, unsigned words);
-/* Orig: FUN_10f8_0fcf @ 10f8:0fcf, now save_xfer_block — byte block via mem_copy_far */
+/* Orig: FUN_10f8_0fcf @ 10f8:0fcf, now save_xfer_block — byte block via mem_copy_far.
+ * Same contract as words with len in bytes: bounds-check + advance, CIV_OK.
+ * NOENT on NULL image/cursor. */
 civ_error_t save_xfer_block(uint8_t *image, size_t cap, size_t *cursor,
                             uint16_t seg, uint16_t off, unsigned len);
-/* Orig: FUN_10f8_1035 @ 10f8:1035, now save_xfer_array — n elems, stride 0x20 */
+/* Orig: FUN_10f8_1035 @ 10f8:1035, now save_xfer_array — n elems, stride 0x20.
+ * Orig loop: n iterations, live stride 0x20 per elem, elem_len image bytes
+ * each (full 0x20; small-map 0x0e/0x0c/0x0b/0x0d per layout). Ported as
+ * per-elem bounds-checked advance (TRUNCATED mid-loop leaves *cursor at the
+ * first failing elem start); total = n*elem_len with overflow guard.
+ * CIV_OK when all n fit. NOENT on NULL image/cursor; RANGE on n*elem_len
+ * overflow. seg/base are live anchors (see words). */
 civ_error_t save_xfer_array(uint8_t *image, size_t cap, size_t *cursor,
                             uint16_t seg, uint16_t base, unsigned n,
                             unsigned elem_len);
-/* Orig: FUN_10f8_10bd @ 10f8:10bd, now save_xfer_strided — skip 0xc + 0xb words */
+/* Orig: FUN_10f8_10bd @ 10f8:10bd, now save_xfer_strided — skip 0xc + 0xb words.
+ * Orig loop: n iterations, each live elem skips 0xc then moves 0xb words
+ * (22B) to/from the image (packed 22B per elem in image, e.g. 28 elems at
+ * CIV_SAVE_OFF_STRIDED_1420_1A38). Ported as per-elem 22B bounds-checked
+ * advance; TRUNCATED mid-loop leaves *cursor at failing elem start.
+ * CIV_OK when all n fit. NOENT on NULL image/cursor. seg/base live anchors.
+ * Stride constants below. */
 civ_error_t save_xfer_strided(uint8_t *image, size_t cap, size_t *cursor,
                               uint16_t seg, uint16_t base, unsigned n);
 
@@ -227,6 +287,15 @@ civ_error_t save_xfer_strided(uint8_t *image, size_t cap, size_t *cursor,
 /* RLL tag: <0x80 repeat, >=0x80 literal run. */
 #define CIV_SAVE_RLL_REPEAT_MAX 0x7fu
 #define CIV_SAVE_RLL_LITERAL_FLAG 0x80u
+
+/* Xfer strides (packet N, Orig FUN_10f8_1035 @ 10f8:1035 / FUN_10f8_10bd @
+ * 10f8:10bd). Live stride is fixed; image elem_len varies by variant
+ * (full 0x20 vs small-map 0x0e/0x0c/0x0b/0x0d). Strided: per elem skip 0xc
+ * live bytes, then 0xb words (22B) packed in image. */
+#define CIV_SAVE_ARRAY_LIVE_STRIDE 0x20u
+#define CIV_SAVE_STRIDED_SKIP 0x0cu
+#define CIV_SAVE_STRIDED_WORDS 0x0bu
+#define CIV_SAVE_STRIDED_ELEM_LEN (0x0bu * 2u)
 
 /* Livectx segments (game state scatter). 12d8 is the main ctx. */
 #define CIV_SEG_GAME_MAIN 0x12d8u

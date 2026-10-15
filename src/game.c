@@ -334,6 +334,133 @@ civ_error_t unit_show_info_popup(int civ, int unit_idx)
     return CIV_ERR_UNSUPPORTED;
 }
 
+civ_error_t combat_resolve_attack(int atk_strength, int def_strength,
+                                  int terrain_bonus, int vet_bonus,
+                                  int *odds_out)
+{
+    if (!odds_out)
+        return CIV_ERR_NOENT;
+    (void)atk_strength;
+    (void)def_strength;
+    (void)terrain_bonus;
+    (void)vet_bonus;
+    /* TODO: Orig Combat_ResolveAttack @ TBD (near unit_choose_order @
+     * 1078:1480 combat-odds tail with 11c0:1bc3; exact seg:off TBD).
+     * Decode atk/def * terrain * veteran multipliers, then scale via
+     * combat_calc_odds @ 11c0:1bc3 (atk*100/(atk+def) v1). */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+int combat_calc_odds(int atk_eff, int def_eff)
+{
+    /* Orig FUN_11c0_1bc3 @ 11c0:1bc3 -> Combat_CalcOdds. OS-free 1:1 v1:
+     * percent odds from effective strengths; veteran/terrain pre-scale
+     * + rounding TBD vs decompiler. */
+    if (atk_eff < 0 || def_eff < 0)
+        return -1;
+    if (atk_eff == 0 && def_eff == 0)
+        return -1;
+    return atk_eff * 100 / (atk_eff + def_eff);
+}
+
+civ_error_t unit_found_city_if_home(int civ, int unit_idx)
+{
+    (void)civ;
+    (void)unit_idx;
+    /* TODO: Orig FUN_11c0_16a4 @ 11c0:16a4 (type 0x1a settler founds
+     * when home-city +10/6307 matches; needs city records 0x1c bytes
+     * at 1420:5500 + map tile claim). */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+int map_check_zoc(const int *enemy_map, int w, int h, int x, int y)
+{
+    /* Orig FUN_11c0_23fd @ 11c0:23fd -> Map_CheckZOC. ZOC gate for
+     * unit_step_toward_goal @ 1128:0000: 8-neighbour enemy scan. */
+    int dyy;
+    int dxx;
+
+    if (!enemy_map)
+        return -1;
+    if (w <= 0 || h <= 0)
+        return -1;
+    if (x < 0 || x >= w || y < 0 || y >= h)
+        return -1;
+    for (dyy = -1; dyy <= 1; dyy++) {
+        for (dxx = -1; dxx <= 1; dxx++) {
+            int nx;
+            int ny;
+
+            if (dxx == 0 && dyy == 0)
+                continue;
+            nx = x + dxx;
+            ny = y + dyy;
+            if (nx < 0 || nx >= w || ny < 0 || ny >= h)
+                continue;
+            if (enemy_map[ny * w + nx] != 0)
+                return 1;
+        }
+    }
+    return 0;
+}
+
+civ_error_t city_spot_reveal(int x, int y, int civ)
+{
+    (void)x;
+    (void)y;
+    (void)civ;
+    /* TODO: Orig FUN_11c0_0000 @ 11c0:0000 (city spot via 1110:180e/16ee
+     * in the unit_update_visibility @ 11c0:0395 tail; sibling
+     * city_update_visibility @ 11c8:00c4; needs 1420:5500 + seen-bits). */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t city_update_visibility(int x, int y, int civ)
+{
+    (void)x;
+    (void)y;
+    (void)civ;
+    /* TODO: Orig FUN_11c8_00c4 @ 11c8:00c4 (second spot helper in the
+     * same 0395 tail; sibling city_spot_reveal @ 11c0:0000). */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+int unit_find_diplomat_target(int ux, int uy, const int *dx, const int *dy,
+                              const int *visible, int n)
+{
+    /* Orig FUN_11c8_02ec @ 11c8:02ec -> Unit_FindDiplomatTarget. Type
+     * 0x0e nearest visible player diplomat for unit_choose_order @
+     * 1078:1480: linear Chebyshev-minimum scan. */
+    int i;
+    int best = -1;
+    int best_d = 0;
+
+    if (!dx || !dy || !visible)
+        return -1;
+    if (n <= 0)
+        return -1;
+    for (i = 0; i < n; i++) {
+        int adx;
+        int ady;
+        int d;
+
+        if (visible[i] == 0)
+            continue;
+        adx = dx[i] - ux;
+        if (adx < 0)
+            adx = -adx;
+        ady = dy[i] - uy;
+        if (ady < 0)
+            ady = -ady;
+        d = adx > ady ? adx : ady;
+        if (best < 0 || d < best_d) {
+            best = i;
+            best_d = d;
+        }
+    }
+    return best;
+}
+
 void game_shutdown(civ_game_t *g)
 {
     if (g)

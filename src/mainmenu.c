@@ -6,12 +6,18 @@
 
 civ_error_t mainmenu_run(civ_mainmenu_choice_t *out)
 {
+    /* Orig: FUN_11e0_0221 @ 11e0:0221, now mainmenu_run (MainMenu_WndProc).
+     * Orig flow (stubbed: SDL3 modal TBD, no globals here):
+     *   Util_StrCopy @ 1000:36b2 (buf, text @ 1420:435b CIV_MAINMENU_TEXT)
+     *   + Dialog_MenuZ_Modal @ 1220:0156 loop while choice < 0 || choice > 3
+     *   (DAT_1418_0002 preselect, DAT_1418_0004 cancel/back re-prompts;
+     *   raw choice = zero-based MenuZ index, i.e. 500-based button id minus
+     *   CIV_DIALOG_MENUZ_BASE_ID via dialog_menuz_id_to_index) into
+     *   g_nMenuChoice (12d8:44e2), then mainmenu_dispatch. Read-only stub:
+     *   validates out, reports NONE, no modal pumped. */
     if (!out)
         return CIV_ERR_NOENT;
     *out = CIV_MENU_NONE;
-    /* TODO: mirror MainMenu_WndProc @ 11e0:0221 —
-     * Util_StrCopy(buf, CIV_MAINMENU_TEXT) + Dialog_MenuZ_Modal()
-     * into g_nMenuChoice (12d8:44e2). */
     return CIV_ERR_UNSUPPORTED;
 }
 

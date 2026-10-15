@@ -34,7 +34,25 @@
 #include "win16_compat.h"
 
 civ_error_t dialog_init(void);
+/* --- generic dialog procs (packet Q 2026-10-15) ---
+ * Win16 dialog dispatch -> SDL3 modal TBD; stubs return
+ * WIN16_MSG_DEFAULT (DefDlgProc path). No globals, no exit(),
+ * read-only. NE export ordinals TBD from the NE export table (see
+ * Ghidra exports); both are MAKEPROCINSTANCE targets in
+ * Dlg_CreateTracked @ 1098:124f. */
+
+/* Orig: FUN_1098_16E2 @ 1098:16e2 -> DLGPROC (dlg_proc).
+ * Generic dialog proc (NE export DLGPROC, ordinal TBD). MAKEPROCINSTANCE
+ * target for generic dialogs in Dlg_CreateTracked @ 1098:124f.
+ * Message table TBD; expected WM_INITDIALOG / WM_COMMAND / WM_PAINT
+ * (+ palette copy GETDC/SELECTPALETTE/REALIZEPALETTE on the create
+ * path, centering, tracked-stack push @ 1420:1ea0/1ec8). */
 win16_msg_result_t dlg_proc(int msg, long wparam, long lparam);
+/* Orig: FUN_1098_1838 @ 1098:1838 -> CIVDIALOGPROC (civ_dialog_proc).
+ * Civ-specific dialog proc (NE export CIVDIALOGPROC, ordinal TBD).
+ * Second MAKEPROCINSTANCE target in Dlg_CreateTracked @ 1098:124f for
+ * civ dialogs (palette-aware centering path). Same WM_INITDIALOG /
+ * WM_COMMAND / WM_PAINT table TBD as above. */
 win16_msg_result_t civ_dialog_proc(int msg, long wparam, long lparam);
 void dialog_shutdown(void);
 
@@ -150,5 +168,24 @@ civ_error_t diplomacy_eval_bribe(int civ, int unit_idx);
  * Sys_GetTickScaled % 0x3c 0x1e-phase clock; blit via 10d0:0854). GDI
  * TEXTOUT + BITBLT -> SDL text/blit TBD. */
 civ_error_t ui_draw_end_turn_prompt(void);
+
+/* --- MenuZ button-id map (packet N, OS-free) ---
+ * Orig: Dialog_MenuZ_Modal @ 1220:0156 builds RanDoMRadio buttons with
+ * 500-based control ids (DAT_1418_0002 holds the preselect index,
+ * DAT_1418_0004 flags cancel/back). MainMenu_WndProc @ 11e0:0221 loops
+ * Util_StrCopy + Dialog_MenuZ_Modal while the raw choice is <0 or >3 over
+ * text @ 1420:435b, then dispatches (see mainmenu.h). The helpers below own
+ * only the id<->index arithmetic (no Win16, no globals, read-only):
+ * raw 500-based button id <-> zero-based item index. Out-of-range maps to
+ * -1 (id_to_index) so callers can re-prompt like the orig loop. */
+#define CIV_DIALOG_MENUZ_BASE_ID 500
+
+/* Orig: Dialog_MenuZ_Modal @ 1220:0156 id math — button id to item index.
+ * Returns index (>=0) or -1 when button_id < 500. */
+int dialog_menuz_id_to_index(int button_id);
+
+/* Orig: Dialog_MenuZ_Modal @ 1220:0156 id math — item index to button id.
+ * Returns 500 + index, or -1 when index < 0. */
+int dialog_menuz_index_to_id(int index);
 
 #endif /* CIVLIN_DIALOG_H */

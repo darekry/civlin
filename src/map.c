@@ -81,6 +81,11 @@ civ_error_t map_init(void)
 
 win16_msg_result_t map_wndproc_main(int msg, long wparam, long lparam)
 {
+    /* Orig FUN_1208_0054 @ 1208:0054 -> WDWMAPPROC. Main map WndProc:
+     * (msg, wparam, lparam) -> WIN16_MSG_HANDLED when consumed else
+     * WIN16_MSG_DEFAULT (DefWindowProc). Message table TBD (expected
+     * WM_PAINT / WM_HSCROLL / WM_VSCROLL / WM_TIMER, see map.h); Win16
+     * USER/GDI -> SDL3 TBD. No globals, no exit(), read-only. */
     (void)msg;
     (void)wparam;
     (void)lparam;
@@ -89,6 +94,11 @@ win16_msg_result_t map_wndproc_main(int msg, long wparam, long lparam)
 
 win16_msg_result_t map_wndproc_small(int msg, long wparam, long lparam)
 {
+    /* Orig FUN_1210_0000 @ 1210:0000 -> WDWSMMAPPROC. World-map child
+     * WndProc: same (msg, wparam, lparam) -> handled/default contract
+     * as above. Message table TBD (expected WM_PAINT + click-center via
+     * Map_CenterOnTile @ 1110:03ae, see map.h); Win16 -> SDL3 TBD. No
+     * globals, no exit(), read-only. */
     (void)msg;
     (void)wparam;
     (void)lparam;
@@ -97,10 +107,25 @@ win16_msg_result_t map_wndproc_small(int msg, long wparam, long lparam)
 
 win16_msg_result_t map_wndproc_status(int msg, long wparam, long lparam)
 {
+    /* Orig FUN_1218_0000 @ 1218:0000 -> WDWSTATUSPROC. Status child
+     * WndProc: same handled/default contract. Message table TBD
+     * (expected WM_PAINT of the 1218:0956/0a06 frames + 11f8:0278 rows,
+     * see map.h); Win16 -> SDL3 TBD. No globals, no exit(), read-only. */
     (void)msg;
     (void)wparam;
     (void)lparam;
     return WIN16_MSG_DEFAULT;
+}
+
+civ_error_t map_timer_proc(void)
+{
+    /* Orig FUN_1008_0D68 @ 1008:0d68 -> TIMERPROC. 200 ms SETTIMER tick
+     * from WdwMap_Open @ 1208:0af1, pumped by WinMain @ 1008:0000;
+     * tick -> game_tick (see game.h) -> Game_TurnLoopTick @ 1088:0000 /
+     * game_turn_tick. TODO: SDL timer bridge (SDL_AddTimer) + frame
+     * pump; KILLTIMER teardown in WinMain_Shutdown @ 1008:0329. No
+     * globals, no exit(), read-only. */
+    return CIV_ERR_UNSUPPORTED;
 }
 
 void map_shutdown(void)
@@ -142,6 +167,126 @@ int path_is_passable(int civ, int x, int y)
      * 11c0:23fd ZOC, 1110:18ce/16ee occupancy); TBD here. */
     (void)civ;
     return map_get_tile(x, y) != -1;
+}
+
+int map_is_sea_land(int x, int y)
+{
+    /* Orig FUN_1110_16C0 @ 1110:16c0 -> Map_IsSeaLand (sea/land match
+     * gate: 0x1a3a vs 1110:16c0==10). Folds the ==10 ocean test:
+     * tile 10 (see worldgen.h) is sea. OOB map_get_tile -> -1 != 10
+     * -> 0 (land), so callers still gate OOB via path_is_passable. */
+    return map_get_tile(x, y) == 10;
+}
+
+int map_is_occupied(int x, int y, const int *unit_xs, const int *unit_ys,
+                    int n_units)
+{
+    /* Orig FUN_1110_18CE @ 1110:18ce -> Map_IsOccupied (occupancy gate
+     * for unit_step_toward_goal @ 1128:0000). Orig scans the 1420:62fc
+     * unit stack with 0x1a3a side gating (exact predicate TBD); here
+     * the stack is passed explicitly so map.c keeps no globals. */
+    int i;
+
+    if (unit_xs == NULL || unit_ys == NULL || n_units <= 0)
+        return 0;
+    for (i = 0; i < n_units; i++) {
+        if (unit_xs[i] == x && unit_ys[i] == y)
+            return 1;
+    }
+    return 0;
+}
+
+int map_is_city_blocked(int x, int y, const int *city_xs,
+                        const int *city_ys, int n_cities)
+{
+    /* Orig FUN_1110_199B @ 1110:199b -> Map_IsCityBlocked (second
+     * occupancy/city gate for unit_step_toward_goal @ 1128:0000;
+     * city records 0x1c bytes at 1420:5500, exact predicate TBD).
+     * Explicit arrays keep no globals; NULL/empty -> 0. */
+    int i;
+
+    if (city_xs == NULL || city_ys == NULL || n_cities <= 0)
+        return 0;
+    for (i = 0; i < n_cities; i++) {
+        if (city_xs[i] == x && city_ys[i] == y)
+            return 1;
+    }
+    return 0;
+}
+
+int map_ocean_clear_depth(int x, int y, int dx, int dy)
+{
+    /* Orig FUN_1110_1DBD @ 1110:1dbd -> Map_OceanClearDepth (ocean >4
+     * clear check for unit_step_toward_goal @ 1128:0000: caller tests
+     * result >4). Run check straight from the tile buffer via
+     * map_get_tile, capped at 5. */
+    int depth = 0;
+    int k;
+
+    if (dx < -1 || dx > 1 || dy < -1 || dy > 1)
+        return 0;
+    if (dx == 0 && dy == 0)
+        return 0;
+    for (k = 0; k < 5; k++) {
+        if (map_get_tile(x + dx * k, y + dy * k) != 10)
+            break;
+        depth++;
+    }
+    return depth;
+}
+
+int map_resolve_direct(int ux, int uy, int gx, int gy)
+{
+    /* Orig FUN_1110_1C4B @ 1110:1c4b -> Map_ResolveDirect
+     * (player-adjacent |dx|<2,|dy|<2 direct resolve for
+     * unit_step_toward_goal @ 1128:0000). Direction numbering 1=N
+     * clockwise is the Linux convention; exact orig table TBD. */
+    int dx = gx - ux;
+    int dy = gy - uy;
+
+    if (dx == 0 && dy == 0)
+        return 0;
+    if (dx < -1 || dx > 1 || dy < -1 || dy > 1)
+        return 0xffff;
+    if (dx == 0 && dy == -1)
+        return 1;
+    if (dx == 1 && dy == -1)
+        return 2;
+    if (dx == 1 && dy == 0)
+        return 3;
+    if (dx == 1 && dy == 1)
+        return 4;
+    if (dx == 0 && dy == 1)
+        return 5;
+    if (dx == -1 && dy == 1)
+        return 6;
+    if (dx == -1 && dy == 0)
+        return 7;
+    return 8;
+}
+
+civ_error_t map_reveal_center(int civ, int x, int y)
+{
+    /* Orig FUN_1110_1461 @ 1110:1461 -> Map_RevealCenter
+     * (reveal/center helper, called from unit_maybe_center_view @
+     * 11f0:44d4 when the 6305 seen bit says visible). Needs the SDL
+     * view/scroll state; stub CIV_ERR_UNSUPPORTED. */
+    (void)civ;
+    (void)x;
+    (void)y;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t map_spot_city(int civ, int x, int y)
+{
+    /* Orig pair FUN_1110_180E @ 1110:180e + FUN_1110_16EE @ 1110:16ee
+     * -> Map_SpotCity (city-spotting pair feeding 11c0:0000, via
+     * unit_update_visibility @ 11c0:0395). Needs city records +
+     * seen-bits + minimap layer; stub CIV_ERR_UNSUPPORTED. */
+    (void)civ;
+    (void)x;
+    (void)y;
+    return CIV_ERR_UNSUPPORTED;
 }
 
 civ_error_t text_draw_status_row(const char *str, const civ_rect_t *rect,
@@ -214,34 +359,40 @@ civ_error_t map_open_status(void)
 
 civ_error_t map_refresh_status(void)
 {
-    /* TODO: WdwStatus_Refresh @ 1218:0801 (dirty +0x2c, Game_UpdateStatusPanel
-     * + Unit_ShowInfoPopup, blit 10d0:0854/09a2). */
+    /* Orig: FUN_1218_0801 @ 1218:0801 -> WdwStatus_Refresh. Dirty flag
+     * +0x2c + Game_UpdateStatusPanel @ 1088:13d5 + Unit_ShowInfoPopup @
+     * 11f0:468c + blits 10d0:0854/09a2. Win16 USER/GDI -> SDL3 TBD; stub
+     * CIV_ERR_UNSUPPORTED. No globals, no exit(), read-only. */
     return CIV_ERR_UNSUPPORTED;
 }
 
 civ_error_t map_center_on_tile(int civ, int x, int y)
 {
+    /* Orig: FUN_1110_03ae @ 1110:03ae -> Map_CenterOnTile. Centers x/y
+     * (x - w/2, y - h/2) then Map_RefreshAllViews @ 1110:03e9. Needs the
+     * SDL view/scroll state; stub CIV_ERR_UNSUPPORTED. */
     (void)civ;
     (void)x;
     (void)y;
-    /* TODO: Map_CenterOnTile @ 1110:03ae (x - w/2, y - h/2, then
-     * Map_RefreshAllViews). */
     return CIV_ERR_UNSUPPORTED;
 }
 
 civ_error_t map_refresh_all_views(int civ)
 {
+    /* Orig: FUN_1110_03e9 @ 1110:03e9 -> Map_RefreshAllViews. Civ bit ->
+     * 1408:00cc + Game_UpdateStatusPanel @ 1088:13d5 + GETFREESPACE guard
+     * + 1208:17da + 1210:09b4. Win16 windowing -> SDL3 TBD; stub
+     * CIV_ERR_UNSUPPORTED. */
     (void)civ;
-    /* TODO: Map_RefreshAllViews @ 1110:03e9 (civ bit -> 1408:00cc,
-     * Game_UpdateStatusPanel, GETFREESPACE, 1208:17da + 1210:09b4). */
     return CIV_ERR_UNSUPPORTED;
 }
 
 civ_error_t mainport_apply_palette(int first, int count)
 {
+    /* Orig: FUN_1200_00a8 @ 1200:00a8 -> MainPort_ApplyPalette.
+     * GLOBALLOCK -> Palette_AnimateRange @ 1090:0376 (see video.h). Win16
+     * palette -> SDL3 TBD; stub CIV_ERR_UNSUPPORTED. */
     (void)first;
     (void)count;
-    /* TODO: MainPort_ApplyPalette @ 1200:00a8 (GLOBALLOCK ->
-     * Palette_AnimateRange). */
     return CIV_ERR_UNSUPPORTED;
 }

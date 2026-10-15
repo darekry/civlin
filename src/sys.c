@@ -2,6 +2,7 @@
  * documented adaptations where DOS/Win16 has no Linux equivalent. */
 #include "sys.h"
 
+#include <stdarg.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -57,6 +58,42 @@ int util_clamp(int v, int lo, int hi)
     if (hi < v)
         v = hi;
     return v;
+}
+
+int util_progress(int done, int total)
+{
+    /* Orig: FUN_1000_29ea @ 1000:29ea -> Util_Progress. OS-free 1:1 port
+     * of the counter/total percent behind the continent-link progress
+     * (orig bar range 0x1248; Linux reports 0..100 percent). No Win16, no
+     * globals, no exit(), read-only. */
+    long pct;
+
+    if (total <= 0 || done <= 0)
+        return 0;
+    if (done >= total)
+        return 100;
+    pct = (long)done * 100L / (long)total;
+    if (pct < 0)
+        pct = 0;
+    if (pct > 100)
+        pct = 100;
+    return (int)pct;
+}
+
+int debug_print(const char *fmt, ...)
+{
+    /* Orig: FUN_1000_2c9c @ 1000:2c9c -> Debug_Print. OS-free 1:1 port of
+     * the fprintf path behind ResMgr_DumpStats @ 1190:17d0: vfprintf(fmt)
+     * to stdout. No globals, no exit(), never writes game assets. */
+    va_list ap;
+    int n;
+
+    if (!fmt)
+        return -1;
+    va_start(ap, fmt);
+    n = vfprintf(stdout, fmt, ap);
+    va_end(ap);
+    return n;
 }
 
 int dos_get_current_drive(void)
@@ -160,13 +197,15 @@ int sys_pump_messages(void)
 
 civ_error_t sys_get_client_rect(int *w_out, int *h_out)
 {
+    /* Orig: FUN_1000_137f @ 1000:137f -> Sys_GetClientRect. w_out/h_out
+     * via GLOBALLOCK on the status-port handle for 1218:0956/0a06.
+     * Linux equivalent TBD (SDL_GetWindowSize on the status view);
+     * NULL either -> NOENT. Stub CIV_ERR_UNSUPPORTED. */
     if (!w_out || !h_out)
         return CIV_ERR_NOENT;
     *w_out = 0;
     *h_out = 0;
-    /* TODO: Orig FUN_1000_137f @ 1000:137f (GLOBALLOCK the status-port
-     * handle -> client RECT for 1218:0956/0a06). Needs the SDL status
-     * view + SDL_GetWindowSize mapping. */
+    /* TODO: SDL_GetWindowSize mapping for the SDL status view. */
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -188,6 +227,15 @@ civ_error_t sys_check_runtime_memory(void)
      * <300000 + GETFREESYSTEMRESOURCES <10/<8 -> MESSAGEBOX 1420:4473 /
      * 1420:44ff, once each via 1420:43b4/43b6). Needs a parent window +
      * SDL_GetSystemRAM mapping. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t sys_check_free_memory(void)
+{
+    /* Orig: FUN_11e8_0000 @ 11e8:0000 -> Sys_CheckFreeMemory. Boot check:
+     * GETFREESPACE against the required floor, MESSAGEBOX 1420:43b8 on
+     * shortfall. Linux mapping TBD (SDL_GetSystemRAM). Stub
+     * CIV_ERR_UNSUPPORTED. No globals, no exit(), read-only. */
     return CIV_ERR_UNSUPPORTED;
 }
 

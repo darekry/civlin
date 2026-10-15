@@ -12,9 +12,14 @@
  * Menu text @ 1420:435b (0-terminated, '_' separates items):
  *   "_Start a New Game_Load a Saved Game_Play on EARTH_Customize World_"
  *   "View Hall of Fame_Quit"
- * Raw modal indices need re-confirmation against Dialog_MenuZ_Modal's
- * 500-based button ids (DAT_1418_0002 preselect); the enum below records
- * the dispatch values observed in MainMenu_WndProc.
+ * Raw modal index is the zero-based MenuZ item index (500-based button id
+ * minus CIV_DIALOG_MENUZ_BASE_ID 500; see dialog_menuz_id_to_index /
+ * dialog_menuz_index_to_id @ 1220:0156, DAT_1418_0002 preselect,
+ * DAT_1418_0004 cancel/back re-prompts); the enum below records the
+ * dispatch values observed in MainMenu_WndProc. Packet N: orig loops
+ * Util_StrCopy(buf, text @ 1420:435b) + Dialog_MenuZ_Modal @ 1220:0156
+ * while choice < 0 || choice > 3, then dispatches. Stub stays read-only
+ * (validates out only, no globals, no exit) until the SDL3 modal lands.
  */
 #ifndef CIVLIN_MAINMENU_H
 #define CIVLIN_MAINMENU_H
@@ -34,8 +39,13 @@ typedef enum civ_mainmenu_choice {
     /* 0/2 fall through to NewGame_Wizard paths; exact mapping TBD */
 } civ_mainmenu_choice_t;
 
-/* Shows the menu (Util_StrCopy + Dialog_MenuZ_Modal loop
- * while choice<0 || choice>3) and returns the raw choice. */
+/* Orig: FUN_11e0_0221 @ 11e0:0221, now mainmenu_run — shows the menu
+ * (Util_StrCopy @ 1000:36b2 + Dialog_MenuZ_Modal @ 1220:0156 loop while
+ * choice<0 || choice>3 over CIV_MAINMENU_TEXT @ 1420:435b) and returns the
+ * raw choice. Stub: NOENT on NULL out, else UNSUPPORTED with *out=NONE;
+ * read-only (no modal pumped until SDL3 bridge lands). Raw choice is the
+ * zero-based MenuZ index; 500-based button ids map via dialog_menuz_*
+ * (CIV_DIALOG_MENUZ_BASE_ID). */
 civ_error_t mainmenu_run(civ_mainmenu_choice_t *out);
 
 /* Dispatches one choice to load/earth/hall/quit/new-game.

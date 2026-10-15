@@ -35,9 +35,42 @@
 #define CIV_MAP_BUF_LEN 64000u
 
 civ_error_t map_init(void);
+/* --- WndProcs + timer (packet Q 2026-10-15) ---
+ * Win16 REGISTERCLASS dispatch -> SDL3 event/widget TBD; stubs return
+ * WIN16_MSG_DEFAULT (DefWindowProc path). No globals, no exit(),
+ * read-only (no tile-buffer writes; paint/scroll only invalidate). */
+
+/* Orig: FUN_1208_0054 @ 1208:0054 -> WDWMAPPROC (map_wndproc_main).
+ * Main "CIVILIZATION" window proc (class registered by
+ * App_RegisterWindowClasses @ 1098:06f8, opened by map_open_main @
+ * 1208:0af1). Message table TBD from decompile; expected WM_CREATE /
+ * WM_PAINT (blits via 10d0:0854/09a2 on the Map_RefreshAllViews @
+ * 1110:03e9 path) + WM_HSCROLL / WM_VSCROLL (scroll ranges set in
+ * WdwMap_Open) + WM_TIMER (200 ms SETTIMER from WdwMap_Open, forwards
+ * to TIMERPROC @ 1008:0d68 / map_timer_proc below) + WM_DESTROY
+ * (KILLTIMER in WinMain_Shutdown @ 1008:0329). */
 win16_msg_result_t map_wndproc_main(int msg, long wparam, long lparam);
+/* Orig: FUN_1210_0000 @ 1210:0000 -> WDWSMMAPPROC (map_wndproc_small).
+ * "World Map" child proc (opened by map_open_small @ 1210:025b).
+ * Message table TBD; expected WM_PAINT (minimap layer Map_SetTile
+ * x+0xf0 via the 1210:09b4 repaint from Map_RefreshAllViews @
+ * 1110:03e9) + click-to-center (Map_CenterOnTile @ 1110:03ae) +
+ * WM_TIMER passthrough. */
 win16_msg_result_t map_wndproc_small(int msg, long wparam, long lparam);
+/* Orig: FUN_1218_0000 @ 1218:0000 -> WDWSTATUSPROC (map_wndproc_status).
+ * "Status" child proc (opened by map_open_status @ 1218:0386).
+ * Message table TBD; expected WM_PAINT (frames wdwstatus_calc_upper /
+ * lower_rect @ 1218:0956/0a06 + Text_DrawStatusRow @ 11f8:0278 rows via
+ * Game_UpdateStatusPanel @ 1088:13d5 / map_refresh_status @ 1218:0801). */
 win16_msg_result_t map_wndproc_status(int msg, long wparam, long lparam);
+/* Orig: FUN_1008_0D68 @ 1008:0d68 -> TIMERPROC (map_timer_proc).
+ * 200 ms SETTIMER callback installed by WdwMap_Open @ 1208:0af1, torn
+ * down by KILLTIMER in WinMain_Shutdown @ 1008:0329, pumped from the
+ * WinMain @ 1008:0000 message loop. Tick drives the per-frame pump
+ * game_tick (see game.h) -> Game_TurnLoopTick @ 1088:0000 /
+ * game_turn_tick. SDL timer bridge TBD; stub CIV_ERR_UNSUPPORTED.
+ * No globals, no exit(), read-only. */
+civ_error_t map_timer_proc(void);
 void map_shutdown(void);
 
 /* --- tile buffer (implemented 1:1; bounds match the originals) --- */
@@ -97,6 +130,71 @@ int path_find_corridor(int civ, int unit_idx, int max_steps);
  * 1 when the tile can be entered, 0 otherwise (OOB is 0). */
 int path_is_passable(int civ, int x, int y);
 
+/* --- tile queries (packet P 2026-10-15) ---
+ * Callees of unit_step_toward_goal @ 1128:0000 + worldgen links +
+ * visibility. OS-free queries are ported 1:1 on the tile buffer via
+ * map_get_tile; view/unit-state tails stay CIV_ERR_UNSUPPORTED stubs.
+ * No globals, no exit(), read-only (const arrays, no buffer writes). */
+
+/* Orig: FUN_1110_16C0 @ 1110:16c0 -> Map_IsSeaLand.
+ * Sea/land match gate for unit_step_toward_goal @ 1128:0000: orig
+ * returns the tile kind and the caller tests ==10 (ocean) vs the
+ * 0x1a3a sea/land domain. This helper folds the ==10: 1 when
+ * map_get_tile(x,y)==10 (sea), 0 otherwise (land or OOB, since
+ * map_get_tile returns -1 OOB). OS-free 1:1 via map_get_tile. */
+int map_is_sea_land(int x, int y);
+
+/* Orig: FUN_1110_18CE @ 1110:18ce -> Map_IsOccupied.
+ * Occupancy gate for unit_step_toward_goal @ 1128:0000. Orig scans
+ * the unit stack (records at 1420:62fc + civ*0x600 + idx*0xc, see
+ * game.h) with 0x1a3a side gating (exact predicate TBD, see Ghidra).
+ * Linux takes the stack explicitly (no globals): xs/ys are n_units
+ * entries, NULL/empty means none. Returns 1 when any entry is at
+ * (x,y), 0 otherwise. OS-free, read-only. */
+int map_is_occupied(int x, int y, const int *unit_xs, const int *unit_ys,
+                    int n_units);
+
+/* Orig: FUN_1110_199B @ 1110:199b -> Map_IsCityBlocked.
+ * Second occupancy/city gate for unit_step_toward_goal @ 1128:0000
+ * (city-record variant of the 1110:18ce gate; city records 0x1c bytes
+ * at 1420:5500 + idx*0x1c, see game.h; exact predicate TBD).
+ * Linux takes cities explicitly (no globals): 1 when any entry is at
+ * (x,y), 0 otherwise (NULL/empty -> 0). OS-free, read-only. */
+int map_is_city_blocked(int x, int y, const int *city_xs,
+                        const int *city_ys, int n_cities);
+
+/* Orig: FUN_1110_1DBD @ 1110:1dbd -> Map_OceanClearDepth.
+ * Ocean >4 clear check for the unit_step_toward_goal @ 1128:0000
+ * pather (caller tests result >4). Counts consecutive ocean (10)
+ * tiles from (x,y) along the unit step (dx,dy), capped at 5.
+ * dx/dy must each be -1..1 and not both 0 (else 0). OOB (-1) breaks
+ * the run. OS-free 1:1 via map_get_tile. Returns 0..5. */
+int map_ocean_clear_depth(int x, int y, int dx, int dy);
+
+/* Orig: FUN_1110_1C4B @ 1110:1c4b -> Map_ResolveDirect.
+ * Player-adjacent direct resolve for unit_step_toward_goal @
+ * 1128:0000: when |dx|<2 and |dy|<2 the step resolves without the
+ * corridor probe. Params: unit (ux,uy) + goal (gx,gy). Returns dir
+ * 1..8 (1=N clockwise: 1=N(0,-1) 2=NE 3=E 4=SE 5=S 6=SW 7=W 8=NW;
+ * exact orig numbering TBD, see Ghidra), 0 when arrived (dx==0 &&
+ * dy==0), 0xffff when not adjacent. OS-free 1:1, no tile access. */
+int map_resolve_direct(int ux, int uy, int gx, int gy);
+
+/* Orig: FUN_1110_1461 @ 1110:1461 -> Map_RevealCenter.
+ * Reveal/center helper called from unit_maybe_center_view @
+ * 11f0:44d4 only when the unit belongs to the player or is seen
+ * (6305 bit). Needs the SDL view/scroll state; stub returns
+ * CIV_ERR_UNSUPPORTED. No globals, no exit(), read-only. */
+civ_error_t map_reveal_center(int civ, int x, int y);
+
+/* Orig pair: FUN_1110_180E @ 1110:180e + FUN_1110_16EE @ 1110:16ee
+ * -> Map_SpotCity. City-spotting pair feeding unit_update_visibility
+ * @ 11c0:0395 -> 11c0:0000/11c8:00c4 (see game.h unit_update_visibility;
+ * spots cities, flips goals on contact). Needs city records
+ * (1420:5500) + seen-bits + minimap layer; stub returns
+ * CIV_ERR_UNSUPPORTED. No globals, no exit(), read-only. */
+civ_error_t map_spot_city(int civ, int x, int y);
+
 /* Orig: FUN_11f8_0278 @ 11f8:0278 -> Text_DrawStatusRow.
  * Status-panel text row called with the wdwstatus frame rects above
  * (upper @ 1088:1479 + DAT_12d8_45f4, lower @ 1088:1536 + DAT_12d8_45fb).
@@ -147,14 +245,28 @@ civ_error_t map_open_small(void);
  * + Game_UpdateStatusPanel @ 1088:13d5. Win16 -> SDL3 TBD; stub returns
  * CIV_ERR_UNSUPPORTED. */
 civ_error_t map_open_status(void);
-/* WdwStatus_Refresh @ 1218:0801. */
+/* Orig: FUN_1218_0801 @ 1218:0801 -> WdwStatus_Refresh.
+ * Marks the status window dirty (flag at +0x2c), then
+ * Game_UpdateStatusPanel @ 1088:13d5 + Unit_ShowInfoPopup @ 11f0:468c
+ * and blits via 10d0:0854/09a2. Win16 USER/GDI -> SDL3 TBD; stub
+ * CIV_ERR_UNSUPPORTED. No globals, no exit(), read-only. */
 civ_error_t map_refresh_status(void);
-/* Map_CenterOnTile @ 1110:03ae. */
+/* Orig: FUN_1110_03ae @ 1110:03ae -> Map_CenterOnTile.
+ * Centers the map view on tile (x, y) (x - w/2, y - h/2), then
+ * Map_RefreshAllViews @ 1110:03e9 (below). Needs the SDL view/scroll
+ * state; stub CIV_ERR_UNSUPPORTED. No globals, no exit(), read-only. */
 civ_error_t map_center_on_tile(int civ, int x, int y);
-/* Map_RefreshAllViews @ 1110:03e9. */
+/* Orig: FUN_1110_03e9 @ 1110:03e9 -> Map_RefreshAllViews.
+ * Sets the civ view bit (-> 1408:00cc), then Game_UpdateStatusPanel @
+ * 1088:13d5 + GETFREESPACE guard + 1208:17da + 1210:09b4 view repaints.
+ * Win16 windowing -> SDL3 TBD; stub CIV_ERR_UNSUPPORTED. No globals, no
+ * exit(), read-only. */
 civ_error_t map_refresh_all_views(int civ);
-/* MainPort_ApplyPalette @ 1200:00a8 (range repaint; exact locked-handle
- * arg order TBD, see Ghidra). */
+/* Orig: FUN_1200_00a8 @ 1200:00a8 -> MainPort_ApplyPalette.
+ * GLOBALLOCK the main-port handle -> Palette_AnimateRange @ 1090:0376
+ * (see video.h) range repaint (first, count). Exact locked-handle arg
+ * order TBD, see Ghidra. Win16 palette -> SDL3 TBD; stub
+ * CIV_ERR_UNSUPPORTED. No globals, no exit(), read-only. */
 civ_error_t mainport_apply_palette(int first, int count);
 
 #endif /* CIVLIN_MAP_H */

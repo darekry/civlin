@@ -22,14 +22,26 @@ civ_error_t boot_setup_paths(void)
 
 civ_error_t boot_check_memory(void)
 {
-    /* TODO: Sys_CheckFreeMemory @ 11e8:0000 (GETFREESPACE/host equiv). */
+    /* Boot step delegating to Orig FUN_11e8_0000 @ 11e8:0000 ->
+     * Sys_CheckFreeMemory (see sys.h sys_check_free_memory; GETFREESPACE
+     * + 1420:43b8 msg, SDL_GetSystemRAM TBD). */
+    return sys_check_free_memory();
+}
+
+civ_error_t app_register_window_classes(void)
+{
+    /* Orig: FUN_1098_06f8 @ 1098:06f8 -> App_RegisterWindowClasses.
+     * REGISTERCLASS x4 + Ctrl_RegisterCustomClasses @ 1058:0b4d (see
+     * dialog.h) + GETSYSTEMMETRICS. Win16 USER -> SDL3 TBD; stub
+     * CIV_ERR_UNSUPPORTED. No globals, no exit(), read-only. */
     return CIV_ERR_UNSUPPORTED;
 }
 
 civ_error_t boot_register_classes(void)
 {
-    /* TODO: App_RegisterWindowClasses @ 1098:06f8 (+ Ctrl_RegisterCustomClasses). */
-    return CIV_ERR_UNSUPPORTED;
+    /* Boot step delegating to Orig FUN_1098_06f8 @ 1098:06f8 ->
+     * App_RegisterWindowClasses (above). */
+    return app_register_window_classes();
 }
 
 civ_error_t boot_load_fonts(void)
