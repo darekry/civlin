@@ -95,6 +95,44 @@ void *util_mem_copy_far(void *dst, const void *src, size_t n)
     return memcpy(dst, src, n);
 }
 
+size_t util_strip_trailing_zeros(char *buf, size_t len, size_t cap,
+                                 int is_g_format)
+{
+    /* Util_StripTrailingZeros @ 1000:01fe (see civ_common.h): G-path
+     * strips '0's while BX > CX bound, then one '.'; non-G only the
+     * dot. Linux: bound is the buffer start (never underflow) + cap. */
+    if (!buf || cap == 0)
+        return 0;
+    if (len > cap)
+        len = cap;
+    if (is_g_format) {
+        while (len > 0 && buf[len - 1] == '0')
+            len--;
+    }
+    if (len > 0 && buf[len - 1] == '.')
+        len--;
+    if (len < cap)
+        buf[len] = '\0';
+    else if (cap > 0)
+        buf[cap - 1] = '\0';
+    return len;
+}
+
+civ_error_t util_format_float(char *out, size_t cap, double val,
+                              char fmt, int prec)
+{
+    (void)val;
+    (void)fmt;
+    (void)prec;
+    /* TODO: Orig FUN_1000_0221 @ 1000:0221 (Borland %E/%F/%G core via
+     * Float_DecomposeExponent @ 1000:0754 + Util_StripTrailingZeros @
+     * 1000:01fe; prec clamp 0x28; INF/NAN tails TBD vs dump, cf.
+     * sys.h float group). Needs digit loop + jumptable decode. */
+    if (out && cap > 0)
+        out[0] = '\0';
+    return CIV_ERR_UNSUPPORTED;
+}
+
 int util_format_message(char *dst, size_t cap, const char *fmt, ...)
 {
     /* Util_FormatMessage @ 11d0:xxxx. snprintf composer sibling to

@@ -187,4 +187,162 @@ int ne_entry_count(const char *path);
 int ne_entry_addr(const char *path, int index,
                   uint16_t *seg_out, uint16_t *off_out);
 
+/* --- Sequential 1000:00b2-0221 CRT exit + FPU (2026-10-15, po kolei) ---
+ * Entry @ 1000:0000 calls Sys_RunInitTable (min-first) for init, then
+ * WinMain @ 1008:0000, then Sys_ExitFallback -> Sys_DoExit -> Dos exit.
+ * Float group (FPU x87) feeds Util_FormatFloat %E/%F/%G via
+ * Float_DecomposeExponent + Util_StripTrailingZeros. OS-free parts
+ * (table scan, zero-strip, noops) are LIVE 1:1 with explicit params (no
+ * ES:, no far, no INT 21h, no FPU CW); DOS/FPU tails stay STUB
+ * CIV_ERR_UNSUPPORTED with TODO Orig. No globals, no exit(), C17. */
+
+/* 6-B table entry behind Sys_RunInitTable/ExitTable (orig ES:BX stride 6:
+ * flag i8 @ +0 (0xff = consumed/skip), prio u8 @ +1, fn far ptr @ +2).
+ * Linux uses a native fn pointer (far/near CALLF/CALL distinction
+ * dropped; both become fn()); code_seg (0x1000 in orig when flag != 0)
+ * is passed through for fidelity but may be ignored by the hook. */
+typedef void (*sys_table_fn_t)(unsigned code_seg);
+
+typedef struct sys_table_entry {
+    int8_t flag; /* -1 (0xff) = consumed/skip, else pending (0 = far path) */
+    uint8_t prio; /* priority byte @ +1 (min-first init, max-first exit) */
+    sys_table_fn_t fn; /* far fn @ +2 (NULL = skip) */
+} sys_table_entry_t;
+
+/* Orig: FUN_1000_00de @ 1000:00de -> Sys_RunInitTable (min-first).
+ * OS-free 1:1 (LIVE): repeatedly scans table[0..n) for the pending
+ * (flag != -1, fn != NULL) entry with the smallest prio, marks flag =
+ * -1, calls fn(0x1000), until none remains. Entry @ 1000:0000 calls it
+ * for init. Returns run count, -1 on NULL table with n > 0. Empty
+ * (n == 0) returns 0. Table is caller-owned (may be mutated: flags). */
+int sys_run_init_table(sys_table_entry_t *table, size_t n);
+
+/* Orig: FUN_1000_0122 @ 1000:0122 -> Sys_RunExitTable (max-first).
+ * OS-free 1:1 (LIVE): same as above but picks the largest prio first
+ * (exit reverse order). Called from Sys_RunExitTableSingle @ 1000:00b2
+ * (fixed DGROUP 0x5140-0x5146, 1x6B entry flag 0/prio 1) and Sys_DoExit
+ * @ 1000:127f. Same return contract. */
+int sys_run_exit_table(sys_table_entry_t *table, size_t n);
+
+/* Orig: FUN_1000_00b2 @ 1000:00b2 -> Sys_RunExitTableSingle.
+ * Fixed-table wrapper: ES=DS, SI=0x5140, DI=0x5146 (DGROUP, 1x6B entry:
+ * 00 01 A7 41 00 00 = flag 0/prio 1/fn reloc @ 1420:5140) -> Sys_RunExit
+ * Table @ 1000:0122. Table relocation (seg fixup at load) TBD -> stub
+ * CIV_ERR_UNSUPPORTED. No globals, no exit(). */
+civ_error_t sys_run_exit_table_single(void);
+
+/* Orig: FUN_1000_00c4 @ 1000:00c4 -> Sys_NoopExitHook1 (empty RETF).
+ * Orig: FUN_1000_00c5 @ 1000:00c5 -> Sys_NoopExitHook2 (empty RETF).
+ * Empty hooks called from Sys_DoExit @ 1000:127f between the atexit
+ * drain and Dos_ExitProcess. Intentionally empty (void, NOOP). */
+void sys_noop_exit_hook1(void);
+void sys_noop_exit_hook2(void);
+
+/* Orig: FUN_1000_00c6 @ 1000:00c6 -> Dos_ExitProcess (AL=[BP+4],
+ * AH=0x4c INT 0x21; fallback PUSH 0xff -> Sys_ExitFallback @ 1000:12d6
+ * -> second INT 0x21). DOS process exit -> no exit() in libs per rules;
+ * stub CIV_ERR_UNSUPPORTED. Param is the DOS exit code. */
+civ_error_t dos_exit_process(int exit_code);
+
+/* Orig: FUN_1000_127f @ 1000:127f -> Sys_DoExit (exit dispatcher).
+ * Drains atexit stack @ DAT_1420_4bac (x4-0x4be8 indirect calls) while
+ * nonzero, then Sys_RunExitTableSingle @ 1000:00b2 + indirect
+ * DAT_1420_4cb0, then Sys_NoopExitHook1/2 @ 1000:00c4/00c5, then
+ * (param2 == 0, param3 == 0) indirect DAT_1420_4cb4 and DAT_1420_4cb8,
+ * then Dos_ExitProcess @ 1000:00c6. Touches DGROUP globals + INT 21h
+ * -> stub CIV_ERR_UNSUPPORTED. Params mirror the decompiler
+ * (exit_code, flags); exact flag semantics TBD. */
+civ_error_t sys_do_exit(int exit_code, int flags);
+
+/* Orig: FUN_1000_12d6 @ 1000:12d6 -> Sys_ExitFallback (wrapper).
+ * Calls Sys_DoExit(exit_code, 0, 0). Called from Dos_ExitProcess
+ * fallback and entry @ 1000:0000 tail. Same stub contract. */
+civ_error_t sys_exit_fallback(int exit_code);
+
+/* Orig: FUN_1000_0164 @ 1000:0164 -> Float_CheckRange (FPU range).
+ * x87 helper behind Float_StoreConverted @ 1000:06cf (2 call sites):
+ * FSTCW/OR 0x0c00(chop)/FLDCW, FLD extended [BP+0xc], range compare vs
+ * AX 0x43fe/0x407e + BX 0x3bcd/0x3f6a + DX sign handling (SHL/RCL/SHR),
+ * sets DAT_1420_0010 = 0x22 on overflow/underflow (cf. OVERFLOW @
+ * 1420:4ad6, Floating Point Trap @ 1420:50cb). x87 CW + DGROUP error
+ * word have no Linux equivalent here -> stub CIV_ERR_UNSUPPORTED. */
+civ_error_t float_check_range(void);
+
+/* Orig: FUN_1000_06cf @ 1000:06cf -> Float_StoreConverted.
+ * FPU store dispatcher (SI flags @ [BP+8]): bit 2 set -> Float_Check
+ * Range(DAT_1420_4a92, ST0, 1) + FSTP double; bit 3 set -> direct FSTP
+ * extended; else Float_CheckRange(DAT_1420_4b06, ST0, 0) + FSTP float.
+ * x87 stack args -> stub CIV_ERR_UNSUPPORTED. */
+civ_error_t float_store_converted(void);
+
+/* Orig: FUN_1000_0754 @ 1000:0754 -> Float_DecomposeExponent.
+ * Float->digits exponent dispatch behind Util_FormatFloat @ 1000:0221:
+ * LES DI [BP+0x10] out, sign save/clear via 0x7fff mask on ES:[BX+DI],
+ * index = (BX>>2)<<1, JMP CS:[BX+0x784] jumptable (too many branches
+ * for the decompiler). Exponent table TBD -> stub CIV_ERR_UNSUPPORTED. */
+civ_error_t float_decompose_exponent(void);
+
+/* Orig: FUN_1000_03b6 @ 1000:03b6 -> Sys_NoopPad (PUSH BP / MOV BP,SP /
+ * POP BP / RET; padding after Util_FormatFloat @ 1000:0221). Empty
+ * near RET like Sys_NoopExitHook1/2 @ 1000:00c4/00c5. Intentionally
+ * empty (void, NOOP). No globals, no exit(). */
+void sys_noop_pad(void);
+
+/* Orig: FUN_1000_06c7 @ 1000:06c7 -> Float_DiscardSt0 (PUSH BP / MOV
+ * BP,SP / WAIT / FSTP ST0 / POP BP / RET: discards the x87 stack top).
+ * Linux C ABI has no x87 register stack, so there is no counterpart;
+ * documented NOOP void (never fakes a computation). No globals,
+ * no exit(). */
+void float_discard_st0(void);
+
+/* Orig: FUN_1000_096a @ 1000:096a -> Float_PackBcdChunk (DX in 0..9999,
+ * AX/CX scratch saved via PUSH/POP, ES:DI out via STOSW; DIV DL by 100
+ * (AL=0x64), AAM 0xa + SHL AH,4 + OR per half, XCHG, second AAM pack,
+ * MOV AH,DH, STOSW 2 BCD bytes, DI += 2). Linux single-byte primitive
+ * of the same AAM-pack step: packs 0..99 into one BCD byte
+ * ((v / 10) << 4 | (v % 10)); input reduced mod 100 first. The orig
+ * 2-byte STOSW is two such packs (DX / 100 high, DX % 100 low);
+ * Float_ConvertExtendedToBcd @ 1000:0988 calls it 4x for 8 bytes plus
+ * a 1-byte AAM tail. OS-free 1:1, no globals, no exit(). */
+uint8_t float_pack_bcd_chunk(uint16_t dx);
+
+/* Orig: FUN_1000_0988 @ 1000:0988 -> Float_ConvertExtendedToBcd (FSTP
+ * extended ES:[DI], exponent AX=[DI+8] & 0x7fff vs 0x3ffe then -0x3c,
+ * mantissa BX=[DI] CX=[DI+2] SI=[DI+4] DX=[DI+6] vs magics
+ * 0xde0b/0x6b3a/0x763f/0xfff0 (CMP BX,-0x10 JA = overflow when
+ * BX > 0xfff0), small -> 9x0x00 fill, large -> 9x0x99 fill, else
+ * normalize shifts + DIV SI by 10000 (SI=0x2710) chain with 4x CALL
+ * Float_PackBcdChunk @ 1000:096a (8 BCD bytes) + AAM tail STOSB (byte
+ * 8) + sign byte ([SI+9] & 0x80) STOSB (byte 9). Linux 1:1 on
+ * explicit (long double x, uint8_t bcd_out[10]): same threshold
+ * branches (e1 = exp - 0x3ffe, e2 = e1 - 0x3c, magic compare), same
+ * 9 + sign layout via the pack helper + integer /% 10000 groups.
+ * NULL bcd_out is a no-op (orig faulted). No globals, no exit(). */
+void float_convert_extended_to_bcd(long double x, uint8_t bcd_out[10]);
+
+/* Orig: FUN_1000_0c03 @ 1000:0c03 -> Float_Log2 (x87 FYL2X core with
+ * FLDLN2/FXCH/FXAM/FSTSW/SAHF dispatch: x == 0 or x < 0 falls through
+ * to the NaN/INF constant loads @ CS:0xa79/0xa7d, x == 1.0
+ * (exp == 0x3fff && hi mantissa == 0x8000) takes log2((x - 1) + 1) via
+ * FLD1/FSUBP/FYL2XP1 to avoid precision loss, else FYL2X). Linux 1:1
+ * via log2(): x == 1.0 returns 0.0 directly (same FYL2XP1 value
+ * without the x87 round trip); x <= 0 outside the orig contract
+ * returns -HUGE_VAL (0) / NAN (negative) exactly like log2(). No
+ * globals, no exit(). */
+double float_log2(double x);
+
+/* Orig: FUN_1000_0c7d @ 1000:0c7d -> Float_Exp2 (x87 2^x core: FLDL2E
+ * log2(e) = 1.4426950408889634 @ 1000:0c7e times x, ABS, 0.5 compare
+ * vs float CS:0xa81, FSCALE/FRNDINT/FIST split, F2XM1 + 1, odd-bit
+ * multiply by _DAT_1000_0a85 = sqrt(2) 85 64 DE F9 33 F3 04 B5 FF 3F,
+ * FILD/FSCALE reassemble; zero/INF/NaN paths via CS:0xa8f/0xa79).
+ * Linux 1:1 via exp2() (same 2^x, same INF/overflow semantics).
+ * FLOAT_LOG2E below keeps the orig FLDL2E constant for fidelity. No
+ * globals, no exit(). */
+double float_exp2(double x);
+
+/* Orig FLDL2E constant @ 1000:0c7e (log2(e) used by Float_Exp2 @
+ * 1000:0c7d: x * log2(e) before the ABS/FSCALE/F2XM1 split). */
+#define FLOAT_LOG2E 1.4426950408889634
+
 #endif /* CIVLIN_SYS_H */

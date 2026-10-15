@@ -16,6 +16,7 @@ import re
 
 ADDR = re.compile(r"\b[0-9A-Fa-f]{4}:[0-9A-Fa-f]{4}\b")
 FUNC = re.compile(r"^(?:static\s+)?(?:[\w\*]+\s+)+(\w+)\s*\([^;]*?\)\s*\{\s*$", re.M)
+DECL = re.compile(r"^(?:static\s+)?(?:[\w\*]+\s+)+(\w+)\s*\([^;]*?\)\s*;\s*$", re.M)
 
 
 def body_of(src, start):
@@ -86,7 +87,8 @@ sekcji „Ścieżka krytyczna" poniżej).
 - STUB — znana ścieżka, nie zaimplementowana (zwraca UNSUPPORTED).
 - NOOP — celowo puste (void shutdowny, `cursor_set`, placeholdery).
 - Kolumna „Orig addr" zbiera adresy `seg:off` wspomniane w komentarzu nad
-  funkcją i w jej ciele — to wskazówki RE, nie approved mapping.
+  funkcją, w jej ciele oraz w nagłówku `src/*.h` (mapa RE żyje w nagłówkach)
+  — to wskazówki RE, nie approved mapping.
 - „has TODO" = w ciele jest znacznik TODO z adresem Orig i opisem braków.
 
 ## Ścieżka krytyczna WinMain @ 1008:0000 (stan na 2026-10-15)
@@ -132,11 +134,43 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 ## Pełna tabela (skan `src/*.c`)
 """
 
+def header_addrs(hpath):
+    """Map function name -> Orig seg:off addrs from its header comment.
+
+    Workflow keeps `Orig FUN_seg_off` + address in every src/*.h comment
+    so the RE map survives; merge those into the STATUS row (the .c body
+    alone may not repeat them).
+    """
+    try:
+        hsrc = open(hpath).read()
+    except OSError:
+        return {}
+    out = {}
+    for m in DECL.finditer(hsrc):
+        name = m.group(1)
+        if name in ("if", "for", "while", "switch", "return"):
+            continue
+        pend = hsrc.rfind("*/", 0, m.start())
+        if pend == -1:
+            continue
+        cstart = hsrc.rfind("/*", 0, pend)
+        if cstart == -1:
+            continue
+        pre = hsrc[cstart : m.start()]
+        if re.search(r"\w+\s*\(.*\)\s*;", strip_comments(pre)):
+            continue  # code between comment and decl: not its header
+        addrs = sorted(set(ADDR.findall(pre)))
+        if addrs:
+            out.setdefault(name, set()).update(addrs)
+    return out
+
+
 print(HEADER)
 for path in sorted(glob.glob("src/*.c")):
     if path.endswith("rsc_dump.c"):
         continue
     src = open(path).read()
+    hmap = header_addrs(path[:-2] + ".h")
     print(f"\n### `{path}`\n")
     print("| Function | State | Orig addr | Note |")
     print("|---|---|---|---|")
@@ -152,7 +186,7 @@ for path in sorted(glob.glob("src/*.c")):
         pre = src[cstart : m.start()] if cstart != -1 else ""
         if re.search(r"\w+\s*\(.*\)\s*;", strip_comments(pre)):
             pre = ""  # code between comment and function: not its header
-        addrs = sorted(set(ADDR.findall(pre + body[:400])))
+        addrs = sorted(set(ADDR.findall(pre + body[:400])) | hmap.get(name, set()))
         state = OVERRIDES.get(name, classify(name, body))
         todo = "TODO" in body
         note = "has TODO" if (todo and state in ("STUB", "PARTIAL")) else ""

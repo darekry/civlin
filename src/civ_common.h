@@ -54,6 +54,30 @@ int util_format_message(char *dst, size_t cap, const char *fmt, ...);
  * 0x1f-char compare). OS-free: 'A'..'Z' -> +32, all else unchanged. */
 int util_to_lower(int c);
 
+/* Orig: FUN_1000_01fe @ 1000:01fe -> Util_StripTrailingZeros.
+ * Trailing-zero/dot strip behind Util_FormatFloat @ 1000:0221 %E/%F/%G:
+ * when is_g_format != 0 ((DL & 0x5f) == 0x47 'G'/'g'), strips trailing
+ * '0' (ES:[BX-1] == 0x30 while BX > CX bound); then (both paths, unless
+ * the zero loop hit the bound) strips one trailing '.' (0x2e). Orig
+ * communicates the new end via BX (caller NUL-terminates later @
+ * 0221:03aa). Linux 1:1 on explicit buf/len (no ES:, no registers):
+ * in-place strip + NUL, returns the new length. NULL buf -> 0 (orig
+ * faulted); len > cap clamps to cap. No globals, no exit(). */
+size_t util_strip_trailing_zeros(char *buf, size_t len, size_t cap,
+                                 int is_g_format);
+
+/* Orig: FUN_1000_0221 @ 1000:0221 -> Util_FormatFloat (%E/%F/%G core).
+ * Borland sprintf float core (prec clamp 0x28, 'E' 0x45/'F' 0x46/'G'
+ * 0x47 via param3 & 0xdf, sign, Float_DecomposeExponent @ 1000:0754
+ * digits, Util_StripTrailingZeros @ 1000:01fe when param2 == 0, exp
+ * digits, NUL @ 03aa; special 0x7fff/0x7ffe tails reference nearby
+ * symbols as reloc base, exact INF/NAN literals TBD vs dump, cf.
+ * OVERFLOW @ 1420:4ad6 + Floating Point Trap @ 1420:50cb). Full digit
+ * loop + jumptable TBD -> stub CIV_ERR_UNSUPPORTED (outs untouched
+ * except NUL when cap > 0). No globals, no exit(). */
+civ_error_t util_format_float(char *out, size_t cap, double val,
+                              char fmt, int prec);
+
 /* Orig: FUN_1000_137f @ 1000:137f -> Util_MemCopyFar.
  * Far memcpy (Win16 HMEMCPY shape: LDS SI [BP+6] src, LES DI [BP+0x0a]
  * dst, CX byte count; CLD + SHR CX,1 + REP MOVSW + ADC CX,CX + REP

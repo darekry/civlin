@@ -2,6 +2,7 @@
  * documented adaptations where DOS/Win16 has no Linux equivalent. */
 #include "sys.h"
 
+#include <math.h>
 #include <stdarg.h>
 #include <string.h>
 #include <unistd.h>
@@ -495,4 +496,253 @@ int ne_entry_addr(const char *path, int index,
     }
     fclose(fp);
     return -1;
+}
+
+int sys_run_init_table(sys_table_entry_t *table, size_t n)
+{
+    /* Sys_RunInitTable @ 1000:00de: min-prio-first drain (see sys.h).
+     * Orig scans ES:BX SI..DI stride 6 for smallest byte[1] with
+     * byte[0] != 0xff, marks 0xff, CALLF/CALL [BX+2], repeats. */
+    size_t i;
+    int run = 0;
+
+    if (!table && n > 0)
+        return -1;
+    for (;;) {
+        size_t best = n;
+        uint8_t best_prio = 0xFFu;
+
+        for (i = 0; i < n; i++) {
+            if (table[i].flag == (int8_t)0xFF || !table[i].fn)
+                continue;
+            if (best == n || table[i].prio < best_prio) {
+                best = i;
+                best_prio = table[i].prio;
+            }
+        }
+        if (best == n)
+            break;
+        table[best].flag = (int8_t)0xFF;
+        table[best].fn(0x1000u);
+        run++;
+    }
+    return run;
+}
+
+int sys_run_exit_table(sys_table_entry_t *table, size_t n)
+{
+    /* Sys_RunExitTable @ 1000:0122: max-prio-first drain (exit reverse).
+     * Same shape as init but picks largest prio (orig JNC/bVar2 <=
+     * chain). Called from 00b2 single + 127f DoExit. */
+    size_t i;
+    int run = 0;
+
+    if (!table && n > 0)
+        return -1;
+    for (;;) {
+        size_t best = n;
+        uint8_t best_prio = 0;
+
+        for (i = 0; i < n; i++) {
+            if (table[i].flag == (int8_t)0xFF || !table[i].fn)
+                continue;
+            if (best == n || table[i].prio >= best_prio) {
+                best = i;
+                best_prio = table[i].prio;
+            }
+        }
+        if (best == n)
+            break;
+        table[best].flag = (int8_t)0xFF;
+        table[best].fn(0x1000u);
+        run++;
+    }
+    return run;
+}
+
+civ_error_t sys_run_exit_table_single(void)
+{
+    /* TODO: Orig FUN_1000_00b2 @ 1000:00b2 (ES=DS, SI=0x5140 DI=0x5146
+     * 1x6B DGROUP entry 00 01 A7 41 00 00 @ 1420:5140 -> Sys_RunExit
+     * Table @ 1000:0122). Needs load-time seg fixup for fn ptr. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+void sys_noop_exit_hook1(void)
+{
+    /* Sys_NoopExitHook1 @ 1000:00c4: empty RETF. */
+}
+
+void sys_noop_exit_hook2(void)
+{
+    /* Sys_NoopExitHook2 @ 1000:00c5: empty RETF. */
+}
+
+civ_error_t dos_exit_process(int exit_code)
+{
+    (void)exit_code;
+    /* TODO: Orig FUN_1000_00c6 @ 1000:00c6 (AH=0x4c INT 0x21 + fallback
+     * via Sys_ExitFallback @ 1000:12d6). No exit() in libs. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t sys_do_exit(int exit_code, int flags)
+{
+    (void)exit_code;
+    (void)flags;
+    /* TODO: Orig FUN_1000_127f @ 1000:127f (atexit DAT_1420_4bac drain +
+     * 00b2 + 4cb0 + 00c4/00c5 + 4cb4/4cb8 + 00c6). DGROUP + INT 21h. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t sys_exit_fallback(int exit_code)
+{
+    (void)exit_code;
+    /* TODO: Orig FUN_1000_12d6 @ 1000:12d6 (Sys_DoExit(code,0,0)
+     * wrapper; entry @ 1000:0000 tail + 00c6 fallback). */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t float_check_range(void)
+{
+    /* TODO: Orig FUN_1000_0164 @ 1000:0164 (x87 FSTCW/0x0c00/FLDCW +
+     * range vs 0x43fe/0x407e + DAT_1420_0010=0x22; cf. OVERFLOW @
+     * 1420:4ad6, Floating Point Trap @ 1420:50cb). */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t float_store_converted(void)
+{
+    /* TODO: Orig FUN_1000_06cf @ 1000:06cf (SI-flag dispatch to
+     * Float_CheckRange + FSTP float/double/extended). */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t float_decompose_exponent(void)
+{
+    /* TODO: Orig FUN_1000_0754 @ 1000:0754 (sign 0x7fff mask +
+     * (BX>>2)<<1 index -> JMP CS:[BX+0x784] jumptable). */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+void sys_noop_pad(void)
+{
+    /* Orig FUN_1000_03b6 @ 1000:03b6 (PUSH BP / MOV BP,SP / POP BP /
+     * RET padding after Util_FormatFloat @ 1000:0221). */
+}
+
+void float_discard_st0(void)
+{
+    /* Orig FUN_1000_06c7 @ 1000:06c7 (WAIT / FSTP ST0: discards the x87
+     * stack top). No x87 stack exists in the Linux C ABI, so this stays
+     * a documented NOOP and never fakes a computation. */
+}
+
+uint8_t float_pack_bcd_chunk(uint16_t dx)
+{
+    /* Orig FUN_1000_096a @ 1000:096a: DX/100 high half + DX%100 low
+     * half, each via AAM 0xa (AH = v / 10, AL = v % 10) + SHL AH,4 +
+     * OR, STOSW 2 bytes. Single-byte primitive of that step. */
+    uint8_t v = (uint8_t)(dx % 100u);
+    uint8_t hi = (uint8_t)(v / 10u);
+    uint8_t lo = (uint8_t)(v % 10u);
+
+    return (uint8_t)((hi << 4) | lo);
+}
+
+void float_convert_extended_to_bcd(long double x, uint8_t bcd_out[10])
+{
+    /* Orig FUN_1000_0988 @ 1000:0988: FSTP extended, exponent/mantissa
+     * threshold gates (0x3ffe / -0x3c / 0xde0b/0x6b3a/0x763f/0xfff0),
+     * DIV 10000 (0x2710) chain with 4x Float_PackBcdChunk @ 1000:096a
+     * + AAM tail + sign ([SI+9] & 0x80). Same branches/layout here via
+     * the pack helper and integer /% groups. */
+    uint8_t raw[10];
+    uint16_t bx;
+    uint16_t cx;
+    uint16_t si;
+    uint16_t dxw;
+    uint16_t exp;
+    uint16_t expb;
+    int e1;
+    int e2;
+    int i;
+    unsigned long long mag;
+    uint8_t sign;
+
+    if (!bcd_out)
+        return;
+    memcpy(raw, &x, sizeof(raw));
+    bx = (uint16_t)((uint16_t)raw[0] | ((uint16_t)raw[1] << 8));
+    cx = (uint16_t)((uint16_t)raw[2] | ((uint16_t)raw[3] << 8));
+    si = (uint16_t)((uint16_t)raw[4] | ((uint16_t)raw[5] << 8));
+    dxw = (uint16_t)((uint16_t)raw[6] | ((uint16_t)raw[7] << 8));
+    exp = (uint16_t)((uint16_t)raw[8] | ((uint16_t)raw[9] << 8));
+    sign = (uint8_t)(raw[9] & 0x80u);
+    expb = (uint16_t)(exp & 0x7FFFu);
+    e1 = (int)expb - 0x3FFEu;
+    if (e1 < 0) {
+        memset(bcd_out, 0x00, 9);
+        bcd_out[9] = sign;
+        return;
+    }
+    e2 = e1 - 0x3Cu;
+    if (e2 > 0)
+        goto overflow;
+    if (e2 == 0) {
+        if (dxw < 0xDE0Bu)
+            goto convert;
+        if (dxw > 0xDE0Bu)
+            goto overflow;
+        if (si < 0x6B3Au)
+            goto convert;
+        if (si > 0x6B3Au)
+            goto overflow;
+        if (cx < 0x763Fu)
+            goto convert;
+        if (cx > 0x763Fu)
+            goto overflow;
+        if (bx > 0xFFF0u)
+            goto overflow;
+    }
+convert:
+    if (e2 < 0 || e2 == 0) {
+        /* Magnitude fits the 18-digit (9 BCD byte) field: orig DIV
+         * chain extracts low 10000-groups first (STOSW order). */
+        mag = (unsigned long long)fabsl(x);
+        for (i = 0; i < 4; i++) {
+            unsigned chunk = (unsigned)(mag % 10000ULL);
+
+            mag /= 10000ULL;
+            bcd_out[2 * i] =
+                float_pack_bcd_chunk((uint16_t)(chunk % 100u));
+            bcd_out[2 * i + 1] =
+                float_pack_bcd_chunk((uint16_t)(chunk / 100u));
+        }
+        if (mag > 99ULL)
+            goto overflow;
+        bcd_out[8] = float_pack_bcd_chunk((uint16_t)mag);
+        bcd_out[9] = sign;
+        return;
+    }
+overflow:
+    memset(bcd_out, 0x99, 9);
+    bcd_out[9] = sign;
+}
+
+double float_log2(double x)
+{
+    /* Orig FUN_1000_0c03 @ 1000:0c03 (FYL2X, with FLD1/FSUBP/FYL2XP1
+     * log2((x - 1) + 1) when exp == 0x3fff && hi == 0x8000). */
+    if (x == 1.0)
+        return 0.0;
+    return log2(x);
+}
+
+double float_exp2(double x)
+{
+    /* Orig FUN_1000_0c7d @ 1000:0c7d (FLDL2E FLOAT_LOG2E * x, ABS,
+     * FSCALE/FRNDINT split, F2XM1 + 1, odd-bit sqrt(2) multiply via
+     * _DAT_1000_0a85). Linux uses exp2() directly. */
+    return exp2(x);
 }
