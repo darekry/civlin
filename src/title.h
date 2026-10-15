@@ -49,6 +49,35 @@ civ_error_t title_play_anim_loop(void);
  * caller chain. Win16/GDI blit path -> stub CIV_ERR_UNSUPPORTED. */
 civ_error_t title_decode_frame(const uint8_t *src, size_t len);
 
+/* Orig: FUN_1010_xxxx @ 1010:xxxx -> pic_decompress_chunk
+ * (Pic_DecompressChunk). Sibling of gr_pic.c PicDecompress @ 1420:23ce:
+ * OS-free chunk decoder (LZ/RLE byte math, save_rll_* shape). Bounds-checked
+ * src->dst, no Win16 until the blit (caller owns the GfxPort blit, see
+ * video.h). Tag v1 (matches save_pack @ 10f8:05da / save_unpack @ 10f8:040a):
+ * <0x80 = repeat next byte N times, >=0x80 = copy N-0x80 literals. Exact
+ * tag/bias TBD vs 1010 decompile; blit path stays in the caller. */
+civ_error_t pic_decompress_chunk(const uint8_t *src, size_t src_len,
+                                 uint8_t *dst, size_t dst_cap,
+                                 size_t *out_len);
+
+/* Orig: FUN_1020_xxxx @ 1020:xxxx -> pic_read_header (Pic_ReadHeader).
+ * Sibling of GR_PicRead @ 1420:2300 / LoadGifPicture @ 1420:2372: header
+ * probe for an intro frame (dims/format). Stub: needs _LOPEN/_HREAD chunked
+ * file path (cf. save_file_read @ 1140:019d) + FINDRESOURCE/LOADRESOURCE
+ * handle path (cf. rsc_loader.h) + GfxPort select (cf. video.h
+ * gfx_port_set_active @ 10d0:0956). Returns CIV_ERR_UNSUPPORTED. */
+civ_error_t pic_read_header(const uint8_t *src, size_t len,
+                            unsigned *out_w, unsigned *out_h);
+
+/* Orig: FUN_1010_xxxx @ 1010:xxxx / FUN_1020_xxxx @ 1020:xxxx spare ->
+ * title_load_opening_frame (Title_LoadOpeningFrame). Frame fetch feeding
+ * Title_DecodeFrame @ 1018:xxxx + Title_PlayAnimLoop @ 1030:0000 +
+ * Sound_PlayId(CIV_SOUND_OPENING)=OPENING.wav (see audio.h). Stub: needs
+ * RSC/NE-resource frame source (RSC entry vs NE bitmap, cf. rsc_loader.h
+ * ResMgr_LoadRsc @ 1190:0000) + GfxPort_SetActive @ 10d0:0956 select
+ * (cf. video.h). Returns CIV_ERR_UNSUPPORTED. */
+civ_error_t title_load_opening_frame(unsigned frame_index);
+
 /* 1 == user asked to skip (key/mouse), 0 == keep playing. Pure SDL3 event
  * poll helper used by the intro and the victory ceremony. */
 int title_poll_skip(void);

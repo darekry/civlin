@@ -81,6 +81,17 @@ civ_error_t worldgen_copy_preset(uint8_t *dst, const uint8_t *src, size_t len);
 /* Custom-world editor (wizard steps 3/4 + 1058 controls). */
 civ_error_t worldgen_customize(void);
 
+/* Orig: FUN_1060_xxxx @ 1060:xxxx -> worldgen_customize_dialog
+ * (WorldGen_CustomizeDialog). Customize-World editor host using the Ctrl_*
+ * @ 1058 controls (RANDOMRADIOPROC @ 1058:06ab, RANDOMSTATICPROC @ 1058:081a,
+ * RANDOMUSERPROC @ 1058:0921, REGIONPROC @ 1058:09f6; classes registered by
+ * Ctrl_RegisterCustomClasses @ 1058:0b4d). Stub: needs the modal
+ * Dlg_CreateTracked @ 1098:124f host (+ Dlg_DestroyTracked @ 1098:1612
+ * teardown) with the 1058 control fan-out. Control/dialog symbols are
+ * referenced by Orig address only here (owned by the dialog module) to keep
+ * this parallel slice disjoint -- dialog.h is intentionally not edited. */
+civ_error_t worldgen_customize_dialog(void);
+
 /* Gen passes (stubs; tile buffer via map.h, RNG via sys.h). */
 civ_error_t worldgen_seed_one_island(void);
 civ_error_t worldgen_paint_blob(int x, int y);

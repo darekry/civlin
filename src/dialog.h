@@ -115,6 +115,26 @@ win16_msg_result_t dialog_ctrl_region_proc(int msg, long wparam, long lparam);
 civ_error_t dlg_create_tracked(int dlg_id, unsigned flags);
 void dlg_destroy_tracked(void);
 
+/* --- dialog centering (packet R2) ---
+ * Orig: FUN_10a0_xxxx @ 10a0:xxxx -> Dlg_CenterWindow. GETCLIENTRECT +
+ *   center math sibling to wdwstatus_calc_upper/lower_rect @ 1218:0956/0a06
+ *   (see map.h): cx = parent.left + (parent_w - dlg_w) / 2, cy =
+ *   parent.top + (parent_h - dlg_h) / 2, OS-free 1:1 port on explicit
+ *   rects (no Win16, no globals, read-only inputs); the SETWINDOWPOS
+ *   application tail stays Win16 -> SDL3 TBD (stub part). */
+typedef struct dlg_rect {
+    int left;
+    int top;
+    int right;
+    int bottom;
+} dlg_rect_t;
+
+/* Centers the dlg-sized rect inside parent; writes the moved rect to out
+ * (same size as dlg) and returns CIV_ERR_UNSUPPORTED until the
+ * SETWINDOWPOS tail lands. CIV_ERR_NOENT on NULL parent/dlg/out. */
+civ_error_t dlg_center_window(const dlg_rect_t *parent, const dlg_rect_t *dlg,
+                              dlg_rect_t *out);
+
 /* --- packet F string anchors + help (2026-10-15) ---
  * "civhelp.hlp" -> CIV_HELP_FILE_NAME (WINHELP bridge TBD, exact Orig
  * FUN_* TBD; the call site issues WINHELP on the help file, read-only).
@@ -128,6 +148,12 @@ void dlg_destroy_tracked(void);
 /* WINHELP(CIV_HELP_FILE_NAME) bridge (stub; topic NULL = contents page).
  * Win16 WINHELP -> SDL3 help viewer TBD. */
 civ_error_t dialog_open_help(const char *topic);
+
+/* Orig: FUN_1160_xxxx @ 1160:xxxx -> Help_OpenTopic. WINHELP
+ * (CIV_HELP_FILE_NAME) topic opener; thin wrapper wiring dialog_open_help
+ * above (topic NULL = contents page). Win16 WINHELP -> SDL3 help viewer
+ * TBD; stub CIV_ERR_UNSUPPORTED. No globals, no exit(), read-only. */
+civ_error_t help_open_topic(const char *topic);
 
 /* Sequence player (stubs). anim_advance_frames: 0 = busy, nonzero = done.
  *

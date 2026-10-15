@@ -198,6 +198,38 @@ int anim_advance_frames(void)
     return 1;
 }
 
+civ_error_t dlg_center_window(const dlg_rect_t *parent, const dlg_rect_t *dlg,
+                              dlg_rect_t *out)
+{
+    /* Orig FUN_10a0_xxxx @ 10a0:xxxx -> Dlg_CenterWindow. GETCLIENTRECT +
+     * centering math sibling to wdwstatus_calc_upper/lower_rect @
+     * 1218:0956/0a06 (see map.h): centered origin = parent origin +
+     * (parent size - dlg size) / 2. OS-free 1:1 port on explicit rects;
+     * the SETWINDOWPOS move application stays Win16 -> SDL3 TBD.
+     * No globals, no exit(), read-only inputs. */
+    int parent_w;
+    int parent_h;
+    int dlg_w;
+    int dlg_h;
+    int x;
+    int y;
+
+    if (!parent || !dlg || !out)
+        return CIV_ERR_NOENT;
+    parent_w = parent->right - parent->left;
+    parent_h = parent->bottom - parent->top;
+    dlg_w = dlg->right - dlg->left;
+    dlg_h = dlg->bottom - dlg->top;
+    x = parent->left + (parent_w - dlg_w) / 2;
+    y = parent->top + (parent_h - dlg_h) / 2;
+    out->left = x;
+    out->top = y;
+    out->right = x + dlg_w;
+    out->bottom = y + dlg_h;
+    /* TODO: SETWINDOWPOS(x, y) application -> SDL3 window positioning TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
 civ_error_t dialog_open_help(const char *topic)
 {
     (void)topic;
@@ -205,6 +237,16 @@ civ_error_t dialog_open_help(const char *topic)
      * FUN_* TBD). Win16 WINHELP -> SDL3 help viewer TBD. Read-only: never
      * writes civhelp.hlp. */
     return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t help_open_topic(const char *topic)
+{
+    /* Orig FUN_1160_xxxx @ 1160:xxxx -> Help_OpenTopic. WINHELP
+     * (CIV_HELP_FILE_NAME "civhelp.hlp") topic opener wiring
+     * dialog_open_help(topic) above (topic NULL = contents page).
+     * Win16 WINHELP -> SDL3 help viewer TBD. No globals, no exit(),
+     * read-only: never writes civhelp.hlp. */
+    return dialog_open_help(topic);
 }
 
 civ_error_t diplomacy_post_contact(int civ, int unit_idx)

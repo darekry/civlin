@@ -62,6 +62,13 @@ civ_error_t sound_mci_open(void);
 void sound_mci_close(void);
 civ_error_t sound_play_file(const char *wav_name);
 
+/* Orig: FUN_1160_xxxx @ 1160:xxxx -> Sound_MciPlay. Neighbour of the 1150
+ * MCI cluster; MCISENDCOMMAND PLAY sibling to Sound_MciOpen @ 1150:001c
+ * (0x803 OPEN) / Sound_MciClose @ 1150:0066 (0x804 CLOSE) — STOP is the
+ * close/0 path, volume variant TBD. Win16 MCI -> SDL3 audio TBD; stub
+ * CIV_ERR_UNSUPPORTED (NULL -> NOENT). */
+civ_error_t sound_mci_play(const char *wav_name);
+
 /* Raw filename playback (Sound_PlayFile @ 1150:00a0). Thin wrapper over
  * sound_play_file; kept for callers that already use audio_play. */
 civ_error_t audio_play(const char *wav_name);

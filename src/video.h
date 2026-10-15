@@ -27,6 +27,7 @@
 #include <SDL3/SDL.h>
 
 #include "civ_common.h"
+#include "rsc_loader.h"
 
 civ_error_t video_init(SDL_Window *win, SDL_Renderer *ren);
 civ_error_t video_blit_indexed(SDL_Renderer *ren, SDL_Texture *tex, int x, int y);
@@ -98,5 +99,102 @@ civ_error_t gfx_port_blit(gfx_port_t *dst, const gfx_port_t *src,
  * render-target select TBD; stub returns CIV_ERR_UNSUPPORTED. NULL
  * renderer/out reports NOENT. */
 civ_error_t mainport_get_or_create(SDL_Renderer *ren, gfx_port_t **out);
+
+/* Orig: FUN_10c0_xxxx @ 10c0:xxxx -> gfx_port_fill_or_copy
+ * (GfxPort_FillOrCopy). Sits between HMEMCPY @ 10b8:079d and BITBLT @
+ * 10d0:0854/08f1; blit helper behind Anim_AdvanceFrames @ 10b0:0461.
+ * Orig path: NULL src -> FILLRECT (solid fill of rect at dst_x/dst_y),
+ * else BITBLT rop 0xcc0020 (SRCCOPY) from src. SDL3 TBD:
+ * SDL_RenderFillRect vs SDL_RenderTexture. NULL dst reports NOENT
+ * (NULL src = fill path, kept; NULL rect = full/origin, kept);
+ * otherwise UNSUPPORTED. */
+civ_error_t gfx_port_fill_or_copy(gfx_port_t *dst, const gfx_port_t *src,
+                                  const SDL_Rect *rect, int dst_x, int dst_y);
+
+/* Orig: FUN_1198_xxxx @ 1198:xxxx -> gfx_port_load_rsc_frame
+ * (GfxPort_LoadRscFrame; display side of Rsc_DecodeBitmap, see
+ * rsc_loader.h). Orig path: GfxPort_Create @ 10d0:0000 via
+ * GfxPort_AllocBitmap @ 10d0:0cfa + Palette_Init @ 1090:0488 /
+ * Palette_AnimateRange @ 1090:0376 (CREATEPALETTE/SELECTPALETTE) +
+ * GfxPort_Blit @ 10d0:08f1 / GfxPort_PresentRect @ 10d0:0854 (BITBLT).
+ * SDL3 TBD: INDEX8 texture + SDL_SetPaletteColors + render present.
+ * NULL ren/frame/out reports NOENT; otherwise UNSUPPORTED. */
+civ_error_t gfx_port_load_rsc_frame(SDL_Renderer *ren,
+                                    const rsc_indexed_t *frame,
+                                    gfx_port_t **out);
+
+/* Orig: FUN_11d0_xxxx @ 11d0:xxxx -> util_draw_progress_bar
+ * (Util_DrawProgressBar; progress-UI). Pairs with the Util_Progress calc
+ * @ 1000:29ea (fraction over the 0x1248 range; calc stays in sys, do not
+ * edit sys.h): this draws the bar (orig: row loop with Sys_Yield per row,
+ * rect fill via the GfxPort_Blit @ 10d0:08f1 path). SDL3 TBD:
+ * SDL_RenderFillRect for the filled/unfilled halves. NULL port/rect
+ * reports NOENT; max <= 0 or value outside [0, max] reports RANGE;
+ * otherwise UNSUPPORTED. */
+civ_error_t util_draw_progress_bar(gfx_port_t *port, const SDL_Rect *rect,
+                                   int value, int max);
+
+/* Orig: FUN_10d0_09ee @ 10d0:09ee -> gfx_port_change_color
+ * (GfxPort_ChangeColor / GR_PortChangeColor; GET/SETBITMAPBITS color
+ * remap). Follows the Create @ 10d0:0000 / SetActive @ 10d0:0956 /
+ * PresentRect @ 10d0:0854 / Blit @ 10d0:08f1 / AllocBitmap @ 10d0:0cfa /
+ * FillOrCopy @ 10c0:xxxx / LoadRscFrame @ 1198:xxxx chain: remaps one
+ * palette index to another inside the port bitmap (orig: GETBITMAPBITS
+ * scan + SETBITMAPBITS write-back). SDL3 TBD: INDEX8 pixel remap or
+ * SDL_SetPaletteColors alias on the port backing store. NULL port
+ * reports NOENT; indices outside 0..255 report RANGE (godpal.c uses
+ * 0x00..0xeb, see gfx_indexed.h); otherwise UNSUPPORTED. */
+civ_error_t gfx_port_change_color(gfx_port_t *port, int old_index,
+                                  int new_index);
+
+/* Orig: GETDC step behind FUN_1098_114a @ 1098:114a (MainPort_GetOrCreate)
+ * + FUN_10d0_0000 @ 10d0:0000 (GfxPort_Create / GR_PortOpen) ->
+ * gfx_port_get_dc (GfxPort_GetDC). Borrows the display DC/renderer for
+ * the port (orig: GETDC on the main window; SELECTPALETTE/REALIZEPALETTE
+ * applied by the MainPort_GetOrCreate @ 1098:114a caller). SDL3: the
+ * renderer stands in for the HDC (no separate DC object; borrow only,
+ * no ownership transfer). NULL port/out reports NOENT; otherwise
+ * UNSUPPORTED. */
+civ_error_t gfx_port_get_dc(gfx_port_t *port, SDL_Renderer **out_dc);
+
+/* Orig: RELEASEDC pair to the GETDC above (same FUN_1098_114a @
+ * 1098:114a + FUN_10d0_0000 @ 10d0:0000 sites) -> gfx_port_release_dc
+ * (GfxPort_ReleaseDC). Releases a DC borrowed via gfx_port_get_dc
+ * (orig: RELEASEDC). SDL3: renderer borrow needs no release; stub keeps
+ * the pairing for RE-map fidelity. NULL port/dc reports NOENT;
+ * otherwise UNSUPPORTED. */
+civ_error_t gfx_port_release_dc(gfx_port_t *port, SDL_Renderer *dc);
+
+/* Orig: CREATECOMPATIBLEDC + FUN_10d0_0cfa @ 10d0:0cfa bitmap select ->
+ * gfx_port_create_compatible (GfxPort_CreateCompatible). Compatible-port
+ * sibling of GfxPort_Create @ 10d0:0000: compatible DC off the display
+ * DC plus bitmap via the 10d0:0cfa allocator (same ~0x20-word port
+ * struct); complements gfx_port_alloc_bitmap (which returns the raw
+ * SDL_Texture backing store, this returns the owning port). SDL3 TBD:
+ * target-capable texture selected into the new port. NULL out reports
+ * NOENT; w/h <= 0 reports RANGE; otherwise UNSUPPORTED. */
+civ_error_t gfx_port_create_compatible(SDL_Renderer *ren, int w, int h,
+                                       gfx_port_t **out);
+
+/* Orig: FUN_1200_00a8 @ 1200:00a8 MainPort_ApplyPalette tail +
+ * FUN_1090_0376 @ 1090:0376 Palette_AnimateRange -> palette_apply_to_port
+ * (Palette_ApplyToPort; video-side helper, map-side
+ * mainport_apply_palette in map.h stays the caller). Applies
+ * [first, first+count) via SDL_SetPaletteColors on the port backing
+ * store (orig: RGB triples + flag byte copy then ANIMATEPALETTE; opcode
+ * 1 full apply + 0xe fade from MainPort_ApplyPalette, timed 1/0xe from
+ * Anim_AdvanceFrames @ 10b0:0461). NULL port reports NOENT; first < 0
+ * or count <= 0 or first+count > 256 reports RANGE (godpal.c covers
+ * 0x00..0xeb, see gfx_indexed.h); otherwise UNSUPPORTED. */
+civ_error_t palette_apply_to_port(gfx_port_t *port, int first, int count);
+
+/* Orig: FUN_1008_0329 @ 1008:0329 WinMain_Shutdown video-only tail ->
+ * video_shutdown_display. DESTROYWINDOW for the display ports/windows
+ * plus REMOVEFONTRESOURCE(CIV_FONT_FILE "civfonts.fon" @ 1420:00a4/00fe,
+ * added by Font_EnumFamiliesInit @ 1008:0e99); KILLTIMER/FREEPROCINSTANCE
+ * tails live in map/dialog shutdown (see map.h/boot.c). SDL3
+ * window/renderer stay caller-owned (see boot_shutdown), so this
+ * installs/removes nothing yet. Void stub: no globals, no exit(). */
+void video_shutdown_display(void);
 
 #endif /* CIVLIN_VIDEO_H */

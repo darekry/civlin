@@ -73,3 +73,26 @@ SDL_Texture *gfx_indexed_to_texture(SDL_Renderer *ren, const rsc_indexed_t *img)
     SDL_DestroySurface(surf);
     return tex;
 }
+
+size_t gfx_godpal_count(void)
+{
+    return (size_t)GFX_GODPAL_COUNT;
+}
+
+civ_error_t gfx_godpal_get(int index, uint8_t rgb[3])
+{
+    (void)index;
+    (void)rgb;
+    if (!rgb)
+        return CIV_ERR_NOENT;
+    if (index < 0 || index >= GFX_GODPAL_COUNT)
+        return CIV_ERR_RANGE;
+    /* TODO: Orig godpal.c 0xec RGB entries feeding FUN_1090_0488 @
+     * 1090:0488 Palette_Init (LOGPALETTE 0x300 -> CREATEPALETTE ->
+     * DAT_1420_9966). Byte payload not yet dumped from godpal.c /
+     * DAT_1420_9966, so no static const table is emitted here (no fake
+     * bytes); dump 0xec x 3 RGB bytes, then fill *rgb from the table.
+     * SDL3 consumer: SDL_SetPaletteColors via palette_apply_to_port /
+     * palette_animate_range (see video.h). */
+    return CIV_ERR_UNSUPPORTED;
+}

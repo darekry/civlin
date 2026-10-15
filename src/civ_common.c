@@ -1,6 +1,8 @@
 /* Shared error strings. */
 #include "civ_common.h"
 
+#include <stdarg.h>
+#include <stdio.h>
 #include <string.h>
 
 const char *civ_strerror(civ_error_t err)
@@ -77,4 +79,23 @@ int util_to_lower(int c)
     if (c >= 'A' && c <= 'Z')
         return c + ('a' - 'A');
     return c;
+}
+
+int util_format_message(char *dst, size_t cap, const char *fmt, ...)
+{
+    /* Util_FormatMessage @ 11d0:xxxx. snprintf composer sibling to
+     * Util_StrCopy/Append @ 1000:36b2/363e + IntToDec @ 1000:2928;
+     * feeds game_append_year_text @ 1088:1dd0 + ResMgr_DumpStats @
+     * 1190:17d0 via Debug_Print @ 1000:2c9c. OS-free 1:1 port on
+     * explicit dst/cap via vsnprintf (truncated safely, always NUL
+     * terminated when cap > 0). No globals, no exit(). */
+    va_list ap;
+    int n;
+
+    if (!dst || cap == 0 || !fmt)
+        return -1;
+    va_start(ap, fmt);
+    n = vsnprintf(dst, cap, fmt, ap);
+    va_end(ap);
+    return n;
 }

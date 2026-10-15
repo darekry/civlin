@@ -96,6 +96,16 @@ civ_error_t City_ShowTopFive(void);
  * Game_ProcessGameEnd @ 1088:0b6d caller (see game.c:47), not here. */
 civ_error_t Hof_CalcFinalScore(int base_score, int difficulty, int *out_score);
 
+/* Orig: FUN_1038_xxxx @ 1038:xxxx -> Hof_CalcInterimScore.
+ * OS-free pure score math 1:1 v1 (implemented, no Win16, no globals,
+ * read-only; game_calc_power_score @ 1088:108a shape): interim =
+ * base_score * (difficulty + 1) (Chieftain x1 .. Emperor x5, matching the
+ * HoF_TryInsert @ 1080:0595 weight). Exact bias/addend TBD vs 1038
+ * decompile; sits between Title_PlayAnimLoop @ 1030:0000 and
+ * Hof_CalcFinalScore @ 1040:1137. Returns -1 on base_score < 0 or
+ * difficulty outside CIV_HOF_DIFFICULTY_MIN..MAX. */
+int Hof_CalcInterimScore(int base_score, int difficulty);
+
 /* Orig: FUN_1188_07ad @ 1188:07ad -> Hof_PlayEndAnimation.
  * Stub: end-of-game frames (BITBLT/ANIMATEPALETTE) + MCI music.
  * Called from Game_ProcessGameEnd unless quit==2. */

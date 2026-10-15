@@ -150,6 +150,21 @@ civ_error_t City_ShowTopFive(void)
     return CIV_ERR_UNSUPPORTED;
 }
 
+/* Orig: FUN_1038_xxxx @ 1038:xxxx -> Hof_CalcInterimScore.
+ * OS-free 1:1 v1 (implemented): interim = base * (difficulty + 1),
+ * matching the HoF_TryInsert @ 1080:0595 weight via hof_weighted_score
+ * above and the game_calc_power_score @ 1088:108a pure-kernel shape.
+ * Exact bias/addend TBD vs 1038 decompile. */
+int Hof_CalcInterimScore(int base_score, int difficulty)
+{
+    if (base_score < 0)
+        return -1;
+    if (difficulty < CIV_HOF_DIFFICULTY_MIN ||
+        difficulty > CIV_HOF_DIFFICULTY_MAX)
+        return -1;
+    return base_score * (difficulty + 1);
+}
+
 /* Orig: FUN_1040_1137 @ 1040:1137 -> Hof_CalcFinalScore. */
 civ_error_t Hof_CalcFinalScore(int base_score, int difficulty, int *out_score)
 {

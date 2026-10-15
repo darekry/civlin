@@ -170,4 +170,83 @@ int dos_drive_ready(int drive);
  * like the original far-pointer fault). Implemented 1:1. */
 civ_error_t dos_set_path(int drive, const char *path);
 
+/* Packet S2: shutdown/startup (WinMain_Shutdown order, artwork prompt,
+ * startup dispatcher, prefs defaults, video caps checklist, timer).
+ *
+ * Orig anchors (Orig FUN_seg_off @ seg:off kept on each symbol):
+ *   WinMain_Shutdown        @ 1008:0329 (lives as boot_shutdown() above;
+ *     KILLTIMER / FREEPROCINSTANCE / DESTROYWINDOW / REMOVEFONTRESOURCE
+ *     order documented in boot.c; timer detail below)
+ *   TIMERPROC               @ 1008:0d68 (200 ms SETTIMER installed by
+ *     WdwMap_Open @ 1208:0af1, pumped from the WinMain @ 1008:0000
+ *     message loop, torn down by KILLTIMER first in WinMain_Shutdown;
+ *     impl map_timer_proc, see map.h; SDL timer bridge TBD, no new
+ *     symbol here)
+ *   Art_MaybeConvertArtwork @ 10b8:0000 (1420:20a9 prompt; gates
+ *     WorldGen_CopyPreset @ 10b8:079d, see worldgen.h)
+ *   Main_RunStartupSequence @ 11e0:0000 (dispatcher for MainMenu_WndProc
+ *     @ 11e0:0221; NewGame_Wizard @ 10e8:0000 via newgame_wizard_run,
+ *     see newgame.h / mainmenu.h)
+ *   Config_LoadPrefs        @ 1008:0b4a / Config_SavePrefs @ 1008:0bbf
+ *     (CIV_PREFS_FILE "civ.prf"; defaults below; file I/O tail stays
+ *     stubbed, read-only: never creates civ.prf)
+ *   Video_CheckDriverCaps   @ 1008:059a (GETDEVICECAPS checklist @
+ *     1420:0af4; SDL mapping via video_check_driver_caps, see video.h)
+ * No globals, no exit(), read-only. Win16 tails stub CIV_ERR_UNSUPPORTED;
+ * OS-free parts (prefs defaults, caps index shape) are ported 1:1. */
+
+/* Orig: FUN_10b8_0000 @ 10b8:0000 -> art_maybe_convert_artwork
+ * (Art_MaybeConvertArtwork). Optional artwork conversion gated by the
+ * 1420:20a9 prompt (prompt bytes not yet decoded from the segment dump,
+ * so no literal is ported here); on confirm it converts before
+ * WorldGen_CopyPreset @ 10b8:079d copies the 64000 B preset (see
+ * worldgen.h worldgen_copy_preset). Conversion format/port bridge TBD
+ * -> stub CIV_ERR_UNSUPPORTED. Called from the boot_maybe_convert_artwork
+ * step above. No globals, no exit(), read-only. */
+civ_error_t art_maybe_convert_artwork(void);
+
+/* Orig: FUN_11e0_0000 @ 11e0:0000 -> main_run_startup_sequence
+ * (Main_RunStartupSequence). Dispatcher for the MainMenu_WndProc @
+ * 11e0:0221 choices over CIV_MAINMENU_TEXT @ 1420:435b (see mainmenu.h
+ * mainmenu_run/mainmenu_dispatch): new-game paths -> NewGame_Wizard @
+ * 10e8:0000 via newgame_wizard_run (see newgame.h), Load -> save prompt
+ * @ 1130:000e, EARTH -> WorldGen_LoadEarth @ 1108:0243 (see worldgen.h),
+ * Hall -> HoF, Quit -> WinMain_Shutdown @ 1008:0329 (boot_shutdown
+ * above). SDL modal/event bridge TBD -> stub CIV_ERR_UNSUPPORTED. No
+ * globals, no exit(), read-only. */
+civ_error_t main_run_startup_sequence(void);
+
+/* Config prefs defaults (civ.prf via Config_LoadPrefs @ 1008:0b4a /
+ * Config_SavePrefs @ 1008:0bbf above). g_nOptionFlags @ 12d0:0064 bit
+ * 0x10 = sounds on (Sound_PlayId @ 1150:00c9 gate together with
+ * DAT_1228:0104, see audio.h audio_play_id + game.h); remaining civ.prf
+ * field map TBD from the dump, so the struct carries only the decoded
+ * flags word. OS-free 1:1; file I/O tail stays stubbed (config_load_prefs
+ * / config_save_prefs above remain CIV_ERR_UNSUPPORTED, read-only). */
+#define CIV_PREFS_FLAG_SOUNDS_ON 0x10u /* g_nOptionFlags bit: sounds on */
+
+typedef struct civ_prefs {
+    uint16_t option_flags; /* g_nOptionFlags image @ 12d0:0064 */
+} civ_prefs_t;
+
+/* Built-in defaults 1:1 (sounds on; other fields TBD). By value, no I/O. */
+civ_prefs_t config_prefs_defaults(void);
+
+/* OS-free predicate for the sounds-on shape (NULL -> 0). The DAT_1228:0104
+ * second half of the Sound_PlayId gate stays on the file/drive side
+ * (dos_drive_ready + config_load_prefs above, TBD). */
+int config_prefs_sounds_on(const civ_prefs_t *prefs);
+
+/* Video caps checklist @ 1420:0af4 for Video_CheckDriverCaps @ 1008:059a
+ * (GETDEVICECAPS queries: resolution/raster/color-depth/palette family,
+ * see video.h video_check_driver_caps; exact entry bytes not yet decoded
+ * from the dump, so no byte table is ported). OS-free index shape:
+ * count reports decoded entries (0 until the dump lands), describe maps
+ * an entry index to its checklist meaning (NULL when out of range or not
+ * yet dumped, same contract as tribe_get_name_list, see newgame.h). SDL
+ * renderer-caps mapping TBD in video_check_driver_caps; boot_check_video
+ * above delegates to it. No globals, no exit(), read-only. */
+int boot_video_caps_count(void);
+const char *boot_video_caps_describe(int index);
+
 #endif /* CIVLIN_BOOT_H */

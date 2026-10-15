@@ -32,6 +32,19 @@ civ_error_t sound_play_file(const char *wav_name)
     return CIV_ERR_UNSUPPORTED;
 }
 
+civ_error_t sound_mci_play(const char *wav_name)
+{
+    /* Orig: FUN_1160_xxxx @ 1160:xxxx -> Sound_MciPlay. Neighbour of the
+     * 1150 MCI cluster (MciOpen @ 1150:001c / MciClose @ 1150:0066);
+     * MCISENDCOMMAND PLAY for wav_name (STOP is the close/0 path; volume
+     * sibling TBD). Win16 MCI -> SDL3 audio TBD. No globals; no disk
+     * access here (read-only WAV lookup lives in sound_play_file). */
+    if (!wav_name)
+        return CIV_ERR_NOENT;
+    (void)wav_name;
+    return CIV_ERR_UNSUPPORTED;
+}
+
 civ_error_t audio_init(void)
 {
     /* WinMain audio step -> Sound_MciOpen @ 1150:001c. */

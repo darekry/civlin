@@ -189,6 +189,23 @@ rsc_error_t rsc_record_data(const rsc_file_t *f, size_t i,
 size_t rsc_image_count(const rsc_file_t *f);
 rsc_error_t rsc_get_indexed(const rsc_file_t *f, size_t i, rsc_indexed_t *out);
 
+/* Orig: FUN_1198_xxxx @ 1198:xxxx -> Rsc_DecodeBitmap.
+ * Neighbour of the 1190 resmgr cluster; decodes one 0x32-B-header payload
+ * slice (file-off @ +4 / len @ +8, see rsc_record_data plan) into an
+ * rsc_indexed view feeding BITBLT/PALETTE (display side is
+ * GfxPort_LoadRscFrame in video.h). Payload layout (all LE): u16 width
+ * @ +0, u16 height @ +2, u8 bpp @ +4 (must be 8), u8 pal_count @ +5
+ * (1..255), pal_count*3 RGB bytes @ +6, then width*height 8-bit indices.
+ * OS-free 1:1 port (no Win16, no SDL, no exit, no globals): validates
+ * bounds (6 + 3*pal_count + w*h <= size, overflow-safe), 8-bpp +
+ * pal 1..255, and every pixel < pal_count; on success fills *out with a
+ * borrowed view (pixels points into data, valid while the container
+ * lives; palette copied, tail zeroed). Returns RSC_ERR_NOENT on NULL
+ * data/out, RSC_ERR_TRUNCATED when the slice is short, RSC_ERR_BAD_MAGIC
+ * on bad bpp/pal/dims, RSC_ERR_RANGE on zero dims / pixel out of range. */
+rsc_error_t rsc_decode_bitmap(const uint8_t *data, size_t size,
+                              rsc_indexed_t *out);
+
 /* --- Packet E: ResMgr list manager (segment 1190, OS-free 1:1) ---
  * Win16 imports behind this layer (KERNEL):
  *   _LOPEN/_LCLOSE  -> file_open_wrapper/file_close_wrapper (save.h)

@@ -61,6 +61,18 @@ civ_error_t worldgen_customize(void)
     return CIV_ERR_UNSUPPORTED;
 }
 
+civ_error_t worldgen_customize_dialog(void)
+{
+    /* TODO: Orig FUN_1060_xxxx @ 1060:xxxx (WorldGen_CustomizeDialog):
+     * Customize-World editor host. Needs the modal Dlg_CreateTracked @
+     * 1098:124f host (+ Dlg_DestroyTracked @ 1098:1612 teardown) driving
+     * the Ctrl_* @ 1058 controls (RANDOMRADIOPROC @ 1058:06ab,
+     * RANDOMSTATICPROC @ 1058:081a, RANDOMUSERPROC @ 1058:0921,
+     * REGIONPROC @ 1058:09f6; cf. dialog module, not redeclared here to
+     * keep parallel slices disjoint). Win16 USER/GDI modal -> SDL TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
 civ_error_t worldgen_seed_one_island(void)
 {
     /* TODO: Map_GenSeedOneIsland @ 1028:0945 (scratch Map_FillRect +

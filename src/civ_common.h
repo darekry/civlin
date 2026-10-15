@@ -39,6 +39,16 @@ char *util_str_append(char *dst, const char *src);
  * Returns dst (NULL when dst is NULL). */
 char *util_int_to_dec(char *dst, int value, int base);
 
+/* Orig: FUN_11d0_xxxx @ 11d0:xxxx -> Util_FormatMessage.
+ * snprintf composer sibling to Util_StrCopy/Append @ 1000:36b2/363e +
+ * IntToDec @ 1000:2928; needed by game_append_year_text @ 1088:1dd0 +
+ * ResMgr_DumpStats @ 1190:17d0 via Debug_Print @ 1000:2c9c (see sys.h).
+ * OS-free 1:1 port on explicit dst/cap via vsnprintf: formats fmt into
+ * dst (cap bytes including the NUL, truncated safely). Returns the
+ * vsnprintf count (would-be length), -1 on NULL dst/fmt or cap == 0.
+ * No globals, no exit(), never writes game assets. */
+int util_format_message(char *dst, size_t cap, const char *fmt, ...);
+
 /* Orig: FUN_1000_1978 @ 1000:1978 -> Util_ToLower.
  * ASCII tolower used by ResMgr_CmpName @ 1190:0e72 (case-insensitive
  * 0x1f-char compare). OS-free: 'A'..'Z' -> +32, all else unchanged. */

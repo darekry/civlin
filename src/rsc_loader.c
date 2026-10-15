@@ -321,6 +321,67 @@ rsc_error_t rsc_get_indexed(const rsc_file_t *f, size_t i, rsc_indexed_t *out)
     return RSC_ERR_UNSUPPORTED;
 }
 
+rsc_error_t rsc_decode_bitmap(const uint8_t *data, size_t size,
+                              rsc_indexed_t *out)
+{
+    /* Rsc_DecodeBitmap @ 1198:xxxx: neighbour of the 1190 resmgr cluster;
+     * 0x32-B header decoder (file-off @ +4 / len @ +8) feeding
+     * BITBLT/PALETTE. Caller slices via rsc_record_data (bounds
+     * file_off + len <= container size); this validates the slice. */
+    uint32_t w;
+    uint32_t h;
+    uint8_t bpp;
+    uint8_t pal_count;
+    size_t pal_bytes;
+    size_t px_count;
+    size_t headroom;
+    const uint8_t *pal;
+    const uint8_t *px;
+    size_t i;
+
+    if (!data || !out)
+        return RSC_ERR_NOENT;
+    if (size < 6)
+        return RSC_ERR_TRUNCATED;
+    w = (uint32_t)data[0] | ((uint32_t)data[1] << 8);
+    h = (uint32_t)data[2] | ((uint32_t)data[3] << 8);
+    bpp = data[4];
+    pal_count = data[5];
+    if (w == 0 || h == 0)
+        return RSC_ERR_RANGE;
+    if (bpp != 8)
+        return RSC_ERR_BAD_MAGIC;
+    if (pal_count == 0)
+        return RSC_ERR_BAD_MAGIC;
+    px_count = (size_t)w * (size_t)h;
+    pal_bytes = (size_t)pal_count * 3u;
+    headroom = size - 6;
+    if (pal_bytes > headroom)
+        return RSC_ERR_TRUNCATED;
+    if (px_count > headroom - pal_bytes)
+        return RSC_ERR_TRUNCATED;
+    pal = data + 6;
+    px = pal + pal_bytes;
+    for (i = 0; i < px_count; i++) {
+        if (px[i] >= pal_count)
+            return RSC_ERR_RANGE;
+    }
+    out->width = w;
+    out->height = h;
+    out->bpp = 8;
+    out->pal_count = pal_count;
+    for (i = 0; i < (size_t)pal_count; i++) {
+        out->pal[i][0] = pal[3 * i];
+        out->pal[i][1] = pal[3 * i + 1];
+        out->pal[i][2] = pal[3 * i + 2];
+    }
+    if ((size_t)pal_count < 256)
+        memset(&out->pal[pal_count], 0,
+               (256 - (size_t)pal_count) * 3);
+    out->pixels = px;
+    return RSC_OK;
+}
+
 /* --- Packet E: ResMgr list manager (segment 1190, OS-free 1:1) --- */
 
 rsc_mgr_t *rsc_mgr_new(void)
