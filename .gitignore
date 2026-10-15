@@ -19,6 +19,7 @@ build/
 *.so
 civlin
 civlin.exe
+rsc_dump
 a.out
 
 # Local tooling / OS
