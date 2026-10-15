@@ -521,7 +521,28 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `sys_exit_fallback` | STUB | 1000:0000, 1000:12d6 | has TODO |
 | `float_check_range` | STUB | 1000:0164, 1000:06cf, 1420:4ad6, 1420:50cb | has TODO |
 | `float_store_converted` | STUB | 1000:06cf | has TODO |
-| `float_decompose_exponent` | STUB | 1000:0221, 1000:0754 | has TODO |
+| `float_decompose_exponent` | STUB | 1000:0221, 1000:0754, 1000:0784, 1000:0988, 1000:0e20 | has TODO |
+| `sys_noop_pad` | NOOP | 1000:00c4, 1000:0221, 1000:03b6 |  |
+| `float_discard_st0` | NOOP | 1000:06c7 |  |
+| `float_pack_bcd_chunk` | LIVE | 1000:096a, 1000:0988 |  |
+| `float_convert_extended_to_bcd` | LIVE | 1000:096a, 1000:0988 |  |
+| `float_log2` | LIVE | 1000:0c03 |  |
+| `float_exp2` | LIVE | 1000:0c7d, 1000:0c7e |  |
+| `float_matherr_filter` | LIVE | 1000:0e2e |  |
+| `util_sprintf` | LIVE | 1000:0221, 1000:1056, 1000:19d8, 1000:1a3c, 1000:2c9c, 1000:35f6, 1000:42d3, 1130:0075, 1420:4eeb |  |
+| `sys_fatal_abort` | STUB | 1000:35f6, 1000:37b2, 1000:4124, 1608:01a4 | has TODO |
+| `float_report_error` | LIVE | 1000:1056, 1000:4124, 1420:4b96, 1420:4b9e |  |
+| `float_pow10` | LIVE | 1000:0d56, 1420:4b0e |  |
+| `float_pow10_far` | LIVE | 1000:0d56, 1000:0e20 |  |
+| `float_exp2_checked` | LIVE | 1000:0c7d, 1000:0e5a, 1420:4a92, 1420:4b96 |  |
+| `float_pow` | LIVE | 1000:0c03, 1000:0e5a, 1000:0ec8, 1420:4b9a |  |
+| `float_scan_is_space` | LIVE |  |  |
+| `float_scan_float` | LIVE | 1000:03bc, 1000:0605, 1420:4af6, 1420:4afe |  |
+| `util_emit_hex_digit` | LIVE | 1000:19d0 |  |
+| `util_emit_hex_byte` | LIVE | 1000:19c7 |  |
+| `util_emit_hex_word` | LIVE | 1000:19c0 |  |
+| `util_vsprintf_strlen` | LIVE | 1000:19f2 |  |
+| `util_format_int` | LIVE | 1000:157a |  |
 
 ### `src/title.c`
 

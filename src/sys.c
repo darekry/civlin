@@ -746,3 +746,587 @@ double float_exp2(double x)
      * _DAT_1000_0a85). Linux uses exp2() directly. */
     return exp2(x);
 }
+
+const char *float_matherr_name(int type)
+{
+    /* Orig table [BX+0x4aae] @ 1420:4aae (6 far ptrs -> DOMAIN/SING/
+     * OVERFLOW/UNDERFLOW/TLOSS/PLOSS @ 1420:4aca+). Switch keeps the
+     * no-globals rule; entry 0 (0x8000:0x0001) is unused/invalid. */
+    switch (type) {
+    case 1:
+        return "DOMAIN";
+    case 2:
+        return "SING";
+    case 3:
+        return "OVERFLOW";
+    case 4:
+        return "UNDERFLOW";
+    case 5:
+        return "TLOSS";
+    case 6:
+        return "PLOSS";
+    default:
+        return "UNKNOWN";
+    }
+}
+
+int float_matherr_filter(float_matherr_t *e)
+{
+    /* Orig FUN_1000_0e2e @ 1000:0e2e -> Float_MatherrFilter: type 4
+     * zeroes retval (FSTP double ES:[BX+0x16]) and suppresses (1),
+     * type 5 suppresses (1), else 0 = report. */
+    if (!e)
+        return 0;
+    if (e->type == 4) {
+        e->retval = 0.0;
+        return 1;
+    }
+    if (e->type == 5)
+        return 1;
+    return 0;
+}
+
+int util_sprintf(char *dst, size_t cap, const char *fmt, ...)
+{
+    /* Orig FUN_1000_35f6 @ 1000:35f6 -> Util_Sprintf (*dst = 0, then
+     * Util_Vsprintf @ 1000:19d8 -> Util_VsprintfCore @ 1000:1a3c).
+     * Linux 1:1 via vsnprintf (cap includes NUL). */
+    va_list ap;
+    int n;
+
+    if (!dst || cap == 0 || !fmt)
+        return -1;
+    dst[0] = '\0';
+    va_start(ap, fmt);
+    n = vsnprintf(dst, cap, fmt, ap);
+    va_end(ap);
+    return n;
+}
+
+civ_error_t sys_fatal_abort(const char *msg)
+{
+    (void)msg;
+    /* TODO: Orig FUN_1000_4124 @ 1000:4124 (Sys_FatalAbort: strrchr
+     * '\\' via Util_StrRChr @ 1000:37b2 on DAT_1420_4f9a/4f9c, then
+     * Win16 GETDESKTOPWINDOW + MESSAGEBOX CALLF 1608:01a4/0080 style
+     * 0x1010 with the Util_Sprintf @ 1000:35f6 buffer). Needs a parent
+     * window + DGROUP; NULL msg -> NOENT. No exit() in libs. */
+    if (!msg)
+        return CIV_ERR_NOENT;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+double float_report_error(float_matherr_t *e, char *buf, size_t cap,
+                          int *errno_out)
+{
+    /* Orig Float_ReportError @ 1000:1056 (matherr: NULL doubles -> 0.0
+     * via FLDZ, filter, sprintf "%s: %s error\n" @ 1420:4b9e with
+     * "pow" @ 1420:4b96/4b9a + name table [BX+0x4aae], errno
+     * DAT_1420_0010 = 0x22 types 3/4 else 0x21, Sys_FatalAbort @
+     * 1000:4124, ST0 = retval). PARTIAL: far/DGROUP dropped, errno
+     * via out-param, dialog via sys_fatal_abort (STUB-tolerant:
+     * its UNSUPPORTED is ignored, like orig ignoring MESSAGEBOX rc).
+     * Suppressed (filter 1): no format/abort, errno/buf untouched. */
+    const char *func;
+    const char *err;
+    int code;
+
+    if (!e)
+        return 0.0;
+    if (float_matherr_filter(e))
+        return e->retval;
+    if (!buf || cap == 0 || !errno_out)
+        return e->retval;
+    func = e->name ? e->name : "pow";
+    err = float_matherr_name(e->type);
+    /* Orig PUSH order: err-name far ptr then func-name far ptr into
+     * "%s: %s error\n", i.e. "func: err error". */
+    util_sprintf(buf, cap, "%s: %s error\n", func, err);
+    code = (e->type == 3 || e->type == 4) ? 0x22 : 0x21;
+    *errno_out = code;
+    (void)sys_fatal_abort(buf);
+    return e->retval;
+}
+
+long double float_pow10(int n)
+{
+    /* Orig Float_Pow10 @ 1000:0d56: clamp +-0x1344, 1.0/0.0/INF edges,
+     * binary decomposition over float @ 1420:4b0e, float [0x4b2e],
+     * double [0x4b32], extended [0x4b3a..0x4b80], FDIVR finish.
+     * Linux 1:1 observable via powl (same edges/clamps). */
+    if (n < -0x1344)
+        return 0.0L;
+    if (n > 0x1344)
+        return (long double)INFINITY;
+    if (n == 0)
+        return 1.0L;
+    return powl(10.0L, (long double)n);
+}
+
+long double float_pow10_far(int n)
+{
+    /* Orig Float_Pow10Far @ 1000:0e20 (INC BP far RETF wrapper: PUSH
+     * [BP+6] / CALL 1000:0d56). Thin delegate. */
+    return float_pow10(n);
+}
+
+double float_exp2_checked(double x)
+{
+    /* Orig Float_Exp2Checked @ 1000:0e5a: extended gate (exp&0x7fff
+     * vs 0x4008, mantissa vs 0xb172) -> type 3/4 + "pow" @ 1420:4b96
+     * with HUGE_VAL @ 1420:4a92 (overflow) / 0.0 (underflow), else
+     * Float_Exp2 @ 1000:0c7d. PARTIAL on double: same type/name
+     * reports via float_report_error, double-range gate; exact
+     * extended 0x4008/0xb172 thresholds TBD (TODO Orig). */
+    float_matherr_t e;
+    char msg[80];
+    int code = 0;
+
+    if (!isfinite(x))
+        return exp2(x);
+    if (x > 1023.0) {
+        e.type = 3;
+        e.name = "pow";
+        e.arg1 = x;
+        e.arg2 = 0.0;
+        e.retval = HUGE_VAL;
+        return float_report_error(&e, msg, sizeof(msg), &code);
+    }
+    if (x < -1075.0) {
+        e.type = 4;
+        e.name = "pow";
+        e.arg1 = x;
+        e.arg2 = 0.0;
+        e.retval = 0.0;
+        return float_report_error(&e, msg, sizeof(msg), &code);
+    }
+    return float_exp2(x);
+}
+
+double float_pow(double x, double y)
+{
+    /* Orig Float_Pow @ 1000:0ec8 (PARTIAL): 0x7ff0 exponent-class
+     * tests per operand (zero/denormal vs INF/NAN -> types 1/3/4 +
+     * "pow" @ 1420:4b9a), int-exp fast path (ROR 4 / SUB 0x3ff vs
+     * 0x3f, <0xc bit-exactness, FCHS on negative base with odd int),
+     * else y*log2(x) (Float_Log2 @ 1000:0c03) -> Float_Exp2Checked @
+     * 1000:0e5a with FCHS fix. Linux mirrors the dispatch: domain
+     * gates via float_report_error, main path via float_log2 +
+     * float_exp2_checked, integer exponents via pow (same values as
+     * the ROR loop). 1190 callers are false merges -> IGNORED.
+     * TODO Orig: exact FISTP/ROR bit path + SING mapping. */
+    float_matherr_t e;
+    char msg[80];
+    int code = 0;
+    double ax;
+    double ay;
+
+    if (isnan(x) || isnan(y))
+        return pow(x, y);
+    if (isinf(y)) {
+        if (fabs(x) == 1.0)
+            return 1.0;
+        if (fabs(x) < 1.0)
+            return (y > 0.0) ? 0.0 : HUGE_VAL;
+        return (y > 0.0) ? HUGE_VAL : 0.0;
+    }
+    if (isinf(x)) {
+        if (y == 0.0)
+            return 1.0;
+        if (x > 0.0)
+            return (y > 0.0) ? HUGE_VAL : 0.0;
+        /* Negative INF base: parity decides, like the FCHS tail. */
+        ay = floor(y);
+        if (y != ay) {
+            e.type = 1;
+            e.name = "pow";
+            e.arg1 = x;
+            e.arg2 = y;
+            e.retval = NAN;
+            return float_report_error(&e, msg, sizeof(msg), &code);
+        }
+        ax = (y > 0.0) ? HUGE_VAL : 0.0;
+        if (fmod(ay, 2.0) != 0.0)
+            ax = -ax;
+        return ax;
+    }
+    if (x == 0.0) {
+        if (y > 0.0)
+            return 0.0;
+        if (y == 0.0)
+            return 1.0;
+        e.type = 3;
+        e.name = "pow";
+        e.arg1 = x;
+        e.arg2 = y;
+        e.retval = HUGE_VAL;
+        return float_report_error(&e, msg, sizeof(msg), &code);
+    }
+    if (x < 0.0) {
+        ay = floor(y);
+        if (y != ay) {
+            e.type = 1;
+            e.name = "pow";
+            e.arg1 = x;
+            e.arg2 = y;
+            e.retval = NAN;
+            return float_report_error(&e, msg, sizeof(msg), &code);
+        }
+        ax = float_exp2_checked(y * float_log2(-x));
+        if (fmod(ay, 2.0) != 0.0)
+            ax = -ax;
+        return ax;
+    }
+    if (y == 0.0)
+        return 1.0;
+    if (y == 1.0)
+        return x;
+    return float_exp2_checked(y * float_log2(x));
+}
+
+static int float_scan_is_space(int c)
+{
+    /* Orig ctype table [c+0x4baf] & 1 (isspace set). Manual set to
+     * stay locale-independent. */
+    return c == ' ' || c == '\t' || c == '\n' || c == '\r' ||
+        c == '\f' || c == '\v';
+}
+
+double float_scan_float(float_getchar_fn get, float_ungetchar_fn unget,
+                        void *ctx, int nmax, int *consumed, int *status)
+{
+    /* Orig Float_ScanFloat @ 1000:03bc (PARTIAL): see sys.h for the
+     * token flow (ws/sign/INF/NAN/digits 0x12-cap/e-exponent 0x1344/
+     * Pow10Far scale/FCHS). nmax = [BP+0xc] get/unget budget,
+     * *consumed = [BP+0xe] char count, *status = [BP+0x12] (1 ok,
+     * 0 no-digits/fail, 2 overflow, -1 immediate EOF). Caller @
+     * 1000:0605 scales via Float_Pow10Far; INF/NAN consts @
+     * 1420:4af6/4afa/4afe/4b02 (float +-INF/+-NAN). TODO Orig: exact
+     * 18-digit rounding + x87 FILD/FMULP last-ulp behavior. */
+    int left;
+    int used = 0;
+    int c = 0;
+    int neg = 0;
+    int ndig = 0;
+    int ndot = -1;
+    int expv = 0;
+    int exp_over = 0;
+    long double mant = 0.0L;
+    long double scale;
+    int any = 0;
+
+    if (!get || !consumed || !status)
+        return 0.0;
+    left = nmax;
+    /* Leading whitespace + sign (orig CBW/XCHG + isspace loop). */
+    for (;;) {
+        if (left <= 0) {
+            *consumed = used;
+            *status = -1;
+            return 0.0;
+        }
+        c = get(ctx);
+        left--;
+        used++;
+        if (c < 0) {
+            *consumed = used - 1;
+            *status = -1;
+            return 0.0;
+        }
+        if (!float_scan_is_space(c))
+            break;
+    }
+    if ((c == '+' || c == '-') && left > 0) {
+        int s = c;
+        int d;
+
+        /* Peek for INF/NAN words (orig 0633/0675 tails). Need one
+         * char lookahead: consume, decide, push back if numeric. */
+        if (left <= 0) {
+            *consumed = used;
+            *status = 0;
+            return 0.0;
+        }
+        d = get(ctx);
+        left--;
+        used++;
+        if (d == 'I' || d == 'i' || d == 'N' || d == 'n') {
+            int up = (d == 'I' || d == 'N') ? d : (d - 32);
+            const char *want = (up == 'I') ? "NF" : "AN";
+            int k0;
+            int k1;
+
+            if (left < 2) {
+                *consumed = used;
+                *status = 0;
+                return 0.0;
+            }
+            k0 = get(ctx);
+            k1 = get(ctx);
+            left -= 2;
+            used += 2;
+            if ((k0 == want[0] || k0 == want[0] + 32) &&
+                (k1 == want[1] || k1 == want[1] + 32)) {
+                double v = (up == 'I') ? INFINITY : NAN;
+                *consumed = used;
+                *status = 1;
+                return (s == '-') ? -v : v;
+            }
+            *consumed = used;
+            *status = 0;
+            return 0.0;
+        }
+        if (unget)
+            unget(d, ctx);
+        left++;
+        used--;
+        c = s;
+    } else if (c == 'I' || c == 'i' || c == 'N' || c == 'n') {
+        int up = (c == 'I' || c == 'N') ? c : (c - 32);
+        const char *want = (up == 'I') ? "NF" : "AN";
+        int k0;
+        int k1;
+
+        if (left < 2) {
+            *consumed = used;
+            *status = 0;
+            return 0.0;
+        }
+        k0 = get(ctx);
+        k1 = get(ctx);
+        left -= 2;
+        used += 2;
+        if ((k0 == want[0] || k0 == want[0] + 32) &&
+            (k1 == want[1] || k1 == want[1] + 32)) {
+            double v = (up == 'I') ? INFINITY : NAN;
+            *consumed = used;
+            *status = 1;
+            return v;
+        }
+        *consumed = used;
+        *status = 0;
+        return 0.0;
+    }
+    if (c == '+' || c == '-') {
+        neg = (c == '-');
+        if (left <= 0) {
+            *consumed = used;
+            *status = 0;
+            return 0.0;
+        }
+        c = get(ctx);
+        left--;
+        used++;
+    }
+    /* Mantissa: digits + one dot, 18 significant caps (0x12). */
+    for (;;) {
+        if (c == '.' && ndot < 0) {
+            ndot = ndig;
+            if (left <= 0)
+                break;
+            c = get(ctx);
+            left--;
+            used++;
+            continue;
+        }
+        if (c < '0' || c > '9')
+            break;
+        any = 1;
+        if (ndig < 18) {
+            mant = mant * 10.0L + (long double)(c - '0');
+            ndig++;
+        } else {
+            /* Beyond the cap orig keeps MUL 10 chains for scale
+             * only; mantissa precision TBD (TODO Orig). */
+            if (ndot < 0)
+                expv += 1;
+        }
+        if (left <= 0) {
+            c = -1;
+            break;
+        }
+        c = get(ctx);
+        left--;
+        used++;
+    }
+    if (!any) {
+        if (c >= 0 && unget) {
+            unget(c, ctx);
+            left++;
+            used--;
+        }
+        *consumed = used;
+        *status = 0;
+        return 0.0;
+    }
+    if (ndot < 0)
+        ndot = ndig;
+    /* Decimal shift from the dot: value = mant * 10^(ndot-ndig). */
+    expv += ndot - ndig;
+    /* Exponent part e/E with 0x1344 clamp (orig DI limit). */
+    if (c == 'e' || c == 'E') {
+        int ec = 0;
+        int es = 1;
+        int ed = 0;
+
+        if (left <= 0) {
+            if (unget)
+                unget(c, ctx);
+            left++;
+            used--;
+            c = -1;
+        } else {
+            c = get(ctx);
+            left--;
+            used++;
+            if (c == '+' || c == '-') {
+                es = (c == '-') ? -1 : 1;
+                if (left <= 0) {
+                    *consumed = used;
+                    *status = 0;
+                    return 0.0;
+                }
+                c = get(ctx);
+                left--;
+                used++;
+            }
+            for (;;) {
+                if (c < '0' || c > '9')
+                    break;
+                ed = 1;
+                ec = ec * 10 + (c - '0');
+                if (ec > 0x1344) {
+                    ec = 0;
+                    exp_over = 1;
+                }
+                if (left <= 0) {
+                    c = -1;
+                    break;
+                }
+                c = get(ctx);
+                left--;
+                used++;
+            }
+            if (!ed) {
+                /* No exponent digits: push back terminator like
+                 * orig 0586 unget path. */
+                if (c >= 0 && unget) {
+                    unget(c, ctx);
+                    left++;
+                    used--;
+                }
+            } else {
+                expv += es * ec;
+            }
+        }
+    } else if (c >= 0 && unget) {
+        unget(c, ctx);
+        left++;
+        used--;
+    }
+    if (exp_over) {
+        *consumed = used;
+        *status = 2;
+        return neg ? -INFINITY : INFINITY;
+    }
+    scale = float_pow10_far(expv);
+    mant *= scale;
+    *consumed = used;
+    *status = 1;
+    return (double)(neg ? -mant : mant);
+}
+
+char util_emit_hex_digit(unsigned v)
+{
+    /* Orig Util_EmitHexDigit @ 1000:19d0 (ADD 0x90 / DAA / ADC 0x40 /
+     * DAA / STOSB): low nibble to ASCII hex uppercase 1:1. */
+    static const char digits[] = "0123456789ABCDEF";
+
+    return digits[v & 15u];
+}
+
+int util_emit_hex_byte(char *out, unsigned v)
+{
+    /* Orig Util_EmitHexByte @ 1000:19c7 (AAM 0x10 split + 2x Digit:
+     * high via CALL 19d0, low via fallthrough). Big-nibble order. */
+    if (!out)
+        return -1;
+    out[0] = util_emit_hex_digit((v >> 4) & 15u);
+    out[1] = util_emit_hex_digit(v & 15u);
+    return 2;
+}
+
+int util_emit_hex_word(char *out, unsigned v)
+{
+    /* Orig Util_EmitHexWord @ 1000:19c0 (MOV AL,DH / CALL Byte +
+     * MOV AL,DL fallthrough): DX as 4 hex, high byte first (same as
+     * %p seg:off halves; caller emits ':' when far). */
+    if (!out)
+        return -1;
+    util_emit_hex_byte(out, (v >> 8) & 255u);
+    util_emit_hex_byte(out + 2, v & 255u);
+    return 4;
+}
+
+size_t util_vsprintf_strlen(const char *s)
+{
+    /* Orig Util_VsprintfStrLen @ 1000:19f2 (SCASB.REPNE/NOT CX/DEC CX,
+     * DI preserved): strlen without NUL. NULL -> 0 (orig faulted). */
+    if (!s)
+        return 0;
+    return strlen(s);
+}
+
+int util_format_int(char *out, size_t cap, uint32_t v, int is_signed,
+                    unsigned base, char digits)
+{
+    /* Orig Util_FormatInt @ 1000:157a (base 2..36 else empty, signed
+     * negate when (int32)v < 0, DIV chain into 34 B scratch, reversed
+     * with '0'-'9' or (b-10)+digits). Wrappers 15fc/2928/2974 pass
+     * digits='a' (0x61); VsprintfCore %x/%X passes 'a'/'A' via c-0x17.
+     * Returns chars without NUL, -1 on NULL/cap0/truncation; invalid
+     * base -> empty string (0) 1:1. */
+    char tmp[34];
+    int n = 0;
+    int neg = 0;
+    uint32_t mag;
+    int i;
+
+    if (!out || cap == 0)
+        return -1;
+    if (base < 2u || base > 36u) {
+        out[0] = '\0';
+        return 0;
+    }
+    if (digits != 'a' && digits != 'A')
+        digits = 'a';
+    if (is_signed && (int32_t)v < 0) {
+        neg = 1;
+        mag = 0u - v;
+    } else {
+        mag = v;
+    }
+    if (mag == 0)
+        tmp[n++] = '0';
+    else {
+        while (mag != 0) {
+            unsigned d = mag % base;
+
+            mag /= base;
+            if (d < 10u)
+                tmp[n++] = (char)('0' + d);
+            else
+                tmp[n++] = (char)(digits + (d - 10u));
+        }
+    }
+    /* Need neg + n chars + NUL. */
+    if ((size_t)(n + neg) + 1u > cap)
+        return -1;
+    i = 0;
+    if (neg)
+        out[i++] = '-';
+    while (n > 0)
+        out[i++] = tmp[--n];
+    out[i] = '\0';
+    return i;
+}

@@ -279,7 +279,16 @@ civ_error_t float_store_converted(void);
  * Float->digits exponent dispatch behind Util_FormatFloat @ 1000:0221:
  * LES DI [BP+0x10] out, sign save/clear via 0x7fff mask on ES:[BX+DI],
  * index = (BX>>2)<<1, JMP CS:[BX+0x784] jumptable (too many branches
- * for the decompiler). Exponent table TBD -> stub CIV_ERR_UNSUPPORTED. */
+ * for the decompiler). Gap 1000:0784-0967 is the LINEAR continuation
+ * (verified 2026-10-15: no FUN_1000_08* exists, single RET 0x10 @ 0967):
+ * 0784-07a7 FLD float/double/extended loads, 07a7-0803 FXAM/FSTSW
+ * class dispatch (DX=1/7ffe/7fff), 080a-0844 log10 approx
+ * ((exp-0x3fff)*0x4d10 + mantissa*0x4d>>...), 0846-0871 scale loop via
+ * Float_Pow10Far @ 1000:0e20 (clamp 0x1344, FDIVP/FMULP, labels
+ * Decompose_ScaleLoop/Pow10Call1-3), 0871-08be FIDIV/FIMUL refine,
+ * 08ce CALL Float_ConvertExtendedToBcd @ 1000:0988 (label
+ * Decompose_BcdConvertCall), 08d3-0952 BCD->ASCII digits. Exponent
+ * table TBD -> stub CIV_ERR_UNSUPPORTED. */
 civ_error_t float_decompose_exponent(void);
 
 /* Orig: FUN_1000_03b6 @ 1000:03b6 -> Sys_NoopPad (PUSH BP / MOV BP,SP /
@@ -344,5 +353,184 @@ double float_exp2(double x);
 /* Orig FLDL2E constant @ 1000:0c7e (log2(e) used by Float_Exp2 @
  * 1000:0c7d: x * log2(e) before the ABS/FSCALE/F2XM1 split). */
 #define FLOAT_LOG2E 1.4426950408889634
+
+/* --- Batch FPU-error: matherr + pow/scan (2026-10-16) ---
+ * Borland matherr chain (civ.exe, seg 1000): Float_ReportError @ 1000:1056
+ * builds a Borland `struct exception` on the stack (type i16 @ +0, func
+ * name far ptr @ +2, arg1/arg2/retval doubles @ +6/+14/+22 == 0x16) with
+ * NULL doubles -> 0.0 (FLDZ), then Float_MatherrFilter @ 1000:0e2e, then
+ * Util_Sprintf @ 1000:35f6 ("%s: %s error\n" @ 1420:4b9e, func "pow" @
+ * 1420:4b96/4b9a, err names [BX+0x4aae] DOMAIN/SING/OVERFLOW/UNDERFLOW/
+ * TLOSS/PLOSS), errno DAT_1420_0010 = 0x22 (ERANGE) for types 3/4 else
+ * 0x21 (EDOM), then Sys_FatalAbort @ 1000:4124 (MESSAGEBOX), returning
+ * retval in ST0. OS-free parts are LIVE 1:1 with explicit params (no
+ * far, no DGROUP, no Win16); Win16 tails stay STUB CIV_ERR_UNSUPPORTED
+ * with TODO Orig. No globals (name table is a switch, not storage),
+ * no exit(), C17. <math.h> only in sys.c.
+ *
+ * Chain notes (verified 2026-10-16):
+ * - 1000:0e27 is NOT a function: it is the inner `CALL 1000:0d56`
+ *   inside Float_Pow10Far @ 1000:0e20 (sole xref of Float_Pow10).
+ * - 1000:0605 is the `CALL 1000:0e20` inside Float_ScanFloat @
+ *   1000:03bc; 1000:0857/0871/089e are three more `CALL 1000:0e20`
+ *   in the orphan gap 1000:0784-0969 (DecomposeExponent jumptable
+ *   targets: exponent clamp 0x1344, FIDIV/FIMUL scaling, then CALL
+ *   Float_ConvertExtendedToBcd @ 1000:0988 at 1000:08ce). No new
+ *   functions created there.
+ * - 1190 callers of Float_Pow are false merges (resource-manager
+ *   segment); IGNORED here, noted so nobody re-triages them. */
+
+/* Borland `struct exception` (stack-built in Float_ReportError @
+ * 1000:1056): type 1..6 (DOMAIN/SING/OVERFLOW/UNDERFLOW/TLOSS/PLOSS),
+ * name = func name ("pow"), arg1/arg2/retval doubles. */
+typedef struct float_matherr {
+    int type;
+    const char *name;
+    double arg1;
+    double arg2;
+    double retval;
+} float_matherr_t;
+
+/* ScanFloat callbacks (orig near CALL [BP+4] get / [BP+6] unget with
+ * two context words [BP+8]/[BP+0xa]; Linux merges them into ctx).
+ * get returns next char or -1 on EOF; unget pushes one char back. */
+typedef int (*float_getchar_fn)(void *ctx);
+typedef void (*float_ungetchar_fn)(int c, void *ctx);
+
+/* Orig: FUN_1000:0e2e @ 1000:0e2e -> Float_MatherrFilter (LIVE).
+ * Returns 1 = suppress (skip message): type 4 zeroes e->retval first
+ * (FSTP double ES:[BX+0x16]), type 5 as-is; else 0 = report. NULL e
+ * -> 0 (orig faulted). */
+int float_matherr_filter(float_matherr_t *e);
+
+/* Orig error-name table [BX+0x4aae] (6 far ptrs -> DOMAIN/SING/
+ * OVERFLOW/UNDERFLOW/TLOSS/PLOSS @ 1420:4aca+). Switch (no globals);
+ * out-of-range type -> "UNKNOWN". */
+const char *float_matherr_name(int type);
+
+/* Orig: FUN_1000:35f6 @ 1000:35f6 -> Util_Sprintf (PARTIAL).
+ * sprintf wrapper (*dst = 0, then Util_Vsprintf @ 1000:19d8 ->
+ * Util_VsprintfCore @ 1000:1a3c). Core flags via table @ 1420:4eeb:
+ * ' '(00)/'+'(00)/'#'(01)/'*'(02)/'-'(03)/'.'(04)/'0'(09)/'1'-'9'(05)/
+ * 'l'(06)/'L'(07, long-double)/'h'/'H'(08)/'F'(17, far)/'N'(16, near);
+ * conv d/i(0A, signed)/o(0B)/u(0C)/x/X(0D, digit 'a'/'A' via c-0x17)/
+ * p(0E, XXXX:XXXX via Util_EmitHexWord)/e/E/f/g/G(0F via
+ * Util_FormatFloatThunk @ 1000:42d3 -> Util_FormatFloat @ 1000:0221)/
+ * c(10)/s(11, far/near)/n(12). %F-upper is far, not float; %O/%U/%D
+ * upper unsupported (only x/X/E/G upper). Callers: Float_ReportError
+ * @ 1000:1056 + save_prompt_open/save @ 1130:0075/0194 (+ Debug_Print
+ * @ 1000:2c9c via Util_Vsprintf). Linux via vsnprintf into dst[0..cap):
+ * standard %d/%o/%u/%x/%X/%c/%s/%e/%f/%g faithful (float path is thin
+ * LIVE via system fp formatting, same delegation as orig %f->float);
+ * Borland %Fs/%Ns far, %p colon form, %n count, %L TBD -> PARTIAL.
+ * Returns vsnprintf count, -1 on NULL dst/fmt or cap == 0.
+ * TODO Orig: far/near %p/%n/%L exactness @ 1a3c/19c0/19f2/1a08. */
+int util_sprintf(char *dst, size_t cap, const char *fmt, ...);
+
+/* --- Vsprintf helpers (2026-10-15, Util_VsprintfCore @ 1000:1a3c) ---
+ * OS-free 1:1 ports with explicit params (no ES:, no far, no DGROUP).
+ * No globals, no exit(), C17. */
+
+/* Orig: FUN_1000_157a @ 1000:157a -> Util_FormatInt (LIVE).
+ * Base 2..36 itoa core (else empty string): signed when is_signed and
+ * (int32)v < 0 ('-' + 0u - v), else magnitude; DIV chain into 34 B
+ * scratch, reversed with '0'-'9' or (b-10)+digits ('a' 0x61 lower for
+ * %x, 'A' 0x41 upper for %X). Wrappers: 15fc/2928/2974 (itoa). */
+int util_format_int(char *out, size_t cap, uint32_t v, int is_signed,
+                    unsigned base, char digits);
+/* Orig: FUN_1000_19d0 @ 1000:19d0 -> Util_EmitHexDigit (LIVE).
+ * ADD AL,0x90 / DAA / ADC AL,0x40 / DAA / STOSB: low nibble to ASCII
+ * hex uppercase. Returns the char, '?' never (v masked to 4 bits). */
+char util_emit_hex_digit(unsigned v);
+/* Orig: FUN_1000_19c7 @ 1000:19c7 -> Util_EmitHexByte (LIVE).
+ * AAM 0x10 split + 2x EmitHexDigit (high via CALL, low via fallthrough
+ * into 19d0). Writes 2 chars, returns 2, -1 on NULL out. */
+int util_emit_hex_byte(char *out, unsigned v);
+/* Orig: FUN_1000_19c0 @ 1000:19c0 -> Util_EmitHexWord (LIVE).
+ * MOV AL,DH / CALL Byte + MOV AL,DL fallthrough: DX as 4 hex
+ * (big-endian, high byte first). Used by %p seg:off (colon emitted by
+ * caller when far). Writes 4 chars, returns 4, -1 on NULL out. */
+int util_emit_hex_word(char *out, unsigned v);
+/* Orig: FUN_1000_19f2 @ 1000:19f2 -> Util_VsprintfStrLen (LIVE).
+ * PUSH DI / CX=FFFF / SCASB.REPNE / NOT CX / DEC CX / POP DI: strlen
+ * preserving DI, returns len without NUL. NULL -> 0 (orig faulted). */
+size_t util_vsprintf_strlen(const char *s);
+
+/* Orig: FUN_1000:4124 @ 1000:4124 -> Sys_FatalAbort (STUB).
+ * Formats via Util_StrRChr @ 1000:37b2 (strrchr '\\' 0x5c on
+ * DAT_1420_4f9a/4f9c) then Win16 GETDESKTOPWINDOW + MESSAGEBOX
+ * (CALLF 1608:01a4/0080, style 0x1010). Needs window + DGROUP ->
+ * stub CIV_ERR_UNSUPPORTED. NULL msg -> NOENT (orig faulted). */
+civ_error_t sys_fatal_abort(const char *msg);
+
+/* Orig: Float_ReportError @ 1000:1056 (PARTIAL/LIVE).
+ * Borland matherr body: NULL doubles -> 0.0, filter, else snprintf
+ * "%s: %s error\n" (func name, err name) via Util_Sprintf into buf,
+ * errno 0x22/0x21 (ERANGE for types 3/4, EDOM otherwise),
+ * Sys_FatalAbort(buf). Returns e->retval (orig ST0 = [BP-0x8]).
+ * Suppressed (filter 1) skips format/abort but still sets errno?
+ * No: orig skips the whole block, errno untouched -> *errno_out
+ * untouched, buf untouched, returns retval. NULL e/buf/cap==0 or
+ * NULL errno_out -> retval (or 0.0 when e is NULL) without writing. */
+double float_report_error(float_matherr_t *e, char *buf, size_t cap,
+                          int *errno_out);
+
+/* Orig: FUN_1000:0d56 @ 1000:0d56 -> Float_Pow10 (LIVE).
+ * 10^AX on x87: AX < -0x1344 -> 0.0 (FLDZ); AX > +0x1344 -> +INF
+ * (FLD float [0x4b8a] = 0x7f800000); AX == 0 -> 1.0 (FLD1); else
+ * |AX| binary decomposition: low 3 bits index float table @
+ * 1420:4b0e (1,10,..,1e7), then FMUL float [0x4b2e] (1e8), double
+ * [0x4b32] (1e16), extended [0x4b3a/44/4e/58/62/6c/76/80]
+ * (1e32..1e512...), negative n finishes FDIVR [0x4b0e] (1.0/x).
+ * Linux 1:1 observable via powl (same clamp/edges, same INF). */
+long double float_pow10(int n);
+
+/* Orig: FUN_1000:0e20 @ 1000:0e20 -> Float_Pow10Far (LIVE).
+ * Far RETF wrapper (INC BP ... PUSH [BP+6] / CALL 1000:0d56):
+ * thin delegate to float_pow10. */
+long double float_pow10_far(int n);
+
+/* Orig: FUN_1000:0e5a @ 1000:0e5a -> Float_Exp2Checked (PARTIAL).
+ * 2^x with extended range gate: (exp & 0x7fff) vs 0x4008, else
+ * mantissa vs 0xb172; overflow (x>0, type 3) loads HUGE_VAL @
+ * 1420:4a92, underflow (x<0, type 4) loads 0.0, both via
+ * Float_ReportError(type, "pow" @ 1420:4b96); else Float_Exp2 @
+ * 1000:0c7d. Linux on double: finite gate approx (|x| small ->
+ * exp2), extremes via float_report_error with the same type/name
+ * codes; exact 0x4008/0xb172 extended thresholds TBD (TODO Orig).
+ * Non-finite x delegates to exp2 (INF/NAN preserved). */
+double float_exp2_checked(double x);
+
+/* Orig: FUN_1000:0ec8 @ 1000:0ec8 -> Float_Pow (PARTIAL).
+ * pow(x,y): 0x7ff0 exponent tests (zero/denormal vs INF/NAN per
+ * operand -> types 1/3/4 + "pow" @ 1420:4b9a), int-exp fast path
+ * (ROR 4 / SUB 0x3ff vs 0x3f, <0xc bit-exactness via SHL/SAR, FCHS
+ * for negative base with odd int), else y*log2(x) (Float_Log2 @
+ * 1000:0c03) -> Float_Exp2Checked @ 1000:0e5a with FCHS sign fix.
+ * Linux on double: same special-type reports via float_report_error
+ * (DOMAIN=1/SING?/OVERFLOW=3/UNDERFLOW=4), main path via
+ * float_exp2_checked(y * float_log2(x)); 1190 callers are false
+ * merges and are IGNORED. Exact FISTP/ROR bit path TBD. */
+double float_pow(double x, double y);
+
+/* Orig: FUN_1000:03bc @ 1000:03bc -> Float_ScanFloat (PARTIAL).
+ * ~780 B strtod core with get/unget callbacks: isspace skip via
+ * ctype @ [c+0x4baf] & 1, sign, INF (sign? "INF" @ 0633: FLD +/-
+ * INF @ 1420:4af6/4afa) / NAN ("NAN" @ 0675: FLD +/- NAN @
+ * 1420:4afe/4b02), digits (18-cap 0x12, extra via MUL 10 chains),
+ * e/E exp (limit 0x1344, overflow flag), scale FILD + Float_Pow10Far
+ * FMULP/FDIVP, FCHS sign. Outs: *consumed += chars used ([BP+0xe]),
+ * *status ([BP+0x12]): 1 ok, 0 no-digits/fail, 2 overflow (-> INF),
+ * -1 (0xffff) immediate EOF. nmax ([BP+0xc]) bounds get/unget.
+ * Linux: same token flow via callbacks; x87 FILD/FMULP last-ulp
+ * exactness + 18-digit rounding TBD (TODO Orig @ 0440-04f3: DI<=5
+ * 16-bit MUL @ 04a6-04b7 vs DI<=18 64-bit MUL x4 @ 04bf-04f0 with
+ * PUSH DX carry @ 04d2/04dc, DI>18 skip @ 04f3; @ 05f5 FILD qword
+ * [BP-0x18] + @ 0605 CALL Pow10Far + @ 060e FDIVP / @ 0613 FMULP +
+ * @ 061c FCHS; final ST0 is extended, Linux returns double -> last-ulp
+ * on 18-digit values + powl-vs-table 1e32.. TBD). NULL get or
+ * consumed/status -> 0.0 without writing outs. Stays PARTIAL. */
+double float_scan_float(float_getchar_fn get, float_ungetchar_fn unget,
+                        void *ctx, int nmax, int *consumed, int *status);
 
 #endif /* CIVLIN_SYS_H */
