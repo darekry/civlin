@@ -61,8 +61,28 @@ typedef struct civ_game {
     int civ_count;   /* g_nCivCount */
 } civ_game_t;
 
+/* Orig WinMain @ 1008:0000 state init (DGROUP 1420 + segment 12d8 image) ->
+ * game_init. OS-free 1:1 (live): zeroes the caller-owned civ_game_t
+ * (initialized/quit_flag/turn/difficulty/player_civ/alive_mask/year/
+ * menu_choice/civ_count; g_nQuitFlag @ 12d8:24ee = run, g_nTurn @
+ * 12d8:42fe, g_nDifficulty @ 12d8:42f6, g_nPlayerCiv @ 12d8:4300,
+ * g_nCivAliveMask @ 12d8:42f8, g_nYear @ 12d8:42fa, g_nMenuChoice @
+ * 12d8:44e2, g_nCivCount @ 12d8:3b9a). Returns CIV_OK; NULL -> NOENT.
+ * No globals, no exit(), read-only. */
 civ_error_t game_init(civ_game_t *g);
+/* Orig NewGame_Wizard @ 10e8:0000 + Map_GenerateRandomOrLoad @ 1028:0000
+ * tail -> game_new. Fills start-of-game fields (see game_init list) via
+ * newgame_wizard_run (see newgame.h) -> worldgen. Win16 dialog/map tails
+ * TBD -> stub CIV_ERR_UNSUPPORTED; NULL -> NOENT. No globals, no exit(). */
 civ_error_t game_new(civ_game_t *g);
+/* Orig TIMERPROC @ 1008:0d68 body, pumped from the while(!g_nQuitFlag)
+ * loop in WinMain @ 1008:0000 (200 ms SETTIMER installed by WdwMap_Open
+ * @ 1208:0af1, torn down first by KILLTIMER in WinMain_Shutdown @
+ * 1008:0329). Tick -> game_turn_tick @ 1088:0000 linkage: per-frame pump
+ * here (Sys_PumpMessages @ 1108:0000 + Sys_Yield @ 1098:0157, see sys.h;
+ * both live SDL_PumpEvents) then one Game_TurnLoopTick pass (stub tail).
+ * Partial: pump live, turn TBD -> overall CIV_ERR_UNSUPPORTED; NULL ->
+ * NOENT, quit_flag set -> CIV_OK (no work). No globals, no exit(). */
 civ_error_t game_tick(civ_game_t *g);
 
 /* One Game_TurnLoopTick @ 1088:0000 pass: iterate civs, bump g_nTurn/g_nYear,
@@ -458,6 +478,13 @@ int unit_order_is_no_path(int order);
  * Win16 dialog; stub. Param wonder is the game_pick_wonder_for_ai index. */
 civ_error_t unit_notify_wonder(int civ, int wonder);
 
+/* Trivial teardown (caller-owned civ_game_t only). Marks uninitialized;
+ * full WinMain_Shutdown @ 1008:0329 order (KILLTIMER for TIMERPROC @
+ * 1008:0d68 / FREEPROCINSTANCE for DLGPROC @ 1098:16e2 + CIVDIALOGPROC @
+ * 1098:1838 / DESTROYWINDOW for main/map/status windows /
+ * REMOVEFONTRESOURCE for CIV_FONT_FILE) lives in boot_shutdown (see
+ * boot.h/boot.c), which delegates to video/map/dialog/audio shutdown.
+ * NULL-safe, void, no globals, no exit(). */
 void game_shutdown(civ_game_t *g);
 
 #endif /* CIVLIN_GAME_H */

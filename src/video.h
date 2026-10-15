@@ -2,6 +2,15 @@
  * SelectPalette/RealizePalette/AnimatePalette, GetDeviceCaps) -> SDL3.
  * Palette fidelity via gfx_indexed (8-bit surface + SDL_Palette).
  *
+ * Y2 HoF/show present path (ported, referenced by halloffame.h Y2 flow):
+ *   HoF_Show @ 1080:0119 (dialog 0x94) + HoF_VictoryCeremony @ 1080:06ff
+ *   (pyramid frames) present via gfx_port_present_rect @ 10d0:0854
+ *   (BITBLT rop 0xcc0020 SRCCOPY -> SDL_RenderTexture; VALIDATERECT is a
+ *   no-op on SDL3) after palette_apply_to_port @ 1200:00a8/1090:0376
+ *   range guard ([first, first+count) inside [0,256), INDEX8 backing
+ *   store, SDL_SetPaletteColors). Both already ported; HoF stubs stay
+ *   UNSUPPORTED until the dialog/frame bridges land (no Win16 here).
+ *
  * Ghidra anchors (civ.exe), renamed 2026-10-15/16 (packet F):
  *   Video_CheckDriverCaps  @ 1008:059a  (GETDEVICECAPS checklist @ 1420:0af4;
  *                            SDL3 renderer-caps mapping TBD)
@@ -89,12 +98,14 @@ civ_error_t gfx_port_set_active(gfx_port_t *port);
  * (GfxPort_PresentRect). Ported: BITBLT rop 0xcc0020 (SRCCOPY) to the
  * screen maps to SDL_RenderTexture (whole texture when rect is NULL,
  * else rect as dst with NULL src); VALIDATERECT is a no-op on SDL3 (no
- * dirty-region validation needed, no HWND to validate). Error mapping
- * (consistent across video.c): NULL port/renderer -> NOENT (NULL rect =
- * full port, kept); missing backing texture / SDL_GetTextureSize fail ->
- * BAD_DATA; SDL_RenderTexture fail -> IO (SDL_GetError logged by
- * caller; NOMEM only from allocation paths: SDL_CreatePalette/Texture,
- * never from present). */
+ * dirty-region validation needed, no HWND to validate). Y2 HoF/show path:
+ * HoF_Show @ 1080:0119 (dialog 0x94) + HoF_VictoryCeremony @ 1080:06ff
+ * (pyramid frames) present through here after palette_apply_to_port
+ * (see halloffame.h Y2 flow). Error mapping (consistent across video.c):
+ * NULL port/renderer -> NOENT (NULL rect = full port, kept); missing
+ * backing texture / SDL_GetTextureSize fail -> BAD_DATA;
+ * SDL_RenderTexture fail -> IO (SDL_GetError logged by caller; NOMEM only
+ * from allocation paths: SDL_CreatePalette/Texture, never from present). */
 civ_error_t gfx_port_present_rect(gfx_port_t *port, SDL_Renderer *ren,
                                   const SDL_Rect *rect);
 
@@ -215,11 +226,14 @@ civ_error_t gfx_port_create_compatible(SDL_Renderer *ren, int w, int h,
  * 256-entry palette attached via SDL_SetTexturePalette; orig: RGB
  * triples + flag byte copy then ANIMATEPALETTE, opcode 1 full apply +
  * 0xe fade from MainPort_ApplyPalette, timed 1/0xe from
- * Anim_AdvanceFrames @ 10b0:0461). Colors feed from gfx_godpal_get
- * (godpal.c 0x00..0xeb) + black tail past 0xec; propagates UNSUPPORTED
- * until the dump lands (no fake bytes). NULL port reports NOENT; first
- * < 0 or count <= 0 or first+count > 256 reports RANGE; missing backing
- * texture reports BAD_DATA; SDL failure reports IO/NOMEM. */
+ * Anim_AdvanceFrames @ 10b0:0461). Y2 HoF/show path: range guard feeds
+ * HoF_Show @ 1080:0119 + HoF_VictoryCeremony @ 1080:06ff fades before
+ * gfx_port_present_rect @ 10d0:0854 (see halloffame.h Y2 flow). Colors
+ * feed from gfx_godpal_get (godpal.c 0x00..0xeb) + black tail past 0xec;
+ * propagates UNSUPPORTED until the dump lands (no fake bytes). NULL port
+ * reports NOENT; first < 0 or count <= 0 or first+count > 256 reports
+ * RANGE; missing backing texture reports BAD_DATA; SDL failure reports
+ * IO/NOMEM. */
 civ_error_t palette_apply_to_port(gfx_port_t *port, int first, int count);
 
 /* Orig: FUN_1008_0329 @ 1008:0329 WinMain_Shutdown video-only tail ->

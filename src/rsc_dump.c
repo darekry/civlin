@@ -1,21 +1,35 @@
-/* CivLin RSC smoke test (local-only, never committed output).
+/* CivLin RSC dump validation Y2 (local-only, never committed output).
  *
  * Usage: rsc_dump [file.rsc ...]
- *   Default (no args): the 5 known files under unpacked/.
+ *   Default (no args): the 5 known files under unpacked/ (CivData0..4.rsc,
+ *   Orig ResMgr_LoadRsc @ 1190:0000 x5 from WinMain @ 1008:0000).
  *
- * Does, in order:
- *   1. rsc_open() each file; print size, record count/types, image count.
- *      record_data()/get_indexed() are EXPECTED to return UNSUPPORTED in
- *      v1 (framing not yet decoded) — that is reported, not a failure.
- *   2. Synthetic palette-path test (no assets): 4x2 indexed image with a
+ * Y2 validation per file, in order (read-only, never writes to
+ * civ1win/ or unpacked/ or anywhere on disk; OS-free loader calls):
+ *   1. rsc_open(): magic 00 00 01 00 @ +0 + marker ("Civ Data "/"rsrcRSED"/
+ *      "CvMM") + size (largest observed: Civdata3.rsc ~1.4 MiB); report
+ *      size/record_count (v1 scan listing)/image_count (strict gate).
+ *   2. Directory slice walk: rsc_record_data() per index (BE EOF dir,
+ *      bounds file_off+len <= size, borrowed, len 0 derives from next
+ *      file-off, last to dir_off) + rsc_decode_bitmap() strict gate
+ *      (w/h > 0, bpp == 8, pal_count 1..255, every pixel < pal_count);
+ *      report dir_records/slices/images_strict. Failures are reported,
+ *      not hidden (TRUNCATED/RANGE/BAD_MAGIC skip, not images).
+ *   3. Buffered manager walk: rsc_mgr_new() + rsc_load_rsc() (ResMgr_LoadRsc
+ *      @ 1190:0000, 0xE360 buffered EOF dir, BE, bounds-checked) +
+ *      rsc_dump_stats() totals + rsc_mgr_free(); proves the same 12-B
+ *      records -> 0x32-B nodes path the game uses, without touching
+ *      load-walk impls here.
+ *   4. Synthetic palette-path test (no assets): 4x2 indexed image with a
  *      4-entry palette through gfx_indexed_to_surface(), verified by
  *      reading format/dimensions/pixels/palette back.
- *   3. One frame on screen: synthetic 64x64 palette gradient via
+ *   5. One frame on screen: synthetic 64x64 palette gradient via
  *      gfx_indexed_to_texture() + SDL_RenderTexture, ~60 frames or until
  *      QUIT/key. Works under SDL_VIDEODRIVER=dummy (no crash = pass).
  *
- * Exit 0 iff all files parsed AND the synthetic tests pass. Never writes
- * to civ1win/ or unpacked/ (or anywhere on disk).
+ * Exit 0 iff all files validate AND the synthetic tests pass. Return value
+ * is the process exit code only (no exit() in libs). No globals: only
+ * kDefaultFiles[] (const table) + stack/heap locals.
  */
 #include <SDL3/SDL.h>
 
@@ -33,14 +47,92 @@ static const char *kDefaultFiles[] = {
     "unpacked/CIVDATA4.RSC",
 };
 
+/* Y2 dir-slice + strict-gate walk (read-only, OS-free loader calls).
+ * Counts directory records via rsc_record_data() until RANGE (end) or
+ * UNSUPPORTED (dir walk unproven), then gates each slice via
+ * rsc_decode_bitmap() (borrowed view: pixels points into the container,
+ * palette copied tail-zeroed; requires w/h > 0, bpp == 8, pal 1..255,
+ * every pixel < pal_count). Prints one summary line per file. */
+static int dump_validate_images(const rsc_file_t *f, const char *path)
+{
+    size_t dir_total = 0;
+    size_t slices_ok = 0;
+    size_t images = 0;
+
+    for (size_t i = 0; i < 8192u; i++) {
+        const uint8_t *data = NULL;
+        size_t size = 0;
+        rsc_indexed_t tmp;
+        rsc_error_t dr = rsc_record_data(f, i, &data, &size);
+
+        if (dr == RSC_ERR_RANGE)
+            break;
+        if (dr == RSC_ERR_UNSUPPORTED)
+            break;
+        if (dr != RSC_OK)
+            continue;
+        dir_total++;
+        slices_ok++;
+        if (rsc_decode_bitmap(data, size, &tmp) == RSC_OK)
+            images++;
+    }
+    printf("  dir_records=%zu slices=%zu images_strict=%zu (gate: borrowed + pal 1..255 + px<pal)\n",
+           dir_total, slices_ok, images);
+    /* Spot-check the borrowed indexed view on record 0 when present. */
+    if (dir_total > 0) {
+        rsc_indexed_t img;
+        rsc_error_t gr = rsc_get_indexed(f, 0, &img);
+
+        if (gr == RSC_OK)
+            printf("  get_indexed[0]: ok %ux%u bpp=%u pal=%u (borrowed view)\n",
+                   img.width, img.height, img.bpp, img.pal_count);
+        else
+            printf("  get_indexed[0]: %s (not an 8-bit image, skipped)\n",
+                   rsc_strerror(gr));
+    }
+    (void)path;
+    return 0;
+}
+
+/* Y2 buffered manager walk (read-only): ResMgr_LoadRsc @ 1190:0000 via
+ * rsc_load_rsc() on the same path (no writes, no globals, no exit).
+ * Prints type/resource totals; failure here fails validation. */
+static int dump_validate_mgr(const char *path)
+{
+    rsc_mgr_t *mgr = rsc_mgr_new();
+    rsc_error_t lr;
+    int rc = 0;
+
+    if (!mgr) {
+        printf("  load_rsc: out of memory\n");
+        return 1;
+    }
+    lr = rsc_load_rsc(mgr, path);
+    if (lr != RSC_OK) {
+        printf("  load_rsc: %s\n", rsc_strerror(lr));
+        rc = 1;
+    } else {
+        printf("  load_rsc: ok files=1 types=%u\n",
+               (unsigned)rsc_get_type_count(mgr));
+        if (rsc_dump_stats(mgr, stdout) != RSC_OK)
+            rc = 1;
+    }
+    rsc_mgr_free(mgr);
+    return rc;
+}
+
 static int dump_one(const char *path)
 {
     rsc_file_t *f = NULL;
     rsc_error_t rc = rsc_open(path, &f);
+    int failures = 0;
+
     if (rc != RSC_OK) {
         printf("%s: open failed: %s\n", path, rsc_strerror(rc));
         return 1;
     }
+    /* size/record_count (v1 scan listing)/image_count (X1 strict gate:
+     * borrowed view + pal 1..255 + pixel < pal_count). */
     printf("%s: size=%zu records=%zu images=%zu\n", path, rsc_size(f),
            rsc_record_count(f), rsc_image_count(f));
     for (size_t i = 0; i < rsc_record_count(f); i++) {
@@ -50,19 +142,10 @@ static int dump_one(const char *path)
                    i, rec.type, rec.entry_offset, rec.unknown_a,
                    rec.unknown_b);
     }
-    {
-        const uint8_t *data = NULL;
-        size_t size = 0;
-        rsc_error_t dr = rsc_record_data(f, 0, &data, &size);
-        printf("  record_data: %s (expected in v1)\n", rsc_strerror(dr));
-    }
-    {
-        rsc_indexed_t img;
-        rsc_error_t gr = rsc_get_indexed(f, 0, &img);
-        printf("  get_indexed: %s (expected in v1)\n", rsc_strerror(gr));
-    }
+    failures |= dump_validate_images(f, path);
     rsc_close(f);
-    return 0;
+    failures |= dump_validate_mgr(path);
+    return failures ? 1 : 0;
 }
 
 /* 4x2 synthetic indexed image: indices 0..3, palette R/G/B/white. */

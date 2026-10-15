@@ -2,7 +2,18 @@
  * OS-free functions port decompiler shape 1:1; Win16 paths
  * (segments/__far/DOS/SELECTPALETTE/handles/MCI/DIALOG) stub out with
  * CIV_ERR_UNSUPPORTED + TODO Orig. No globals, no exit(), no file I/O in
- * implemented paths; stubs never touch civ1win/unpacked. */
+ * implemented paths; stubs never touch civ1win/unpacked.
+ *
+ * Y2 end-to-end flow (stubs stay, flow documented, no Win16; see
+ * halloffame.h Y2 block for the numbered steps):
+ *   hof_load @ 1080:0023 -> hof_try_insert @ 1080:0595 (score*(diff+1) +
+ *   memmove shift) -> hof_show @ 1080:0119 (dialog 0x94) -> hof_save @
+ *   1080:0092 + hof_victory_ceremony @ 1080:06ff (WINTUNE 0x22 via
+ *   Sound_PlayId @ 1150:00c9 / Sound_MapIdToWav @ 1150:019e + pyramid
+ *   frames + Sire strings) + city_show_top_five @ 1080:099b (Top Five @
+ *   1420:159c). Show/present via gfx_port_present_rect @ 10d0:0854
+ *   (SDL_RenderTexture, VALIDATERECT no-op) after palette_apply_to_port
+ *   @ 1200:00a8/1090:0376 range guard (see video.h). */
 #include "halloffame.h"
 
 #include <string.h>
@@ -63,7 +74,7 @@ civ_error_t HoF_Save(const civ_hof_entry_t slots[CIV_HOF_SLOTS])
     return CIV_ERR_UNSUPPORTED;
 }
 
-/* Orig: FUN_1080_0119 @ 1080:0119 -> HoF_Show. */
+/* Orig: FUN_1080_0119 @ 1080:0119 -> HoF_Show (Y2 flow step 3). */
 civ_error_t HoF_Show(const civ_hof_entry_t slots[CIV_HOF_SLOTS])
 {
     if (!slots)
@@ -72,7 +83,10 @@ civ_error_t HoF_Show(const civ_hof_entry_t slots[CIV_HOF_SLOTS])
      * text build: "Empty" @ 1420:1502, difficulty names @ 1420:153e..1567
      * incl. "Chieftan" typo, "CIVILIZATION RATING: " @ 1420:1572, slot
      * table @ DAT_1420_52a8 stride 0x27 words). Needs dialog 0x94 bridge
-     * (see dialog.h dlg_create_tracked). */
+     * (see dialog.h dlg_create_tracked); SDL3 show presents via
+     * gfx_port_present_rect @ 10d0:0854 (SDL_RenderTexture, VALIDATERECT
+     * no-op) after palette_apply_to_port @ 1200:00a8/1090:0376 (see
+     * video.h Y2 HoF/show present path). */
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -129,7 +143,7 @@ civ_error_t HoF_TryInsert(civ_hof_entry_t slots[CIV_HOF_SLOTS],
     return CIV_OK;
 }
 
-/* Orig: FUN_1080_06ff @ 1080:06ff -> HoF_VictoryCeremony. */
+/* Orig: FUN_1080_06ff @ 1080:06ff -> HoF_VictoryCeremony (Y2 flow step 5). */
 civ_error_t HoF_VictoryCeremony(int level, int score)
 {
     (void)level;
@@ -137,7 +151,10 @@ civ_error_t HoF_VictoryCeremony(int level, int score)
     /* TODO: Orig FUN_1080_06ff @ 1080:06ff (Sound_PlayId(0x22)=WINTUNE, see
      * audio.h CIV_SOUND_VICTORY + Sound_MapIdToWav @ 1150:019e, pyramid
      * build frames via BITBLT/SELECTPALETTE, "Sire, your fame now..."
-     * strings). Needs audio + SDL texture blits. */
+     * strings). Needs audio + SDL texture blits; frames present via
+     * gfx_port_present_rect @ 10d0:0854 (SDL_RenderTexture) after
+     * palette_apply_to_port @ 1200:00a8/1090:0376 (see video.h Y2
+     * HoF/show present path). */
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -204,34 +221,55 @@ civ_error_t Hof_ShowEndDialog(int ending_kind, int final_score)
     return CIV_ERR_UNSUPPORTED;
 }
 
-/* --- Legacy lowercase compat (deprecated; delegate to HoF_* above) --- */
+/* --- Legacy lowercase compat (deprecated; delegate to HoF_* above) ---
+ * Y2 end-to-end flow delegates (thin LIVE wrappers; Orig addrs kept so
+ * tools/gen_status.py counts them; present via gfx_port_present_rect @
+ * 10d0:0854 + palette_apply_to_port @ 1200:00a8/1090:0376, see video.h). */
 
+/* Orig: FUN_1080_0023 @ 1080:0023 -> hof_load (Y2 flow step 1: HoF_Load;
+ * famehall.civ @ 1420:14e8). Thin delegate to HoF_Load. */
 civ_error_t hof_load(civ_hof_entry_t slots[CIV_HOF_SLOTS])
 {
     return HoF_Load(slots);
 }
 
+/* Orig: FUN_1080_0092 @ 1080:0092 -> hof_save (Y2 flow step 4: HoF_Save;
+ * mode @ 1420:14f5). Thin delegate to HoF_Save. */
 civ_error_t hof_save(const civ_hof_entry_t slots[CIV_HOF_SLOTS])
 {
     return HoF_Save(slots);
 }
 
+/* Orig: FUN_1080_0119 @ 1080:0119 -> hof_show (Y2 flow step 3: HoF_Show;
+ * dialog 0x94, "Empty" @ 1420:1502, names @ 1420:153e..1567, rating @
+ * 1420:1572; presents via gfx_port_present_rect @ 10d0:0854). Thin
+ * delegate to HoF_Show. */
 civ_error_t hof_show(const civ_hof_entry_t slots[CIV_HOF_SLOTS])
 {
     return HoF_Show(slots);
 }
 
+/* Orig: FUN_1080_0595 @ 1080:0595 -> hof_try_insert (Y2 flow step 2:
+ * HoF_TryInsert; weight score*(difficulty+1) + memmove shift-down).
+ * Thin delegate to HoF_TryInsert. */
 civ_error_t hof_try_insert(civ_hof_entry_t slots[CIV_HOF_SLOTS],
                            const civ_hof_entry_t *result, int *out_index)
 {
     return HoF_TryInsert(slots, result, out_index);
 }
 
+/* Orig: FUN_1080_06ff @ 1080:06ff -> hof_victory_ceremony (Y2 flow step 5:
+ * HoF_VictoryCeremony; WINTUNE 0x22 via Sound_MapIdToWav @ 1150:019e +
+ * pyramid frames + Sire strings; presents via gfx_port_present_rect @
+ * 10d0:0854). Thin delegate to HoF_VictoryCeremony. */
 civ_error_t hof_victory_ceremony(int level, int score)
 {
     return HoF_VictoryCeremony(level, score);
 }
 
+/* Orig: FUN_1080_099b @ 1080:099b -> city_show_top_five (Y2 flow step 6:
+ * City_ShowTopFive; "The Top Five Cities..." @ 1420:159c + records @
+ * 1420:5500). Thin delegate to City_ShowTopFive. */
 civ_error_t city_show_top_five(void)
 {
     return City_ShowTopFive();

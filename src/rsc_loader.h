@@ -107,6 +107,23 @@
  *     (ANIMATEPALETTE -> SDL_SetPaletteColors in video.c), sound/font
  *     wiring. Those stay stubs with TODO Orig addresses.
  *
+ * Y2 dump validation (read-only, OS-free, no load-walk changes):
+ *   - rsc_dump.c opens each of the 5 CivData0..4.rsc via rsc_open()
+ *     (magic 00 00 01 00 @ +0 + marker "Civ Data "/"rsrcRSED"/"CvMM")
+ *     plus rsc_load_rsc() (ResMgr_LoadRsc @ 1190:0000 buffered 0xE360
+ *     EOF-dir walk); largest observed is Civdata3.rsc ~1.4 MiB.
+ *   - Per-file report: size via rsc_size(), record_count via
+ *     rsc_record_count() (v1 scan listing), image_count via
+ *     rsc_image_count() (X1 strict gate below) plus dir_records/slices/
+ *     images_strict from the rsc_record_data() + rsc_decode_bitmap()
+ *     walk and type/res totals via rsc_dump_stats().
+ *   - Strict gate (already ported, reused here, not reimplemented):
+ *     borrowed view (pixels points into the container, valid while
+ *     rsc_file lives; palette copied, tail zeroed) + pal_count in
+ *     1..255 + every pixel index < pal_count (see rsc_decode_bitmap @
+ *     1198:xxxx and rsc_get_indexed @ 1190:0a29). Non-images skip
+ *     (TRUNCATED/RANGE/BAD_MAGIC), never fail validation.
+ *
  * Rules: read-only against civ1win//unpacked (never writes there), no
  * exit() in the library, no globals, C17, SDL3 only in gfx_indexed (this
  * file has zero SDL dependency).

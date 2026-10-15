@@ -21,6 +21,28 @@
  * Rating line @ 1420:1572 "CIVILIZATION RATING: ".
  * Famehall strings: 1420:14e8 filename, 1420:14f5 save mode, 1420:1502 "Empty",
  * 1420:159c "The Top Five Cities...".
+ *
+ * Y2 end-to-end flow (stubs stay CIV_ERR_UNSUPPORTED, flow documented here,
+ * no Win16; present via video.h gfx_port_present_rect @ 10d0:0854 +
+ * palette_apply_to_port @ 1200:00a8/1090:0376):
+ *   1. HoF_Load @ 1080:0023 (hof_load): famehall.civ @ 1420:14e8 via
+ *      save_file_open/read/close into 6 slots (HoF_Clear @ 1080:0000
+ *      0xffff sentinel first).
+ *   2. HoF_TryInsert @ 1080:0595 (hof_try_insert): weight =
+ *      score * (difficulty + 1) via hof_weighted_score, linear scan,
+ *      memmove shift-down, copy into the hole, out_index (-1 = no qualify).
+ *   3. HoF_Show @ 1080:0119 (hof_show): modal dialog 0x94 + per-slot text
+ *      ("Empty" @ 1420:1502, difficulty names @ 1420:153e..1567, rating @
+ *      1420:1572); SDL3 present via gfx_port_present_rect (BITBLT rop
+ *      0xcc0020 -> SDL_RenderTexture, VALIDATERECT no-op) after the
+ *      palette_apply_to_port [first, first+count) range guard.
+ *   4. HoF_Save @ 1080:0092 (hof_save): save_file_open x2/write/close
+ *      (mode @ 1420:14f5).
+ *   5. HoF_VictoryCeremony @ 1080:06ff (hof_victory_ceremony):
+ *      Sound_PlayId(0x22) = WINTUNE (Sound_MapIdToWav @ 1150:019e) +
+ *      pyramid frames + "Sire, your fame now..." strings, same present path.
+ *   6. City_ShowTopFive @ 1080:099b (city_show_top_five): "The Top Five
+ *      Cities..." @ 1420:159c + city records @ 1420:5500.
  */
 #ifndef CIVLIN_HALLOFFAME_H
 #define CIVLIN_HALLOFFAME_H
@@ -116,17 +138,28 @@ civ_error_t Hof_PlayEndAnimation(int ending_kind);
  * Called from Game_ProcessGameEnd unless quit==2. */
 civ_error_t Hof_ShowEndDialog(int ending_kind, int final_score);
 
-/* --- Legacy lowercase compat (deprecated; delegate to HoF_* above) --- */
+/* --- Legacy lowercase compat (deprecated; delegate to HoF_* above) ---
+ * Y2 flow delegates (Orig addrs kept for the RE map; present via
+ * gfx_port_present_rect @ 10d0:0854 + palette_apply_to_port @
+ * 1200:00a8/1090:0376, see video.h). */
+/* Orig: FUN_1080_0023 @ 1080:0023 -> hof_load (Y2 step 1). */
 civ_error_t hof_load(civ_hof_entry_t slots[CIV_HOF_SLOTS]);
+/* Orig: FUN_1080_0092 @ 1080:0092 -> hof_save (Y2 step 4). */
 civ_error_t hof_save(const civ_hof_entry_t slots[CIV_HOF_SLOTS]);
+/* Orig: FUN_1080_0119 @ 1080:0119 -> hof_show (Y2 step 3, dialog 0x94). */
 civ_error_t hof_show(const civ_hof_entry_t slots[CIV_HOF_SLOTS]);
 
-/* Inserts a finished-game score; returns 1 + index via out_index on success,
+/* Orig: FUN_1080_0595 @ 1080:0595 -> hof_try_insert (Y2 step 2).
+ * Inserts a finished-game score; returns 1 + index via out_index on success,
  * 0 when the score does not qualify. Shows the table (HoF_Show). */
 civ_error_t hof_try_insert(civ_hof_entry_t slots[CIV_HOF_SLOTS],
                            const civ_hof_entry_t *result, int *out_index);
 
+/* Orig: FUN_1080_06ff @ 1080:06ff -> hof_victory_ceremony (Y2 step 5,
+ * WINTUNE 0x22 + pyramid frames + Sire strings). */
 civ_error_t hof_victory_ceremony(int level, int score);
+/* Orig: FUN_1080_099b @ 1080:099b -> city_show_top_five (Y2 step 6,
+ * Top Five @ 1420:159c). */
 civ_error_t city_show_top_five(void);
 
 #endif /* CIVLIN_HALLOFFAME_H */

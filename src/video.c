@@ -223,9 +223,12 @@ civ_error_t gfx_port_present_rect(gfx_port_t *port, SDL_Renderer *ren,
      * 0xcc0020 (SRCCOPY) to the screen maps to SDL_RenderTexture (NULL
      * rect = whole texture via NULL src/dst, else rect as dst with NULL
      * src); VALIDATERECT is a no-op on SDL3 (no HWND/dirty-region to
-     * validate). Error mapping: NULL -> NOENT, missing tex/size fail ->
-     * BAD_DATA, SDL_RenderTexture fail -> IO (NOMEM never from
-     * present, only from CreatePalette/Texture alloc paths). */
+     * validate). Y2 HoF/show present path (see halloffame.h Y2 flow):
+     * HoF_Show @ 1080:0119 (dialog 0x94) + HoF_VictoryCeremony @ 1080:06ff
+     * (pyramid frames) present through here after palette_apply_to_port
+     * @ 1200:00a8/1090:0376. Error mapping: NULL -> NOENT, missing
+     * tex/size fail -> BAD_DATA, SDL_RenderTexture fail -> IO (NOMEM
+     * never from present, only from CreatePalette/Texture alloc paths). */
     SDL_FRect dst;
     const SDL_FRect *dstp = NULL;
 
@@ -483,9 +486,13 @@ civ_error_t palette_apply_to_port(gfx_port_t *port, int first, int count)
      * backing store (SDL_GetTexturePalette when present, else a temp
      * 256-entry palette attached via SDL_SetTexturePalette; orig RGB
      * triples + flag byte copy then ANIMATEPALETTE, opcodes 1/0xe).
-     * Colors feed from gfx_godpal_get (godpal.c 0x00..0xeb, see
-     * gfx_indexed.h) + black tail past 0xec (LOGPALETTE 0x300 zero
-     * tail); propagates UNSUPPORTED until the dump lands (no fake). */
+     * Y2 HoF/show path (see halloffame.h Y2 flow): range guard
+     * ([first, first+count) in [0,256)) feeds HoF_Show @ 1080:0119 +
+     * HoF_VictoryCeremony @ 1080:06ff fades before gfx_port_present_rect
+     * @ 10d0:0854 (SDL_RenderTexture). Colors feed from gfx_godpal_get
+     * (godpal.c 0x00..0xeb, see gfx_indexed.h) + black tail past 0xec
+     * (LOGPALETTE 0x300 zero tail); propagates UNSUPPORTED until the dump
+     * lands (no fake). */
     SDL_Color colors[256];
     SDL_Palette *pal = NULL;
     SDL_Palette *owned = NULL;

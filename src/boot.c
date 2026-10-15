@@ -156,14 +156,24 @@ civ_error_t boot_open_windows(SDL_Window *win, SDL_Renderer *ren)
 {
     civ_error_t err;
 
-    /* TODO: GfxPort_Create @ 10d0:0000 + WdwMap_Open @ 1208:0af1,
-     * WdwSmMap_Open @ 1210:025b, WdwStatus_Open @ 1218:0386 (see map.h). */
+    /* Orig: GfxPort_Create @ 10d0:0000 (GR_PortOpen) +
+     * MainPort_GetOrCreate @ 1098:114a + WdwMap_Open @ 1208:0af1 +
+     * WdwSmMap_Open @ 1210:025b + WdwStatus_Open @ 1218:0386 (see video.h
+     * gfx_port_create/mainport_get_or_create + map.h map_open_main/small/
+     * status). SDL3: SDL_Window/SDL_Renderer are caller-owned (created by
+     * main.c, borrowed here, never Destroyed). Partial port: video_init +
+     * map_init are live; Win16 CREATEWINDOW/scroll-range/SETTIMER tails
+     * stay stubbed -> overall CIV_ERR_UNSUPPORTED. No globals, no exit(),
+     * read-only. */
     err = video_init(win, ren);
     if (err != CIV_OK)
         return err;
     err = map_init();
     if (err != CIV_OK)
         return err;
+    /* TODO: GfxPort_Create @ 10d0:0000 + MainPort_GetOrCreate @ 1098:114a
+     * + WdwMap_Open @ 1208:0af1 + WdwSmMap_Open @ 1210:025b +
+     * WdwStatus_Open @ 1218:0386 Win16 tails (see map.h). */
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -181,15 +191,21 @@ civ_error_t boot_init_menu(void)
 {
     civ_error_t err;
 
-    /* WinMain menu step: Menu_InitMainBar @ 1048:0000 + Cursor_Set @
-     * 1098:096c (cursor_set() stub in this file; SDL cursor TBD).
-     * dialog_init owns the DLGPROC layer. */
+    /* WinMain menu step: Menu_InitMainBar @ 1048:0000 (menu_init_mainbar
+     * below; CHECKMENUITEM/MODIFYMENU) + Cursor_Set @ 1098:096c
+     * (cursor_set() void stub in this file; SDL_CreateSystemCursor bridge
+     * TBD, installs nothing) + dialog_init (DLGPROC layer, see dialog.h).
+     * Partial port: cursor step is live (void, order fidelity); menu +
+     * dialog tails stay stubbed -> overall CIV_ERR_UNSUPPORTED. No
+     * globals, no exit(), read-only. */
     err = menu_init_mainbar();
     if (err != CIV_OK)
         return err;
     err = dialog_init();
     if (err != CIV_OK)
         return err;
+    /* Cursor_Set @ 1098:096c order fidelity (void, always live). */
+    cursor_set(0);
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -250,6 +266,28 @@ civ_error_t config_save_prefs(void)
 
 civ_error_t boot_run(SDL_Window *win, SDL_Renderer *ren)
 {
+    /* Orig WinMain @ 1008:0000 order, SDL window/renderer caller-owned:
+     * drive/path (boot_setup_paths live via sys_init_paths) -> memory
+     * (boot_check_memory stub via Sys_CheckFreeMemory @ 11e8:0000) ->
+     * classes (boot_register_classes stub via App_RegisterWindowClasses @
+     * 1098:06f8) -> timer/accel/font (boot_load_fonts stub via
+     * Font_EnumFamiliesInit @ 1008:0e99; 200 ms SETTIMER for TIMERPROC @
+     * 1008:0d68 installed later by WdwMap_Open @ 1208:0af1) -> 5x RSC
+     * (boot_load_resources stub via ResMgr_LoadRsc @ 1190:0000 CivData0..4)
+     * -> video caps (boot_check_video stub via Video_CheckDriverCaps @
+     * 1008:059a) -> artwork (boot_maybe_convert_artwork stub via
+     * Art_MaybeConvertArtwork @ 10b8:0000) -> prefs (boot_load_prefs stub
+     * via Config_LoadPrefs @ 1008:0b4a) -> palette (boot_init_palette stub
+     * via Palette_Init @ 1090:0488) -> tables (boot_init_tables partial:
+     * remap + rng_init + malloc probe live, Win16 lock stub) -> ports/map
+     * windows (boot_open_windows partial: video_init + map_init live) ->
+     * menu bar (boot_init_menu partial: cursor live, menu/dialog stub) ->
+     * cursor (Cursor_Set @ 1098:096c void) -> event/turn loop caller-owned
+     * (while(!g_nQuitFlag) + TIMERPROC body via game_tick ->
+     * game_turn_tick @ 1088:0000, see game.h; main.c owns it). Wiring:
+     * CIV_OK where OS-free (setup_paths live, tables partial but overall
+     * UNSUPPORTED), otherwise CIV_ERR_UNSUPPORTED stub; first non-OK
+     * short-circuits. No globals, no exit(), read-only. */
     static civ_error_t (*const steps[])(void) = {
         boot_setup_paths,
         boot_check_memory,

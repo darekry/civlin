@@ -1,11 +1,16 @@
-/* Game state. Turn logic mirrors Game_TurnLoopTick @ 1088:0000. */
+/* Game state. Turn logic mirrors Game_TurnLoopTick @ 1088:0000.
+ * Y1 boot loop + tick: game_tick is the TIMERPROC @ 1008:0d68 body pumped
+ * from while(!g_nQuitFlag) in WinMain @ 1008:0000; SDL pump via
+ * Sys_PumpMessages @ 1108:0000 + Sys_Yield @ 1098:0157 (see sys.h). */
 #include "game.h"
+
+#include "sys.h"
 
 civ_error_t game_init(civ_game_t *g)
 {
     if (!g)
         return CIV_ERR_NOENT;
-    g->initialized = 0;
+    g->initialized = 1;
     g->quit_flag = 0;
     g->turn = 0;
     g->difficulty = 0;
@@ -14,21 +19,47 @@ civ_error_t game_init(civ_game_t *g)
     g->year = 0;
     g->menu_choice = -1;
     g->civ_count = 0;
-    /* TODO: DGROUP 1420 + segment 12d8 layout mapping. */
-    return CIV_ERR_UNSUPPORTED;
+    /* OS-free 1:1 live (caller-owned image of g_nQuitFlag @ 12d8:24ee,
+     * g_nTurn @ 12d8:42fe, g_nDifficulty @ 12d8:42f6, g_nPlayerCiv @
+     * 12d8:4300, g_nCivAliveMask @ 12d8:42f8, g_nYear @ 12d8:42fa,
+     * g_nMenuChoice @ 12d8:44e2, g_nCivCount @ 12d8:3b9a).
+     * TODO: DGROUP 1420 full layout mapping (unit/city records) lands with
+     * game_new/worldgen. */
+    return CIV_OK;
 }
 
 civ_error_t game_new(civ_game_t *g)
 {
-    (void)g;
-    /* TODO: NewGame_Wizard (newgame.h) -> worldgen -> state fill. */
+    if (!g)
+        return CIV_ERR_NOENT;
+    /* TODO: Orig NewGame_Wizard @ 10e8:0000 (newgame_wizard_run, see
+     * newgame.h) -> Map_GenerateRandomOrLoad @ 1028:0000 (see worldgen.h)
+     * -> start-of-game field fill (g_nDifficulty/CivCount/AliveMask/
+     * PlayerCiv/Year). Win16 dialog/map tails TBD. */
     return CIV_ERR_UNSUPPORTED;
 }
 
 civ_error_t game_tick(civ_game_t *g)
 {
-    (void)g;
-    /* TODO: per-frame pump (message queue + TIMERPROC @ 1008:0d68). */
+    if (!g)
+        return CIV_ERR_NOENT;
+    /* Orig TIMERPROC @ 1008:0d68 body, pumped from the while(!g_nQuitFlag)
+     * loop in WinMain @ 1008:0000 (200 ms SETTIMER installed by WdwMap_Open
+     * @ 1208:0af1, KILLTIMER first in WinMain_Shutdown @ 1008:0329). Tick
+     * -> game_turn_tick @ 1088:0000 linkage below: per-frame SDL pump is
+     * live, turn pass stays stubbed -> overall CIV_ERR_UNSUPPORTED. No
+     * globals, no exit(), read-only (pump only). */
+    if (g->quit_flag)
+        return CIV_OK;
+    /* Live pump: Sys_PumpMessages @ 1108:0000 (SDL_PumpEvents, 1 = message,
+     * 0 = empty) + Sys_Yield @ 1098:0157 (Anim pump @ 10b0:0000). */
+    (void)sys_pump_messages();
+    sys_yield();
+    /* TODO: TIMERPROC body -> Game_TurnLoopTick @ 1088:0000
+     * (game_turn_tick below; Civ_ProcessUnitMoves @ 11f0:0000, year steps,
+     * scoring every 0x32 via game_calc_progress_threshold, HoF endings).
+     * Exercised for linkage; result ignored until the per-civ loop lands. */
+    (void)game_turn_tick(g);
     return CIV_ERR_UNSUPPORTED;
 }
 

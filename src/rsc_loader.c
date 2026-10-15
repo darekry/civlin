@@ -1,6 +1,12 @@
-/* CivLin RSC container manager (W2: load walk implemented).
- * See rsc_loader.h for the documented BE framing. Read-only: never writes
- * to civ1win/ or unpacked/. No SDL, no exit(), no globals, C17. */
+/* CivLin RSC container manager (W2: load walk implemented; Y2: dump
+ * validation documented, walk impls unchanged).
+ * See rsc_loader.h for the documented BE framing + Y2 5-file validation
+ * plan (CivData0..4.rsc via rsc_open @ magic 00 00 01 00 + marker and
+ * rsc_load_rsc @ 1190:0000; Civdata3.rsc ~1.4 MiB largest; per-file
+ * size/record_count/image_count via rsc_image_count + rsc_decode_bitmap
+ * @ 1198:xxxx strict gate: borrowed view + pal 1..255 + pixel<pal_count).
+ * Read-only: never writes to civ1win/ or unpacked/. No SDL, no exit(),
+ * no globals, C17. */
 #include "rsc_loader.h"
 #include "civ_common.h"
 
@@ -465,12 +471,16 @@ rsc_error_t rsc_record_data(const rsc_file_t *f, size_t i,
 
 size_t rsc_image_count(const rsc_file_t *f)
 {
-    /* X1 strict gate (see rsc_loader.h): count directory slices that pass
-     * rsc_record_data + rsc_decode_bitmap (w/h > 0, bpp == 8, pal 1..255,
-     * every pixel index < pal_count). OS-free, no SDL, no exit, no
-     * globals. RANGE ends the walk; UNSUPPORTED (directory-walk failure)
-     * ends with the count so far (0 when the dir itself is unproven);
-     * per-record TRUNCATED/RANGE/BAD_MAGIC skips (not an image). */
+    /* X1 strict gate + Y2 per-file validation (see rsc_loader.h):
+     * count directory slices that pass rsc_record_data (borrowed slice,
+     * file_off+len <= size, valid while rsc_file lives) + rsc_decode_bitmap
+     * @ 1198:xxxx (w/h > 0, bpp == 8, pal 1..255, every pixel index <
+     * pal_count; borrowed view: pixels into the container, palette copied
+     * tail-zeroed). OS-free, no SDL, no exit, no globals. RANGE ends the
+     * walk; UNSUPPORTED (directory-walk failure) ends with the count so far
+     * (0 when the dir itself is unproven); per-record TRUNCATED/RANGE/
+     * BAD_MAGIC skips (not an image). rsc_dump.c Y2 reports this per file
+     * alongside size/record_count (Civdata3.rsc ~1.4 MiB largest). */
     size_t count = 0;
 
     if (!f)
@@ -495,14 +505,15 @@ size_t rsc_image_count(const rsc_file_t *f)
 
 rsc_error_t rsc_get_indexed(const rsc_file_t *f, size_t i, rsc_indexed_t *out)
 {
-    /* X1 port (see rsc_loader.h): ResMgr image payload via the
-     * rsc_record_data slice (ResMgr_LoadToMem @ 1190:0fda file-off/len
-     * bounds) + rsc_decode_bitmap strict gate (Rsc_DecodeBitmap @
-     * 1198:xxxx: w/h > 0, bpp == 8, pal 1..255, every pixel index <
+    /* X1 port + Y2 validation view (see rsc_loader.h): ResMgr image payload
+     * via the rsc_record_data slice (ResMgr_LoadToMem @ 1190:0fda
+     * file-off/len bounds) + rsc_decode_bitmap strict gate (Rsc_DecodeBitmap
+     * @ 1198:xxxx: w/h > 0, bpp == 8, pal 1..255, every pixel index <
      * pal_count). Borrowed view: pixels points into the container (valid
      * while rsc_file lives), palette copied with tail zeroed (mirrors
-     * gfx_indexed_to_surface 8-bit + palette gate). OS-free, no SDL,
-     * no exit, no globals. */
+     * gfx_indexed_to_surface 8-bit + palette gate). rsc_dump.c Y2 spot-checks
+     * record 0 per file through this view. OS-free, no SDL, no exit, no
+     * globals. */
     const uint8_t *data = NULL;
     size_t size = 0;
     rsc_error_t dr;
