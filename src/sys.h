@@ -107,13 +107,18 @@ void sys_yield(void);
  * queue was empty. Distinct from sys_yield (Anim pump @ 10b0:0000) and
  * sys_drain_input (state clear + queue drain, see game.h). */
 int sys_pump_messages(void);
-/* Orig: FUN_1000_137f @ 1000:137f -> Sys_GetClientRect.
- * Client-rect helper behind the status frame calculators @ 1218:0956 /
- * 0a06 (w_out, h_out via GLOBALLOCK on the status-port handle, then rect
- * out). Linux equivalent TBD (SDL_GetWindowSize on the status view).
- * Params are the client width/height outputs; NULL either -> NOENT
- * (orig faulted on a bad far pointer). Zeroes outputs then stub
- * CIV_ERR_UNSUPPORTED until the SDL status-view mapping lands. */
+/* Orig: FUN_1218_0956 @ 1218:0956 / FUN_1218_0a06 @ 1218:0a06 family ->
+ * Sys_GetClientRect (see map.h wdwstatus_calc_upper/lower_rect).
+ * Client-rect helper behind the status frame calculators (w_out, h_out
+ * via GLOBALLOCK on the status-port handle + Util_MemCopyFar @ 1000:137f
+ * struct copy, see civ_common.h util_mem_copy_far, then SETRECT/
+ * INFLATERECT/GLOBALUNLOCK out). NOTE: 1000:137f is NOT the rect helper
+ * (verified 2026-10-15: LDS SI/LES DI + REP MOVSW/MOVSB far memcpy, 116
+ * xrefs) — it only serves the copy step inside 1218:0956. Linux
+ * equivalent TBD (SDL_GetWindowSize on the status view). Params are the
+ * client width/height outputs; NULL either -> NOENT (orig faulted on a
+ * bad far pointer). Zeroes outputs then stub CIV_ERR_UNSUPPORTED until
+ * the SDL status-view mapping lands. */
 civ_error_t sys_get_client_rect(int *w_out, int *h_out);
 /* Orig: FUN_1138_0269 @ 1138:0269 -> Status_MeasureRow.
  * GETTEXTMETRICS variant in the status_font_height @ 1098:0dda chain

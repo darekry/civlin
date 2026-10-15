@@ -107,6 +107,17 @@ unsigned game_uprising_rng_scale(unsigned rand15, int n)
     return (rand15 * (unsigned)n) >> 15;
 }
 
+civ_error_t city_process_disaster(int city_idx)
+{
+    (void)city_idx;
+    /* TODO: Orig FUN_1040_068e @ 1040:068e -> City_ProcessDisaster (see
+     * game.h). Random disaster switch Rng_Range(10) on the 0x1c city
+     * records @ 1420:5500/54fc + messages 1420:07f0/0839 + viewer
+     * 1030:0000 + dialog 1220:00d2 + Map_CenterOnTile @ 1110:03ae.
+     * Needs city-record decode + Win16 dialog/message pump. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
 int game_calc_power_score(int cities, int territory, int treasury, int tech)
 {
     /* Game_UpdatePowerRankings @ 1088:108a kernel: cities*8 + territory +

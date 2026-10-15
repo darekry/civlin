@@ -81,6 +81,20 @@ int util_to_lower(int c)
     return c;
 }
 
+void *util_mem_copy_far(void *dst, const void *src, size_t n)
+{
+    /* Util_MemCopyFar @ 1000:137f: far REP MOVSW/MOVSB copy, CX bytes
+     * src -> dst (see civ_common.h). Linux: memcpy with NULL guards
+     * (orig faulted on a bad far pointer). */
+    if (!dst)
+        return NULL;
+    if (n == 0)
+        return dst;
+    if (!src)
+        return NULL;
+    return memcpy(dst, src, n);
+}
+
 int util_format_message(char *dst, size_t cap, const char *fmt, ...)
 {
     /* Util_FormatMessage @ 11d0:xxxx. snprintf composer sibling to

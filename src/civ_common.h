@@ -54,4 +54,16 @@ int util_format_message(char *dst, size_t cap, const char *fmt, ...);
  * 0x1f-char compare). OS-free: 'A'..'Z' -> +32, all else unchanged. */
 int util_to_lower(int c);
 
+/* Orig: FUN_1000_137f @ 1000:137f -> Util_MemCopyFar.
+ * Far memcpy (Win16 HMEMCPY shape: LDS SI [BP+6] src, LES DI [BP+0x0a]
+ * dst, CX byte count; CLD + SHR CX,1 + REP MOVSW + ADC CX,CX + REP
+ * MOVSB; RETF 8). Used 116x (HoF_TryInsert @ 1080:0607, Config_SavePrefs
+ * @ 1008:0bbf tails, dialog unit scaling @ 1098:0d43, status rect fetch
+ * via GLOBALLOCK @ 1218:0956, etc.) as the struct/buffer copier.
+ * OS-free 1:1 port: memcpy(dst, src, n). NULL dst -> NULL (orig faulted
+ * on a bad far pointer); NULL src with n > 0 -> NULL; n == 0 returns
+ * dst (no touch, even when src is NULL). No Win16, no globals, no
+ * exit(), read-only vs sources. */
+void *util_mem_copy_far(void *dst, const void *src, size_t n);
+
 #endif /* CIVLIN_COMMON_H */

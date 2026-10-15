@@ -37,9 +37,15 @@
 civ_error_t title_play_intro(void);
 
 /* Orig: FUN_1030_0000 @ 1030:0000 -> title_play_anim_loop (Title_PlayAnimLoop).
- * Anim-loop candidate (see title.c:6): drives the intro frames with
- * Sound_PlayId(CIV_SOUND_OPENING)=OPENING.wav (SI 3/4 -> 0x83, see audio.h),
- * skippable via title_poll_skip(). Win16 frame present -> stub
+ * CORRECTION 2026-10-15 (verified: size 0x79cd ~31 KB, 13 callers incl.
+ * City_ShowTopFive @ 1080:099b, Unit_DoMove @ 1038:0000, City_ProcessDisaster
+ * @ 1040:068e, Game score @ 1040:1137 tails, 1170/1188/11b8 families):
+ * 1030:0000 is the shared PIC/modal player (Dlg_CreateTracked @ 1098:124f
+ * + FILLRECT/FRAMERECT + internal 1030:79ce/7c28/... helpers), NOT the
+ * pre-menu intro loop. Intro frame source (NE resource vs RSC, OPENING.wav
+ * SI 3/4 -> 0x83, see audio.h) stays TBD; this stub keeps the intro shape
+ * (frames + Sound_PlayId(CIV_SOUND_OPENING) + title_poll_skip()) until
+ * the true intro entry is isolated. Win16 frame present -> stub
  * CIV_ERR_UNSUPPORTED. */
 civ_error_t title_play_anim_loop(void);
 

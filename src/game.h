@@ -125,6 +125,22 @@ civ_error_t game_spawn_uprisings(void);
  * rng_next_raw() output (or a test vector). */
 unsigned game_uprising_rng_scale(unsigned rand15, int n);
 
+/* Orig: FUN_1040_068e @ 1040:068e -> City_ProcessDisaster.
+ * Random city disaster, called 2x per Game_TurnLoopTick @ 1088:0000 pass
+ * once g_nTurn > 0x32 for random cities (Rng_Range @ 11c8:003d draw
+ * 0x80, valid via 1420:5502 != -1 + pop via 1420:3efe > 1 + size via
+ * 1420:5503 > 4). Switch Rng_Range(10): building-flag checks on the
+ * 0x1c city rec mask @ 1420:54fc (bits 0x10/0x100/0x80/0x08/0x04/0x02/
+ * 0x40) + messages @ 1420:07f0 Earthquake / 0x839 Rioting / 0x7ff-0x802
+ * destroyed + demands GRANARY/TEMPLE/COURTHOUSE/MARKETPLACE/CATHEDRAL +
+ * 0x860/0x873/0x87a/0x885/0x891/0x89b tails + shared viewer
+ * FUN_1030_0000 (see title.h correction: shared PIC player, not intro)
+ * + dialog FUN_1220_00d2 + Map_CenterOnTile @ 1110:03ae. Win16 dialog /
+ * city-record mutation tails TBD -> stub CIV_ERR_UNSUPPORTED. Param is
+ * the 0-based city index into the 1420:5500 0x1c records (see header
+ * top). No globals, no exit(), read-only. */
+civ_error_t city_process_disaster(int city_idx);
+
 /* Power inputs for Orig FUN_1088_108a @ 1088:108a.
  * cities = live city count, territory = land/territory score,
  * treasury = gold stock (divided by 0x20 in the score), tech =

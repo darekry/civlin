@@ -197,10 +197,11 @@ int sys_pump_messages(void)
 
 civ_error_t sys_get_client_rect(int *w_out, int *h_out)
 {
-    /* Orig: FUN_1000_137f @ 1000:137f -> Sys_GetClientRect. w_out/h_out
-     * via GLOBALLOCK on the status-port handle for 1218:0956/0a06.
-     * Linux equivalent TBD (SDL_GetWindowSize on the status view);
-     * NULL either -> NOENT. Stub CIV_ERR_UNSUPPORTED. */
+    /* Orig: FUN_1218_0956 @ 1218:0956 family -> Sys_GetClientRect (see
+     * sys.h). 1000:137f is Util_MemCopyFar (far memcpy, see civ_common.h
+     * util_mem_copy_far), only the copy step inside 1218:0956. Linux
+     * equivalent TBD (SDL_GetWindowSize on the status view); NULL either
+     * -> NOENT. Stub CIV_ERR_UNSUPPORTED. */
     if (!w_out || !h_out)
         return CIV_ERR_NOENT;
     *w_out = 0;
