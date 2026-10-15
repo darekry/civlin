@@ -46,7 +46,13 @@
 #define CIV_MAP_H 0x32u
 #define CIV_MAP_PRESET_BYTES 64000u
 
-/* Random-map pipeline (Map_GenerateRandomOrLoad param==0 path). */
+/* Random-map pipeline (Map_GenerateRandomOrLoad @ 1028:0000 param==0 path).
+ * Ordered pipeline (param==0): Sound_PlayId(4)=OPENING at start, then
+ * seed_one_island -> paint_blob loop (Rng_Range sized) -> label_continents
+ * -> gen_rivers -> score_city_sites -> build_continent/ocean_links, with
+ * Sys_Yield per row + Rng_Range for every random choice. Callers outward:
+ * NewGame path via MainMenu choice; param!=0 takes the preset path below.
+ * Win16/scratch-buffer tail TBD -> stub CIV_ERR_UNSUPPORTED. */
 civ_error_t worldgen_generate_random(void);
 
 /* Preset load (param!=0 path: 64000B image + 1028:1d15/0a93 tail).
@@ -92,11 +98,58 @@ civ_error_t worldgen_customize(void);
  * this parallel slice disjoint -- dialog.h is intentionally not edited. */
 civ_error_t worldgen_customize_dialog(void);
 
-/* Gen passes (stubs; tile buffer via map.h, RNG via sys.h). */
+/* Gen passes (tile buffer via map.h map_get/set_tile + map_fill_rect,
+ * RNG via sys.h rng_range, pacing via sys.h sys_yield; C17, no exit(),
+ * no globals). Direction table below is static const (see worldgen.c). */
+
+/* Orig: FUN_1028_0945 @ 1028:0945 -> worldgen_seed_one_island.
+ * Scratch Map_FillRect clear + Map_GenPaintBlob scatter + island-copy math:
+ * copy scratch +0xa0 -> main with +1 (land increment), counting via
+ * 1248:0002. Caller: worldgen_generate_random param==0 loop. Win16
+ * scratch segment TBD -> stub CIV_ERR_UNSUPPORTED. */
 civ_error_t worldgen_seed_one_island(void);
+
+/* Orig: FUN_1028_09ef @ 1028:09ef -> worldgen_paint_blob.
+ * Random-walk painting 0x0f: steps = Rng_Range(0x40)+1, each step writes
+ * 0x0f at (x,y) via Map_SetTile then steps by dx[8],dy[8] (dir =
+ * Rng_Range(8)). Direction table TBD (orig bytes); Linux uses 8-dir
+ * N-clockwise stub table (see worldgen_dir_dx/dy). OS-free 1:1 port. */
 civ_error_t worldgen_paint_blob(int x, int y);
+
+/* 8-dir step table for paint_blob + rivers (shared random-walk geometry).
+ * Orig direction-table bytes TBD from decompile near 1028:09ef/066a;
+ * Linux stub is 8-dir N-clockwise: N(0,-1) NE(1,-1) E(1,0) SE(1,1) S(0,1)
+ * SW(-1,1) W(-1,0) NW(-1,-1). OS-free static const port (read-only,
+ * no globals mutated, no exit()). Index 0..7 via Rng_Range(8). */
+extern const int worldgen_dir_dx[8];
+extern const int worldgen_dir_dy[8];
+/* Accessors (bounds-checked: OOB dir -> 0 step). */
+int worldgen_dir_dx_at(int dir);
+int worldgen_dir_dy_at(int dir);
+
+/* Orig: FUN_1028_0a93 @ 1028:0a93 -> worldgen_label_continents.
+ * Connected-components labeling over 0x50 x 0x32 + rank sort: flood-merge
+ * labels, size counts @ 0x4334, top-0xF rank sort (sort comparator: size
+ * desc -- larger continents rank first, exact tiebreak TBD), calls
+ * 1028:12c6/162c/0fb4 tail + border FillRects (Map_FillRect @ 1028:1d15
+ * edges + Map_DrawRectBorder @ 1028:1ca7). Caller: generate_random tail.
+ * Win16 label segments TBD -> stub CIV_ERR_UNSUPPORTED. */
 civ_error_t worldgen_label_continents(void);
+
+/* Orig: FUN_1028_066a @ 1028:066a -> worldgen_gen_rivers.
+ * River random-walk: collect 0x0c tiles, directional walk with 8-dir table
+ * (shared dx/dy above, Rng_Range picks), len > 4 required to commit;
+ * save/restore island at +0xa0 via copy_rect @ 1028:06c1/0865/0908
+ * (save @ 06c1, restore @ 0865, commit @ 0908). Caller: generate_random.
+ * Walk decode pending -> stub CIV_ERR_UNSUPPORTED. */
 civ_error_t worldgen_gen_rivers(void);
+
+/* Orig: FUN_1028_1afd @ 1028:1afd -> worldgen_spread_pollution.
+ * Fallout tiles from Game_DoPollutionAndWonderRace: level -> n tiles via
+ * Rng_Range + Map_SetTile loop (n grows with level; random sites via
+ * Rng_Range over 0x50 x 0x32, paint fallout tile via Map_SetTile).
+ * Exact n formula + ocean-neighbour gate + 1110:1b36 tail TBD, so this
+ * stays a stub CIV_ERR_UNSUPPORTED until the 1afd walk decodes. */
 civ_error_t worldgen_spread_pollution(unsigned level);
 
 /* --- Map_LabelContinents / Map_GenRivers tails (frontier 2026-10-15) ---
@@ -105,36 +158,43 @@ civ_error_t worldgen_spread_pollution(unsigned level);
  * 1/2/0xb = scored land, 0xc = river seed, 0xf = border, 0 = cleared. */
 
 /* Orig: FUN_1028_0fb4 @ 1028:0fb4 -> worldgen_score_city_sites.
- * Fertility pass: builds weights[0x18] from 1420:17d6*3+17d8
- * (+17d7*2 except cols 2/0xb, moisture penalties at 12b8/12bc), scans
- * x 2..0x4d y 2..0x2f for land 1/2/0xb, sums 0x15 neighbours (x2 for
- * idx<9 and idx==0, +2 for water-adjacent 2/0xb, +0xc river), dithers
- * -0x10 on (x*7+y*0xb&2), clamps ((sum-0x78)/8,1,0xf), writes
- * Map_SetTile(x+0x50,y,score) + rank layer (y+0x32) + histogram at
- * 0x218a. Caller Map_LabelContinents @ 1028:0f0c. */
+ * Fertility pass: builds weights[0x18] from 1420:17d6*3+17d8 (+17d7*2
+ * except cols 2/0xb, moisture penalties at 12b8/12bc), scans x 2..0x4d
+ * y 2..0x2f for land 1/2/0xb, sums 0x15 neighbours (x2 for idx<9 and
+ * idx==0, +2 for water-adjacent 2/0xb, +0xc river), dithers -0x10 on
+ * (x*7+y*0xb&2), clamps ((sum-0x78)/8,1,0xf), writes Map_SetTile(x+0x50,
+ * y,score) + rank layer (y+0x32) + hist 0x218a. Caller
+ * Map_LabelContinents @ 1028:0f0c. Table addresses TBD -> stub
+ * CIV_ERR_UNSUPPORTED. */
 civ_error_t worldgen_score_city_sites(void);
 
 /* Orig: FUN_1028_12c6 @ 1028:12c6 (yield) -> worldgen_build_continent_links.
  * 0x14 x 0x0d blocks of 4x4: finds an ocean (10) corner vs land corner
  * pair sharing the same continent id, checks FUN_1128_16d0 < 0x14, ORs
- * direction bits at +4 (+ reverse). Progress 1000:29ea(4,0x1248...),
- * Sys_Yield per row when yield!=0. Caller Map_LabelContinents. */
+ * direction bits at +4 (+ reverse). Progress 1000:29ea (Util_Progress
+ * over 0x1248 bar range) + Sys_Yield per row when yield!=0 (Sys_Yield @
+ * 1098:0157 pumps Anim_PumpIfActive @ 10b0:0000). Caller
+ * Map_LabelContinents. Segment walk TBD -> stub CIV_ERR_UNSUPPORTED. */
 civ_error_t worldgen_build_continent_links(int yield);
 
 /* Orig: FUN_1028_162c @ 1028:162c (yield) -> worldgen_build_ocean_links.
  * Same grid, 8-dir variant with a 5-step ocean-run check straight from
  * g_offMapBuf/g_segMapBuf (needs 2+ clear rows each step); sets bits at
  * +0x108 (+ reverse) with the (0xb,3) corner exception; edge fixups
- * (OR 0xe0/0x0e, AND masks). Progress 1000:29ea(0x108,...). Callers:
- * Map_LabelContinents @ 1028:0f01, save_deserialize @ 10f8:01e9. */
+ * (OR 0xe0/0x0e, AND masks). Progress 1000:29ea (0x108,...) + Sys_Yield
+ * per row when yield!=0. Callers: Map_LabelContinents @ 1028:0f01,
+ * save_deserialize @ 10f8:01e9. Segment walk TBD -> stub. */
 civ_error_t worldgen_build_ocean_links(int yield);
 
 /* Orig: FUN_1028_1dfb @ 1028:1dfb -> worldgen_copy_rect.
  * Block copy (src_x, src_y, w_bytes, h, dst_x, dst_y), dword fast path
- * (w>>2) with 0x50/0x140 stride wrap. 3 callers in Map_GenRivers
+ * (w>>2, remainder byte loop) with 0x50/0x140 stride wrap (game width
+ * 0x50 inside 0x140 buffer stride). 3 callers in Map_GenRivers
  * (@ 1028:06c1/0865/0908: save/restore island at +0xa0, commit rivers).
- * NOTE: 1028:1dbd is not an entry -- it is the byte-path loop inside
- * Map_FillRect @ 1028:1d15 (see map.h). */
+ * OS-free memcpy loops port 1:1: row copy via map_get/set_tile (or
+ * memmove on buffer) with bounds-check (OOB cells skipped, overlap-safe
+ * per-row snapshot). NOTE: 1028:1dbd is not an entry -- it is the
+ * byte-path loop inside Map_FillRect @ 1028:1d15 (see map.h). */
 civ_error_t worldgen_copy_rect(int src_x, int src_y, unsigned w_bytes,
                                 int h, int dst_x, int dst_y);
 

@@ -1,24 +1,37 @@
 /* New-game wizard (difficulty / civ count / tribe / custom world).
  *
  * Ghidra anchors (civ.exe):
- *   NewGame_Wizard @ 10e8:0000 (PUSH 0x2a5a @ 10e8:01c9 proves the site;
- *     caller: Main_RunStartupSequence @ 11e0:0000)
- *   Dialog_MenuZ_Modal @ 1220:0156 (each step) / @ 1220:16fd (custom world)
- *   Ctrl_* custom controls @ 1058:xxxx (RANDOMRADIOPROC 06ab,
- *     RANDOMSTATICPROC 081a, RANDOMUSERPROC 0921, REGIONPROC 09f6)
- *   Sound_PlayId (leader wav for the picked civ at wizard end)
- *   Map_GenerateRandomOrLoad @ 1028:0000 (map comes next)
+ *   NewGame_Wizard @ 10e8:0000 steps 0..5 (PUSH 0x2a5a @ 10e8:01c9 proves
+ *     the site; caller: Main_RunStartupSequence @ 11e0:0000)
+ *   Dialog_MenuZ_Modal base @ 1220:0156 (each wizard step; see dialog.h
+ *     dialog_menuz) vs custom-world variant @ 1220:16fd (see
+ *     newgame_custom_world_modal below)
+ *   Tribe_GetNameList @ 11f8:0080 (Orig FUN_11f8_0080; param 0x94 at the
+ *     newgame_pick_tribe call site)
+ *   Ctrl_* custom controls @ 1058:xxxx (RANDOMRADIOPROC @ 1058:06ab,
+ *     RANDOMSTATICPROC @ 1058:081a, RANDOMUSERPROC @ 1058:0921,
+ *     REGIONPROC @ 1058:09f6; registered by Ctrl_RegisterCustomClasses
+ *     @ 1058:0b4d, see dialog.h)
+ *   WorldGen_CustomizeDialog @ 1060:xxxx (Orig FUN_1060_xxxx; custom editor
+ *     host fed by newgame_customize_world; see worldgen.h — referenced by
+ *     Orig address only, not redeclared here)
+ *   Sound_PlayId @ 1150:00c9 (leader wav for the picked civ at wizard end;
+ *     see audio.h — referenced by Orig address only)
+ *   Map_GenerateRandomOrLoad @ 1028:0000 (map comes next after finalize;
+ *     see worldgen.h — referenced by Orig address only)
  *
  * Strings @ 1420 (dump-confirmed 2026-10-15):
  *   0x2a5a "Difficulty Level..._Chieftain (easiest)_Warlord_Prince_King_"
  *          "Emperor (toughest)"
  *   0x2aa9 "Level of Competition..." (+ 0x2ac1 "_"/0x2ac3 " Civilizations")
  *   0x2ad2 "Pick your tribe..." (+ 0x2ae5 "_Custom.")
- * Game state written (segment 0x12d8 globals):
+ * Game state written (segment 0x12d8 globals, orig finalize tail):
  *   g_nDifficulty (42f6) 0=Chieftain..4=Emperor
  *   g_nCivCount   (3b9a) 2..6 (from 6 - modal index)
  *   g_nCivAliveMask (42f8) = 0xff >> (6 - count)
  *   g_nPlayerCiv  (4300); g_nYear (42fa)=0xF060 at finalize
+ *
+ * Rules: C17, no exit(), no globals, read-only vs civ1win/unpacked.
  */
 #ifndef CIVLIN_NEWGAME_H
 #define CIVLIN_NEWGAME_H
@@ -51,12 +64,40 @@ typedef struct civ_newgame_settings {
     int custom_world;/* 0 = random map, 1 = customized via 1058 controls */
 } civ_newgame_settings_t;
 
-/* Runs steps 0..5 of NewGame_Wizard (back/forward via cancel semantics). */
+/* Runs steps 0..5 of NewGame_Wizard (back/forward via cancel semantics).
+ * Orig: NewGame_Wizard @ 10e8:0000 -> newgame_wizard_run.
+ * Caller: Main_RunStartupSequence @ 11e0:0000. */
 civ_error_t newgame_wizard_run(civ_newgame_settings_t *out);
 
-/* Single steps (each = text build + Dialog_MenuZ_Modal). */
+/* Orig: NewGame_Wizard @ 10e8:0000 step 0 -> newgame_pick_difficulty.
+ * Text 1420:2a5a ("Difficulty Level..._Chieftain (easiest)_Warlord_Prince_
+ * King_Emperor (toughest)") via Dialog_MenuZ_Modal @ 1220:0156 (Orig
+ * FUN_1220_0156); modal index 0..4 maps 1:1 to Chieftain..Emperor and is
+ * stored to g_nDifficulty @ 12d8:42f6. Win16 dialog tail TBD; stub
+ * returns CIV_ERR_UNSUPPORTED (NULL out -> CIV_ERR_NOENT). */
 civ_error_t newgame_pick_difficulty(civ_difficulty_t *out);
+
+/* Orig: NewGame_Wizard @ 10e8:0000 step 1 -> newgame_pick_competition.
+ * Text 1420:2aa9 ("Level of Competition...") + count suffix built from
+ * 1420:2ac1 ("_") / 1420:2ac3 (" Civilizations") via Dialog_MenuZ_Modal
+ * @ 1220:0156 (Orig FUN_1220_0156); civ count = 6 - modal index, range
+ * 2..6, stored to g_nCivCount @ 12d8:3b9a (alive mask @ 12d8:42f8 is
+ * derived at finalize). Win16 dialog tail TBD; stub returns
+ * CIV_ERR_UNSUPPORTED (NULL out -> CIV_ERR_NOENT). */
 civ_error_t newgame_pick_competition(int *civ_count_out);
+
+/* OS-free sub-expression of step 1 / finalize (no Win16, no globals).
+ * Modal index 0..4 -> civ count 6..2 (6 - index); out-of-range -> -1.
+ * Read-only pure helper; mirrors the "6 - modal index" assignment to
+ * g_nCivCount @ 12d8:3b9a. */
+int newgame_civ_count_from_index(int modal_index);
+
+/* OS-free sub-expression of the finalize tail (no Win16, no globals).
+ * alive_mask = 0xff >> (6 - count); count 2..6 -> 0x03..0xff.
+ * Out-of-range count -> -1. Read-only pure helper; mirrors the write
+ * to g_nCivAliveMask @ 12d8:42f8. */
+int newgame_alive_mask(int civ_count);
+
 /* Orig: FUN_11f8_0080 @ 11f8:0080 -> Tribe_GetNameList.
  * Tribe-name table read with param 0x94 at the newgame_pick_tribe call
  * site (resource/buffer meaning TBD: 0x94 = 148 could be a string-table
@@ -68,8 +109,46 @@ civ_error_t newgame_pick_competition(int *civ_count_out);
  * not yet dumped. Packet I scope: doc-only extension; stub body in
  * newgame.c untouched (still returns NULL). Read-only. */
 const char *tribe_get_name_list(int index);
+
+/* Orig: NewGame_Wizard @ 10e8:0000 step 2 -> newgame_pick_tribe.
+ * Text 1420:2ad2 ("Pick your tribe...") + 1420:2ae5 ("_Custom.") plus the
+ * tribe list from Tribe_GetNameList @ 11f8:0080 (Orig FUN_11f8_0080,
+ * param 0x94) via Dialog_MenuZ_Modal @ 1220:0156 (Orig FUN_1220_0156);
+ * selection stored to g_nPlayerCiv @ 12d8:4300. Win16 dialog tail TBD;
+ * stub returns CIV_ERR_UNSUPPORTED (NULL ctx/civ_out -> CIV_ERR_NOENT). */
 civ_error_t newgame_pick_tribe(const civ_newgame_settings_t *ctx, int *civ_out);
+
+/* Orig: NewGame_Wizard @ 10e8:0000 steps 3/4 -> newgame_customize_world.
+ * Custom-world path via the custom Dialog_MenuZ_Modal variant @ 1220:16fd
+ * (Orig FUN_1220_16fd, separate entry from the base @ 1220:0156) driving
+ * the Ctrl_* @ 1058 controls (RANDOMRADIOPROC @ 1058:06ab, RANDOMSTATICPROC
+ * @ 1058:081a, RANDOMUSERPROC @ 1058:0921, REGIONPROC @ 1058:09f6); feeds
+ * WorldGen_CustomizeDialog @ 1060:xxxx (Orig FUN_1060_xxxx, see worldgen.h).
+ * Win16 dialog/control tails TBD; stub returns CIV_ERR_UNSUPPORTED (NULL
+ * ctx -> CIV_ERR_NOENT). */
 civ_error_t newgame_customize_world(civ_newgame_settings_t *ctx);
+
+/* Orig: FUN_1220_16fd @ 1220:16fd -> newgame_custom_world_modal.
+ * Custom-world modal variant (Dialog_MenuZ_Modal custom entry), separate
+ * from the base Dialog_MenuZ_Modal @ 1220:0156 (Orig FUN_1220_0156) used by
+ * steps 0..2 above (see dialog.h dialog_menuz for the base). Hosts the
+ * Ctrl_* @ 1058 paint/input fan-out for the Customize-World editor and
+ * feeds WorldGen_CustomizeDialog @ 1060:xxxx. Win16 USER/GDI -> SDL3 TBD;
+ * stub returns CIV_ERR_UNSUPPORTED (NULL ctx/out_action -> CIV_ERR_NOENT).
+ * No globals, no exit(), read-only inputs. */
+civ_error_t newgame_custom_world_modal(const civ_newgame_settings_t *ctx,
+                                       int *out_action);
+
+/* Orig: NewGame_Wizard @ 10e8:0000 step 5 (finalize tail) -> newgame_finalize.
+ * Writes g_nDifficulty @ 12d8:42f6, g_nCivCount @ 12d8:3b9a,
+ * g_nCivAliveMask @ 12d8:42f8 (= 0xff >> (6 - count), see
+ * newgame_alive_mask), g_nPlayerCiv @ 12d8:4300, g_nYear @ 12d8:42fa
+ * (= 0xF060, CIV_NEWGAME_START_YEAR); then Sound_PlayId @ 1150:00c9
+ * (leader wav for the picked civ) and Map_GenerateRandomOrLoad @ 1028:0000
+ * next. OS-free mask/year math is ported 1:1 and validated here (range
+ * errors -> CIV_ERR_RANGE); the dialog/sound/map tails stay stubbed, so
+ * the function still returns CIV_ERR_UNSUPPORTED on valid input (NULL
+ * settings -> CIV_ERR_NOENT). No globals, no exit(), read-only. */
 civ_error_t newgame_finalize(const civ_newgame_settings_t *settings);
 
 #endif /* CIVLIN_NEWGAME_H */

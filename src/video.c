@@ -1,30 +1,55 @@
-/* Video stubs. */
+/* Video: SDL3 backend. Orig GDI paths in video.h; Win16 handles have no
+ * Linux equivalent, so the port owns the SDL window/renderer created by
+ * the caller (main.c) and validates them here (no globals, no exit). */
 #include "video.h"
 
 civ_error_t video_init(SDL_Window *win, SDL_Renderer *ren)
 {
-    (void)win;
-    (void)ren;
-    return CIV_ERR_UNSUPPORTED;
+    /* Orig Video init tail (GETDC/CREATEPALETTE family, see video.h).
+     * Linux: caller owns win/ren; nothing to allocate yet. NULL -> NOENT
+     * (orig faulted on a bad handle); otherwise CIV_OK so boot can proceed
+     * to the title animation. */
+    if (!win || !ren)
+        return CIV_ERR_NOENT;
+    return CIV_OK;
 }
 
 civ_error_t video_blit_indexed(SDL_Renderer *ren, SDL_Texture *tex, int x, int y)
 {
-    (void)ren;
-    (void)tex;
-    (void)x;
-    (void)y;
-    return CIV_ERR_UNSUPPORTED;
+    SDL_FRect dst;
+
+    /* Thin SDL_RenderTexture wrapper (orig BITBLT SRCCOPY @ 10d0:0854).
+     * NULL-safe; texture size query failure maps to BAD_DATA. */
+    if (!ren || !tex)
+        return CIV_ERR_NOENT;
+    {
+        float w = 0.0f;
+        float h = 0.0f;
+        if (!SDL_GetTextureSize(tex, &w, &h))
+            return CIV_ERR_BAD_DATA;
+        dst.x = (float)x;
+        dst.y = (float)y;
+        dst.w = w;
+        dst.h = h;
+        if (!SDL_RenderTexture(ren, tex, NULL, &dst))
+            return CIV_ERR_IO;
+    }
+    return CIV_OK;
 }
 
 civ_error_t video_present(SDL_Renderer *ren)
 {
-    (void)ren;
-    return CIV_ERR_UNSUPPORTED;
+    if (!ren)
+        return CIV_ERR_NOENT;
+    if (!SDL_RenderPresent(ren))
+        return CIV_ERR_IO;
+    return CIV_OK;
 }
 
 void video_shutdown(void)
 {
+    /* Caller destroys win/ren (see boot_shutdown order in boot.c);
+     * nothing owned here. */
 }
 
 civ_error_t palette_animate_range(int first, int count)
@@ -40,22 +65,32 @@ civ_error_t palette_animate_range(int first, int count)
 
 civ_error_t video_check_driver_caps(SDL_Renderer *ren)
 {
+    int w = 0;
+    int h = 0;
+
+    /* Orig FUN_1008_059a @ 1008:059a -> Video_CheckDriverCaps.
+     * GETDEVICECAPS checklist @ 1420:0af4 (palette/raster caps) maps to:
+     * render output must be non-zero (SDL_GetRenderOutputSize). Full
+     * checklist bytes TBD (see boot_video_caps_count), so any live
+     * renderer passes. */
     if (!ren)
         return CIV_ERR_NOENT;
-    /* TODO: Orig FUN_1008_059a @ 1008:059a -> Video_CheckDriverCaps.
-     * GETDEVICECAPS checklist @ 1420:0af4 (palette/raster caps) maps to
-     * SDL3 renderer caps (output size + pixel format + target-texture
-     * support checks TBD). */
-    return CIV_ERR_UNSUPPORTED;
+    if (!SDL_GetRenderOutputSize(ren, &w, &h))
+        return CIV_ERR_IO;
+    if (w <= 0 || h <= 0)
+        return CIV_ERR_BAD_DATA;
+    return CIV_OK;
 }
 
 civ_error_t palette_init(void)
 {
-    /* TODO: Orig FUN_1090_0488 @ 1090:0488 -> Palette_Init. LOGPALETTE
-     * 0x300 + 0xec RGB entries from godpal.c -> CREATEPALETTE, handle to
-     * DAT_1420_9966 (SELECTPALETTE/REALIZEPALETTE at each port present).
-     * SDL3: SDL_SetPaletteColors on the 8-bit surfaces TBD. */
-    return CIV_ERR_UNSUPPORTED;
+    /* Orig FUN_1090_0488 @ 1090:0488 -> Palette_Init. LOGPALETTE 0x300 +
+     * 0xec RGB entries from godpal.c -> CREATEPALETTE -> DAT_1420_9966.
+     * SDL3 8-bit palette is applied per-surface/texture at upload time
+     * (see gfx_indexed_to_surface); no global palette to install here,
+     * so init is a no-op CIV_OK (entry bytes still TBD, see
+     * gfx_godpal_get). */
+    return CIV_OK;
 }
 
 civ_error_t gfx_port_create(SDL_Renderer *ren, int w, int h, gfx_port_t **out)

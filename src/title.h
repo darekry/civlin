@@ -27,6 +27,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <SDL3/SDL.h>
+
 #include "civ_common.h"
 
 /* Plays the pre-menu intro (OPENING.wav + frames). Skippable on input in
@@ -81,5 +83,14 @@ civ_error_t title_load_opening_frame(unsigned frame_index);
 /* 1 == user asked to skip (key/mouse), 0 == keep playing. Pure SDL3 event
  * poll helper used by the intro and the victory ceremony. */
 int title_poll_skip(void);
+
+/* SDL3 intro player (Title_PlayAnimLoop @ 1030:0000 shape): MPLOGO.BMP
+ * frame (civ1win/MPLOGO.BMP, read-only; procedural emblem when missing)
+ * + Sound_PlayId(CIV_SOUND_OPENING)=OPENING.wav (see audio.h; silent when
+ * missing) + title_poll_skip(). Fade-in + float + sweep + starfield;
+ * ends on skip, on WAV drain, or on timeout (CIVLIN_INTRO_SECONDS env
+ * caps, default 20 s / 6 s silent). CIV_OK on end/skip, NOENT on NULL
+ * win/ren. No exit(). */
+civ_error_t title_play_intro_sdl(SDL_Window *win, SDL_Renderer *ren);
 
 #endif /* CIVLIN_TITLE_H */

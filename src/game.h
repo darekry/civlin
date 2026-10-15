@@ -66,7 +66,10 @@ civ_error_t game_new(civ_game_t *g);
 civ_error_t game_tick(civ_game_t *g);
 
 /* One Game_TurnLoopTick @ 1088:0000 pass: iterate civs, bump g_nTurn/g_nYear,
- * scoring every 0x32 turns, endings via HoF path (sets quit_flag). */
+ * scoring every 0x32 turns, endings via HoF path (sets quit_flag).
+ * Scoring branch (every 0x32 turns) scales via Game_CalcProgressThreshold
+ * @ 1088:1d99 (game_calc_progress_threshold below, implemented: sum
+ * i*(7-diff)/2+1); stub covers the branch via the TODO in game.c. */
 civ_error_t game_turn_tick(civ_game_t *g);
 
 /* --- Game-end / turn batch (frontier 2026-10-15) ---
@@ -378,6 +381,82 @@ civ_error_t city_update_visibility(int x, int y, int civ);
  * (Chebyshev matches the 1128:0000 step scoring). */
 int unit_find_diplomat_target(int ux, int uy, const int *dx, const int *dy,
                               const int *visible, int n);
+
+/* --- T2 turnloop + unit orders (2026-10-15) ---
+ * Parent: Game_TurnLoopTick @ 1088:0000 + Civ_ProcessUnitMoves @ 11f0:0000.
+ * Order codes below are opaque dispatch keys for the three jump tables
+ * inside Civ_ProcessUnitMoves (1420:43b8+0x8f x0x0e, +0x4b x0x11,
+ * 1420:435b+0x28 x0x20); exact handler seg:off per case TBD from
+ * decompile, so each stub cites its order key + parent + table. Unit
+ * records: 1420:62fc layout, see header top (goal 6302/6303, last-dir
+ * 6304, home-city 6307). OS-free predicates take explicit order codes
+ * only (no Win16, no globals); Win16 map/city/dialog tails stay
+ * CIV_ERR_UNSUPPORTED with TODO Orig refs. */
+
+/* Orig Civ_ProcessUnitMoves @ 11f0:0000 order 0x62 case -> Unit_DoFoundCity
+ * (unit_do_found_city). Found-city/irrigate?: type 0x1a settler founds via
+ * Unit_FoundCityIfHome @ 11c0:16a4 (unit_found_city_if_home above) when
+ * home (home-city field +10/6307); irrigate vs found disambiguation TBD
+ * vs decompiler. Needs city records 0x1c bytes at 1420:5500 + map tile
+ * claim + dialog pump; stub. */
+civ_error_t unit_do_found_city(int civ, int unit_idx);
+
+/* Orig Civ_ProcessUnitMoves @ 11f0:0000 order 0x66 case -> Unit_DoFortify
+ * (unit_do_fortify). Wait-fortify?: sets the fortified/wait flag on the
+ * 1420:62fc record (exact flag bit TBD) so the unit skips moves until
+ * contacted; ZOC/defense bonus applied by the combat tail. Needs unit
+ * flag writes + status redraw; stub. */
+civ_error_t unit_do_fortify(int civ, int unit_idx);
+
+/* Orig Civ_ProcessUnitMoves @ 11f0:0000 order 0x68 case -> Unit_DoSentry
+ * (unit_do_sentry). Sentry/1-move?: parks the unit until an enemy enters
+ * visibility (unit_update_visibility @ 11c0:0395 wakes it) or one move
+ * elapses; exact wake predicate TBD. Needs seen-bits + turn-counter
+ * state; stub. */
+civ_error_t unit_do_sentry(int civ, int unit_idx);
+
+/* Orig Civ_ProcessUnitMoves @ 11f0:0000 orders
+ * 0x69/0x6d/0x6f/0x70/0x72/0x75 cases -> Unit_DoMoveAttack variants
+ * (unit_do_move_attack). Move/attack dispatch: opaque order keys into the
+ * three jump tables above (1420:43b8+0x8f x0x0e, +0x4b x0x11,
+ * 1420:435b+0x28 x0x20); 0x6d road?, 0x70 pollution? per frontier notes,
+ * exact per-key semantics (road build vs goto vs attack-move) TBD.
+ * Single dispatcher takes the order key explicitly; steps via
+ * unit_step_toward_goal @ 1128:0000, odds via Combat_ResolveAttack +
+ * 11c0:1bc3. Needs map occupancy/ZOC + combat state; stub. */
+civ_error_t unit_do_move_attack(int civ, int unit_idx, int order);
+
+/* Orig Civ_ProcessUnitMoves @ 11f0:0000 order 0x00 -> unit_order_is_idle.
+ * OS-free 1:1 (implemented): idle/none predicate, nonzero (1) when
+ * order == 0x00. Takes the order code explicitly; no Win16, no globals. */
+int unit_order_is_idle(int order);
+
+/* Orig Civ_ProcessUnitMoves @ 11f0:0000 order 0x20 -> unit_order_is_sleep.
+ * OS-free 1:1 (implemented): force-sleep/reset predicate, nonzero (1)
+ * when order == 0x20. Takes the order code explicitly; no Win16. */
+int unit_order_is_sleep(int order);
+
+/* Orig Civ_ProcessUnitMoves @ 11f0:0000 order 0x50 -> unit_order_is_fail.
+ * OS-free 1:1 (implemented): settler-site fail predicate, nonzero (1)
+ * when order == 0x50. Takes the order code explicitly; no Win16. */
+int unit_order_is_fail(int order);
+
+/* Orig Civ_ProcessUnitMoves @ 11f0:0000 order 0xffff ->
+ * unit_order_is_no_path. OS-free 1:1 (implemented): no-path predicate,
+ * nonzero (1) when order == 0xffff (16-bit -1; callers may pass -1).
+ * The 1128:0000 no-path path clears goal 6302/goal 6303?/last-dir 6304
+ * (see unit_step_toward_goal above: clears 6302/6304); the clear itself
+ * stays in the stepper, this helper is the pure code test. */
+int unit_order_is_no_path(int order);
+
+/* Orig Game_DoPollutionAndWonderRace @ 1088:1e32 tail ->
+ * Unit_NotifyWonder (unit_notify_wonder). Pollution/wonder message tail:
+ * "... builds ..." message + shield deduction + dialog pump after the
+ * wonder-race pick. Pick itself is done via Game_PickWonderForAI @
+ * 1170:3181 (game_pick_wonder_for_ai above, implemented, tech-table
+ * gated); exact wonder/tech table ids TBD. Needs city shields state +
+ * Win16 dialog; stub. Param wonder is the game_pick_wonder_for_ai index. */
+civ_error_t unit_notify_wonder(int civ, int wonder);
 
 void game_shutdown(civ_game_t *g);
 

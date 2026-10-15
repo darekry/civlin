@@ -1,48 +1,161 @@
-/* Audio: ID table + normalization implemented; SDL playback is a stub. */
+/* Audio: ID table + normalization + SDL3 WAV playback.
+ *
+ * Orig anchors in audio.h (Sound_MciOpen @ 1150:001c, Sound_MciClose @
+ * 1150:0066, Sound_PlayFile @ 1150:00a0, Sound_PlayId @ 1150:00c9,
+ * Sound_MapIdToWav @ 1150:019e). Win16 SNDPLAYSOUND/MCI -> SDL3
+ * AudioStream (SDL_OpenAudioDeviceStream + Put + Resume). Read-only vs
+ * civ1win WAVs, never written. Case-insensitive lookup because the
+ * original table uses UPPER names ("OPENING.wav" @ 1420:3114) while the
+ * shipped files use Mixed case ("Opening.wav").
+ */
 #include "audio.h"
 
+#include <dirent.h>
 #include <stddef.h>
+#include <stdio.h>
+#include <strings.h>
+#include <string.h>
+
+#include <SDL3/SDL.h>
+
+/* Single voice (orig played one SNDPLAYSOUND at a time; STOP halts it).
+ * File-static: the stream/device owner for this module (cf. sys.c statics).
+ * No exit(), read-only. */
+static SDL_AudioStream *s_stream;
+
+/* Resolve wav_name to a loadable path into out (cap bytes).
+ * Tries: as-is, civ1win/<name>, case-insensitive scan of civ1win/.
+ * Returns out on success, NULL when nothing readable is found. */
+static char *audio_resolve_path(const char *wav_name, char *out, size_t cap)
+{
+    char probe[512];
+    FILE *fp = NULL;
+    DIR *dir = NULL;
+    struct dirent *ent = NULL;
+
+    if (!wav_name || !out || cap == 0)
+        return NULL;
+    out[0] = '\0';
+
+    /* 1) As given (absolute or cwd-relative). */
+    fp = fopen(wav_name, "rb");
+    if (fp) {
+        fclose(fp);
+        snprintf(out, cap, "%s", wav_name);
+        out[cap - 1] = '\0';
+        return out;
+    }
+
+    /* 2) civ1win/<name> exact case. */
+    snprintf(probe, sizeof(probe), "civ1win/%s", wav_name);
+    fp = fopen(probe, "rb");
+    if (fp) {
+        fclose(fp);
+        snprintf(out, cap, "%s", probe);
+        out[cap - 1] = '\0';
+        return out;
+    }
+
+    /* 3) Case-insensitive scan of civ1win/ (OPENING.wav vs Opening.wav). */
+    dir = opendir("civ1win");
+    if (!dir)
+        return NULL;
+    while ((ent = readdir(dir)) != NULL) {
+        if (strcasecmp(ent->d_name, wav_name) == 0) {
+            closedir(dir);
+            snprintf(out, cap, "civ1win/%s", ent->d_name);
+            out[cap - 1] = '\0';
+            fp = fopen(out, "rb");
+            if (fp) {
+                fclose(fp);
+                return out;
+            }
+            return NULL;
+        }
+    }
+    closedir(dir);
+    return NULL;
+}
+
+static void audio_stop_stream(void)
+{
+    if (s_stream) {
+        SDL_DestroyAudioStream(s_stream);
+        s_stream = NULL;
+    }
+}
 
 civ_error_t sound_mci_open(void)
 {
     /* Orig: FUN_1150_001c @ 1150:001c -> Sound_MciOpen. MCISENDCOMMAND
-     * 0x803 (MCI_OPEN) for WAV; callee of audio_init. Win16 MCI ->
-     * SDL3 audio device TBD. No globals; no disk access. */
-    return CIV_ERR_UNSUPPORTED;
+     * 0x803 (MCI_OPEN) for WAV; callee of audio_init. Linux: device is
+     * opened lazily per file in sound_play_file (format comes from the
+     * WAV header), so open is a no-op CIV_OK. No disk access. */
+    return CIV_OK;
 }
 
 void sound_mci_close(void)
 {
     /* Orig: FUN_1150_0066 @ 1150:0066 -> Sound_MciClose. MCISENDCOMMAND
-     * 0x804 (MCI_CLOSE); callee of audio_shutdown. Win16 MCI ->
-     * SDL3 teardown TBD. */
+     * 0x804 (MCI_CLOSE); callee of audio_shutdown. */
+    audio_stop_stream();
 }
 
 civ_error_t sound_play_file(const char *wav_name)
 {
+    char path[512];
+    SDL_AudioSpec spec;
+    Uint8 *buf = NULL;
+    Uint32 len = 0;
+
     /* Orig: FUN_1150_00a0 @ 1150:00a0 -> Sound_PlayFile. Raw SNDPLAYSOUND
      * playback of wav_name; callee of Sound_PlayId (audio_play_id) after
-     * normalize + map + 0x80. Disk gate lives in the caller via
-     * Dos_DriveReady @ 1000:1184 (see boot.h dos_drive_ready; Linux:
-     * always ready). Read-only vs unpacked WAVs, never written.
-     * SDL3 WAV playback TBD. */
+     * normalize + map + 0x80. Disk gate via Dos_DriveReady @ 1000:1184
+     * (see boot.h; Linux: always ready). */
     if (!wav_name)
         return CIV_ERR_NOENT;
-    (void)wav_name;
-    return CIV_ERR_UNSUPPORTED;
+    if (!audio_resolve_path(wav_name, path, sizeof(path))) {
+        SDL_Log("audio: wav not found: %s", wav_name);
+        return CIV_ERR_NOENT;
+    }
+    if (!SDL_LoadWAV(path, &spec, &buf, &len)) {
+        SDL_Log("audio: LoadWAV failed %s: %s", path, SDL_GetError());
+        return CIV_ERR_IO;
+    }
+    audio_stop_stream();
+    s_stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK,
+                                         &spec, NULL, NULL);
+    if (!s_stream) {
+        SDL_Log("audio: OpenAudioDeviceStream failed: %s", SDL_GetError());
+        SDL_free(buf);
+        return CIV_ERR_IO;
+    }
+    if (!SDL_PutAudioStreamData(s_stream, buf, (int)len)) {
+        SDL_Log("audio: PutAudioStreamData failed: %s", SDL_GetError());
+        SDL_free(buf);
+        audio_stop_stream();
+        return CIV_ERR_IO;
+    }
+    SDL_free(buf);
+    if (!SDL_ResumeAudioStreamDevice(s_stream)) {
+        SDL_Log("audio: ResumeAudioStreamDevice failed: %s", SDL_GetError());
+        audio_stop_stream();
+        return CIV_ERR_IO;
+    }
+    SDL_Log("audio: playing %s (%u bytes, %d Hz x%d)", path, (unsigned)len,
+            spec.freq, spec.channels);
+    return CIV_OK;
 }
 
 civ_error_t sound_mci_play(const char *wav_name)
 {
     /* Orig: FUN_1160_xxxx @ 1160:xxxx -> Sound_MciPlay. Neighbour of the
-     * 1150 MCI cluster (MciOpen @ 1150:001c / MciClose @ 1150:0066);
-     * MCISENDCOMMAND PLAY for wav_name (STOP is the close/0 path; volume
-     * sibling TBD). Win16 MCI -> SDL3 audio TBD. No globals; no disk
-     * access here (read-only WAV lookup lives in sound_play_file). */
+     * 1150 MCI cluster; MCISENDCOMMAND PLAY sibling to MciOpen @ 1150:001c
+     * (0x803 OPEN) / MciClose @ 1150:0066 (0x804 CLOSE). Same file lookup
+     * as sound_play_file; volume variant TBD. */
     if (!wav_name)
         return CIV_ERR_NOENT;
-    (void)wav_name;
-    return CIV_ERR_UNSUPPORTED;
+    return sound_play_file(wav_name);
 }
 
 civ_error_t audio_init(void)
@@ -106,16 +219,31 @@ civ_error_t audio_play_id(int id)
 {
     const char *wav;
 
-    /* Sound_PlayId @ 1150:011e..0132: STOP path. */
+    /* Sound_PlayId @ 1150:00c9: STOP path = SNDPLAYSOUND(0) silence. */
     if (id == CIV_SOUND_STOP || id == CIV_SOUND_STOP1) {
-        /* TODO: SNDPLAYSOUND(0) -> SDL3 stop. */
-        return CIV_ERR_UNSUPPORTED;
+        audio_stop_stream();
+        return CIV_OK;
     }
     /* TODO: gate on g_nOptionFlags (12d0:0064) bit 0x10 + DAT_1228:0104. */
     wav = sound_map_id_to_wav(sound_normalize_id(id) + 0x80);
     if (!wav)
         return CIV_ERR_NOENT; /* silent gap in the table */
     return sound_play_file(wav);
+}
+
+int audio_is_playing(void)
+{
+    /* 1 while the device still has queued/available samples, 0 when
+     * idle or when no stream is open. Used by the title loop to end the
+     * intro when OPENING.wav finishes (fallback timeout stays in the
+     * caller so dummy-audio builds still terminate). */
+    if (!s_stream)
+        return 0;
+    if (SDL_GetAudioStreamQueued(s_stream) > 0)
+        return 1;
+    if (SDL_GetAudioStreamAvailable(s_stream) > 0)
+        return 1;
+    return 0;
 }
 
 void audio_shutdown(void)

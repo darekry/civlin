@@ -73,6 +73,11 @@ civ_error_t sound_mci_play(const char *wav_name);
  * sound_play_file; kept for callers that already use audio_play. */
 civ_error_t audio_play(const char *wav_name);
 
+/* 1 while a WAV is still queued/available on the stream, 0 when idle or
+ * closed. Used by Title_PlayAnimLoop @ 1030:0000 to end the intro when
+ * OPENING.wav finishes (caller keeps a timeout fallback for dummy audio). */
+int audio_is_playing(void);
+
 /* ID playback (Sound_PlayId @ 1150:00c9). Honors the STOP/silent rules;
  * UNSUPPORTED only when a mapped file exists but SDL playback is missing. */
 civ_error_t audio_play_id(int id);

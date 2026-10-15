@@ -36,8 +36,12 @@ civ_error_t game_turn_tick(civ_game_t *g)
 {
     if (!g)
         return CIV_ERR_NOENT;
-    /* TODO: Game_TurnLoopTick @ 1088:0000 (civ iteration, year steps,
-     * 0x32-turn scoring via 11c0:3beb, HoF endings setting quit_flag). */
+    /* TODO: Game_TurnLoopTick @ 1088:0000 (civ iteration via
+     * Civ_ProcessUnitMoves @ 11f0:0000, year steps, scoring branch every
+     * 0x32 turns via Game_CalcProgressThreshold @ 1088:1d99
+     * (game_calc_progress_threshold, implemented: sum i*(7-diff)/2+1),
+     * HoF endings setting quit_flag). Scoring branch covered here once
+     * the per-civ loop lands; threshold math itself is done. */
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -459,6 +463,91 @@ int unit_find_diplomat_target(int ux, int uy, const int *dx, const int *dy,
         }
     }
     return best;
+}
+
+civ_error_t unit_do_found_city(int civ, int unit_idx)
+{
+    (void)civ;
+    (void)unit_idx;
+    /* TODO: Orig Civ_ProcessUnitMoves @ 11f0:0000 order 0x62 case
+     * (jump tables 1420:43b8+0x8f x0x0e, +0x4b x0x11, 1420:435b+0x28
+     * x0x20). Found-city/irrigate?: type 0x1a settler founds via
+     * Unit_FoundCityIfHome @ 11c0:16a4 (unit_found_city_if_home) when
+     * home (+10/6307); needs 1420:5500 city records + map tile claim. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t unit_do_fortify(int civ, int unit_idx)
+{
+    (void)civ;
+    (void)unit_idx;
+    /* TODO: Orig Civ_ProcessUnitMoves @ 11f0:0000 order 0x66 case
+     * (jump tables 1420:43b8+0x8f x0x0e, +0x4b x0x11, 1420:435b+0x28
+     * x0x20). Wait-fortify?: set fortified flag on the 1420:62fc record
+     * so the unit holds; needs flag-bit decode + status redraw. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t unit_do_sentry(int civ, int unit_idx)
+{
+    (void)civ;
+    (void)unit_idx;
+    /* TODO: Orig Civ_ProcessUnitMoves @ 11f0:0000 order 0x68 case
+     * (jump tables 1420:43b8+0x8f x0x0e, +0x4b x0x11, 1420:435b+0x28
+     * x0x20). Sentry/1-move?: park until unit_update_visibility @
+     * 11c0:0395 contact or one move elapses; exact wake TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t unit_do_move_attack(int civ, int unit_idx, int order)
+{
+    (void)civ;
+    (void)unit_idx;
+    (void)order;
+    /* TODO: Orig Civ_ProcessUnitMoves @ 11f0:0000 orders
+     * 0x69/0x6d/0x6f/0x70/0x72/0x75 cases (opaque keys into the three
+     * jump tables 1420:43b8+0x8f x0x0e, +0x4b x0x11, 1420:435b+0x28
+     * x0x20; 0x6d road?, 0x70 pollution? per frontier). Steps via
+     * unit_step_toward_goal @ 1128:0000, odds via Combat_ResolveAttack +
+     * 11c0:1bc3; needs map/combat state. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+int unit_order_is_idle(int order)
+{
+    /* Orig Civ_ProcessUnitMoves @ 11f0:0000 order 0x00: idle/none. */
+    return order == 0x00;
+}
+
+int unit_order_is_sleep(int order)
+{
+    /* Orig Civ_ProcessUnitMoves @ 11f0:0000 order 0x20: force-sleep/reset. */
+    return order == 0x20;
+}
+
+int unit_order_is_fail(int order)
+{
+    /* Orig Civ_ProcessUnitMoves @ 11f0:0000 order 0x50: settler-site fail. */
+    return order == 0x50;
+}
+
+int unit_order_is_no_path(int order)
+{
+    /* Orig Civ_ProcessUnitMoves @ 11f0:0000 order 0xffff + unit_step_toward_goal
+     * @ 1128:0000 no-path tail (clears 6302/6304): pure code test. The
+     * 16-bit 0xffff arrives as -1 when callers use signed ints. */
+    return order == 0xffff || order == -1;
+}
+
+civ_error_t unit_notify_wonder(int civ, int wonder)
+{
+    (void)civ;
+    (void)wonder;
+    /* TODO: Orig Game_DoPollutionAndWonderRace @ 1088:1e32 tail ("...
+     * builds ..." message + shield deduction + dialog pump). Pick is done
+     * via Game_PickWonderForAI @ 1170:3181 (game_pick_wonder_for_ai,
+     * implemented, tech-table gated); needs city shields + Win16 dialog. */
+    return CIV_ERR_UNSUPPORTED;
 }
 
 void game_shutdown(civ_game_t *g)
