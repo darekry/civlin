@@ -124,6 +124,54 @@
  *     1198:xxxx and rsc_get_indexed @ 1190:0a29). Non-images skip
  *     (TRUNCATED/RANGE/BAD_MAGIC), never fail validation.
  *
+ * Z1 truncated root-cause (read-only diagnosis, 2026-10-15, unpacked/):
+ *   rsc_dump slices OK vs total: civdata0 181519 B dir 10608 B 457 total
+ *     -> 454 slices OK (3 TRUNCATED: STR# idx 9/15/25 file_off+len > size);
+ *     Civdata3 1433655 B dir 3621 B 149 total -> 143 OK (6 TRUNCATED:
+ *     CvPc idx 129/136/145/146/147/148, ends up to +31996 past size);
+ *     CIVDATA1 729188 B dir 358 B 14/14 OK; CIVDATA2 959728 B dir 766 B
+ *     31/31 OK; CIVDATA4 144102 B dir 63 B 1/1 OK. Invariant violated is
+ *     file_off+len <= size (payload ends past EOF), not dir_size > 0xE360
+ *     (all dirs 63..10608 < 0xE360=58272) and not BE/LE header misread
+ *     (LE dir_size is 0x66010000..0xFE020000 huge > size, always invalid;
+ *     BE is the only valid header endian). Last-to-dir_off vs last-to-EOF:
+ *     len==0 last-in-type derives to dir_off in W2; Z1 extends truncated
+ *     last-in-type/file to EOF (size) so a short dir still yields a usable
+ *     tail slice instead of TRUNCATED.
+ *   Variant table (Orig FUN_seg_off @ seg:off kept; _le suffix = BE impl):
+ *     family     | probe tag  | unknown_a LE   | unknown_a BE   | unknown_b LE
+ *     rsrcRSED   | rsrcRSED   | 0xffff0001     | 0x0100ffff     | 0x0002ffff/0x0000ffff
+ *       (civdata0.rsc 181519 B; 5 types STR#(32,unk 0x002a)/TEXT(398,0x01b6)/
+ *        GDAT(6,0x146a)/KDAT(13,0x14be)/CvPc(3,0x1566); 12-B rec on-disk,
+ *        same BE24@+5/BE16@+10 as CvD*, u32@+4/+8 in-memory node only)
+ *     CvD1CvMM   | CvD1CvMM   | 0xc6000001     | 0x010000c6     | 0x00008406
+ *       (CIVDATA1.RSC 729188 B; 1 type CvPc cnt13 unk 0x000a; 14/14 OK)
+ *     CvD2CvMM   | CvD2CvMM   | 0xc6000001     | 0x010000c6     | 0x0000b008
+ *       (CIVDATA2.RSC 959728 B; 1 type CvPc cnt30 unk 0x000a; 31/31 OK)
+ *     CvD3CvMM   | CvD3CvMM   | 0x00000001     | 0x01000000     | 0x00000000
+ *       (Civdata3.rsc 1433655 B; 1 type CvPc cnt148 unk 0x000a; 143/149 OK)
+ *     CvD4CvMM   | CvD4CvMM   | 0xc6000001     | 0x010000c6     | 0x0000dc0a
+ *       (CIVDATA4.RSC 144102 B; 1 type CvPc cnt0 unk 0x000a; 1/1 OK)
+ *   On-disk vs in-memory duality (unified Z1, no variant split on-disk):
+ *     on-disk 12-B rec (BOTH families): id BE16 @ +0, name-off BE16 @ +2,
+ *       unk u8 @ +4, file-off BE24 @ +5..+7, unk BE16 @ +8..+9,
+ *       len BE16 @ +10..+11 (helpers rsc_rec_file_off/rsc_rec_len).
+ *     in-memory 0x32-B node: file-off u32 @ +4, len u32 @ +8 (zero-extended;
+ *       see rsc_new_resource). The "u32@+4/+8" form never appears on-disk;
+ *       readers that tried u32 on-disk got huge offsets (e.g. STR# rec0
+ *       0x20000000) and false truncations. Z1 helpers read BE24/BE16 only.
+ *   Per-type 8-B: 4-char tag + res-count BE16 + unk BE16. rsrcRSED unks
+ *     (42/438/5226/5310/5478) are larger than CvD* (10) but still just
+ *     opaque per-type words (not counts); res-count vs unk check passes
+ *     (count+1 records fit in remaining dir) for both families, so no
+ *     per-type size split is needed.
+ *   Buffer/fallback (Orig GLOBALCOMPACT @ 1000:xxxx < 1500000):
+ *     buffered ResMgr_LoadRsc @ 1190:0000 uses one 0xE360 read; streaming
+ *     ResMgr_LoadRscDisk @ 1190:0501 uses File_ReadChunk @ 1000:272a loop.
+ *     Z1: dir_size > 0xE360 (or file_size >= 1500000) selects streaming via
+ *     rsc_dir_needs_streaming()/rsc_load_rsc_auto(); large dirs are read by
+ *     rsc_read_dir_chunked() in 0xE360 chunks, not one fread.
+ *
  * Rules: read-only against civ1win//unpacked (never writes there), no
  * exit() in the library, no globals, C17, SDL3 only in gfx_indexed (this
  * file has zero SDL dependency).
@@ -220,27 +268,33 @@ size_t rsc_record_count(const rsc_file_t *f);
 rsc_error_t rsc_record_info(const rsc_file_t *f, size_t i, rsc_record_t *out);
 
 /* Payload carving: IMPLEMENTED minimal slice (W2, prefers slice over the
- * v1 1 KiB tag-scan probe; scan kept for record_count/info listing).
- * Walks the EOF directory in f->data (BE, same framing as rsc_load_rsc):
- * file header 16 B (magic + unk0 BE32 + unk1 BE32 + dir_size BE32),
- * 14-B file extra (skipped), per-type 8 B (tag + count BE16 + unk BE16,
- * count+1 records per orig <=count+1U loops), per-record 12-B on-disk
- * (id BE16 @ +0, name-off BE16 @ +2, unk u8 @ +4, file-off BE24 @
- * +5..+7 zero-extended to u32 @ +4 in the node, unk BE16 @ +8..+9, len
- * BE16 @ +10..+11 zero-extended to u32 @ +8; len 0 derives from the next
- * file-off in the same type, last to dir_off). Validates i < dir_total
- * (RANGE), file_off+len <= rsc_size overflow-safe (TRUNCATED), returns
- * the borrowed slice f->data+file_off (valid while rsc_file lives, no
- * copy, empty slice with size 0 when len is 0). Directory-walk failures
- * (bad magic/dir_size/dir_off) return UNSUPPORTED (scan listing still
- * available); NULL args return NOENT. Read-only, no exit/globals/SDL. */
+ * v1 1 KiB tag-scan probe; scan kept for record_count/info listing; Z1
+ * truncated-last-to-EOF + duality unified). Walks the EOF directory in
+ * f->data (BE, same framing as rsc_load_rsc; header BE32 variant-tolerant,
+ * LE only if BE dir_size invalid): file header 16 B (magic + unk0 BE32 +
+ * unk1 BE32 + dir_size BE32), 14-B file extra (skipped), per-type 8 B (tag
+ * + count BE16 + unk BE16, count+1 records per orig <=count+1U loops),
+ * per-record 12-B on-disk via rsc_rec_file_off/rsc_rec_len (id BE16 @ +0,
+ * name-off BE16 @ +2, unk u8 @ +4, file-off BE24 @ +5..+7 zero-extended to
+ * u32 @ +4 in the node, unk BE16 @ +8..+9, len BE16 @ +10..+11
+ * zero-extended to u32 @ +8 for BOTH families; u32 @ +4/+8 is the
+ * in-memory node only, never on-disk; len 0 derives from the next
+ * file-off in the same type, last to EOF = rsc_size (Z1; W2 used dir_off
+ * so truncated tails still carve to EOF instead of TRUNCATED). Validates
+ * i < dir_total (RANGE), file_off+len <= rsc_size overflow-safe
+ * (TRUNCATED; truncated non-last records stay TRUNCATED, truncated last
+ * clamps to EOF), returns the borrowed slice f->data+file_off (valid while
+ * rsc_file lives, no copy, empty slice with size 0 when len is 0 and no
+ * next/EOF extends it). Directory-walk failures (bad magic/dir_size/
+ * dir_off) return UNSUPPORTED (scan listing still available); NULL args
+ * return NOENT. Read-only, no exit/globals/SDL. */
 rsc_error_t rsc_record_data(const rsc_file_t *f, size_t i,
                             const uint8_t **data, size_t *size);
 
 /* Indexed images: IMPLEMENTED (X1, strict gate, OS-free, no SDL).
  * Producer chain: rsc_record_data slice must first succeed (directory
  * file-off/len, bounds file_off+len <= size, borrowed, valid while
- * rsc_file lives; len 0 derives from next file-off, last to dir_off);
+ * rsc_file lives; len 0 derives from next file-off, last to EOF/Z1);
  * then rsc_decode_bitmap validates the 8-bit image + palette (width > 0,
  * height > 0, bpp == 8, pal_count in 1..255 with 3*pal_count bytes
  * present, width*height indices present, every pixel index < pal_count).
@@ -268,6 +322,119 @@ rsc_error_t rsc_get_indexed(const rsc_file_t *f, size_t i, rsc_indexed_t *out);
  * on bad bpp/pal/dims, RSC_ERR_RANGE on zero dims / pixel out of range. */
 rsc_error_t rsc_decode_bitmap(const uint8_t *data, size_t size,
                               rsc_indexed_t *out);
+
+/* --- AA1: per-type payload decoders (segment 1198, OS-free) ---
+ * Context (read-only, no asset writes): civdata0 rsrcRSED 5 types
+ *   STR#(32,unk 0x002a)/TEXT(398,unk 0x01b6)/GDAT(6,unk 0x146a)/
+ *   KDAT(13,unk 0x14be)/CvPc(3,unk 0x1566); CIVDATA1/2/3/4 CvD* CvPc
+ *   cnt 13/30/148/0. Dir_records 454/14/31/144/1 all slices OK via
+ *   rsc_record_data (borrowed slice, valid while rsc_file lives);
+ *   images_strict=0 (no raw INDEX8 at slice start via rsc_decode_bitmap
+ *   @ 1198:xxxx strict gate). Payloads look type-tagged/RLE, not raw.
+ * Caller plan (read-only, caller-side e.g. rsc_dump.c so this file stays
+ *   SDL-free): slice via rsc_record_data(f,i,&data,&size), then log first
+ *   16 B via gfx_probe_head_hex(head,16) (gfx_indexed.h, OS-free, no SDL,
+ *   borrowed slice, never writes civ1win//unpacked/), then dispatch below
+ *   by 4-char tag via rsc_cmp_type (ResMgr_CmpType @ 1190:1533). Rules:
+ *   C17, zero SDL, no exit(), no globals, read-only borrowed slices. */
+
+/* STR# string-list view (borrowed, valid while the container lives).
+ * body points at the first len byte after the u16 count (data+2),
+ * body_len is size-2. Caller walks: len = body[p]; bytes = body[p+1..p+len]. */
+typedef struct rsc_strlist {
+    uint16_t count;
+    const uint8_t *body;
+    size_t body_len;
+} rsc_strlist_t;
+
+/* TEXT string view (borrowed, valid while the container lives).
+ * text points into data; text[len] is the terminating NUL inside the slice. */
+typedef struct rsc_text {
+    const char *text;
+    size_t len;
+} rsc_text_t;
+
+/* GDAT table view (reserved for the 1198 table layout; stub fills nothing). */
+typedef struct rsc_gdat {
+    const uint8_t *body;
+    size_t body_len;
+} rsc_gdat_t;
+
+/* KDAT table view (reserved for the 1198 table layout; stub fills nothing). */
+typedef struct rsc_kdat {
+    const uint8_t *body;
+    size_t body_len;
+} rsc_kdat_t;
+
+/* CvPc frame view (reserved for the 1198 RLE/tagged frame; stub fills nothing). */
+typedef struct rsc_cvpc {
+    const uint8_t *body;
+    size_t body_len;
+} rsc_cvpc_t;
+
+/* Orig: FUN_1198_xxxx @ 1198:xxxx -> Rsc_DecodeStrList.
+ * STR# payload layout (Pascal strings, count BE to match rsc_read_u16le BE
+ * via ResMgr_ReadU16 @ 1190:1953): u16 count BE @ +0, then count entries of
+ * (u8 len + len bytes). OS-free 1:1 port (no Win16, no SDL, no exit, no
+ * globals): overflow-safe walk, trailing bytes after the list are allowed
+ * (ignored). Borrowed view (body into data, valid while container lives).
+ * Returns RSC_ERR_NOENT on NULL data/out, RSC_ERR_TRUNCATED when size < 2
+ * or any entry overruns the slice, RSC_OK otherwise. */
+rsc_error_t rsc_decode_strlist(const uint8_t *data, size_t size,
+                               rsc_strlist_t *out);
+
+/* Orig: FUN_1198_xxxx @ 1198:xxxx -> Rsc_DecodeText.
+ * TEXT payload layout (one dialog string per slice hypothesis; 398 recs,
+ * unk 0x01b6; e.g. menu @ 1420:435b, difficulty @ 2a5a): single
+ * NUL-terminated C string (len = NUL offset within size). OS-free port
+ * (no Win16, no SDL, no exit, no globals): memchr for the NUL inside the
+ * borrowed slice; multi-string records (embedded NULs) still return the
+ * first string, caller may rescan text[len+1..]. Returns RSC_ERR_NOENT on
+ * NULL data/out, RSC_ERR_TRUNCATED when size == 0, RSC_ERR_BAD_MAGIC when
+ * no NUL is present within size, RSC_OK otherwise (borrowed, valid while
+ * container lives). */
+rsc_error_t rsc_decode_text(const uint8_t *data, size_t size,
+                            rsc_text_t *out);
+
+/* Orig: FUN_1198_xxxx @ 1198:xxxx -> Rsc_DecodeGdat.
+ * GDAT payload layout TBD (6 recs, unk 0x146a; game data tables hypothesis:
+ * terrain tables? cf. weights @ 1420:17d6). Needs Ghidra compare vs the
+ * 1198 decoder before any field split (endian/stride unknown; BE count
+ * assumed only for the dir layer, not the payload). Stub: validates args
+ * (NOENT on NULL data/out, TRUNCATED when size == 0) then returns
+ * RSC_ERR_UNSUPPORTED with *out untouched (no decode fake). Plan:
+ * caller logs the rsc_record_data slice head 16 B via gfx_probe_head_hex
+ * (read-only, no asset writes) and compares vs 1198. No SDL, no exit,
+ * no globals, C17, borrowed read-only slice. */
+rsc_error_t rsc_decode_gdat(const uint8_t *data, size_t size,
+                            rsc_gdat_t *out);
+
+/* Orig: FUN_1198_xxxx @ 1198:xxxx -> Rsc_DecodeKdat.
+ * KDAT payload layout TBD (13 recs, unk 0x14be; table hypothesis, stride
+ * unknown). Needs Ghidra compare vs the 1198 decoder before any field
+ * split. Stub: validates args (NOENT on NULL data/out, TRUNCATED when
+ * size == 0) then returns RSC_ERR_UNSUPPORTED with *out untouched (no
+ * decode fake). Plan: caller logs the rsc_record_data slice head 16 B
+ * via gfx_probe_head_hex (read-only, no asset writes) and compares vs
+ * 1198. No SDL, no exit, no globals, C17, borrowed read-only slice. */
+rsc_error_t rsc_decode_kdat(const uint8_t *data, size_t size,
+                            rsc_kdat_t *out);
+
+/* Orig: FUN_1198_xxxx @ 1198:xxxx -> Rsc_DecodeCvPc.
+ * CvPc payload layout TBD (picture hypothesis: 3/13/30/148/0 recs across
+ * CivData0..4, likely bitmap frames for intro/pyramid/minimap). Bitmap
+ * candidate feeding rsc_decode_bitmap @ 1198:xxxx / gfx_probe_rsc_image
+ * (w/h/bpp/pal gate: u16 w + u16 h + u8 bpp==8 + u8 pal 1..255 + RGB +
+ * indices); images_strict=0 proves no slice starts with raw INDEX8, so
+ * this stub never fakes a bitmap decode. Stub: validates args (NOENT on
+ * NULL data/out, TRUNCATED when size == 0) then returns
+ * RSC_ERR_UNSUPPORTED with *out untouched. Plan: caller logs the
+ * rsc_record_data slice head 16 B via gfx_probe_head_hex (gfx_indexed.h,
+ * OS-free, read-only, no asset writes) + probe reason, then Ghidra
+ * compares the head vs the 1198 RLE/tagged-frame decoder. No SDL,
+ * no exit, no globals, C17, borrowed read-only slice. */
+rsc_error_t rsc_decode_cvpc(const uint8_t *data, size_t size,
+                            rsc_cvpc_t *out);
 
 /* --- Packet E: ResMgr list manager (segment 1190, OS-free 1:1) ---
  * Win16 imports behind this layer (KERNEL):
@@ -453,39 +620,66 @@ rsc_error_t rsc_load_to_mem(rsc_mgr_t *mgr, rsc_res_t *res, FILE *fp);
  *   FUN_10d0_0cfa @ 10d0:0cfa GfxPort_AllocBitmap -> gfx_port_alloc_bitmap. */
 
 /* Orig: FUN_1190_0000 @ 1190:0000 -> ResMgr_LoadRsc (OpenResFile).
- * IMPLEMENTED (W2, buffered 0xE360 walk, read-only): orig does _LOPEN(path)
- * + _HREAD 0xE360 bytes into a GLOBALALLOC buffer (falls back to
- * ResMgr_LoadRscDisk @ 1190:0501 when GLOBALCOMPACT < 1500000), then parses
- * the type dir + per-record headers into file/type/res lists (rsc_add_file
- * @ 1190:1692 / rsc_add_type @ 1190:13a8 / rsc_new_resource @ 1190:12ee).
- * Called 5x from WinMain @ 1008:0000 with 1420:00b1/00be/00cb/00d8/00e5
- * (CivData0..4.rsc; observed sizes 181519/729188/959728/1433655/144102,
- * dirs 10608/358/766/3621/63, all < 0xE360). Linux: fopen(rb) + ftell size
- * + fread 16-B file header (magic + unk0 BE32 + unk1 BE32 + dir_size BE32)
- * + malloc dir_size (<= 0xE360, no GLOBALALLOC) + file_read_chunk the EOF
- * directory (dir_off = size-dir_size) + BE cursor walk (u32/u32/u16
- * equivalent + per-type tag/count + 12-B records -> 0x32-B nodes, len 0
- * derives from next file-off in the same type, last to dir_off; names via
- * string-table name-off, 0xffff = empty, capped 0x1f). Validates magic,
- * dir_size/dir_off/type/record/string bounds vs sizes (BAD_MAGIC/
- * TRUNCATED/RANGE/NOMEM/IO); partial file node removed on failure (no
- * leak). Read-only, no exit/globals/SDL. RSC_ERR_NOENT on bad mgr/path. */
+ * IMPLEMENTED (W2, buffered 0xE360 walk, read-only; Z1 fallback+chunked):
+ * orig does _LOPEN(path) + _HREAD 0xE360 bytes into a GLOBALALLOC buffer
+ * (falls back to ResMgr_LoadRscDisk @ 1190:0501 when GLOBALCOMPACT <
+ * 1500000), then parses the type dir + per-record headers into
+ * file/type/res lists (rsc_add_file @ 1190:1692 / rsc_add_type @ 1190:13a8
+ * / rsc_new_resource @ 1190:12ee). Called 5x from WinMain @ 1008:0000 with
+ * 1420:00b1/00be/00cb/00d8/00e5 (CivData0..4.rsc; observed sizes
+ * 181519/729188/959728/1433655/144102, dirs 10608/358/766/3621/63, all <
+ * 0xE360). Linux: fopen(rb) + ftell size + 16-B file header via
+ * variant-tolerant BE32 (LE only if BE dir_size invalid; see Z1 table
+ * above) + malloc dir_size (no GLOBALALLOC) + rsc_read_dir_chunked() the
+ * EOF directory (dir_off = size-dir_size; one File_ReadChunk @ 1000:272a
+ * when dir_size <= 0xE360, 0xE360-chunk loop otherwise, mirroring the
+ * LoadRscDisk streaming path) + BE walk (u32/u32/u16 equivalent +
+ * per-type tag/count + 12-B records via rsc_rec_file_off/rsc_rec_len:
+ * BE24 @ +5 / BE16 @ +10 on-disk for BOTH families, u32 @ +4/+8 is the
+ * in-memory node only -> 0x32-B nodes, len 0 derives from next file-off in
+ * the same type, last to EOF (size) for truncated tails (Z1; W2 used
+ * dir_off); names via string-table name-off, 0xffff = empty, capped 0x1f).
+ * When dir_size > 0xE360 this buffered entry falls back to
+ * rsc_load_rsc_disk() (GLOBALCOMPACT analog, see rsc_load_rsc_auto).
+ * Validates magic, dir_size/dir_off/type/record/string bounds vs sizes
+ * (BAD_MAGIC/TRUNCATED/RANGE/NOMEM/IO); partial file node removed on
+ * failure (no leak). Read-only, no exit/globals/SDL. NOENT on bad mgr/path. */
 rsc_error_t rsc_load_rsc(rsc_mgr_t *mgr, const char *path);
 
 /* Orig: FUN_1190_0501 @ 1190:0501 -> ResMgr_LoadRscDisk.
- * IMPLEMENTED (W2, streaming twin of ResMgr_LoadRsc @ 1190:0000):
- * same directory walk but streams via the File_ReadChunk path
- * (FUN_1000_272a @ 1000:272a, _HREAD/_LREAD on the resource handle)
- * instead of one 0xE360 buffered read; taken when GLOBALCOMPACT reports
- * < 1500000 bytes free. Linux: fopen(rb) + ftell size + 16-B header via
- * file_read_chunk + fseek to dir_off + streaming reads via
+ * IMPLEMENTED (W2, streaming twin of ResMgr_LoadRsc @ 1190:0000; Z1
+ * len-to-EOF + duality unified): same directory walk but streams via the
+ * File_ReadChunk path (FUN_1000_272a @ 1000:272a, _HREAD/_LREAD on the
+ * resource handle) instead of one 0xE360 buffered read; taken when
+ * GLOBALCOMPACT reports < 1500000 bytes free. Linux: fopen(rb) + ftell
+ * size + 16-B header via file_read_chunk (variant-tolerant BE32, LE only
+ * if BE dir_size invalid) + fseek to dir_off + streaming reads via
  * rsc_read_u16_disk @ 1190:1abe / rsc_read_u16_disk2 @ 1190:1b47 (name-off
- * slot) / rsc_read_u32_disk @ 1190:1bcb (all BE, fixed W2) + the same
- * node constructors (12-B records -> 0x32-B nodes, same len-0 derivation
- * and string-table names as rsc_load_rsc). Same validation/cleanup as
- * buffered (BAD_MAGIC/TRUNCATED/RANGE/NOMEM/IO; partial node removed).
- * Read-only, no exit/globals/SDL. RSC_ERR_NOENT on bad mgr/path. */
+ * slot) / rsc_read_u32_disk @ 1190:1bcb (all BE, fixed W2) + the same node
+ * constructors (12-B records via rsc_rec_file_off/rsc_rec_len -> 0x32-B
+ * nodes, same len-0 to-EOF derivation and string-table names as
+ * rsc_load_rsc; no dir_size <= 0xE360 cap here, so large dirs stream).
+ * Same validation/cleanup as buffered (BAD_MAGIC/TRUNCATED/RANGE/NOMEM/IO;
+ * partial node removed). Read-only, no exit/globals/SDL. NOENT on bad
+ * mgr/path. */
 rsc_error_t rsc_load_rsc_disk(rsc_mgr_t *mgr, const char *path);
+
+/* Z1 fallback wiring (Orig GLOBALCOMPACT @ 1000:xxxx < 1500000 ->
+ * ResMgr_LoadRscDisk @ 1190:0501; no new Orig address, decision wrapper).
+ * rsc_dir_needs_streaming() is the OS-free GLOBALCOMPACT analog: true when
+ * dir_size > 0xE360 (buffered _HREAD would not fit) or file_size >= 1500000
+ * (orig low-memory threshold; Civdata3.rsc 1433655 B sits just below it).
+ * rsc_read_dir_chunked() is the File_ReadChunk @ 1000:272a loop behind the
+ * buffered path for large dirs: fseek(dir_off) + repeated file_read_chunk
+ * in 0xE360 chunks (short read = IO). rsc_load_rsc_auto() tries buffered
+ * rsc_load_rsc() first and falls back to rsc_load_rsc_disk() when the
+ * buffered attempt fails with TRUNCATED/UNSUPPORTED caused by oversize dir
+ * (or when rsc_dir_needs_streaming() is true up-front). All read-only, no
+ * exit/globals/SDL. */
+int rsc_dir_needs_streaming(size_t dir_size, size_t file_size);
+rsc_error_t rsc_read_dir_chunked(FILE *fp, size_t dir_off, uint8_t *dst,
+                                 size_t dir_size);
+rsc_error_t rsc_load_rsc_auto(rsc_mgr_t *mgr, const char *path);
 
 /* Orig: FUN_1190_1570 @ 1190:1570 -> ResMgr_AddFileDisk (disk AddRFile).
  * IMPLEMENTED via File_ReadChunk: reads u32 unk0 + u32 unk1 (each via

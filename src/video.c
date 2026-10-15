@@ -72,10 +72,13 @@ civ_error_t video_present(SDL_Renderer *ren)
      * validate). Error mapping (consistent across video.c): NULL ->
      * NOENT; SDL_RenderPresent fail -> IO; NOMEM only from host
      * allocation paths (SDL_CreatePalette / malloc probe), never from
-     * present/blit. Z2 dump synthetic ok (doc only): rsc_dump
-     * present_frame (64x64 palette gradient via gfx_indexed_to_texture +
-     * SDL_RenderTexture + this present) passes incl. dummy video; 4x2
-     * surface read-back via gfx_indexed_to_surface passes. */
+     * present/blit. Z2 dump synthetic ok (doc only, no impl change):
+     * rsc_dump present_frame (64x64 palette gradient via
+     * gfx_indexed_to_texture + SDL_RenderTexture + this present) passes
+     * incl. dummy video; 4x2 surface read-back via gfx_indexed_to_surface
+     * passes. AA2: same synthetic surface/texture ok feeds the probe gate
+     * (gfx_probe_rsc_image @ 1198:xxxx raw gate + gfx_decode_rle CvPc path,
+     * see gfx_indexed.h); real frames stay gated there. */
     if (!ren)
         return CIV_ERR_NOENT;
     if (!SDL_RenderPresent(ren))
@@ -233,7 +236,10 @@ civ_error_t gfx_port_present_rect(gfx_port_t *port, SDL_Renderer *ren,
      * 10d0:08f1 / AllocBitmap @ 10d0:0cfa impls untouched): rsc_dump
      * present_frame (64x64 gradient via gfx_indexed_to_texture +
      * SDL_RenderTexture + video_present) shares this present core and
-     * passes on dummy video. Error mapping: NULL -> NOENT, missing
+     * passes on dummy video. AA2: synthetic surface/texture ok links to
+     * the probe gate (gfx_probe_rsc_image @ 1198:xxxx raw gate +
+     * gfx_decode_rle CvPc path, see gfx_indexed.h); real frames stay
+     * gated there. Error mapping: NULL -> NOENT, missing
      * tex/size fail -> BAD_DATA, SDL_RenderTexture fail -> IO (NOMEM
      * never from present, only from CreatePalette/Texture alloc paths). */
     SDL_FRect dst;

@@ -83,6 +83,52 @@ civ_error_t gfx_probe_rsc_image(const uint8_t *data, size_t size,
 int gfx_probe_head_hex(char *dst, size_t cap,
                        const uint8_t *data, size_t size, size_t n);
 
+/* AA2 RLE tag constants (OS-free, no SDL).
+ * Mirror of CIV_SAVE_RLL_LITERAL_FLAG/REPEAT_MAX in save.h @ 10f8:05da /
+ * 10f8:040a (read via Read, not included: save.h pulls win16_compat.h,
+ * gfx stays SDL + civ_common + rsc_loader only). Tag < 0x80 = repeat
+ * next byte N times; tag >= 0x80 = copy N-0x80 literal bytes; 0x7f chunk
+ * cap on encode. */
+#define GFX_RLE_LITERAL_FLAG 0x80u
+#define GFX_RLE_REPEAT_MAX 0x7fu
+
+/* Orig: FUN_10f8_040a @ 10f8:040a RLLDecode (save_unpack core) + FUN_10f8_05da
+ * @ 10f8:05da RLLEncode (save_pack core) -> gfx_decode_rle (CvPc payload
+ * RLE expander; OS-free 1:1 port of save_rll_decode in save.c, read via
+ * Read for reuse, not included).
+ * Tag scheme (same as save_rll_*): tag < 0x80 = repeat next byte tag times
+ * (tag 0 = no-op, kept 1:1); tag >= 0x80 = copy tag-0x80 literal bytes.
+ * Vs raw gate: CvPc payloads in CivData1/2/3 (cnt 13/30/148) present
+ * RLE/compressed frames at record start, NOT raw INDEX8 (probe shows w/h
+ * zero or bpp != 8), so the raw gate below (gfx_probe_rsc_image /
+ * rsc_decode_bitmap @ 1198:xxxx, 6 + 3*pal + w*h) correctly skips them;
+ * expand via this RLE first, then re-probe the expanded bytes with the raw
+ * gate (this function never calls the raw gate itself). Bounds: src is
+ * borrowed (valid while container lives), dst is caller-owned; never reads
+ * past src_len, never writes past dst_cap. Returns CIV_OK with *out_len =
+ * expanded bytes; CIV_ERR_NOENT on NULL src/dst (NULL out_len = skip, kept
+ * 1:1); CIV_ERR_TRUNCATED on short tag/value/literal tail or dst overrun
+ * (matches save_rll_decode TRUNCATED shape). No SDL, no exit, no globals. */
+civ_error_t gfx_decode_rle(const uint8_t *src, size_t src_len,
+                           uint8_t *dst, size_t dst_cap, size_t *out_len);
+
+/* Orig: FUN_1198_xxxx @ 1198:xxxx Rsc_DecodeBitmap -> gfx_decode_raw
+ * (raw INDEX8 decoder, OS-free 1:1 port; no Win16, no SDL, no exit, no
+ * globals). Payload layout (all LE, same as rsc_decode_bitmap in
+ * rsc_loader.c, read via Read, not edited, + gfx_probe_rsc_image gate
+ * above): u16 w LE @ +0, u16 h LE @ +2, u8 bpp @ +4 (must be 8), u8
+ * pal_count @ +5 (1..255), pal_count*3 RGB @ +6, then w*h 8-bit indices;
+ * bounds 6 + 3*pal + w*h <= size overflow-safe. Parity: identical field
+ * order/bounds/pixel check to rsc_decode_bitmap; error mapping matches
+ * gfx_probe_rsc_image (CIV_ERR_BAD_DATA on bpp != 8 or pal == 0, CIV
+ * maps RSC BAD_MAGIC there; RANGE on w/h zero or pixel >= pal; TRUNCATED
+ * on short header/palette/pixel tail; NOENT on NULL data/out). On success
+ * fills *out as a borrowed view (pixels points into data, valid while the
+ * container lives; palette copied, tail zeroed). RLE payloads must be
+ * expanded via gfx_decode_rle first; this decodes raw bytes only. */
+civ_error_t gfx_decode_raw(const uint8_t *data, size_t size,
+                           rsc_indexed_t *out);
+
 /* Orig: godpal.c 0xec RGB entries feeding FUN_1090_0488 @ 1090:0488
  * Palette_Init (LOGPALETTE 0x300 -> CREATEPALETTE -> DAT_1420_9966 @
  * 1420:9966, SELECTPALETTE/REALIZEPALETTE at each port present;
@@ -91,8 +137,12 @@ int gfx_probe_head_hex(char *dst, size_t cap,
  * LOGPALETTE tail past 0xec stays zero/black). Byte payload not yet
  * dumped from godpal.c / DAT_1420_9966, so only the size is live (TODO
  * dump); entry fetch stays CIV_ERR_UNSUPPORTED until the dump lands (no
- * fake bytes emitted here). Ghidra dump steps (no fake data):
- *   1. Open civ.exe in Ghidra 12.1.2 (CivLin.gpr, program "civ.exe").
+ * fake bytes emitted here). unpacked/civ.exe is present locally
+ * (unpacked/ local-only, never committed, holds civ.exe + 5 RSC) and
+ * contains the DAT_1420_9966 bytes, but the 0x2c4 dump has not been
+ * extracted yet -> TODO dump, do not hardcode fake bytes here.
+ * Ghidra dump steps (no fake data):
+ *   1. Open unpacked/civ.exe in Ghidra 12.1.2 (CivLin.gpr, program "civ.exe").
  *   2. Go to DAT_1420_9966 @ 1420:9966 (Memory view / Symbol Tree).
  *   3. Select 0xec*3 = 0x2c4 bytes (236 entries x R,G,B, no alpha).
  *   4. Copy as C array / export bytes; cross-check vs godpal.c source

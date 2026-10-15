@@ -52,7 +52,14 @@ static const char *kDefaultFiles[] = {
  * UNSUPPORTED (dir walk unproven), then gates each slice via
  * rsc_decode_bitmap() (borrowed view: pixels points into the container,
  * palette copied tail-zeroed; requires w/h > 0, bpp == 8, pal 1..255,
- * every pixel < pal_count). Prints one summary line per file. */
+ * every pixel < pal_count). Prints one summary line per file.
+ * AA2 probe (read-only, OS-free, no asset writes): logs first-16B head_hex
+ * via gfx_probe_head_hex + probe reason w/h/bpp/pal via gfx_probe_rsc_image
+ * for the first up to 4 slices per file (called once per file, so all 5
+ * files are covered; civdata0 carries 5 types so first-4 samples the type
+ * variety without flooding 454-record logs). Head bytes distinguish CvPc
+ * RLE frames (expand via gfx_decode_rle, then re-probe raw via
+ * gfx_decode_raw) from raw INDEX8 (6 + 3*pal + w*h, see gfx_indexed.h). */
 static int dump_validate_images(const rsc_file_t *f, const char *path)
 {
     size_t dir_total = 0;
@@ -78,6 +85,28 @@ static int dump_validate_images(const rsc_file_t *f, const char *path)
     }
     printf("  dir_records=%zu slices=%zu images_strict=%zu (gate: borrowed + pal 1..255 + px<pal)\n",
            dir_total, slices_ok, images);
+    /* AA2 per-file probe: head16 + raw-gate reason (read-only, OS-free). */
+    {
+        size_t nlog = dir_total < 4u ? dir_total : 4u;
+
+        for (size_t k = 0; k < nlog; k++) {
+            const uint8_t *data = NULL;
+            size_t size = 0;
+            char head[64];
+            uint32_t w = 0;
+            uint32_t h = 0;
+            uint8_t bpp = 0;
+            uint8_t pal = 0;
+            civ_error_t pr;
+
+            if (rsc_record_data(f, k, &data, &size) != RSC_OK)
+                continue;
+            gfx_probe_head_hex(head, sizeof(head), data, size, 16);
+            pr = gfx_probe_rsc_image(data, size, &w, &h, &bpp, &pal);
+            printf("  rec[%zu] head16=%s probe=%s w=%u h=%u bpp=%u pal=%u\n",
+                   k, head, civ_strerror(pr), w, h, bpp, pal);
+        }
+    }
     /* Spot-check the borrowed indexed view on record 0 when present. */
     if (dir_total > 0) {
         rsc_indexed_t img;

@@ -46,7 +46,12 @@ civ_error_t video_blit_indexed(SDL_Renderer *ren, SDL_Texture *tex, int x, int y
  * gfx_indexed_to_texture + SDL_RenderTexture + SDL_RenderPresent passes
  * (1 frame, incl. SDL_VIDEODRIVER=dummy = no crash); 4x2 surface path
  * via gfx_indexed_to_surface verified by format/dims/pixel/palette
- * read-back. NULL ren -> NOENT; SDL_RenderPresent fail -> IO. */
+ * read-back. AA2: same synthetic surface/texture ok feeds the probe gate
+ * (gfx_probe_rsc_image @ 1198:xxxx strict raw INDEX8 gate + gfx_decode_rle
+ * CvPc RLE path, see gfx_indexed.h); real RSC frames stay gated there,
+ * this present shares the SDL_RenderTexture core with
+ * gfx_port_present_rect @ 10d0:0854 (no impl change here).
+ * NULL ren -> NOENT; SDL_RenderPresent fail -> IO. */
 civ_error_t video_present(SDL_Renderer *ren);
 void video_shutdown(void);
 
@@ -113,7 +118,10 @@ civ_error_t gfx_port_set_active(gfx_port_t *port);
  * rsc_dump present_frame (64x64 palette gradient via
  * gfx_indexed_to_texture + SDL_RenderTexture + video_present) passes on
  * dummy video; this port path shares the same SDL_RenderTexture present
- * core. Error mapping (consistent across video.c):
+ * core. AA2: synthetic surface (4x2 via gfx_indexed_to_surface) + texture
+ * (64x64 via gfx_indexed_to_texture) ok links to the probe gate
+ * (gfx_probe_rsc_image @ 1198:xxxx raw gate + gfx_decode_rle CvPc path,
+ * see gfx_indexed.h); real frames stay gated there. Error mapping (consistent across video.c):
  * NULL port/renderer -> NOENT (NULL rect = full port, kept); missing
  * backing texture / SDL_GetTextureSize fail -> BAD_DATA;
  * SDL_RenderTexture fail -> IO (SDL_GetError logged by caller; NOMEM only
