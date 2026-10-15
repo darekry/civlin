@@ -595,18 +595,27 @@ civ_error_t unit_do_sentry(uint8_t *units, int unit_idx, int n_units)
 
 civ_error_t unit_do_move_attack(int civ, int unit_idx, int order)
 {
+    int odds = -1;
+    int win;
+    int step;
+
+    /* AL1 wiring: explicit kernels with placeholder board (full 1420:62fc
+     * units / 64 KB tile buffer / 1420:17d4 cost images TBD, so NULL here
+     * -> step returns -1, no write; odds uses 1v1 dummy to exercise the
+     * combat_calc_odds @ 11c0:1bc3 + Rng_Range @ 11c8:003d path). Real
+     * per-key dispatch (0x69/0x6d/0x6f/0x70/0x72/0x75; 0x6d road?, 0x70
+     * pollution?) + UI pump tail via unit_wait_for_orders @ 11c0:0ec2
+     * (blink-and-pump modal, Win16) stay TBD. */
+    win = unit_attack_resolve(1, 1, 0, 0, 0u, &odds);
+    (void)win;
+    (void)odds;
+    step = unit_move_attack_step(NULL, 0, 0, NULL, 0, 0, NULL, 0, NULL, 0,
+                                 0, NULL, NULL, 0, NULL, NULL, 0, 0);
+    (void)step;
     (void)civ;
     (void)unit_idx;
     (void)order;
-    /* Kept stub (AJ3): Orig Civ_ProcessUnitMoves @ 11f0:0000 orders
-     * 0x69/0x6d/0x6f/0x70/0x72/0x75 cases (opaque keys into the three
-     * jump tables 1420:43b8+0x8f x0x0e, +0x4b x0x11, 1420:435b+0x28
-     * x0x20; 0x6d road?, 0x70 pollution? per frontier). Steps via
-     * unit_step_toward_goal @ 1128:0000, odds via Combat_ResolveAttack +
-     * 11c0:1bc3; needs pathing/ZOC/occupancy full Sims (map_is_occupied
-     * @ 1110:18ce / map_is_city_blocked @ 1110:199b / map_check_zoc @
-     * 11c0:23fd + combat state).
-     * TODO Orig per-key handlers. */
+    /* TODO Orig per-key handlers + unit_wait_for_orders @ 11c0:0ec2 tail. */
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -741,6 +750,434 @@ civ_error_t city_grow(uint8_t *cities, int city_idx, int n_cities)
     rec = cities + (size_t)city_idx * (size_t)CIV_CITY_REC_LEN;
     rec[CIV_CITY_OFF_SIZE] = (uint8_t)(size + 1);
     return CIV_OK;
+}
+
+/* --- AK1 move + accessors (2026-10-15): unit_step_toward_goal @
+ * 1128:0000 scoring (Chebyshev-remaining + terrain cost gated on
+ * sea/land, ZOC, occupancy, ocean-clear). OS-free, no globals, no
+ * exit(), read-only (except dx/dy outs). */
+
+int unit_move_cost(int tile, const uint8_t *cost_table, int cost_n,
+                   int move_dir, int last_dir, int is_river)
+{
+    /* Terrain-cost tail: 1420:17d4*3-or-3 base (same formula as
+     * tile_move_cost in map.h, inlined to keep game/map decoupled) +
+     * river 1 + anti-reverse 0x6304 (last-dir +7) penalty. Zero-entry /
+     * OOR fallback + penalty value TBD vs decompiler. */
+    int base;
+    int opp;
+
+    if (cost_table == NULL || cost_n <= 0)
+        return -1;
+    if (tile < 0 || tile >= cost_n) {
+        base = 3;
+    } else {
+        int v = cost_table[tile];
+
+        base = v != 0 ? v * 3 : 3;
+    }
+    if (is_river != 0)
+        base += CIV_UNIT_RIVER_COST;
+    if (move_dir >= 1 && move_dir <= 8 && last_dir >= 1 && last_dir <= 8) {
+        opp = ((last_dir - 1 + 4) % 8) + 1;
+        if (move_dir == opp)
+            base += CIV_UNIT_REVERSE_PENALTY;
+    }
+    return base;
+}
+
+int unit_can_enter(int is_sea_unit, int is_sea_tile,
+                   const int *enemy_map, int ew, int eh, int x, int y,
+                   const int *unit_xs, const int *unit_ys, int n_units,
+                   const int *city_xs, const int *city_ys, int n_cities,
+                   int ocean_depth)
+{
+    /* Entry gates: 0x1a3a vs Map_IsSeaLand @ 1110:16c0 == 10, ZOC @
+     * 11c0:23fd (inlined 8-neighbour scan), occupancy @ 1110:18ce/16ee
+     * (inlined linear scan), city-blocked @ 1110:199b (inlined linear
+     * scan), ocean @ 1110:1dbd > 4 (explicit depth param). 1 = enter,
+     * 0 = blocked. NULL/empty maps mean clear for that gate. */
+    int sea_unit = is_sea_unit != 0;
+    int sea_tile = is_sea_tile != 0;
+    int dyy;
+    int dxx;
+    int i;
+
+    if (sea_unit != sea_tile)
+        return 0;
+    if (enemy_map != NULL && ew > 0 && eh > 0) {
+        if (x < 0 || x >= ew || y < 0 || y >= eh)
+            return 0;
+        for (dyy = -1; dyy <= 1; dyy++) {
+            for (dxx = -1; dxx <= 1; dxx++) {
+                int nx;
+                int ny;
+
+                if (dxx == 0 && dyy == 0)
+                    continue;
+                nx = x + dxx;
+                ny = y + dyy;
+                if (nx < 0 || nx >= ew || ny < 0 || ny >= eh)
+                    continue;
+                if (enemy_map[ny * ew + nx] != 0)
+                    return 0;
+            }
+        }
+    }
+    if (unit_xs != NULL && unit_ys != NULL && n_units > 0) {
+        for (i = 0; i < n_units; i++) {
+            if (unit_xs[i] == x && unit_ys[i] == y)
+                return 0;
+        }
+    }
+    if (city_xs != NULL && city_ys != NULL && n_cities > 0) {
+        for (i = 0; i < n_cities; i++) {
+            if (city_xs[i] == x && city_ys[i] == y)
+                return 0;
+        }
+    }
+    if (sea_tile != 0 && ocean_depth <= 4)
+        return 0;
+    return 1;
+}
+
+civ_error_t unit_dir_to_dxdy(int dir, int *dx_out, int *dy_out)
+{
+    /* Dir 1..8 -> dx/dy (1 = N clockwise, same as map_resolve_direct @
+     * 1110:1c4b; exact orig numbering TBD). Index 0 = arrived (0,0). */
+    static const int dx[9] = { 0, 0, 1, 1, 1, 0, -1, -1, -1 };
+    static const int dy[9] = { 0, -1, -1, 0, 1, 1, 1, 0, -1 };
+
+    if (dx_out == NULL || dy_out == NULL)
+        return CIV_ERR_NOENT;
+    if (dir == CIV_UNIT_DIR_NO_PATH || dir == -1)
+        return CIV_ERR_RANGE;
+    if (dir < 0 || dir > 8)
+        return CIV_ERR_RANGE;
+    *dx_out = dx[dir];
+    *dy_out = dy[dir];
+    return CIV_OK;
+}
+
+int unit_home(const uint8_t *units, int unit_idx, int n_units)
+{
+    /* Unit +10 home-city (1420:62fc stride 0xc): 0xff = none -> -1. */
+    int v;
+
+    if (units == NULL || n_units <= 0 || unit_idx < 0 || unit_idx >= n_units)
+        return -1;
+    v = units[(size_t)unit_idx * (size_t)CIV_UNIT_REC_LEN +
+              (size_t)CIV_UNIT_OFF_HOME];
+    if (v == 0xff)
+        return -1;
+    return v;
+}
+
+int unit_moves_left(const uint8_t *units, int unit_idx, int n_units)
+{
+    /* Unit +3 moves/counter. */
+    if (units == NULL || n_units <= 0 || unit_idx < 0 || unit_idx >= n_units)
+        return -1;
+    return units[(size_t)unit_idx * (size_t)CIV_UNIT_REC_LEN +
+                 (size_t)CIV_UNIT_OFF_MOVES];
+}
+
+int unit_seen_by(const uint8_t *units, int unit_idx, int n_units)
+{
+    /* Unit +8 seen-by mask. */
+    if (units == NULL || n_units <= 0 || unit_idx < 0 || unit_idx >= n_units)
+        return -1;
+    return units[(size_t)unit_idx * (size_t)CIV_UNIT_REC_LEN +
+                 (size_t)CIV_UNIT_OFF_SEEN];
+}
+
+int city_get_prod(const uint8_t *base, int idx, int n_cities)
+{
+    /* TODO: Orig city production/shields offset TBD from the 0x1c
+     * records at 1420:5500 (known: +0 x, +1 y, +2 valid, +3 size/def,
+     * +7 owner). No fake offset defined; always -1 until decoded. */
+    if (base == NULL)
+        return -1;
+    if (n_cities <= 0)
+        return -1;
+    if (idx < 0 || idx >= n_cities)
+        return -1;
+    return -1;
+}
+
+/* --- AL1 move_attack + tables (2026-10-15): unit_step_toward_goal @
+ * 1128:0000 single-step core + combat odds/roll + tech/wonder/cost
+ * tables. OS-free, no globals, no exit(). See game.h AL1 block for
+ * parent/parity/TBD notes. */
+
+int unit_move_attack_step(uint8_t *units, int unit_idx, int n_units,
+                          const uint8_t *tiles, int bw, int bh,
+                          const uint8_t *cost_table, int cost_n,
+                          const int *enemy_map, int ew, int eh,
+                          const int *unit_xs, const int *unit_ys,
+                          int n_occ_units,
+                          const int *city_xs, const int *city_ys, int n_cities,
+                          int is_sea_unit)
+{
+    uint8_t *rec;
+    int ux;
+    int uy;
+    int moves;
+    int gx;
+    int gy;
+    int last_dir;
+    int dx;
+    int dy;
+    int adx;
+    int ady;
+    int dir;
+    int best_dir;
+    int best_score;
+    int best_nx;
+    int best_ny;
+
+    if (units == NULL || n_units <= 0 || unit_idx < 0 || unit_idx >= n_units)
+        return -1;
+    if (tiles == NULL || bw <= 0 || bh <= 0)
+        return -1;
+    if (cost_table == NULL || cost_n <= 0)
+        return -1;
+    rec = units + (size_t)unit_idx * (size_t)CIV_UNIT_REC_LEN;
+    ux = rec[CIV_UNIT_OFF_X];
+    uy = rec[CIV_UNIT_OFF_Y];
+    moves = rec[CIV_UNIT_OFF_MOVES];
+    gx = rec[CIV_UNIT_OFF_GOAL_X];
+    gy = rec[CIV_UNIT_OFF_GOAL_Y];
+    last_dir = rec[CIV_UNIT_OFF_LAST_DIR];
+    /* Goal none (0xff, see header top) -> nothing to do. */
+    if (gx == 0xff || gy == 0xff)
+        return CIV_UNIT_DIR_ARRIVED;
+    /* Arrived / exhausted -> 0, no write (goal-clear policy TBD). */
+    if (ux == gx && uy == gy)
+        return CIV_UNIT_DIR_ARRIVED;
+    if (moves <= 0)
+        return CIV_UNIT_DIR_ARRIVED;
+    /* Direct (|dx|<2,|dy|<2, cf. map_resolve_direct @ 1110:1c4b): try the
+     * goal-adjacent step first, gated by unit_can_enter. Falls through
+     * to full scoring when not adjacent or blocked (TBD vs decompiler
+     * whether blocked direct goes straight to 0xffff). */
+    dx = gx - ux;
+    dy = gy - uy;
+    adx = dx < 0 ? -dx : dx;
+    ady = dy < 0 ? -dy : dy;
+    if (adx < 2 && ady < 2) {
+        int ddx;
+        int ddy;
+        int nx;
+        int ny;
+        int tile;
+        int is_sea;
+        int is_river;
+        int depth;
+        int cx;
+        int cy;
+        int i;
+
+        dir = -1;
+        /* 1=N clockwise match for (dx,dy), same table as
+         * unit_dir_to_dxdy (exact orig numbering TBD). */
+        if (dx == 0 && dy == -1)
+            dir = 1;
+        else if (dx == 1 && dy == -1)
+            dir = 2;
+        else if (dx == 1 && dy == 0)
+            dir = 3;
+        else if (dx == 1 && dy == 1)
+            dir = 4;
+        else if (dx == 0 && dy == 1)
+            dir = 5;
+        else if (dx == -1 && dy == 1)
+            dir = 6;
+        else if (dx == -1 && dy == 0)
+            dir = 7;
+        else if (dx == -1 && dy == -1)
+            dir = 8;
+        if (dir >= 1 && dir <= 8) {
+            if (unit_dir_to_dxdy(dir, &ddx, &ddy) == CIV_OK) {
+                nx = ux + ddx;
+                ny = uy + ddy;
+                if (nx >= 0 && nx < bw && ny >= 0 && ny < bh) {
+                    tile = tiles[(size_t)ny * (size_t)bw + (size_t)nx];
+                    is_sea = (tile == 10) ? 1 : 0;
+                    is_river = (tile == 0x0c) ? 1 : 0;
+                    (void)is_river;
+                    /* Ocean depth from target along step, capped at 5
+                     * (cf. map_ocean_clear_depth @ 1110:1dbd >4). */
+                    depth = 0;
+                    cx = nx;
+                    cy = ny;
+                    for (i = 0; i < 5; i++) {
+                        int t2;
+
+                        if (cx < 0 || cx >= bw || cy < 0 || cy >= bh)
+                            break;
+                        t2 = tiles[(size_t)cy * (size_t)bw + (size_t)cx];
+                        if (t2 != 10)
+                            break;
+                        depth++;
+                        cx += ddx;
+                        cy += ddy;
+                    }
+                    if (unit_can_enter(is_sea_unit, is_sea, enemy_map, ew,
+                                       eh, nx, ny, unit_xs, unit_ys,
+                                       n_occ_units, city_xs, city_ys,
+                                       n_cities, depth) != 0) {
+                        rec[CIV_UNIT_OFF_X] = (uint8_t)nx;
+                        rec[CIV_UNIT_OFF_Y] = (uint8_t)ny;
+                        rec[CIV_UNIT_OFF_LAST_DIR] = (uint8_t)dir;
+                        rec[CIV_UNIT_OFF_MOVES] =
+                            (uint8_t)(moves > 0 ? moves - 1 : 0);
+                        return dir;
+                    }
+                }
+            }
+        }
+    }
+    /* Full 8-neighbour best-score: Chebyshev-remaining + move_cost. */
+    best_dir = CIV_UNIT_DIR_NO_PATH;
+    best_score = 0;
+    best_nx = ux;
+    best_ny = uy;
+    for (dir = 1; dir <= 8; dir++) {
+        int ddx;
+        int ddy;
+        int nx;
+        int ny;
+        int tile;
+        int is_sea;
+        int is_river;
+        int depth;
+        int cx;
+        int cy;
+        int i;
+        int cost;
+        int rdx;
+        int rdy;
+        int rem;
+        int score;
+
+        if (unit_dir_to_dxdy(dir, &ddx, &ddy) != CIV_OK)
+            continue;
+        nx = ux + ddx;
+        ny = uy + ddy;
+        if (nx < 0 || nx >= bw || ny < 0 || ny >= bh)
+            continue;
+        tile = tiles[(size_t)ny * (size_t)bw + (size_t)nx];
+        is_sea = (tile == 10) ? 1 : 0;
+        is_river = (tile == 0x0c) ? 1 : 0;
+        depth = 0;
+        cx = nx;
+        cy = ny;
+        for (i = 0; i < 5; i++) {
+            int t2;
+
+            if (cx < 0 || cx >= bw || cy < 0 || cy >= bh)
+                break;
+            t2 = tiles[(size_t)cy * (size_t)bw + (size_t)cx];
+            if (t2 != 10)
+                break;
+            depth++;
+            cx += ddx;
+            cy += ddy;
+        }
+        if (unit_can_enter(is_sea_unit, is_sea, enemy_map, ew, eh, nx, ny,
+                           unit_xs, unit_ys, n_occ_units, city_xs, city_ys,
+                           n_cities, depth) == 0)
+            continue;
+        cost = unit_move_cost(tile, cost_table, cost_n, dir, last_dir,
+                              is_river);
+        if (cost < 0)
+            continue;
+        rdx = gx - nx;
+        rdx = rdx < 0 ? -rdx : rdx;
+        rdy = gy - ny;
+        rdy = rdy < 0 ? -rdy : rdy;
+        rem = rdx > rdy ? rdx : rdy;
+        score = rem + cost;
+        if (best_dir == CIV_UNIT_DIR_NO_PATH || score < best_score) {
+            best_dir = dir;
+            best_score = score;
+            best_nx = nx;
+            best_ny = ny;
+        }
+    }
+    if (best_dir == CIV_UNIT_DIR_NO_PATH) {
+        /* No path: clear goal-x/goal-y/last-dir to 0xff (exact 6302/6304
+         * mask TBD, 6303? included here; see unit_order_is_no_path). */
+        rec[CIV_UNIT_OFF_GOAL_X] = 0xff;
+        rec[CIV_UNIT_OFF_GOAL_Y] = 0xff;
+        rec[CIV_UNIT_OFF_LAST_DIR] = 0xff;
+        return CIV_UNIT_DIR_NO_PATH;
+    }
+    rec[CIV_UNIT_OFF_X] = (uint8_t)best_nx;
+    rec[CIV_UNIT_OFF_Y] = (uint8_t)best_ny;
+    rec[CIV_UNIT_OFF_LAST_DIR] = (uint8_t)best_dir;
+    rec[CIV_UNIT_OFF_MOVES] = (uint8_t)(moves > 0 ? moves - 1 : 0);
+    return best_dir;
+}
+
+int unit_attack_resolve(int atk_strength, int def_strength,
+                        int atk_flags, int def_flags,
+                        unsigned rand15, int *odds_out)
+{
+    int atk_eff;
+    int def_eff;
+    int odds;
+    int roll;
+
+    /* Veteran 0x20 (unit +11, see game.h header top) pre-scale TBD vs
+     * combat_resolve_attack stub (no fake multipliers); pass-through. */
+    (void)atk_flags;
+    (void)def_flags;
+    atk_eff = atk_strength;
+    def_eff = def_strength;
+    odds = combat_calc_odds(atk_eff, def_eff);
+    if (odds_out != NULL)
+        *odds_out = odds;
+    if (odds < 0)
+        return -1;
+    /* Rng_Range @ 11c8:003d via game_uprising_rng_scale (0..99). Caller
+     * passes the raw rand15 draw (0..0x7FFF) or a test vector. */
+    roll = (int)game_uprising_rng_scale(rand15, 100);
+    return roll < odds ? 1 : 0;
+}
+
+const char *tech_names(int tech)
+{
+    (void)tech;
+    /* TODO: Orig tech table for Game_UpdatePowerRankings @ 1088:108a
+     * (tech contribution, table TBD) + Game_PickWonderForAI @ 1170:3181
+     * (tech-gated via game_pick_wonder_for_ai prereq indices). Checked
+     * game.c: only prereq indices, no string literals, so no
+     * dump-confirmed names yet; Alphabet/.../Nuclear hypothesis stays
+     * TODO (no fake). Confirmed subset empty + "?" unknown. */
+    return "?";
+}
+
+const char *wonder_names(int wonder)
+{
+    (void)wonder;
+    /* TODO: Orig wonder table for Game_PickWonderForAI @ 1170:3181
+     * (eligible[w] via game_pick_wonder_for_ai) + "... builds ..." tail
+     * via unit_notify_wonder @ 1088:1e32. Checked game.c: only wonder
+     * indices, no string literals, so no confirmed names; 7-wonders
+     * hypothesis (Pyramids/Hanging/Oracle/etc.) stays TODO (no fake). */
+    return "?";
+}
+
+int terrain_cost_table(int tile)
+{
+    (void)tile;
+    /* TODO: Orig 1420:17d4 terrain base-cost table for unit_move_cost /
+     * tile_move_cost (*3-or-3). Entries/stride TBD (0x?? entries?),
+     * so no image yet (no fake entries); consumers take the explicit
+     * cost_table image until the fixed image is decoded. Always -1. */
+    return -1;
 }
 
 void game_shutdown(civ_game_t *g)

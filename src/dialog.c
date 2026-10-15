@@ -1,6 +1,9 @@
 /* Dialog stubs (+ MenuZ/custom-control surface). */
 #include "dialog.h"
 
+/* AL2: INT_MAX for help_hlp_lzss_try len cap (OS-free, no SDL). */
+#include <limits.h>
+
 civ_error_t dialog_init(void)
 {
     return CIV_ERR_UNSUPPORTED;
@@ -690,6 +693,97 @@ civ_error_t help_topic_get(const uint8_t *data, size_t len,
     return help_hlp_topic_text(data, len, (uint32_t)off, out_text, out_len);
 }
 
+int help_hlp_lzss_try(const uint8_t *src, size_t src_len,
+                      uint8_t *dst, size_t dst_cap)
+{
+    /* AL2 HLP LZSS-EDI trial (see dialog.h). OS-free 1:1 duplicate of
+     * gfx_try_lzss_edi @ 10f8:040a family (tools/unpack_edi.py edi_unpack,
+     * read via Read, not edited): flags LSB-first, 1 = literal 1 B, 0 =
+     * match 2 B with matchpos = ((x1 & 0xF0) << 4) | x0 and matchlen =
+     * (x1 & 0x0F) + 3; 4 K ring prefilled 0x20, curpos 4096-18 = 4078
+     * (same as GFX_LZSS_RING_SIZE/RING_FILL/START_POS, duplicated here, no
+     * gfx pull). Duplicated (not calling gfx) to avoid a gfx pull:
+     * gfx_indexed.h brings SDL; dialog HLP stays SDL-free. Stack ring only
+     * (no cross-module globals); overlap-safe forward match copy. Raw LZSS
+     * code-stream framing (no 25-B EDI header / unpacked_len prefix, no HLP
+     * decomp_size word here — framing lives in help_hlp_decompress): decode
+     * runs until src bytes are consumed, so a trailing incomplete flag/code
+     * at src end is a miss (-1, not silent success). Bounds: never reads
+     * past src_len, never writes past dst_cap. No SDL, no exit, no globals,
+     * C17. Returns decompressed bytes (>= 0, fits int) or -1 on NULL
+     * src/dst, empty src/dst cap, decode miss (TRUNC_SRC/TAG/DST overrun
+     * shape), or len > INT_MAX (no fake bytes as success; dst undefined on
+     * miss, caller ignores it). */
+    uint8_t ring[4096];
+    size_t curpos = 4078u;
+    size_t cpos = 0;
+    unsigned bitbuf = 0;
+    unsigned bits_left = 0;
+    size_t op = 0;
+    size_t i;
+
+    if (!src || !dst)
+        return -1;
+    if (src_len == 0 || dst_cap == 0)
+        return -1;
+    for (i = 0; i < (size_t)4096; i++)
+        ring[i] = (uint8_t)0x20;
+    while (cpos < src_len || bits_left > 0u) {
+        int bit;
+
+        if (bits_left == 0u) {
+            if (cpos >= src_len)
+                break;
+            bitbuf = (unsigned)src[cpos++];
+            bits_left = 8u;
+        }
+        bit = (int)(bitbuf & 1u);
+        bitbuf >>= 1;
+        bits_left--;
+        if (bit == 1) {
+            uint8_t b;
+
+            if (cpos >= src_len)
+                return -1;
+            if (op >= dst_cap)
+                return -1;
+            b = src[cpos++];
+            dst[op++] = b;
+            ring[curpos] = b;
+            curpos = (curpos + 1u) & (size_t)4095u;
+        } else {
+            unsigned x0;
+            unsigned x1;
+            size_t matchpos;
+            unsigned matchlen;
+            unsigned k;
+
+            if (cpos + (size_t)2u > src_len)
+                return -1;
+            x0 = (unsigned)src[cpos];
+            x1 = (unsigned)src[cpos + (size_t)1u];
+            cpos += (size_t)2u;
+            matchpos = (size_t)(((x1 & 0xF0u) << 4) | x0);
+            matchpos &= (size_t)4095u;
+            matchlen = (x1 & 0x0Fu) + 3u;
+            for (k = 0; k < matchlen; k++) {
+                uint8_t b;
+
+                if (op >= dst_cap)
+                    return -1;
+                b = ring[matchpos];
+                dst[op++] = b;
+                ring[curpos] = b;
+                curpos = (curpos + 1u) & (size_t)4095u;
+                matchpos = (matchpos + 1u) & (size_t)4095u;
+            }
+        }
+    }
+    if (op > (size_t)INT_MAX)
+        return -1;
+    return (int)op;
+}
+
 civ_error_t help_hlp_decompressed_size(const uint8_t *src, size_t src_len,
                                                size_t *out_size)
 {
@@ -715,15 +809,18 @@ civ_error_t help_hlp_decompress(const uint8_t *src, size_t src_len,
 {
     /* AK2 HLP 3.x LZ body side (see dialog.h). OS-free stub with explicit
      * src/dst bounds (borrowed src vs caller-owned dst, never writes
-     * civhelp.hlp; no SDL, no globals, no exit(), no fake, dst untouched).
-     * HLP 3.x LZ vs EDI: EDI LZSS2 (4K ring 0x20 curpos 4078 LSB-first
-     * 1=literal/0=match+3, see gfx_try_lzss_edi @ 10f8:040a family in
-     * gfx_indexed.h, read via Read, not edited) is installer framing, not
-     * proven same as the HLP 3.x topic-body variant (decomp_size word +
-     * window/bias TBD from the 72787 B dump), so no alias here. Header
-     * validated via help_hlp_decompressed_size above; codec TODO. */
+     * civhelp.hlp; no SDL, no globals, no exit(), no fake, dst untouched
+     * on miss). HLP 3.x LZ vs EDI: EDI LZSS2 (4K ring 0x20 curpos 4078
+     * LSB-first 1=literal/0=match+3, see gfx_try_lzss_edi @ 10f8:040a
+     * family in gfx_indexed.h, read via Read, not edited) is installer
+     * framing, not proven same as the HLP 3.x topic-body variant
+     * (decomp_size word + window/bias TBD from the 72787 B dump), so no
+     * gfx alias here (AL2 wires the local duplicate help_hlp_lzss_try
+     * instead, no gfx/SDL pull). Header validated via
+     * help_hlp_decompressed_size above; codec TODO. */
     civ_error_t rc;
     size_t need = 0;
+    int trial;
 
     if (out_len)
         *out_len = 0;
@@ -734,12 +831,28 @@ civ_error_t help_hlp_decompress(const uint8_t *src, size_t src_len,
     rc = help_hlp_decompressed_size(src, src_len, &need);
     if (rc != CIV_OK)
         return rc;
+    /* AL2: delegate body (skip decomp_size word at src+0x00, stream at
+     * src+0x04 per AK2 framing) to help_hlp_lzss_try above (local EDI
+     * duplicate, no gfx/SDL pull; parity read-only, not edited). Trial
+     * hit sets *out_len and returns CIV_OK (need is advisory, NOT gated:
+     * decomp_size mismatch still OK, trial len authoritative; see
+     * help_hlp_decompressed_size doc). Trial miss (incl. DST overrun on
+     * small dst) stays UNSUPPORTED (no fake bytes as success; dst
+     * undefined on miss, *out_len stays 0). */
     (void)need;
-    /* TODO: rsc_dump-style read-only dump of a compressed topic body vs
-     * raw to confirm window/bias/decomp_size semantics, then wire a real
-     * LZSS trial (not gfx_try_lzss_edi alias until proven same); unknown
-     * bodies stay UNSUPPORTED, never faked; dst never touched here. */
-    return CIV_ERR_UNSUPPORTED;
+    if (src_len <= 4u)
+        return CIV_ERR_UNSUPPORTED;
+    trial = help_hlp_lzss_try(src + (size_t)4u, src_len - (size_t)4u, dst,
+                              dst_cap);
+    if (trial < 0) {
+        /* TODO: rsc_dump-style read-only dump of a compressed topic body
+         * vs raw to confirm window/bias/decomp_size semantics; unknown
+         * bodies stay UNSUPPORTED, never faked. */
+        return CIV_ERR_UNSUPPORTED;
+    }
+    if (out_len)
+        *out_len = (size_t)trial;
+    return CIV_OK;
 }
 
 civ_error_t help_topic_get_full(const uint8_t *data, size_t len,
@@ -751,7 +864,8 @@ civ_error_t help_topic_get_full(const uint8_t *data, size_t len,
      * help_hlp_topic_text + help_hlp_decompress decision on borrowed bytes
      * (no Win16, no HELP viewer, no SDL, no globals, no exit(), never
      * writes civhelp.hlp). Raw format borrows the view; compressed format
-     * reports UNSUPPORTED (no fake; caller scratch + codec TODO). */
+     * probes help_hlp_lzss_try then reports UNSUPPORTED (no fake; caller
+     * scratch + codec TODO). */
     long off;
     help_hlp_topic_header_t hdr;
     civ_error_t rc;
@@ -776,8 +890,40 @@ civ_error_t help_topic_get_full(const uint8_t *data, size_t len,
     if (rc != CIV_OK)
         return rc;
     if (hdr.format != CIV_HLP_TOPIC_FORMAT_RAW) {
+        /* AL2: LZSS-EDI trial probe for compressed records (no HELP
+         * viewer, no fake text). Body slice = [topic_off+text_off,
+         * topic_off+size) from hdr above (header already validated
+         * overflow-safe; recomputed defensively). Framing per AK2:
+         * +0x00 decomp_size word +0x04 LZ stream (codec TBD, EDI trial
+         * best-effort via help_hlp_lzss_try above, local duplicate, no
+         * gfx/SDL pull). Probe with small stack scratch (no caller
+         * scratch yet, no globals); full decompressed-text return needs
+         * caller-owned scratch via help_hlp_decompress (same trial with
+         * framing) + formatting stripper + viewer (TODO). Hit or miss
+         * both stay UNSUPPORTED here (no persistent buffer to return
+         * text, never faked); raw path below still returns borrowed text.
+         * Small probe may hit DST overrun even when the codec is right
+         * (needs larger scratch) — still a miss probe, no fake. */
+        size_t abs;
+        size_t end;
+        const uint8_t *body;
+        size_t body_len;
+        uint8_t probe[256];
+        int trial;
+
+        abs = (size_t)hdr.topic_off + (size_t)hdr.text_off;
+        end = (size_t)hdr.topic_off + (size_t)hdr.size;
+        if (abs >= len || end > len || abs >= end)
+            return CIV_ERR_RANGE;
+        body = data + abs;
+        body_len = end - abs;
+        if (body_len < (size_t)4u)
+            return CIV_ERR_UNSUPPORTED;
+        trial = help_hlp_lzss_try(body + (size_t)4u, body_len - (size_t)4u,
+                                  probe, sizeof probe);
+        (void)trial;
         /* TODO: wire help_hlp_decompress with caller-owned scratch once
-         * the HLP 3.x LZ variant lands (window/bias TBD, not EDI alias)
+         * the HLP 3.x LZ variant lands (window/bias TBD, not gfx alias)
          * + strip WinHelp formatting codes/bitmap refs; never fake. */
         return CIV_ERR_UNSUPPORTED;
     }

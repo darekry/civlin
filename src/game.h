@@ -487,11 +487,14 @@ civ_error_t unit_do_sentry(uint8_t *units, int unit_idx, int n_units);
  * three jump tables above (1420:43b8+0x8f x0x0e, +0x4b x0x11,
  * 1420:435b+0x28 x0x20); 0x6d road?, 0x70 pollution? per frontier notes,
  * exact per-key semantics (road build vs goto vs attack-move) TBD.
- * Single dispatcher takes the order key explicitly; steps via
- * unit_step_toward_goal @ 1128:0000, odds via Combat_ResolveAttack +
- * 11c0:1bc3. Kept stub (AJ3): needs pathing/ZOC/occupancy full Sims
- * (map_is_occupied @ 1110:18ce / map_is_city_blocked @ 1110:199b /
- * map_check_zoc @ 11c0:23fd + combat state) -> CIV_ERR_UNSUPPORTED.
+ * Single dispatcher takes the order key explicitly; AL1 wires the
+ * explicit kernels: step via unit_move_attack_step (Chebyshev-remaining
+ * + unit_move_cost + unit_can_enter + unit_dir_to_dxdy, moves-1, goal
+ * clear on 0xffff; mirrors unit_step_toward_goal @ 1128:0000) and odds
+ * via unit_attack_resolve (combat_calc_odds @ 11c0:1bc3 + Rng_Range @
+ * 11c8:003d, veteran 0x20 TBD). Full board images (1420:62fc units,
+ * 64 KB tile buffer, 1420:17d4 cost) + UI pump tail via
+ * unit_wait_for_orders @ 11c0:0ec2 stay TBD -> CIV_ERR_UNSUPPORTED.
  * TODO Orig per-key handlers. No globals, no exit(). */
 civ_error_t unit_do_move_attack(int civ, int unit_idx, int order);
 
@@ -600,6 +603,189 @@ int city_get_owner(const uint8_t *base, int idx, int n_cities);
  * CIV_ERR_NOENT on NULL, CIV_ERR_RANGE on n_cities <= 0, idx OOR,
  * or size 0/0xff (invalid/full). */
 civ_error_t city_grow(uint8_t *cities, int city_idx, int n_cities);
+
+/* --- AK1 move + accessors (2026-10-15) ---
+ * Parent: unit_step_toward_goal @ 1128:0000 neighbour scoring
+ *   (Chebyshev-remaining + terrain cost gated on sea/land, ZOC,
+ *   occupancy, ocean-clear). Unit records 0xc bytes (see header top):
+ *   +0 x, +1 y, +2 type, +3 moves, +4 timer, +5 goal-x, +6 goal-y,
+ *   +7 last-dir (0x6304, 0xff init), +8 seen-by, +9 next, +10 home,
+ *   +11 flags. City 0x1c at 1420:5500 (+0 x, +1 y, +2 valid,
+ *   +3 size/def, +7 owner; prod offset TBD, see city_get_prod).
+ * OS-free ports: explicit params only (tile codes + cost-table image,
+ *   dir tables, record bases), no globals, no exit(), read-only
+ *   (except dx/dy outs). Map-side twin tile_move_cost lives in map.h
+ *   (same 1420:17d4*3-or-3 formula, duplicated here to keep game/map
+ *   decoupled for the parallel rewrite). */
+#define CIV_UNIT_OFF_TIMER 4
+#define CIV_UNIT_OFF_LAST_DIR 7
+#define CIV_UNIT_OFF_SEEN 8
+#define CIV_UNIT_OFF_NEXT 9
+#define CIV_UNIT_DIR_ARRIVED 0
+#define CIV_UNIT_DIR_NO_PATH 0xffff
+#define CIV_UNIT_REVERSE_PENALTY 2
+#define CIV_UNIT_RIVER_COST 1
+
+/* Orig unit_step_toward_goal @ 1128:0000 terrain-cost tail ->
+ * unit_move_cost. OS-free 1:1 v1 (implemented): base via the
+ * 1420:17d4*3-or-3 rule (see tile_move_cost in map.h, inlined here to
+ * keep game/map decoupled) + river 1 when is_river != 0 +
+ * anti-reverse penalty (CIV_UNIT_REVERSE_PENALTY) when move_dir 1..8 is
+ * opposite last_dir 1..8 (opposite = ((last - 1 + 4) % 8) + 1; 0xff
+ * init / 0 / 0xffff never penalised). Params: tile is the map tile
+ * code, cost_table is the 1420:17d4 image (read-only, cost_n entries).
+ * Returns total cost (>= 3), -1 on NULL table or cost_n <= 0. Exact
+ * zero-entry/OOR fallback + penalty value TBD vs decompiler. No
+ * globals, no exit(), read-only. */
+int unit_move_cost(int tile, const uint8_t *cost_table, int cost_n,
+                   int move_dir, int last_dir, int is_river);
+
+/* Orig unit_step_toward_goal @ 1128:0000 entry gates -> unit_can_enter.
+ * OS-free 1:1 v1 (implemented, 1 = enter, 0 = blocked): sea/land match
+ * (is_sea_unit != is_sea_tile -> 0; 0x1a3a domain vs Map_IsSeaLand @
+ * 1110:16c0 == 10), ZOC (8-neighbour enemy scan, nonzero = enemy, same
+ * as Map_CheckZOC @ 11c0:23fd but inlined to keep game/map decoupled),
+ * occupancy (linear (x,y) scan, same as Map_IsOccupied @ 1110:18ce /
+ * 16ee), city-blocked (linear scan, same as Map_IsCityBlocked @
+ * 1110:199b), ocean (is_sea_tile && ocean_depth <= 4 -> 0;
+ * Map_OceanClearDepth @ 1110:1dbd > 4 rule, caller passes the
+ * map_ocean_clear_depth depth 0..5). NULL/empty enemy/unit/city maps
+ * mean clear for that gate (matches map_is_occupied/city_blocked);
+ * (x,y) OOB vs ew/eh when enemy_map given -> 0 (blocked, cf.
+ * path_is_passable). No globals, no exit(), read-only. */
+int unit_can_enter(int is_sea_unit, int is_sea_tile,
+                   const int *enemy_map, int ew, int eh, int x, int y,
+                   const int *unit_xs, const int *unit_ys, int n_units,
+                   const int *city_xs, const int *city_ys, int n_cities,
+                   int ocean_depth);
+
+/* Orig dir encoding in unit_step_toward_goal @ 1128:0000 +
+ * Map_ResolveDirect @ 1110:1c4b -> unit_dir_to_dxdy. OS-free 1:1
+ * (implemented): dir 1..8 (1 = N clockwise, same as map_resolve_direct;
+ * exact orig numbering TBD) to dx/dy via static const dx[9],dy[9]
+ * (index 0 = arrived (0,0)). dir 0 = arrived (*dx_out = 0, *dy_out = 0,
+ * CIV_OK); dir 0xffff/-1 = no-path (CIV_ERR_RANGE, outs untouched, test
+ * via unit_order_is_no_path first); other OOR -> CIV_ERR_RANGE; NULL
+ * outs -> CIV_ERR_NOENT. No globals (function-local tables only), no
+ * exit(). */
+civ_error_t unit_dir_to_dxdy(int dir, int *dx_out, int *dy_out);
+
+/* Unit record accessors (1420:62fc 0xc stride, explicit base, no
+ * globals): +10 home-city (unit_home): returns home index 0..254, -1
+ * on NULL, n_units <= 0, idx OOR, or stored 0xff (none). +3 moves
+ * (unit_moves_left) and +8 seen-by mask (unit_seen_by): return byte
+ * 0..255, -1 on NULL / n_units <= 0 / idx OOR. OS-free, read-only, no
+ * exit(). */
+int unit_home(const uint8_t *units, int unit_idx, int n_units);
+int unit_moves_left(const uint8_t *units, int unit_idx, int n_units);
+int unit_seen_by(const uint8_t *units, int unit_idx, int n_units);
+
+/* Orig city production field? (0x1c records at 1420:5500) ->
+ * city_get_prod. Known: +0 x, +1 y, +2 valid, +3 size/def, +7 owner
+ * (see city_get_*). Prod/shields offset TBD vs decompile (no fake
+ * offset defined here). Stub: always -1 (TBD, no fake), same -1
+ * contract as other city_get_* (NULL / n_cities <= 0 / idx OOR also
+ * -1). TODO Orig prod offset. No globals, no exit(), read-only. */
+int city_get_prod(const uint8_t *base, int idx, int n_cities);
+
+/* --- AL1 move_attack + tables (2026-10-15) ---
+ * Parent: Civ_ProcessUnitMoves @ 11f0:0000 orders 0x69/0x6d/0x6f/0x70/
+ *   0x72/0x75 (same three jump tables as unit_do_move_attack above;
+ *   0x6d road?, 0x70 pollution? per frontier, exact per-key TBD).
+ * Stepper unit_move_attack_step is the explicit-params single step
+ *   toward goal via unit_step_toward_goal @ 1128:0000 logic
+ *   (Chebyshev-remaining + move_cost + can_enter + dir_to_dxdy,
+ *   moves-1, goal clear on 0xffff); attacker unit_attack_resolve is
+ *   odds + roll via combat_calc_odds @ 11c0:1bc3 (atk*100/(atk+def))
+ *   + Rng_Range @ 11c8:003d (via game_uprising_rng_scale) with veteran
+ *   flag 0x20 TBD. Tables tech_names/wonder_names/terrain_cost_table
+ *   are OS-free static-const ports (no fake beyond confirmed, see
+ *   per-func TODOs). Dispatcher unit_do_move_attack wires step + attack
+ *   and keeps the stub tail for the UI pump via unit_wait_for_orders @
+ *   11c0:0ec2. OS-free, no globals, no exit(), read-only except the
+ *   stepper's unit-record write (x/y/moves/last-dir/goal clear).
+ * Map parity (read, not edited; see map.h, parallel-owned):
+ *   map_is_sea_land @ 1110:16c0 == 10 (sea), map_is_occupied @
+ *   1110:18ce/16ee, map_is_city_blocked @ 1110:199b, map_ocean_clear_depth
+ *   @ 1110:1dbd > 4 (capped at 5), map_resolve_direct @ 1110:1c4b
+ *   (|dx|<2,|dy|<2), tile_move_cost 1420:17d4*3-or-3, path_is_passable @
+ *   1128:081c OOB = blocked; game-side twins unit_move_cost (river 1 +
+ *   reverse 2), unit_can_enter gates, unit_dir_to_dxdy 1=N clockwise. */
+#define CIV_UNIT_FLAG_VETERAN 0x20
+
+/* Orig unit_step_toward_goal @ 1128:0000 single-step core ->
+ * unit_move_attack_step. OS-free 1:1 v1 (implemented): explicit unit +
+ * board params, no globals. Reads x/y/moves(+3)/goal(+5/+6, 0xff none)/
+ * last-dir(+7, 0xff init) from units[unit_idx] (0xc stride, see header
+ * top). Direct (|dx|<2,|dy|<2, cf. map_resolve_direct @ 1110:1c4b) then
+ * 8-neighbour best-score (Chebyshev max(|gx-nx|,|gy-ny|) + unit_move_cost
+ * via cost_table 1420:17d4*3-or-3 + river 1 + reverse 2, gated by
+ * unit_can_enter: sea match 0x1a3a vs 10, ZOC/enemy, occupancy, city,
+ * ocean >4 with depth counted as map_ocean_clear_depth @ 1110:1dbd
+ * capped at 5; sea = tile 10, river = tile 0x0c per map.h; OOB blocked
+ * cf. path_is_passable @ 1128:081c). Dirs via unit_dir_to_dxdy 1=N
+ * clockwise. On step: x/y = nx/ny, last-dir = dir, moves-1 (exact cost
+ * deduction TBD, currently 1 per step). On 0xffff: clears goal-x/goal-y/
+ * last-dir to 0xff (exact 6302/6304 mask TBD, 6303? included here).
+ * Returns dir 1..8 (moved), 0 arrived (x==goal) / exhausted (moves<=0) /
+ * no-goal (0xff) with no write, 0xffff no-path (goal cleared), -1 on
+ * NULL/bad (units/tiles/cost_table, counts, idx OOR; no write). Ties to
+ * lowest dir (TBD). No globals, no exit(). */
+int unit_move_attack_step(uint8_t *units, int unit_idx, int n_units,
+                          const uint8_t *tiles, int bw, int bh,
+                          const uint8_t *cost_table, int cost_n,
+                          const int *enemy_map, int ew, int eh,
+                          const int *unit_xs, const int *unit_ys,
+                          int n_occ_units,
+                          const int *city_xs, const int *city_ys, int n_cities,
+                          int is_sea_unit);
+
+/* Orig Combat_ResolveAttack (near unit_choose_order @ 1078:1480) +
+ * FUN_11c0_1bc3 @ 11c0:1bc3 -> unit_attack_resolve. OS-free 1:1 v1
+ * (implemented): odds via combat_calc_odds (atk*100/(atk+def)) on
+ * effective strengths (currently raw pass-through; veteran/terrain
+ * pre-scale from combat_resolve_attack stub TBD, no fake), roll via
+ * Rng_Range @ 11c8:003d (game_uprising_rng_scale(rand15,100) 0..99).
+ * atk_flags/def_flags bit CIV_UNIT_FLAG_VETERAN (0x20, unit +11, see
+ * header top) accepted for future decoding, currently ignored (void).
+ * Attacker wins when roll < odds (odds 100 always wins, 0 never).
+ * Returns 1 attacker wins, 0 defender wins, -1 on bad (negative or
+ * both-zero strengths via combat_calc_odds). odds_out optional (may be
+ * NULL); when non-NULL writes odds 0..100 on success, -1 on bad. No
+ * Win16, no globals, no exit(), read-only. */
+int unit_attack_resolve(int atk_strength, int def_strength,
+                        int atk_flags, int def_flags,
+                        unsigned rand15, int *odds_out);
+
+/* Orig tech table for Game_UpdatePowerRankings @ 1088:108a (tech
+ * contribution, table TBD) + Game_PickWonderForAI @ 1170:3181
+ * (tech-table gated via game_pick_wonder_for_ai prereq indices) ->
+ * tech_names. OS-free static-const port (stub, no fake): checked game.c
+ * (only prereq indices, no string literals) so no dump-confirmed names
+ * yet; Alphabet/.../Nuclear hypothesis stays TODO. Returns "?" for any
+ * tech (confirmed subset empty + "?" unknown, never NULL, read-only
+ * literal). Count TBD (callers pass n_tech explicitly). No globals, no
+ * exit(). */
+const char *tech_names(int tech);
+
+/* Orig wonder table for Game_PickWonderForAI @ 1170:3181 (eligible[w]
+ * via game_pick_wonder_for_ai, tech-gated) + "... builds ..." tail via
+ * unit_notify_wonder @ 1088:1e32 -> wonder_names. OS-free port (stub,
+ * no fake): checked game.c (only wonder indices, no string literals)
+ * so no confirmed names; 7-wonders hypothesis (Pyramids/Hanging/
+ * Oracle/etc.) stays TODO. Returns "?" for any wonder (never NULL).
+ * Count TBD (callers pass n_wonders explicitly). No globals, no exit(). */
+const char *wonder_names(int wonder);
+
+/* Orig 1420:17d4 terrain base-cost table for unit_move_cost /
+ * tile_move_cost (*3-or-3) -> terrain_cost_table. OS-free port (stub,
+ * no fake): entries/stride TBD (0x?? entries? stride? vs decompile),
+ * so no image yet; consumers take the explicit cost_table image until
+ * the fixed image is decoded (see unit_move_cost + tile_move_cost in
+ * map.h, same formula). Returns base cost per tile when known, -1 TBD
+ * for now on any tile (no fake entries; tile param void). TODO Orig
+ * 1420:17d4 layout. No globals, no exit(), read-only. */
+int terrain_cost_table(int tile);
 
 void game_shutdown(civ_game_t *g);
 

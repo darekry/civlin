@@ -29,6 +29,10 @@
 
 #include "civ_common.h"
 #include "win16_compat.h"
+/* AL2: FNT face + SDL types for text_draw_with_font below (SDL only
+ * there, via video bridge; no Win16). boot.h brings SDL + font_fnt_info_t
+ * (read-only parity, not edited). */
+#include "boot.h"
 
 #define CIV_MAP_BUF_W 0x140u
 #define CIV_MAP_BUF_H 200u
@@ -204,6 +208,31 @@ civ_error_t map_spot_city(int civ, int x, int y);
 civ_error_t text_draw_status_row(const char *str, const civ_rect_t *rect,
                                  int slot);
 
+/* --- AL2 status text blit (2026-10-16) ---
+ * Orig: FUN_11f8_0278 @ 11f8:0278 -> Text_DrawStatusRow via
+ *   font_blit_glyph @ 1008:0e99 + font_text_width/height.
+ * Params: NUL-terminated str + destination frame rect (civ_rect_t from
+ *   wdwstatus_calc_upper/lower @ 1218:0956/0a06) + slot selecting the
+ *   DAT_12d8_45f4/45fb source row / font row (0 = upper/45f4, 1 =
+ *   lower/45fb; other non-negative = same origin, exact row mapping TBD).
+ * OS-free metrics via font_text_width/height + per-char SDL blit loop via
+ *   font_blit_glyph (video bridge, no Win16): for each char,
+ *   font_render_glyph @ 1008:0e99 dfBitsOffset tight repack (w+7)/8 ->
+ *   font_glyph_to_surface (8-bit black/white) -> font_blit_glyph at
+ *   (rect->left + xoff, rect->top); xoff += glyph width (tracking 0,
+ *   GetTextExtent shape); single row, no wrap, clipped at rect->right.
+ * SDL lives only here (via video bridge headers in map.c; no direct
+ *   Win16). No globals, no exit(), C17; read-only font image (borrowed,
+ *   never writes civfonts.fon) vs caller-owned SDL dest (win borrowed,
+ *   may be NULL like font_blit_glyph; ren/tex borrowed, never owned).
+ * text_draw_status_row above stays the SDL-free stub (no handles without
+ *   globals); this is the SDL bridge port. */
+civ_error_t text_draw_with_font(SDL_Window *win, SDL_Renderer *ren,
+                                SDL_Texture *tex, const char *str,
+                                const civ_rect_t *rect, int slot,
+                                const uint8_t *font_data, size_t font_len,
+                                const font_fnt_info_t *font_info);
+
 /* --- status-text rows (packet D 2026-10-15) ---
  * Row formatters write the NUL-terminated status line into the shared
  * 12d8:24fa line buffer (see game_append_year_text @ 1088:1dd0), then the
@@ -286,5 +315,21 @@ civ_error_t mainport_apply_palette(int first, int count);
  * "river seed", 0x0f "border"; every other code returns "?" (TODO).
  * Returns a read-only literal, never NULL. No globals, no exit(). */
 const char *tile_type_name(int tile);
+
+/* --- AK1 tile/move cost (2026-10-15) ---
+ * Map-side twin of unit_move_cost in game.h (same 1420:17d4 formula, no
+ * cross-link to keep game/map decoupled for the parallel rewrite).
+ * Parent: unit_step_toward_goal @ 1128:0000 neighbour scoring
+ * (Chebyshev-remaining + terrain cost: 1420:17d4*3 or 3, river 1,
+ * anti-reverse 0x6304 penalty; river + reverse live in unit_move_cost,
+ * this helper does the base only). OS-free, no globals, no exit(),
+ * read-only. */
+
+/* Orig 1420:17d4 base-cost table -> tile_move_cost. OS-free 1:1 v1
+ * (implemented): base = cost_table[tile] * 3 when 0 <= tile < cost_n
+ * and entry != 0, else 3 (the "or 3" fallback; OOR/zero handling TBD vs
+ * decompiler). Returns base cost (>= 3), -1 on NULL table or
+ * cost_n <= 0. No globals, no exit(), read-only. */
+int tile_move_cost(int tile, const uint8_t *cost_table, int cost_n);
 
 #endif /* CIVLIN_MAP_H */

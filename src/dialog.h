@@ -444,7 +444,7 @@ civ_error_t help_hlp_decompressed_size(const uint8_t *src, size_t src_len,
 /* Orig: FUN_xxxx_xxxx @ xxxx:xxxx TBD -> Help_HlpDecompress.
  * HLP 3.x topic-body LZ side. OS-free stub with explicit src/dst bounds
  * (borrowed src vs caller-owned dst, never writes civhelp.hlp; no SDL, no
- * globals, no exit(), no fake bytes, dst never touched on stub).
+ * globals, no exit(), no fake bytes, dst never touched on miss).
  * HLP 3.x LZ vs EDI note (parity read-only via Read, not edited/reused
  * blindly): EDI LZSS2 (tools/unpack_edi.py + gfx_try_lzss_edi @ 10f8:040a
  * family, see gfx_indexed.h: 4K ring prefilled 0x20, curpos 4096-18=4078,
@@ -453,12 +453,16 @@ civ_error_t help_hlp_decompressed_size(const uint8_t *src, size_t src_len,
  * unpacked_len prefix, raw code stream); HLP 3.x topic bodies use their
  * own WinHelp 3.x LZ variant (decomp_size word + code stream with
  * window/bias TBD from the 72787 B dump, not proven same as EDI), so this
- * does NOT alias gfx_try_lzss_edi output (no fake decompress). NULL
- * src/dst -> NOENT (NULL out_len = skip, zeroed when present); src_len < 4
- * or dst_cap == 0 -> TRUNCATED; otherwise UNSUPPORTED until the HLP codec
- * is dumped/wired (TODO: rsc_dump-style read-only dump of a compressed
- * topic body vs raw, confirm window/bias/decomp_size semantics, then wire
- * a real LZSS trial here; unknown bodies stay UNSUPPORTED, never faked).
+ * does NOT alias gfx_try_lzss_edi output (no fake decompress; AL2 wires
+ * the local duplicate help_hlp_lzss_try below instead, no gfx/SDL pull).
+ * AL2 (2026-10-16): delegates body (skip decomp_size word at src+0x00,
+ * stream at src+0x04) to help_hlp_lzss_try; trial hit sets *out_len and
+ * returns CIV_OK (need is advisory, NOT gated), trial miss stays
+ * UNSUPPORTED (no fake). NULL src/dst -> NOENT (NULL out_len = skip,
+ * zeroed when present); src_len < 4 or dst_cap == 0 -> TRUNCATED;
+ * otherwise UNSUPPORTED on trial miss (TODO: rsc_dump-style read-only
+ * dump of a compressed topic body vs raw to confirm window/bias/
+ * decomp_size semantics; unknown bodies stay UNSUPPORTED, never faked).
  * Outputs zeroed (*out_len = 0 when non-NULL) on any error. */
 civ_error_t help_hlp_decompress(const uint8_t *src, size_t src_len,
                                 uint8_t *dst, size_t dst_cap,
@@ -472,16 +476,39 @@ civ_error_t help_hlp_decompress(const uint8_t *src, size_t src_len,
  * TRUNCATED; magic mismatch (incl. EDILZSS2-packed input) -> BAD_DATA;
  * help_hlp_btree_find miss (< 0, incl. unwired B-tree stub) -> NOENT;
  * header/text RANGE propagates as RANGE; format !=
- * CIV_HLP_TOPIC_FORMAT_RAW (compressed/encoded) -> UNSUPPORTED (no fake
- * decompress; TODO: wire help_hlp_decompress with caller scratch +
- * formatting-code stripper once the codec lands). On success (raw only)
- * sets *out_text / *out_len exactly like help_hlp_topic_text above and
- * returns CIV_OK (borrowed view into data, caller-owned buffers only).
- * Outputs zeroed (*out_text = NULL, *out_len = 0) on any error when
- * non-NULL. Unknown ids stay NOENT, never faked. */
+ * CIV_HLP_TOPIC_FORMAT_RAW (compressed/encoded) -> UNSUPPORTED after an
+ * AL2 (2026-10-16) help_hlp_lzss_try probe on body+0x04 with stack
+ * scratch (no fake text; full decompressed-text return still needs
+ * caller-owned scratch via help_hlp_decompress + formatting-code stripper
+ * + viewer, TODO once the codec lands). On success (raw only) sets
+ * *out_text / *out_len exactly like help_hlp_topic_text above and returns
+ * CIV_OK (borrowed view into data, caller-owned buffers only). Outputs
+ * zeroed (*out_text = NULL, *out_len = 0) on any error when non-NULL.
+ * Unknown ids stay NOENT, never faked. */
 civ_error_t help_topic_get_full(const uint8_t *data, size_t len,
                                 uint32_t topic_id,
                                 const uint8_t **out_text, size_t *out_len);
+
+/* --- AL2: HLP LZSS-EDI trial (2026-10-16).
+ * HLP topic body via LZSS-EDI 4K ring 0x20 gfx_try_lzss_edi parity
+ * read-only (tools/unpack_edi.py + gfx_try_lzss_edi @ 10f8:040a family,
+ * see gfx_indexed.h, read via Read, not edited/reused blindly): flags
+ * LSB-first 1=literal 1B / 0=match 2B matchpos=((x1&0xF0)<<4)|x0
+ * matchlen=(x1&0x0F)+3; 4K ring prefilled 0x20, curpos 4096-18=4078,
+ * overlap-safe forward copy; raw code-stream framing (no 25-B EDI header
+ * / unpacked_len prefix, no HLP decomp_size word here — framing lives in
+ * help_hlp_decompress above/below). OS-free port duplicated here to avoid
+ * a gfx pull (gfx_indexed.h brings SDL; dialog HLP stays SDL-free): same
+ * 4K ring/bias/shape, stack ring only, no cross-module globals. No SDL,
+ * no globals, no exit(), C17; borrowed src vs caller-owned dst,
+ * read-only (never writes civhelp.hlp).
+ * HLP 3.x LZ vs EDI note (see help_hlp_decompress): EDI is installer
+ * framing, HLP 3.x topic-body variant (decomp_size word + window/bias TBD
+ * from the 72787 B dump) is not proven same, so this trial is best-effort
+ * (miss stays -1, never faked); help_hlp_decompress wires it with framing,
+ * help_topic_get_full probes it for compressed records. */
+int help_hlp_lzss_try(const uint8_t *src, size_t src_len,
+                      uint8_t *dst, size_t dst_cap);
 
 /* WINHELP(CIV_HELP_FILE_NAME) bridge (stub; topic NULL = contents page).
  * Win16 WINHELP -> SDL3 help viewer TBD. */

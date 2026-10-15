@@ -1,6 +1,16 @@
 /* Map tile buffer (1:1) + window stubs. */
 #include "map.h"
 
+/* AL2: SDL/video bridge for text_draw_with_font only (read-only parity
+ * via Read, not edited; no Win16 here). Other funcs stay SDL-free. */
+#include <SDL3/SDL.h>
+
+#include "video.h"
+#include "gfx_indexed.h"
+/* boot.h already via map.h (font_render_glyph/text_width/height +
+ * font_fnt_info_t); explicit for parity clarity. */
+#include "boot.h"
+
 /* 64 KB tile buffer: g_segMapBuf:g_offMapBuf @ 1420:b396/b394. */
 static uint8_t s_map[CIV_MAP_BUF_LEN];
 
@@ -302,6 +312,96 @@ civ_error_t text_draw_status_row(const char *str, const civ_rect_t *rect,
     return CIV_ERR_UNSUPPORTED;
 }
 
+civ_error_t text_draw_with_font(SDL_Window *win, SDL_Renderer *ren,
+                                SDL_Texture *tex, const char *str,
+                                const civ_rect_t *rect, int slot,
+                                const uint8_t *font_data, size_t font_len,
+                                const font_fnt_info_t *font_info)
+{
+    /* AL2 Text_DrawStatusRow @ 11f8:0278 via font_blit_glyph @ 1008:0e99
+     * + font_text_width/height (see map.h). OS-free metrics + per-char
+     * SDL blit loop, no Win16: str + rect (civ_rect_t from
+     * wdwstatus_calc_upper/lower @ 1218:0956/0a06) + slot DAT_12d8_45f4/
+     * 45fb (0 = upper/45f4, 1 = lower/45fb; other non-negative = same
+     * origin, exact row mapping TBD) -> font blit per char at
+     * (rect->left + xoff, rect->top), xoff += glyph width (tracking 0).
+     * Metrics parity read-only (not edited): font_text_width (sum of
+     * per-char entry widths, OOR skipped) + font_text_height
+     * (dfPixHeight line stride). SDL bridge via video.h font_blit_glyph
+     * (SRCCOPY 0xcc0020 family) + gfx_indexed.h font_glyph_to_surface
+     * (FNT 1-bpp MSB-first tight (w+7)/8 -> 8-bit black/white surface).
+     * Single row, no wrap, clipped at rect->right (break when xoff >=
+     * rect_w); vertical overflow still blits top-aligned (no fake scale).
+     * Borrowed font image (never writes civfonts.fon) vs caller-owned SDL
+     * dest (win borrowed, may be NULL like font_blit_glyph; ren/tex
+     * borrowed, never owned/freed here; glyph surfaces temp, destroyed
+     * per char). No globals, no exit(), C17. */
+    int rect_w;
+    int line_h;
+    int total_w;
+    int xoff;
+    size_t i;
+
+    if (!str || !rect || !font_data || !font_info)
+        return CIV_ERR_NOENT;
+    if (!ren || !tex)
+        return CIV_ERR_NOENT;
+    if (font_len < (size_t)CIV_FNT_MIN_SIZE)
+        return CIV_ERR_TRUNCATED;
+    if (rect->right <= rect->left || rect->bottom <= rect->top)
+        return CIV_ERR_RANGE;
+    if (slot < 0)
+        return CIV_ERR_RANGE;
+    /* Metrics via font_text_width/height (parity, no SDL). total_w is the
+     * GetTextExtent shape without tracking (OOR chars contribute 0, see
+     * boot.h); used only for documentation/clipping parity, success never
+     * gated on it (empty/undecodable text still walks per char below). */
+    total_w = font_text_width(font_data, font_len, font_info, str);
+    line_h = font_text_height(font_info);
+    (void)total_w;
+    if (line_h <= 0)
+        return CIV_ERR_BAD_DATA;
+    rect_w = rect->right - rect->left;
+    /* Slot selects the DAT_12d8_45f4/45fb source row + font row; the rect
+     * already selects the upper/lower frame, so no y offset is faked here
+     * (exact row mapping TBD, see map.h). win is passed through to
+     * font_blit_glyph (ignored there, may be NULL). */
+    xoff = 0;
+    for (i = 0; str[i] != '\0'; i++) {
+        int c = (unsigned char)str[i];
+        uint8_t bits[1024];
+        int gw = 0;
+        int gh = 0;
+        civ_error_t r;
+        SDL_Surface *surf = NULL;
+        civ_error_t b;
+
+        if (xoff >= rect_w)
+            break;
+        /* Tight repack (w+7)/8 via font_render_glyph (dfBitsOffset +
+         * dfCharTable, MSB-first). Skip OOR/undecodable chars with 0
+         * advance (parity with font_text_width, never faked). 1024 B
+         * covers all 21 faces (max stride*h ~5*38=190 B for TIMES36; see
+         * boot.h font_fnt_bits stride (dfMaxWidth+7)/8). */
+        r = font_render_glyph(font_data, font_len, font_info, c, bits,
+                              sizeof bits, &gw, &gh);
+        if (r != CIV_OK)
+            continue;
+        if (gw <= 0 || gh <= 0)
+            continue;
+        surf = font_glyph_to_surface(bits, gw, gh);
+        if (!surf)
+            return CIV_ERR_IO;
+        b = font_blit_glyph(win, ren, tex, rect->left + xoff, rect->top,
+                            surf);
+        SDL_DestroySurface(surf);
+        if (b != CIV_OK)
+            return b;
+        xoff += gw;
+    }
+    return CIV_OK;
+}
+
 civ_error_t status_format_main_row(char *dst, size_t cap)
 {
     (void)dst;
@@ -419,4 +519,20 @@ const char *tile_type_name(int tile)
         return "?";
     s = s_tile_type_names[tile];
     return s != NULL ? s : "?";
+}
+
+int tile_move_cost(int tile, const uint8_t *cost_table, int cost_n)
+{
+    /* Orig 1420:17d4 base-cost table (*3-or-3) for unit_step_toward_goal
+     * @ 1128:0000 (map-side twin of unit_move_cost in game.h; river 1 +
+     * anti-reverse 0x6304 live in the game-side wrapper). Zero-entry /
+     * OOR fallback TBD vs decompiler. OS-free, no globals, read-only. */
+    int v;
+
+    if (cost_table == NULL || cost_n <= 0)
+        return -1;
+    if (tile < 0 || tile >= cost_n)
+        return 3;
+    v = cost_table[tile];
+    return v != 0 ? v * 3 : 3;
 }
