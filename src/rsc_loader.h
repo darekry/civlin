@@ -1,4 +1,4 @@
-/* CivLin RSC resource manager (resmgr.c port).
+/* CivLin RSC resource manager (resmgr.c port, W2: load walk implemented).
  *
  * Ghidra anchors (civ.exe, NE Win3.x), renamed 2026-10-15/16:
  *   ResMgr_LoadRsc      @ 1190:0000  (OpenResFile; _LOPEN + _HREAD 0xE360
@@ -55,23 +55,55 @@
  *   - Custom resmgr container, NOT Mac HFS resources, NOT NE resources
  *     (file(1) "HFS resource fork" hit is a false positive; "rsrcRSED"
  *     in civdata0 is just another 4-char type tag family).
- *   - Header per file node: u32 unk, u32 unk, u16 type-dir count, then per
- *     type: 4-char tag + u16 res-count + u16 unk, per record 0x32-B header
- *     (id u16 @ +0, name-off u16, file-off u32 @ +4, len u32, name len u8
- *     capped 0x1f + name chars @ +0xc, ...). All LE via mult table.
+ *   - File header 16 B: magic 00 00 01 00 @ +0, u32 unk0 BE @ +4, u32
+ *     unk1 BE @ +8, u32 dir_size BE @ +12 (dir_size = file_size -
+ *     dir_off; observed: 358/766/3621/63/10608 for CivData1/2/3/4/0,
+ *     all < 0xE360). Directory at EOF (last magic) starts with the same
+ *     16-B header copy, then 14-B file-node extra (opaque, skipped),
+ *     then per type: 4-char tag + u16 res-count BE + u16 unk BE (8 B),
+ *     then per record 12-B on-disk: id BE16 @ +0, name-off BE16 @ +2,
+ *     unk u8 @ +4, file-off BE24 @ +5..+7 (zero-extended to u32),
+ *     unk BE16 @ +8..+9, len BE16 @ +10..+11 (zero-extended to u32).
+ *     In-memory res node is 0x32 B via rsc_new_resource (id @ +0,
+ *     name-off @ +2, file-off u32 @ +4, len u32 @ +8, name len u8 @
+ *     +0xc capped 0x1f + chars @ +0xd, loaded @ +0x2d, handle @ +0x2e).
+ *     All integers BE (orig descending mult-table loop over ascending
+ *     LE table @ 1420:3d00 {1,0x100,0x10000,0x1000000}: first byte *
+ *     largest power = BE; previous "LE" docs were misread, fixed W2).
+ *   - String table at dir end (after all types/records): len-prefixed
+ *     names (len u8 + chars, len capped 0x1f); record name-off is the
+ *     byte offset into the table (0xffff = no name -> empty).
+ *     Payloads before the directory (file_off+len <= dir_off <= size).
  *   - Runtime: file list @ 1420:b2c0, type list @ 1420:b2c2, cursor pair
  *     @ 1420:b2b4/b2b8 (+seg @ b2b6/b2ba), file-count @ 1420:b2be,
  *     type-count @ 1420:b2bc. Lazy payload load (LoadToMem) + Zap/Release.
  *
- * What this module does now:
- *   - DOES (OS-free, ported 1:1): rsc_read_u16le / rsc_read_u32le /
- *     rsc_cmp_type / rsc_cmp_name (exact logic of ResMgr_ReadU16/U32,
- *     CmpType/CmpName, cursor-advancing, no Win16).
- *   - DOES (v1 probe, kept): rsc_open() validates magic 00 00 01 00 +
- *     marker, scans the first 1 KiB for 8-byte tags (bounded, read-only).
- *   - DOES NOT yet: full type-dir walk (needs the u32/u32/u16 header
- *     decode against all 5 files -> rsc_record_data() still UNSUPPORTED),
- *     GLOBAL* list manager, GfxPort BITBLT bridge, palette animation
+ * What this module does now (W2):
+ *   - DOES (OS-free, ported 1:1, BE fixed W2): rsc_read_u16le /
+ *     rsc_read_u32le / rsc_cmp_type / rsc_cmp_name (ResMgr_ReadU16/U32,
+ *     CmpType/CmpName, cursor-advancing, no Win16; _le suffix retained
+ *     for RE-map fidelity, actually BE per descending loop).
+ *   - DOES (v1 probe, kept for listing): rsc_open() validates magic
+ *     00 00 01 00 + marker, scans the first 1 KiB for 8-byte tags
+ *     (bounded, read-only); record_count/info still reflect the scan.
+ *   - DOES (W2, buffered 0xE360): rsc_load_rsc() reads the EOF directory
+ *     (dir_size <= 0xE360, malloc, no GLOBALALLOC) via File_ReadChunk
+ *     and walks u32/u32/u16-equivalent + per-type tag/count + 12-B
+ *     records into rsc_add_file/type/new_resource (read-only, validated
+ *     vs all 5 CivData sizes, no exit/globals/SDL).
+ *   - DOES (W2, streaming twin): rsc_load_rsc_disk() same walk streamed
+ *     via rsc_read_u16_disk/disk2/u32_disk (taken when GLOBALCOMPACT <
+ *     1500000 in orig).
+ *   - DOES (W2): rsc_load_to_mem() via fseek (file_seek_wrapper/_LLSEEK
+ *     equiv) + file_read_chunk + malloc, sets loaded @ +0x2d = 1 and
+ *     handle @ +0x2e (non-zero unique, 0 never matches find_by_handle).
+ *   - DOES (W2, minimal slice): rsc_record_data() prefers the directory
+ *     slice (file-off/len from the 12-B header -> u32 @ +4/+8 in the
+ *     node, bounds file_off+len <= size, borrowed, valid while rsc_file
+ *     lives; len 0 derives from next file-off in the same type, last to
+ *     dir_off); scan kept as listing fallback, slice failures return
+ *     UNSUPPORTED/TRUNCATED/RANGE (no copy, no exit/globals/SDL).
+ *   - DOES NOT yet: GfxPort BITBLT bridge, palette animation
  *     (ANIMATEPALETTE -> SDL_SetPaletteColors in video.c), sound/font
  *     wiring. Those stay stubs with TODO Orig addresses.
  *
@@ -136,6 +168,12 @@ const char *rsc_strerror(rsc_error_t err);
  *   rsc_cmp_name   -> ResMgr_CmpName @ 1190:0e72 (case-insensitive,
  *                     0x1f chars max, NUL/NUL stops; tolower via
  *                     FUN_1000_1978 in orig, plain ASCII here)
+ * Endian (fixed W2): orig loops descend (1->0 for U16, 3->0 for U32)
+ * over the ascending LE table @ 1420:3d00 {1,0x100,0x10000,0x1000000}
+ * (verified via 1420:3d00 bytes 01 00 00 00 00 01 00 00 ...), so the
+ * first byte takes the largest power = big-endian. The _le suffix is
+ * retained for RE-map fidelity; the implementation is BE to validate
+ * against all 5 CivData files (LE gave huge file-offs > sizes).
  * Readers return 0 on truncated cursor (orig callers never hit this;
  * _HREAD always fills 0xE360). */
 uint16_t rsc_read_u16le(rsc_cursor_t *cur);
@@ -164,27 +202,35 @@ const char *rsc_path(const rsc_file_t *f);
 size_t rsc_record_count(const rsc_file_t *f);
 rsc_error_t rsc_record_info(const rsc_file_t *f, size_t i, rsc_record_t *out);
 
-/* Payload carving: STUB (packet H documents, does not yet carve).
- * Exact offsets needed for a safe bounds-checked slice (see Packet H file
- * header above): file header u32 unk0 + u32 unk1 + u16 type-dir count;
- * per-type 4-char tag + u16 res-count + u16 unk; per-record 0x32-B header
- * (id u16 @ +0, name-off u16 @ +2, file-off u32 @ +4, len u32 @ +8, name
- * len u8 @ +0xc capped 0x1f + chars @ +0xd, loaded @ +0x2d, handle @
- * +0x2e). Minimal version will be: validate i < nrecords, read file-off /
- * len from the 0x32-B header, bounds-check file-off + len <= rsc_size,
- * return borrowed slice (no copy, valid while rsc_file lives). Until the
- * full type-dir walk is validated against all 5 CivData files, returns
- * RSC_ERR_UNSUPPORTED (RSC_ERR_NOENT/RANGE on bad args). */
+/* Payload carving: IMPLEMENTED minimal slice (W2, prefers slice over the
+ * v1 1 KiB tag-scan probe; scan kept for record_count/info listing).
+ * Walks the EOF directory in f->data (BE, same framing as rsc_load_rsc):
+ * file header 16 B (magic + unk0 BE32 + unk1 BE32 + dir_size BE32),
+ * 14-B file extra (skipped), per-type 8 B (tag + count BE16 + unk BE16,
+ * count+1 records per orig <=count+1U loops), per-record 12-B on-disk
+ * (id BE16 @ +0, name-off BE16 @ +2, unk u8 @ +4, file-off BE24 @
+ * +5..+7 zero-extended to u32 @ +4 in the node, unk BE16 @ +8..+9, len
+ * BE16 @ +10..+11 zero-extended to u32 @ +8; len 0 derives from the next
+ * file-off in the same type, last to dir_off). Validates i < dir_total
+ * (RANGE), file_off+len <= rsc_size overflow-safe (TRUNCATED), returns
+ * the borrowed slice f->data+file_off (valid while rsc_file lives, no
+ * copy, empty slice with size 0 when len is 0). Directory-walk failures
+ * (bad magic/dir_size/dir_off) return UNSUPPORTED (scan listing still
+ * available); NULL args return NOENT. Read-only, no exit/globals/SDL. */
 rsc_error_t rsc_record_data(const rsc_file_t *f, size_t i,
                             const uint8_t **data, size_t *size);
 
-/* Indexed images: STUB (packet H documents strict validation plan).
- * Plan: rsc_record_data slice must first succeed; then validate an 8-bit
- * image + palette (width > 0, height > 0, width*height <= slice len, bpp
- * == 8, pal_count in 1..255 with 3*pal_count bytes present, max pixel
- * index < pal_count when a palette is attached). rsc_image_count stays 0
- * and rsc_get_indexed returns RSC_ERR_UNSUPPORTED until that chain is
- * proven; gfx_indexed_to_surface already enforces the same 8-bit +
+/* Indexed images: IMPLEMENTED (X1, strict gate, OS-free, no SDL).
+ * Producer chain: rsc_record_data slice must first succeed (directory
+ * file-off/len, bounds file_off+len <= size, borrowed, valid while
+ * rsc_file lives; len 0 derives from next file-off, last to dir_off);
+ * then rsc_decode_bitmap validates the 8-bit image + palette (width > 0,
+ * height > 0, bpp == 8, pal_count in 1..255 with 3*pal_count bytes
+ * present, width*height indices present, every pixel index < pal_count).
+ * rsc_image_count counts slices that pass that strict gate (0 on NULL
+ * file or directory-walk failure); rsc_get_indexed returns the borrowed
+ * view for record i (pixels points into the container, palette copied
+ * with tail zeroed). gfx_indexed_to_surface enforces the same 8-bit +
  * palette checks on its input (see gfx_indexed.h). */
 size_t rsc_image_count(const rsc_file_t *f);
 rsc_error_t rsc_get_indexed(const rsc_file_t *f, size_t i, rsc_indexed_t *out);
@@ -241,12 +287,12 @@ rsc_error_t rsc_decode_bitmap(const uint8_t *data, size_t size,
  *     (renamed with _res_ infix: rsc_get_indexed above is the v1 image view)
  *   FUN_1190_0aea @ 1190:0aea ResMgr_GetById       -> rsc_get_by_id
  *   FUN_1190_0bbe @ 1190:0bbe ResMgr_GetByName     -> rsc_get_by_name
- *   FUN_1190_0fda @ 1190:0fda ResMgr_LoadToMem     -> rsc_load_to_mem (stub)
+ *   FUN_1190_0fda @ 1190:0fda ResMgr_LoadToMem     -> rsc_load_to_mem (W2)
  *   FUN_1190_10e6 @ 1190:10e6 ResMgr_ZapRes        -> rsc_mgr_dispose covers
  *     free path (payload free + loaded=0/handle=0, no _LCLOSE here)
  *   FUN_1190_0c92 @ 1190:0c92 ResMgr_Dispose       -> rsc_mgr_dispose/free
  * All find/get/add are OS-free linked-list walks (implemented 1:1);
- * only LoadToMem needs file offsets + _LLSEEK/_HREAD (stub). */
+ * LoadToMem is file offsets + fseek/file_read_chunk/malloc (W2). */
 
 typedef struct rsc_res rsc_res_t;
 typedef struct rsc_type rsc_type_t;
@@ -353,25 +399,32 @@ rsc_res_t *rsc_get_by_id(const rsc_type_t *type, uint16_t id);
 rsc_res_t *rsc_get_by_name(const rsc_type_t *type, const char *name);
 
 /* Orig: FUN_1190_0fda @ 1190:0fda -> ResMgr_LoadToMem (RestoMem).
- * Win16-sensitive STUB: orig does _LLSEEK(file_off) + _HREAD(len) payload,
- * sets loaded flag +0x2d = 1 and handle +0x2e. Needs container offsets +
- * file handle plumbing (see ResMgr_LoadRsc @ 1190:0000 /
- * ResMgr_LoadRscDisk @ 1190:0501); Linux payload malloc + file_seek_wrapper
- * + file_read_chunk wiring TBD. Always RSC_ERR_UNSUPPORTED (NULL-safe:
- * RSC_ERR_NOENT on bad args). */
+ * IMPLEMENTED (W2, OS-free 1:1 without Win16): orig does _LLSEEK(file_off
+ * @ +0x04) + _HREAD(len @ +0x08) into a GLOBALALLOC buffer, sets loaded
+ * flag +0x2d = 1 and handle +0x2e (0 == not loaded, never matches
+ * ResMgr_FindByHandle @ 1190:0ee5). Linux: fseek(fp, file_off, SEEK_SET)
+ * (file_seek_wrapper @ 1000:xxxx / _LLSEEK equiv, 0/1/2 == SEEK_SET/CUR/END)
+ * + file_read_chunk (File_ReadChunk @ 1000:272a / _HREAD equiv) + malloc
+ * (no GLOBALALLOC), then payload/payload_len assignment. Validates
+ * file_off+len <= file_size overflow-safe via ftell END (TRUNCATED),
+ * fseek failure is IO; len 0 loads empty (payload NULL, loaded 1).
+ * Idempotent when already loaded (same len/handle/payload). Handle is
+ * max-existing+1 skipping 0 (NOMEM on 0xFFFF exhaustion). Read-only
+ * against the container (never writes), no exit/globals/SDL. NULL-safe:
+ * RSC_ERR_NOENT on bad mgr/res/fp. */
 rsc_error_t rsc_load_to_mem(rsc_mgr_t *mgr, rsc_res_t *res, FILE *fp);
 
 /* --- Packet H: ResMgr full walk + GfxPort bitmap (segment 1190/10d0) ---
  * Container framing (from ResMgr_AddFile/AddType/NewResource + header
- * comment above; all LE via rsc_read_u16le/rsc_read_u32le):
+ * comment above; all BE via rsc_read_u16le/rsc_read_u32le, fixed W2):
  *   file header: u32 unk0, u32 unk1, u16 type-dir count, then per type:
  *     4-char tag + u16 res-count + u16 unk, then per record a 0x32-B
  *     header: id u16 @ +0, name-off u16 @ +2, file-off u32 @ +4, len u32
  *     @ +8, name len u8 @ +0xc capped 0x1f + name chars @ +0xd (NUL-padded
  *     to +0x2c), loaded flag u8 @ +0x2d, handle u16 @ +0x2e.
  * Name mapping (Orig FUN_seg_off @ seg:off -> C name):
- *   FUN_1190_0000 @ 1190:0000 ResMgr_LoadRsc      -> rsc_load_rsc (stub)
- *   FUN_1190_0501 @ 1190:0501 ResMgr_LoadRscDisk  -> rsc_load_rsc_disk (stub)
+ *   FUN_1190_0000 @ 1190:0000 ResMgr_LoadRsc      -> rsc_load_rsc (W2)
+ *   FUN_1190_0501 @ 1190:0501 ResMgr_LoadRscDisk  -> rsc_load_rsc_disk (W2)
  *   FUN_1190_1570 @ 1190:1570 ResMgr_AddFileDisk  -> rsc_add_file_disk
  *   FUN_1190_1abe @ 1190:1abe ResMgr_ReadU16Disk  -> rsc_read_u16_disk
  *   FUN_1190_1b47 @ 1190:1b47 ResMgr_ReadU16Disk2 -> rsc_read_u16_disk2
@@ -383,23 +436,38 @@ rsc_error_t rsc_load_to_mem(rsc_mgr_t *mgr, rsc_res_t *res, FILE *fp);
  *   FUN_10d0_0cfa @ 10d0:0cfa GfxPort_AllocBitmap -> gfx_port_alloc_bitmap. */
 
 /* Orig: FUN_1190_0000 @ 1190:0000 -> ResMgr_LoadRsc (OpenResFile).
- * Win16-sensitive STUB: orig does _LOPEN(path) + _HREAD 0xE360 bytes into
- * a GLOBALALLOC buffer, then parses the type dir + per-record 0x32-B
- * headers above into file/type/res lists (rsc_add_file / rsc_add_type /
- * rsc_new_resource). Called 5x from WinMain @ 1008:0000 with
- * 1420:00b1/00be/00cb/00d8/00e5 (CivData0..4.rsc). Linux wiring TBD:
- * file_open_wrapper + file_read_chunk + the same node constructors.
- * Always RSC_ERR_UNSUPPORTED (RSC_ERR_NOENT on bad mgr/path). */
+ * IMPLEMENTED (W2, buffered 0xE360 walk, read-only): orig does _LOPEN(path)
+ * + _HREAD 0xE360 bytes into a GLOBALALLOC buffer (falls back to
+ * ResMgr_LoadRscDisk @ 1190:0501 when GLOBALCOMPACT < 1500000), then parses
+ * the type dir + per-record headers into file/type/res lists (rsc_add_file
+ * @ 1190:1692 / rsc_add_type @ 1190:13a8 / rsc_new_resource @ 1190:12ee).
+ * Called 5x from WinMain @ 1008:0000 with 1420:00b1/00be/00cb/00d8/00e5
+ * (CivData0..4.rsc; observed sizes 181519/729188/959728/1433655/144102,
+ * dirs 10608/358/766/3621/63, all < 0xE360). Linux: fopen(rb) + ftell size
+ * + fread 16-B file header (magic + unk0 BE32 + unk1 BE32 + dir_size BE32)
+ * + malloc dir_size (<= 0xE360, no GLOBALALLOC) + file_read_chunk the EOF
+ * directory (dir_off = size-dir_size) + BE cursor walk (u32/u32/u16
+ * equivalent + per-type tag/count + 12-B records -> 0x32-B nodes, len 0
+ * derives from next file-off in the same type, last to dir_off; names via
+ * string-table name-off, 0xffff = empty, capped 0x1f). Validates magic,
+ * dir_size/dir_off/type/record/string bounds vs sizes (BAD_MAGIC/
+ * TRUNCATED/RANGE/NOMEM/IO); partial file node removed on failure (no
+ * leak). Read-only, no exit/globals/SDL. RSC_ERR_NOENT on bad mgr/path. */
 rsc_error_t rsc_load_rsc(rsc_mgr_t *mgr, const char *path);
 
 /* Orig: FUN_1190_0501 @ 1190:0501 -> ResMgr_LoadRscDisk.
- * Win16-sensitive STUB: same directory walk as ResMgr_LoadRsc @ 1190:0000
- * but streams via the File_ReadChunk path (FUN_1000_272a @ 1000:272a,
- * _HREAD/_LREAD on the resource handle) instead of one 0xE360 buffered
- * read; taken when GLOBALCOMPACT reports < 1500000 bytes free. Linux
- * wiring TBD (fopen + rsc_read_u16_disk/u32_disk streaming into the same
- * node constructors). Always RSC_ERR_UNSUPPORTED (RSC_ERR_NOENT on bad
- * mgr/path). */
+ * IMPLEMENTED (W2, streaming twin of ResMgr_LoadRsc @ 1190:0000):
+ * same directory walk but streams via the File_ReadChunk path
+ * (FUN_1000_272a @ 1000:272a, _HREAD/_LREAD on the resource handle)
+ * instead of one 0xE360 buffered read; taken when GLOBALCOMPACT reports
+ * < 1500000 bytes free. Linux: fopen(rb) + ftell size + 16-B header via
+ * file_read_chunk + fseek to dir_off + streaming reads via
+ * rsc_read_u16_disk @ 1190:1abe / rsc_read_u16_disk2 @ 1190:1b47 (name-off
+ * slot) / rsc_read_u32_disk @ 1190:1bcb (all BE, fixed W2) + the same
+ * node constructors (12-B records -> 0x32-B nodes, same len-0 derivation
+ * and string-table names as rsc_load_rsc). Same validation/cleanup as
+ * buffered (BAD_MAGIC/TRUNCATED/RANGE/NOMEM/IO; partial node removed).
+ * Read-only, no exit/globals/SDL. RSC_ERR_NOENT on bad mgr/path. */
 rsc_error_t rsc_load_rsc_disk(rsc_mgr_t *mgr, const char *path);
 
 /* Orig: FUN_1190_1570 @ 1190:1570 -> ResMgr_AddFileDisk (disk AddRFile).
@@ -412,19 +480,20 @@ rsc_dir_t *rsc_add_file_disk(rsc_mgr_t *mgr, FILE *fp);
 
 /* Orig: FUN_1190_1abe @ 1190:1abe -> ResMgr_ReadU16Disk.
  * IMPLEMENTED via File_ReadChunk (FUN_1000_272a @ 1000:272a): fread 2
- * bytes, assemble LE (byte0 * 1 + byte1 * 0x100, same mult table @ 0x3d00
- * as ResMgr_ReadU16 @ 1190:1953). Returns 0 on NULL fp or short read. */
+ * bytes, assemble BE (byte0 * 0x100 + byte1, descending mult table @
+ * 1420:3d00 as ResMgr_ReadU16 @ 1190:1953; fixed W2, was LE). Returns 0
+ * on NULL fp or short read. */
 uint16_t rsc_read_u16_disk(FILE *fp);
 /* Orig: FUN_1190_1b47 @ 1190:1b47 -> ResMgr_ReadU16Disk2.
- * IMPLEMENTED twin of ResMgr_ReadU16Disk (identical 2-byte LE fetch; orig
+ * IMPLEMENTED twin of ResMgr_ReadU16Disk (identical 2-byte BE fetch; orig
  * uses the second slot for the record name-off field). Same contract:
  * 0 on NULL fp or short read. Kept as a separate symbol for RE-map
  * fidelity. */
 uint16_t rsc_read_u16_disk2(FILE *fp);
 /* Orig: FUN_1190_1bcb @ 1190:1bcb -> ResMgr_ReadU32Disk.
- * IMPLEMENTED via File_ReadChunk: fread 4 bytes, assemble LE (shifts
- * 0/8/16/24, same as ResMgr_ReadU32 @ 1190:1a3f). Returns 0 on NULL fp
- * or short read. */
+ * IMPLEMENTED via File_ReadChunk: fread 4 bytes, assemble BE (shifts
+ * 24/16/8/0, same descending table as ResMgr_ReadU32 @ 1190:1a3f; fixed
+ * W2, was LE). Returns 0 on NULL fp or short read. */
 uint32_t rsc_read_u32_disk(FILE *fp);
 
 /* Orig: FUN_1190_17d0 @ 1190:17d0 -> ResMgr_DumpStats (debug dump via

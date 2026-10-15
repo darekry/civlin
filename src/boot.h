@@ -140,8 +140,16 @@ void boot_shutdown(void);
 
 /* Orig: FUN_1008_0e99 @ 1008:0e99 -> font_enum_families_init
  * (Font_EnumFamiliesInit). ENUMFONTFAMILIES enumeration callback +
- * ADDFONTRESOURCE(CIV_FONT_FILE). Win16 GDI font-table install -> SDL3
- * text backend TBD; stub. */
+ * ADDFONTRESOURCE(CIV_FONT_FILE "civfonts.fon" @ 1420:00a4/00fe).
+ * civfonts.fon is a Win16 NE DLL/font container (244224 B on disk):
+ * MZ+NE header + font-directory resources; exact FON header bytes +
+ * font-table offsets TBD from the unpacked dump (do not hardcode).
+ * SDL_ttf bridge plan (not implemented): read-only parse of the NE
+ * font resources -> extract a TTF/bitmap face -> TTF_OpenFont +
+ * ENUMFONTFAMILIES-equivalent family list; full TTF raster out of
+ * scope here. Win16 GDI font-table install -> SDL_ttf TBD; stub
+ * CIV_ERR_UNSUPPORTED. Read-only: never writes civfonts.fon (see
+ * video_shutdown_display for the REMOVEFONTRESOURCE tail). */
 civ_error_t font_enum_families_init(void);
 
 /* Orig: FUN_1008_0b4a @ 1008:0b4a -> config_load_prefs (Config_LoadPrefs).

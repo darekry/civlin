@@ -10,6 +10,8 @@
  */
 #include "audio.h"
 
+#include "boot.h"
+
 #include <dirent.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -149,10 +151,12 @@ civ_error_t sound_play_file(const char *wav_name)
 
 civ_error_t sound_mci_play(const char *wav_name)
 {
-    /* Orig: FUN_1160_xxxx @ 1160:xxxx -> Sound_MciPlay. Neighbour of the
-     * 1150 MCI cluster; MCISENDCOMMAND PLAY sibling to MciOpen @ 1150:001c
-     * (0x803 OPEN) / MciClose @ 1150:0066 (0x804 CLOSE). Same file lookup
-     * as sound_play_file; volume variant TBD. */
+    /* Orig: FUN_1160_xxxx @ 1160:xxxx -> Sound_MciPlay (volume port).
+     * Neighbour of the 1150 MCI cluster; MCISENDCOMMAND PLAY sibling to
+     * MciOpen @ 1150:001c (0x803 OPEN) / MciClose @ 1150:0066 (0x804
+     * CLOSE). Delegates to the ported sound_play_file
+     * (SDL_OpenAudioDeviceStream path above); explicit volume variant
+     * TBD (plays at WAV/device volume). */
     if (!wav_name)
         return CIV_ERR_NOENT;
     return sound_play_file(wav_name);
@@ -218,13 +222,25 @@ const char *sound_map_id_to_wav(int file_id)
 civ_error_t audio_play_id(int id)
 {
     const char *wav;
+    civ_prefs_t prefs;
 
     /* Sound_PlayId @ 1150:00c9: STOP path = SNDPLAYSOUND(0) silence. */
     if (id == CIV_SOUND_STOP || id == CIV_SOUND_STOP1) {
         audio_stop_stream();
         return CIV_OK;
     }
-    /* TODO: gate on g_nOptionFlags (12d0:0064) bit 0x10 + DAT_1228:0104. */
+    /* Two-half gate (orig skipped SNDPLAYSOUND when either half failed,
+     * silent CIV_OK, not an error): (1) g_nOptionFlags @ 12d0:0064 bit
+     * 0x10 (sounds on) via config_prefs_sounds_on (see boot.h
+     * config_prefs_defaults; live civ.prf field map TBD so defaults
+     * carry the decoded flags word); (2) DAT_1228:0104 disk-ready half
+     * via dos_drive_ready @ 1000:1184 (see boot.h; Linux: always ready,
+     * drive 0 = current). */
+    prefs = config_prefs_defaults();
+    if (!config_prefs_sounds_on(&prefs))
+        return CIV_OK;
+    if (!dos_drive_ready(0))
+        return CIV_OK;
     wav = sound_map_id_to_wav(sound_normalize_id(id) + 0x80);
     if (!wav)
         return CIV_ERR_NOENT; /* silent gap in the table */

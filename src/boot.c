@@ -215,10 +215,17 @@ civ_error_t dos_set_path(int drive, const char *path)
 
 civ_error_t font_enum_families_init(void)
 {
-    /* TODO: Orig FUN_1008_0e99 @ 1008:0e99 -> Font_EnumFamiliesInit.
+    /* Orig FUN_1008_0e99 @ 1008:0e99 -> Font_EnumFamiliesInit (stub).
      * ENUMFONTFAMILIES enumeration callback + ADDFONTRESOURCE(CIV_FONT_FILE
-     * "civfonts.fon" @ 1420:00a4/00fe). Win16 GDI font-table install ->
-     * SDL3 text backend TBD. Read-only: never writes to civ1win/. */
+     * "civfonts.fon" @ 1420:00a4/00fe). civfonts.fon is a Win16 NE
+     * DLL/font container (244224 B): MZ+NE header + font-directory
+     * resources; exact FON header bytes + table offsets TBD from the
+     * unpacked dump (do not implement full TTF here). SDL_ttf bridge
+     * plan: read-only NE parse -> TTF_OpenFont face + family list
+     * (ENUMFONTFAMILIES equivalent); raster via SDL_ttf when a face
+     * lands. Win16 GDI font-table install -> SDL_ttf TBD. Read-only:
+     * never writes to civ1win/ (REMOVEFONTRESOURCE tail in
+     * video_shutdown_display, see video.h). */
     return CIV_ERR_UNSUPPORTED;
 }
 

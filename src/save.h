@@ -138,29 +138,38 @@ long file_seek_wrapper(FILE *fp, long offset, int origin);
  * (sys.h) / save_file_write (chunked @ 1140:0245). */
 
 /* --- serialize layer (game state <-> flat 0x1a2ba image) ---
- * Packet N: marshal + RLL + file wiring (stubs until live ctx mapped).
+ * W1 (packet N): marshal + RLL + file wiring, partial ports (live ctx
+ * still zeroed, see below).
  * save_serialize @ 10f8:02bd flow: alloc 0x1a2ba image (LocalAlloc,
- *   err 1420:2cac "Could not allocate buffer for saving") -> marshal via
- *   save_marshal_fields @ 10f8:090c (direction save) -> RLL-encode via
- *   save_pack @ 10f8:05da (save_rll_encode core) -> save_file_open O_WRITE
- *   @ 1140:0139 -> save_file_write @ 1140:0245 -> save_file_close @
- *   1140:037c. save_deserialize @ 10f8:0000 flow: GLOBALALLOC 0xa2ba
- *   scratch -> save_file_open O_READ -> save_file_size @ 1140:0295 (accept
- *   0x1a2ba / 0x1a2b8 / 0x18de0, else err 1420:2c74 "Could not load saved
- *   game. Corrupted or out of memory.") -> save_file_read @ 1140:019d ->
- *   RLL-decode via save_unpack @ 10f8:040a (save_rll_decode core) ->
- *   marshal via save_marshal_fields (direction load) -> close. Both are
- *   UNSUPPORTED stubs: RLL codec + file I/O below are ported, live-ctx
- *   marshal wiring is TBD, no globals taken here. */
+ *   err 1420:2cac "Could not allocate buffer for saving" -> NOMEM) ->
+ *   marshal via save_marshal_fields @ 10f8:090c (direction save,
+ *   g_nSaveDirection @ 1310:0008 == 0) -> RLL-encode via save_pack @
+ *   10f8:05da core (save_rll_encode) -> save_file_open O_WRITE @ 1140:0139
+ *   -> save_file_write @ 1140:0245 -> save_file_close @ 1140:037c.
+ * save_deserialize @ 10f8:0000 flow: heap wire buffer (GLOBALALLOC 0xa2ba
+ *   scratch equiv) -> save_file_open O_READ -> save_file_size @ 1140:0295
+ *   (read bound only) -> save_file_read @ 1140:019d -> RLL-decode via
+ *   save_unpack @ 10f8:040a core (save_rll_decode) -> decoded-size gate
+ *   0x1a2ba / 0x1a2b8 / 0x18de0 (else BAD_DATA, orig err 1420:2c74 "Could
+ *   not load saved game. Corrupted or out of memory.") -> marshal via
+ *   save_marshal_fields (direction load, == 1) -> close. RLL codec + file
+ *   I/O + marshal driver below are ported; live-ctx scatter (segments
+ *   12d8/...) stays zeroed (TODO), no globals taken here. */
 
 /* Orig: FUN_10f8_02bd @ 10f8:02bd, now save_serialize — pack + write .sav.
- * Stub: validates path (NOENT on NULL/empty), else UNSUPPORTED; read-only
- * (no file touched until wiring lands). */
+ * Partial port (W1): calloc 0x1a2ba -> save_marshal_fields (save) ->
+ * save_rll_encode -> save_file_open/write/close. NOENT on NULL/empty
+ * path, NOMEM on alloc failure, IO on open/write failure, else CIV_OK.
+ * Image is zeros until live ctx maps (TODO). */
 civ_error_t save_serialize(const char *path);
 /* Orig: FUN_10f8_0000 @ 10f8:0000, now save_deserialize — read + unpack .sav.
- * Stub: validates path (NOENT on NULL/empty), else UNSUPPORTED; read-only.
- * Size gate lives here when wired (not in save_file_size): 0x1a2ba
- * canonical, 0x1a2b8 alt (cond word), 0x18de0 small-map. */
+ * Partial port (W1): open -> size -> read -> save_rll_decode -> decoded
+ * gate 0x1a2ba canonical / 0x1a2b8 alt / 0x18de0 small-map (BAD_DATA on
+ * mismatch) -> save_marshal_fields (load) -> close. NOENT on NULL/empty
+ * path, IO on open/seek failure, TRUNCATED on empty/short read or RLL
+ * overrun, NOMEM on alloc failure. Size gate lives here (not in
+ * save_file_size); wire length varies with RLL so the gate is on the
+ * decoded flat length. */
 civ_error_t save_deserialize(const char *path);
 
 /* Pack/unpack are RLL codecs (not game pack). Log strings:
@@ -189,22 +198,31 @@ civ_error_t save_rll_decode(const uint8_t *src, size_t src_len,
                             uint8_t *dst, size_t dst_cap, size_t *out_len);
 
 /* --- field marshaller (game ctx <-> flat image) ---
- * Packet N: save_marshal_fields @ 10f8:090c is the ordered xfer driver. Stub:
+ * W1: save_marshal_fields @ 10f8:090c is the ordered xfer driver (ported).
  *   direction via g_nSaveDirection @ 1310:0008 (0 = save: live -> image,
- *   1 = load: image -> live), small/large variant via g_nSaveVariant @
- *   1310:0000 (pre-word at image +0x0, live 1310:0000), image cursor via
- *   g_nSaveCursorOff @ 1420:a2d6 with base @ 1420:a2da. Ordered calls below
- *   (image offsets CIV_SAVE_OFF_*): words/block/array/strided then the
- *   0xfa00 map block at +0xa8ba. No globals taken here (caller-owned image
- *   + cap); live segments 12d8/12d0/1248/1290/1298/1308/1350/1388/1390/
- *   13c0/13e8/1420 have no Linux mapping yet -> UNSUPPORTED. */
+ *   1 = load: image -> live; reservation is direction-symmetric),
+ *   small/large variant via g_nSaveVariant @ 1310:0000 (pre-word at image
+ *   +0x0, live 1310:0000; full-size path ported, small-map shrink TODO),
+ *   image cursor via g_nSaveCursorOff @ 1420:a2d6 with base @ 1420:a2da
+ *   (local cursor here, no globals). Ordered calls below (image offsets
+ *   CIV_SAVE_OFF_*): pre word + 8 words + 3 arrays 8x0x20 + blks
+ *   0x4b0/0x4b0/0xe00 + strided 28x22B + blk 0x3000 + blk 0xfa0 + array
+ *   0x100x0x20 + blk 0x1000 + blk 0x240 + blk 0x104 + blk 0x5a0 + last
+ *   word + map 0xfa00 at +0xa8ba. Gaps between CIV_SAVE_OFF_* are padding
+ *   left as caller left it (zeros from save_serialize calloc). No globals
+ *   taken here (caller-owned image + cap); live segments 12d8/12d0/1248/
+ *   1290/1298/1308/1350/1388/1390/13c0/13e8/1420 have no Linux mapping yet,
+ *   so the live memcpy half stays TODO (OS-free reservation only, no
+ *   Win16 far pointers). */
 /* Orig: FUN_10f8_090c @ 10f8:090c, now save_marshal_fields.
  * Direction by Ghidra g_nSaveDirection @ 1310:0008 (0=save,1=load);
  * variant by g_nSaveVariant @ 1310:0000. Cursor g_nSaveCursorOff @
- * 1420:a2d6, base g_nSaveBaseOff @ 1420:a2da.
- * Stub: NOENT on NULL image, TRUNCATED when cap < CIV_SAVE_BUF_MIN
- * (smallest accepted wire size), else UNSUPPORTED; read-only (no write
- * on stub path). */
+ * 1420:a2d6, base g_nSaveBaseOff @ 1420:a2da (locals here).
+ * Ported (W1): NOENT on NULL image, TRUNCATED when cap < CIV_SAVE_BUF_MIN
+ * (smallest accepted flat size) or when the full-size walk overruns cap,
+ * BAD_DATA on layout overlap/final-size mismatch, CIV_OK when the full
+ * ordered sequence fits (cursor ends at CIV_SAVE_IMAGE_SIZE). Image bytes
+ * preserved (no write on the reservation path). */
 civ_error_t save_marshal_fields(uint8_t *image, size_t cap);
 /* Orig: FUN_10f8_0f40 @ 10f8:0f40, now save_xfer_words — count WORDS (x2 bytes).
  * OS-free image-cursor half ported 1:1: len = words*2 with overflow guard,
@@ -297,9 +315,99 @@ civ_error_t save_xfer_strided(uint8_t *image, size_t cap, size_t *cursor,
 #define CIV_SAVE_STRIDED_WORDS 0x0bu
 #define CIV_SAVE_STRIDED_ELEM_LEN (0x0bu * 2u)
 
-/* Livectx segments (game state scatter). 12d8 is the main ctx. */
+/* Live-ctx segments (game state scatter, X1). 12d8 is the main ctx.
+ * Full scatter from save_marshal_fields @ 10f8:090c walk + frontier:
+ *   12d8 main (words @ 42fe/4300/42fc/42fa/42f6/42f8, arrays 01da/02da/03da
+ *     8x0x20, blks 3200/2d50 0x4b0, array 04da 0x100x0x20, blk 36b0 0x240)
+ *   12d0 sys (word @ 0062), 1248 aux (blk @ 0004 0x104),
+ *   1290 aux (blk @ 01b2 0x5a0), 1298/1350/1388 reserved (no walk yet,
+ *     unmapped -> reservation-only), 1308 ctrl (word @ 0020),
+ *   1390 (blk @ 03af 0x1000), 13c0 (word @ 0000), 13e8 (blk @ 000a 0xfa0),
+ *   1420 far (blk 54fc 0xe00, strided 1a38 28x22B, blk 62fc 0x3000,
+ *     map 0xfa00 @ b394 via ptr @ b394/b396), 1310 ctrl (pre-word @ 0000
+ *     g_nSaveVariant, direction @ 1310:0008 g_nSaveDirection).
+ * Map block is indirect in orig (far ptr at 1420:b394/b396); on Linux the
+ * caller registers a linear window for seg 0x1420 large enough for
+ * off+len (no 64K wrap) or leaves it unmapped. No globals. */
 #define CIV_SEG_GAME_MAIN 0x12d8u
 #define CIV_SEG_GAME_SYS 0x12d0u
 #define CIV_SEG_GAME_AUX 0x1290u
+#define CIV_SEG_GAME_AUX2 0x1248u
+#define CIV_SEG_GAME_R1298 0x1298u
+#define CIV_SEG_GAME_CTRL 0x1308u
+#define CIV_SEG_GAME_R1350 0x1350u
+#define CIV_SEG_GAME_R1388 0x1388u
+#define CIV_SEG_GAME_R1390 0x1390u
+#define CIV_SEG_GAME_R13C0 0x13c0u
+#define CIV_SEG_GAME_R13E8 0x13e8u
+#define CIV_SEG_GAME_FAR 0x1420u
+#define CIV_SEG_SAVE_CTRL 0x1310u
+
+/* Direction mirrors g_nSaveDirection @ 1310:0008 (0 save, 1 load). */
+#define CIV_SAVE_DIR_SAVE 0
+#define CIV_SAVE_DIR_LOAD 1
+
+/* Explicit live ctx (X1, OS-free, no globals). Caller owns every window;
+ * NULL base or missing seg = unmapped -> reservation-only (zeros behavior
+ * preserved). seg/off anchors are kept on every xfer call for the RE map.
+ * Map block via 1420:b394/b396 ptr in orig: register a linear 1420 window
+ * covering off+len on Linux. */
+typedef struct civ_save_seg_win {
+    uint16_t seg;      /* Win16 seg anchor, e.g. 0x12d8 */
+    uint8_t *base;     /* caller-owned live bytes (NULL = unmapped) */
+    size_t len;        /* window size */
+} civ_save_seg_win_t;
+
+#define CIV_SAVE_CTX_MAX_SEGS 16u
+
+typedef struct civ_save_ctx {
+    int direction;     /* CIV_SAVE_DIR_SAVE (live->image) or LOAD (image->live) */
+    civ_save_seg_win_t wins[CIV_SAVE_CTX_MAX_SEGS];
+    size_t nwins;
+} civ_save_ctx_t;
+
+/* OS-free ctx lifecycle (no globals, no exit): init zeroes wins/nwins and
+ * stores direction (nonzero -> LOAD); add registers one seg window
+ * (NOENT on NULL ctx/base, RANGE when full/len==0, OK on insert or
+ * in-place update of an existing seg). */
+void civ_save_ctx_init(civ_save_ctx_t *ctx, int direction);
+civ_error_t civ_save_ctx_add(civ_save_ctx_t *ctx, uint16_t seg,
+                             uint8_t *base, size_t len);
+
+/* Live twins of the xfer family (X1, OS-free, no globals, no Win16):
+ * same seg/off anchors + image-cursor reservation as the plain variants,
+ * plus a directional bounds-checked memcpy when ctx maps the seg
+ * (SAVE: live -> image window at *cursor; LOAD: image window -> live).
+ * ctx NULL or seg unmapped = reservation-only (same as plain). Live
+ * overrun (off+len beyond the registered window) reports RANGE;
+ * image-cursor overrun reports TRUNCATED with *cursor at the failing
+ * elem start (matches orig stop-short). Array live stride is fixed
+ * 0x20 (copies elem_len bytes per elem, prefix for small-map);
+ * strided live stride is SKIP+ELEM_LEN per elem (skips 0xc live bytes,
+ * packs 22B per elem in the image). */
+civ_error_t save_xfer_words_live(uint8_t *image, size_t cap, size_t *cursor,
+                                 uint16_t seg, uint16_t off, unsigned words,
+                                 const civ_save_ctx_t *ctx);
+civ_error_t save_xfer_block_live(uint8_t *image, size_t cap, size_t *cursor,
+                                 uint16_t seg, uint16_t off, unsigned len,
+                                 const civ_save_ctx_t *ctx);
+civ_error_t save_xfer_array_live(uint8_t *image, size_t cap, size_t *cursor,
+                                 uint16_t seg, uint16_t base, unsigned n,
+                                 unsigned elem_len,
+                                 const civ_save_ctx_t *ctx);
+civ_error_t save_xfer_strided_live(uint8_t *image, size_t cap, size_t *cursor,
+                                   uint16_t seg, uint16_t base, unsigned n,
+                                   const civ_save_ctx_t *ctx);
+/* Orig FUN_10f8_090c @ 10f8:090c live driver: same ordered CIV_SAVE_OFF_*
+ * walk as save_marshal_fields but through the *_live xfers with ctx
+ * (NULL ctx == reservation-only, same as plain). Direction comes from
+ * ctx->direction (SAVE live->image, else image->live); unmapped segs
+ * (1298/1350/1388 frontier, or any caller hole) stay reservation-only. */
+civ_error_t save_marshal_fields_live(uint8_t *image, size_t cap,
+                                      const civ_save_ctx_t *ctx);
+
+/* Strided live stride: per elem skip 0xc live bytes + 22B packed. */
+#define CIV_SAVE_STRIDED_LIVE_STRIDE \
+    (CIV_SAVE_STRIDED_SKIP + CIV_SAVE_STRIDED_ELEM_LEN)
 
 #endif /* CIVLIN_SAVE_H */

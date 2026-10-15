@@ -65,8 +65,9 @@ civ_error_t sound_play_file(const char *wav_name);
 /* Orig: FUN_1160_xxxx @ 1160:xxxx -> Sound_MciPlay. Neighbour of the 1150
  * MCI cluster; MCISENDCOMMAND PLAY sibling to Sound_MciOpen @ 1150:001c
  * (0x803 OPEN) / Sound_MciClose @ 1150:0066 (0x804 CLOSE) — STOP is the
- * close/0 path, volume variant TBD. Win16 MCI -> SDL3 audio TBD; stub
- * CIV_ERR_UNSUPPORTED (NULL -> NOENT). */
+ * close/0 path. Ported volume path: delegates to the ported
+ * sound_play_file (SDL_OpenAudioDeviceStream WAV playback); explicit
+ * volume variant TBD (plays at WAV/device volume). NULL -> NOENT. */
 civ_error_t sound_mci_play(const char *wav_name);
 
 /* Raw filename playback (Sound_PlayFile @ 1150:00a0). Thin wrapper over
@@ -78,8 +79,15 @@ civ_error_t audio_play(const char *wav_name);
  * OPENING.wav finishes (caller keeps a timeout fallback for dummy audio). */
 int audio_is_playing(void);
 
-/* ID playback (Sound_PlayId @ 1150:00c9). Honors the STOP/silent rules;
- * UNSUPPORTED only when a mapped file exists but SDL playback is missing. */
+/* ID playback (Sound_PlayId @ 1150:00c9). Honors the STOP/silent rules
+ * plus the two-half gate: (1) g_nOptionFlags @ 12d0:0064 bit 0x10
+ * sounds-on via config_prefs_sounds_on (see boot.h; defaults carry the
+ * decoded flags word until the civ.prf field map lands), and (2)
+ * DAT_1228:0104 disk-ready half via dos_drive_ready (see boot.h
+ * Dos_DriveReady @ 1000:1184; Linux: always ready, drive 0 = current).
+ * Both halves must pass; gated-off stays silent with CIV_OK (orig
+ * skipped SNDPLAYSOUND, not an error). UNSUPPORTED only when a mapped
+ * file exists but SDL playback is missing. */
 civ_error_t audio_play_id(int id);
 
 /* Pure mappers (implemented; verified against jump table + mem dump). */

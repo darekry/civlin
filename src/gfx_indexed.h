@@ -21,15 +21,15 @@
 #include "civ_common.h"
 #include "rsc_loader.h"
 
-/* Packet H note: future rsc_get_indexed @ 1190:xxxx (ResMgr image payload
- * via ResMgr_LoadToMem @ 1190:0fda + GfxPort bitmap @ 10d0:0cfa chain)
- * feeds this bridge. Strict validation plan (enforced here AND at the
- * rsc_get_indexed producer): 8-bit only (bpp == 8), width > 0, height > 0,
- * pixels != NULL, width*height bytes addressable, pal_count 0..255
- * (0 = no palette attached), every pixel index < pal_count when a palette
- * is present. rsc_image_count stays 0 / rsc_get_indexed stays
- * RSC_ERR_UNSUPPORTED until that producer chain is proven against the 5
- * CivData files. */
+/* X1 producer gate: rsc_get_indexed @ 1190:0a29 (ResMgr image payload
+ * via rsc_record_data slice + rsc_decode_bitmap @ 1198:xxxx strict gate:
+ * w/h > 0, bpp == 8, pal 1..255, every pixel index < pal_count) feeds
+ * this bridge. Consumer enforces the same 8-bit + palette gate here
+ * before touching SDL (8-bit only, w/h > 0, pixels != NULL, pal_count
+ * 0..255 with 0 = no palette attached); palette path installs via
+ * SDL_SetPaletteColors (SDL_CreateSurfacePalette + SetPaletteColors).
+ * No behavior break: malformed producer output is rejected on both
+ * sides, valid 8-bit + palette views flow unchanged to INDEX8. */
 SDL_Surface *gfx_indexed_to_surface(const rsc_indexed_t *img);
 SDL_Texture *gfx_indexed_to_texture(SDL_Renderer *ren, const rsc_indexed_t *img);
 
@@ -40,7 +40,11 @@ SDL_Texture *gfx_indexed_to_texture(SDL_Renderer *ren, const rsc_indexed_t *img)
  * 0xec entries x 3 bytes (R,G,B, no alpha; LOGPALETTE tail past 0xec
  * stays zero/black). Byte payload not yet dumped from godpal.c /
  * DAT_1420_9966, so only the size is live (TODO dump); entry fetch stays
- * CIV_ERR_UNSUPPORTED until the dump lands. No globals, no exit(). */
+ * CIV_ERR_UNSUPPORTED until the dump lands (no fake bytes emitted here).
+ * Dump plan: in Ghidra go to DAT_1420_9966 @ 1420:9966, dump 0xec*3
+ * (0x2c4) RGB bytes, cross-check vs godpal.c, then emit a static const
+ * table + wire gfx_godpal_get to copy rgb[3] with the bounds below.
+ * No globals, no exit(). */
 #define GFX_GODPAL_COUNT 0xec
 
 /* Returns GFX_GODPAL_COUNT (0xec). OS-free 1:1 size port. */

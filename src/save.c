@@ -1,17 +1,24 @@
 /* CivLin SAVE/LOAD. See save.h for Orig FUN_* -> new name mapping.
  * RLL codec (save_rll_encode/save_rll_decode, Orig FUN_10f8_05da/040a cores)
- * is decoded and implemented natively below. Packet N: serialize/
- * deserialize/marshal stay UNSUPPORTED stubs (live Win16 segments 12d8/...
- * have no Linux mapping yet; RLL + file I/O cores they would call are
- * ported); xfer words/block/array/strided (@ 10f8:0f40/0fcf/1035/10bd) own
- * only the OS-free image-cursor half (bounds-checked reservation, no Win16,
- * no globals). Packet L file I/O (save_file_* @ 1140) is implemented below
- * on POSIX fds — the HFILE-native twin of the FILE* File_* wrappers (same
- * Win16 imports, same chunk/contract semantics). */
+ * is decoded and implemented natively below. W1: save_marshal_fields @
+ * 10f8:090c is the ordered xfer driver over CIV_SAVE_OFF_* (local cursor
+ * mirrors g_nSaveCursorOff @ 1420:a2d6 over base @ 1420:a2da; direction
+ * g_nSaveDirection @ 1310:0008 and variant g_nSaveVariant @ 1310:0000 are
+ * caller-documented, reservation is direction-symmetric); save_serialize @
+ * 10f8:02bd and save_deserialize @ 10f8:0000 are partial ports on top of
+ * it + RLL + POSIX save_file_* (live Win16 segments 12d8/... have no Linux
+ * mapping yet, so the marshalled image is caller-owned zeros with a TODO;
+ * no Win16, no globals, no exit()). xfer words/block/array/strided (@
+ * 10f8:0f40/0fcf/1035/10bd) own only the OS-free image-cursor half
+ * (bounds-checked reservation, no Win16, no globals). Packet L file I/O
+ * (save_file_* @ 1140) is implemented below on POSIX fds — the HFILE-native
+ * twin of the FILE* File_* wrappers (same Win16 imports, same
+ * chunk/contract semantics). */
 #define _POSIX_C_SOURCE 200809L
 #include "save.h"
 
 #include <fcntl.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -201,42 +208,156 @@ long file_seek_wrapper(FILE *fp, long offset, int origin)
 civ_error_t save_serialize(const char *path)
 {
     /* Save_Serialize, Orig FUN_10f8_02bd @ 10f8:02bd (called from the
-     * "&Save Game" menu path). Orig flow, stubbed here because the live
-     * game ctx (segments 12d8/12d0/...) has no Linux mapping yet:
-     *   1. alloc flat image 0x1a2ba (CIV_SAVE_BUF_SIZE; err string @
-     *      1420:2cac "Could not allocate buffer for saving" on failure);
+     * "&Save Game" menu path). Partial port (W1):
+     *   1. alloc flat image CIV_SAVE_BUF_SIZE (0x1a2ba; orig LocalAlloc,
+     *      err string @ 1420:2cac "Could not allocate buffer for saving"
+     *      -> CIV_ERR_NOMEM here);
      *   2. save_marshal_fields @ 10f8:090c with direction save
-     *      (g_nSaveDirection @ 1310:0008 == 0) to fill the image;
-     *   3. save_pack @ 10f8:05da (RLL-encode via save_rll_encode core);
+     *      (g_nSaveDirection @ 1310:0008 == 0) to validate/fill the image;
+     *   3. save_pack @ 10f8:05da core via save_rll_encode into a heap
+     *      RLL buffer (worst-case flat + flat/127 + 16);
      *   4. save_file_open @ 1140:0139 O_WRITE, save_file_write @ 1140:0245,
      *      save_file_close @ 1140:037c.
-     * Steps 3-4 cores are ported below; steps 1-2 wiring is TBD. No heap
-     * taken, no file touched, no globals: validates path only. */
+     * Live game ctx (segments 12d8/12d0/1248/1290/1298/1308/1350/1388/
+     * 1390/13c0/13e8/1420) has no Linux mapping yet, so the image stays
+     * caller-owned zeros (TODO: scatter live ctx via memcpy once mapped).
+     * No globals, no exit(). */
+    uint8_t *image = NULL;
+    uint8_t *enc = NULL;
+    size_t enc_cap = 0;
+    size_t enc_len = 0;
+    win16_handle h = WIN16_HFILE_ERROR;
+    unsigned long written = 0;
+    civ_error_t rc;
+
     if (!path || !*path)
         return CIV_ERR_NOENT;
-    return CIV_ERR_UNSUPPORTED;
+    image = (uint8_t *)calloc(1, (size_t)CIV_SAVE_BUF_SIZE);
+    if (!image)
+        return CIV_ERR_NOMEM;
+    rc = save_marshal_fields(image, (size_t)CIV_SAVE_BUF_SIZE);
+    if (rc != CIV_OK) {
+        free(image);
+        return rc;
+    }
+    /* RLL worst case: every 0x7f literals cost one tag byte. */
+    enc_cap = (size_t)CIV_SAVE_BUF_SIZE +
+        (size_t)CIV_SAVE_BUF_SIZE / 127u + 16u;
+    enc = (uint8_t *)malloc(enc_cap);
+    if (!enc) {
+        free(image);
+        return CIV_ERR_NOMEM;
+    }
+    rc = save_rll_encode(image, (size_t)CIV_SAVE_BUF_SIZE, enc, enc_cap,
+                         &enc_len);
+    free(image);
+    image = NULL;
+    if (rc != CIV_OK) {
+        free(enc);
+        return rc;
+    }
+    h = save_file_open(path, 1);
+    if (h == WIN16_HFILE_ERROR) {
+        free(enc);
+        return CIV_ERR_IO;
+    }
+    rc = CIV_OK;
+    if (save_file_write(h, enc, (unsigned long)enc_len, &written) != 0 ||
+        (size_t)written != enc_len)
+        rc = CIV_ERR_IO;
+    save_file_close(h);
+    free(enc);
+    return rc;
 }
 
 civ_error_t save_deserialize(const char *path)
 {
     /* Save_Deserialize, Orig FUN_10f8_0000 @ 10f8:0000 (called from the
-     * Load path + worldgen_build_ocean_links @ 1028:162c context). Orig
-     * flow, stubbed for the same live-ctx reason:
-     *   1. GLOBALALLOC 0xa2ba (CIV_SAVE_SCRATCH) scratch for the RLL window;
-     *   2. save_file_open @ 1140:0139 O_READ, save_file_size @ 1140:0295 to
-     *      accept 0x1a2ba canonical / 0x1a2b8 alt / 0x18de0 small-map (else
-     *      err string @ 1420:2c74 "Could not load saved game. Corrupted or
+     * Load path + worldgen_build_ocean_links @ 1028:162c context). Partial
+     * port (W1):
+     *   1. GLOBALALLOC 0xa2ba (CIV_SAVE_SCRATCH) scratch equiv: heap wire
+     *      buffer sized by save_file_size @ 1140:0295 (orig RLL window);
+     *   2. save_file_open @ 1140:0139 O_READ + save_file_read @ 1140:019d
+     *      (0x8000 chunks) to fetch the wire bytes;
+     *   3. save_unpack @ 10f8:040a core via save_rll_decode into a flat
+     *      CIV_SAVE_BUF_SIZE image;
+     *   4. size gate on the decoded image: CIV_SAVE_BUF_SIZE (0x1a2ba)
+     *      canonical / CIV_SAVE_BUF_ALT (0x1a2b8) cond-word alt /
+     *      CIV_SAVE_BUF_MIN (0x18de0) small-map, else CIV_ERR_BAD_DATA
+     *      (orig err @ 1420:2c74 "Could not load saved game. Corrupted or
      *      out of memory.");
-     *   3. save_file_read @ 1140:019d (0x8000 chunks) + save_unpack @
-     *      10f8:040a (RLL-decode via save_rll_decode core);
-     *   4. save_marshal_fields @ 10f8:090c with direction load
-     *      (g_nSaveDirection == 1) to scatter into live ctx;
-     *   5. save_file_close @ 1140:037c.
-     * Size gate belongs here when wired, not in save_file_size. No heap
-     * taken, no file touched, no globals: validates path only. */
+     *   5. save_marshal_fields @ 10f8:090c with direction load
+     *      (g_nSaveDirection @ 1310:0008 == 1) to validate/scatter;
+     *   6. save_file_close @ 1140:037c.
+     * Wire length varies with RLL compression, so the 0x1a2ba/0x1a2b8/
+     * 0x18de0 gate applies to the decoded flat length, not the file size
+     * (file size is only a read bound + empty/short check). Live scatter
+     * into segments 12d8/... is TODO (image validated only). No globals,
+     * no exit(). */
+    win16_handle h = WIN16_HFILE_ERROR;
+    long fsize = -1L;
+    uint8_t *wire = NULL;
+    uint8_t *flat = NULL;
+    size_t flat_len = 0;
+    unsigned long got = 0;
+    civ_error_t rc;
+
     if (!path || !*path)
         return CIV_ERR_NOENT;
-    return CIV_ERR_UNSUPPORTED;
+    h = save_file_open(path, 0);
+    if (h == WIN16_HFILE_ERROR)
+        return CIV_ERR_IO;
+    fsize = save_file_size(h);
+    if (fsize < 0) {
+        save_file_close(h);
+        return CIV_ERR_IO;
+    }
+    if (fsize == 0) {
+        save_file_close(h);
+        return CIV_ERR_TRUNCATED;
+    }
+    /* Upper bound: RLL worst case is flat + flat/127 + 16; anything far
+     * larger cannot decode into CIV_SAVE_BUF_SIZE (corrupted). */
+    if ((unsigned long)fsize >
+        (unsigned long)CIV_SAVE_BUF_SIZE +
+            (unsigned long)CIV_SAVE_BUF_SIZE / 127u + 4096u) {
+        save_file_close(h);
+        return CIV_ERR_BAD_DATA;
+    }
+    wire = (uint8_t *)malloc((size_t)fsize);
+    if (!wire) {
+        save_file_close(h);
+        return CIV_ERR_NOMEM;
+    }
+    if (save_file_read(h, wire, (unsigned long)fsize, &got) != 0 ||
+        got != (unsigned long)fsize) {
+        save_file_close(h);
+        free(wire);
+        return CIV_ERR_TRUNCATED;
+    }
+    save_file_close(h);
+    flat = (uint8_t *)malloc((size_t)CIV_SAVE_BUF_SIZE);
+    if (!flat) {
+        free(wire);
+        return CIV_ERR_NOMEM;
+    }
+    rc = save_rll_decode(wire, (size_t)fsize, flat,
+                         (size_t)CIV_SAVE_BUF_SIZE, &flat_len);
+    free(wire);
+    wire = NULL;
+    if (rc != CIV_OK) {
+        free(flat);
+        return rc;
+    }
+    if (flat_len != (size_t)CIV_SAVE_BUF_SIZE &&
+        flat_len != (size_t)CIV_SAVE_BUF_ALT &&
+        flat_len != (size_t)CIV_SAVE_BUF_MIN) {
+        free(flat);
+        return CIV_ERR_BAD_DATA;
+    }
+    rc = save_marshal_fields(flat, (size_t)CIV_SAVE_BUF_SIZE);
+    free(flat);
+    return rc;
 }
 
 civ_error_t save_pack(const uint8_t **out_image, size_t *out_len)
@@ -383,23 +504,123 @@ civ_error_t save_rll_decode(const uint8_t *src, size_t src_len,
     return CIV_OK;
 }
 
+/* Local cursor seek for the marshal driver below. Mirrors the orig
+ * g_nSaveCursorOff @ 1420:a2d6 over base @ 1420:a2da: the driver walks
+ * CIV_SAVE_OFF_* in order, skipping forward over padding gaps (cursor < off
+ * -> cursor = off). Backward motion would mean overlapping fields ->
+ * BAD_DATA. Off beyond cap -> TRUNCATED. No globals, no Win16. */
+static civ_error_t marshal_seek(size_t *cursor, size_t cap, size_t off)
+{
+    if (!cursor)
+        return CIV_ERR_NOENT;
+    if (off > cap)
+        return CIV_ERR_TRUNCATED;
+    if (*cursor > off)
+        return CIV_ERR_BAD_DATA;
+    *cursor = off;
+    return CIV_OK;
+}
+
 civ_error_t save_marshal_fields(uint8_t *image, size_t cap)
 {
     /* Save_MarshalFields, Orig FUN_10f8_090c @ 10f8:090c. Ordered xfer
-     * driver over the CIV_SAVE_OFF_* layout (save.h): pre-word (live
-     * 1310:0000 g_nSaveVariant) then words/block/array/strided calls below
-     * and the 0xfa00 map block at +0xa8ba (live 1420:b394/b396). Direction
-     * switch is g_nSaveDirection @ 1310:0008 (0 = save live->image, 1 =
-     * load image->live); small-map variant shrinks the 8x0x20 / 0x100x0x20
-     * arrays (see layout note). Cursor mirrors g_nSaveCursorOff @
-     * 1420:a2d6 over base @ 1420:a2da. Stub: live segments have no Linux
-     * mapping yet, so no xfer runs; validates the caller-owned image only.
-     * Read-only on stub path (no byte written). */
+     * driver over the CIV_SAVE_OFF_* layout (save.h, full-size path):
+     * pre-word (live 1310:0000 g_nSaveVariant) + 8 words + 3 arrays
+     * 8x0x20 + blks 0x4b0/0x4b0/0xe00 + strided 28x22B + blk 0x3000 + blk
+     * 0xfa0 + array 0x100x0x20 + blk 0x1000 + blk 0x240 + blk 0x104 + blk
+     * 0x5a0 + last word + map 0xfa00 at +0xa8ba (live 1420:b394/b396).
+     * Direction switch is g_nSaveDirection @ 1310:0008 (0 = save
+     * live->image, 1 = load image->live); reservation is
+     * direction-symmetric so the same walk validates both. Small-map
+     * variant (g_nSaveVariant @ 1310:0000) shrinks the 8x0x20 / 0x100x0x20
+     * arrays -> TODO (this walk covers the full-size path; a small cap in
+     * [MIN,FULL) TRUNCATEs at the first field that no longer fits).
+     * Cursor mirrors g_nSaveCursorOff @ 1420:a2d6 over base @ 1420:a2da
+     * (local here, no globals). Each step reuses the ported
+     * save_xfer_words/block/array/strided (which own the xfer_reserve
+     * bounds check). OS-free: image bytes are caller-owned (serialize
+     * calloc-zeros them); no Win16 far-pointer dereference, no HMEMCPY —
+     * the live seg:off anchors below are retained for the RE map and the
+     * future bounds-checked memcpy once live ctx is mapped. */
+    size_t cursor = 0;
+    civ_error_t rc;
+
+#define SAVE_MARSHAL_SEEK(off)                                                 \
+    do {                                                                       \
+        rc = marshal_seek(&cursor, cap, (size_t)(off));                         \
+        if (rc != CIV_OK)                                                      \
+            return rc;                                                         \
+    } while (0)
+#define SAVE_MARSHAL_CHECK(call)                                               \
+    do {                                                                       \
+        rc = (call);                                                            \
+        if (rc != CIV_OK)                                                      \
+            return rc;                                                         \
+    } while (0)
+
     if (!image)
         return CIV_ERR_NOENT;
-    if (cap < CIV_SAVE_BUF_MIN)
+    if (cap < (size_t)CIV_SAVE_BUF_MIN)
         return CIV_ERR_TRUNCATED;
-    return CIV_ERR_UNSUPPORTED;
+
+    SAVE_MARSHAL_SEEK(CIV_SAVE_OFF_PRE);
+    SAVE_MARSHAL_CHECK(save_xfer_words(image, cap, &cursor, 0x1310u, 0x0000u, 1u));
+    SAVE_MARSHAL_SEEK(CIV_SAVE_OFF_F_12D8_42FE);
+    SAVE_MARSHAL_CHECK(save_xfer_words(image, cap, &cursor, 0x12d8u, 0x42feu, 1u));
+    SAVE_MARSHAL_SEEK(CIV_SAVE_OFF_F_12D8_4300);
+    SAVE_MARSHAL_CHECK(save_xfer_words(image, cap, &cursor, 0x12d8u, 0x4300u, 1u));
+    SAVE_MARSHAL_SEEK(CIV_SAVE_OFF_F_12D8_42FC);
+    SAVE_MARSHAL_CHECK(save_xfer_words(image, cap, &cursor, 0x12d8u, 0x42fcu, 1u));
+    SAVE_MARSHAL_SEEK(CIV_SAVE_OFF_F_13C0_0000);
+    SAVE_MARSHAL_CHECK(save_xfer_words(image, cap, &cursor, 0x13c0u, 0x0000u, 1u));
+    SAVE_MARSHAL_SEEK(CIV_SAVE_OFF_F_12D8_42FA);
+    SAVE_MARSHAL_CHECK(save_xfer_words(image, cap, &cursor, 0x12d8u, 0x42fau, 1u));
+    SAVE_MARSHAL_SEEK(CIV_SAVE_OFF_F_12D8_42F6);
+    SAVE_MARSHAL_CHECK(save_xfer_words(image, cap, &cursor, 0x12d8u, 0x42f6u, 1u));
+    SAVE_MARSHAL_SEEK(CIV_SAVE_OFF_F_12D8_42F8);
+    SAVE_MARSHAL_CHECK(save_xfer_words(image, cap, &cursor, 0x12d8u, 0x42f8u, 1u));
+    SAVE_MARSHAL_SEEK(CIV_SAVE_OFF_F_12D0_0062);
+    SAVE_MARSHAL_CHECK(save_xfer_words(image, cap, &cursor, 0x12d0u, 0x0062u, 1u));
+    SAVE_MARSHAL_SEEK(CIV_SAVE_OFF_A_12D8_01DA);
+    SAVE_MARSHAL_CHECK(save_xfer_array(image, cap, &cursor, 0x12d8u, 0x01dau, 8u, 0x20u));
+    SAVE_MARSHAL_SEEK(CIV_SAVE_OFF_A_12D8_02DA);
+    SAVE_MARSHAL_CHECK(save_xfer_array(image, cap, &cursor, 0x12d8u, 0x02dau, 8u, 0x20u));
+    SAVE_MARSHAL_SEEK(CIV_SAVE_OFF_A_12D8_03DA);
+    SAVE_MARSHAL_CHECK(save_xfer_array(image, cap, &cursor, 0x12d8u, 0x03dau, 8u, 0x20u));
+    SAVE_MARSHAL_SEEK(CIV_SAVE_OFF_BLK_12D8_3200);
+    SAVE_MARSHAL_CHECK(save_xfer_block(image, cap, &cursor, 0x12d8u, 0x3200u, 0x4b0u));
+    SAVE_MARSHAL_SEEK(CIV_SAVE_OFF_BLK_12D8_2D50);
+    SAVE_MARSHAL_CHECK(save_xfer_block(image, cap, &cursor, 0x12d8u, 0x2d50u, 0x4b0u));
+    SAVE_MARSHAL_SEEK(CIV_SAVE_OFF_BLK_1420_54FC);
+    SAVE_MARSHAL_CHECK(save_xfer_block(image, cap, &cursor, 0x1420u, 0x54fcu, 0xe00u));
+    SAVE_MARSHAL_SEEK(CIV_SAVE_OFF_STRIDED_1420_1A38);
+    SAVE_MARSHAL_CHECK(save_xfer_strided(image, cap, &cursor, 0x1420u, 0x1a38u, 28u));
+    SAVE_MARSHAL_SEEK(CIV_SAVE_OFF_BLK_1420_62FC);
+    SAVE_MARSHAL_CHECK(save_xfer_block(image, cap, &cursor, 0x1420u, 0x62fcu, 0x3000u));
+    SAVE_MARSHAL_SEEK(CIV_SAVE_OFF_BLK_13E8_000A);
+    SAVE_MARSHAL_CHECK(save_xfer_block(image, cap, &cursor, 0x13e8u, 0x000au, 0xfa0u));
+    SAVE_MARSHAL_SEEK(CIV_SAVE_OFF_A_12D8_04DA);
+    SAVE_MARSHAL_CHECK(save_xfer_array(image, cap, &cursor, 0x12d8u, 0x04dau, 0x100u, 0x20u));
+    SAVE_MARSHAL_SEEK(CIV_SAVE_OFF_BLK_1390_03AF);
+    SAVE_MARSHAL_CHECK(save_xfer_block(image, cap, &cursor, 0x1390u, 0x03afu, 0x1000u));
+    SAVE_MARSHAL_SEEK(CIV_SAVE_OFF_BLK_12D8_36B0);
+    SAVE_MARSHAL_CHECK(save_xfer_block(image, cap, &cursor, 0x12d8u, 0x36b0u, 0x240u));
+    SAVE_MARSHAL_SEEK(CIV_SAVE_OFF_BLK_1248_0004);
+    SAVE_MARSHAL_CHECK(save_xfer_block(image, cap, &cursor, 0x1248u, 0x0004u, 0x104u));
+    SAVE_MARSHAL_SEEK(CIV_SAVE_OFF_BLK_1290_01B2);
+    SAVE_MARSHAL_CHECK(save_xfer_block(image, cap, &cursor, 0x1290u, 0x01b2u, 0x5a0u));
+    SAVE_MARSHAL_SEEK(CIV_SAVE_OFF_F_1308_0020);
+    SAVE_MARSHAL_CHECK(save_xfer_words(image, cap, &cursor, 0x1308u, 0x0020u, 1u));
+    SAVE_MARSHAL_SEEK(CIV_SAVE_IMAGE_MAP_OFF);
+    SAVE_MARSHAL_CHECK(save_xfer_block(image, cap, &cursor, 0x1420u, 0xb394u,
+                                       CIV_SAVE_IMAGE_MAP_LEN));
+
+#undef SAVE_MARSHAL_SEEK
+#undef SAVE_MARSHAL_CHECK
+
+    if (cursor != (size_t)CIV_SAVE_IMAGE_SIZE)
+        return CIV_ERR_BAD_DATA;
+    return CIV_OK;
 }
 
 /* Image-cursor reservation shared by the xfer family: the OS-free half of
@@ -502,7 +723,8 @@ civ_error_t save_xfer_strided(uint8_t *image, size_t cap, size_t *cursor,
      * packed per elem in the image (e.g. 28 elems at
      * CIV_SAVE_OFF_STRIDED_1420_1A38). Ported as a per-elem 22B
      * reservation loop; overrun leaves *cursor at the failing elem start.
-     * seg/base are live anchors (base + i*(0xc+22) in orig). */
+     * seg/base are live anchors (base + i*(0xc+22) in orig). Live copy
+     * lands in save_xfer_strided_live below (same anchors + ctx). */
     unsigned i;
 
     (void)seg;
@@ -518,5 +740,381 @@ civ_error_t save_xfer_strided(uint8_t *image, size_t cap, size_t *cursor,
         if (rc != CIV_OK)
             return rc;
     }
+    return CIV_OK;
+}
+
+/* --- X1 live ctx (explicit, no globals, OS-free, no Win16, no exit) --- */
+
+void civ_save_ctx_init(civ_save_ctx_t *ctx, int direction)
+{
+    size_t k;
+
+    if (!ctx)
+        return;
+    ctx->direction = direction ? CIV_SAVE_DIR_LOAD : CIV_SAVE_DIR_SAVE;
+    ctx->nwins = 0;
+    for (k = 0; k < (size_t)CIV_SAVE_CTX_MAX_SEGS; k++) {
+        ctx->wins[k].seg = 0;
+        ctx->wins[k].base = NULL;
+        ctx->wins[k].len = 0;
+    }
+}
+
+civ_error_t civ_save_ctx_add(civ_save_ctx_t *ctx, uint16_t seg,
+                             uint8_t *base, size_t len)
+{
+    size_t k;
+
+    if (!ctx || !base)
+        return CIV_ERR_NOENT;
+    if (len == 0)
+        return CIV_ERR_RANGE;
+    for (k = 0; k < ctx->nwins; k++) {
+        if (ctx->wins[k].seg == seg) {
+            ctx->wins[k].base = base;
+            ctx->wins[k].len = len;
+            return CIV_OK;
+        }
+    }
+    if (ctx->nwins >= (size_t)CIV_SAVE_CTX_MAX_SEGS)
+        return CIV_ERR_RANGE;
+    ctx->wins[ctx->nwins].seg = seg;
+    ctx->wins[ctx->nwins].base = base;
+    ctx->wins[ctx->nwins].len = len;
+    ctx->nwins++;
+    return CIV_OK;
+}
+
+/* Find a mapped live window for seg (NULL when ctx NULL, unmapped, or
+ * empty). Caller-owned; no globals. */
+static const civ_save_seg_win_t *save_ctx_find(const civ_save_ctx_t *ctx,
+                                                uint16_t seg)
+{
+    size_t k;
+
+    if (!ctx)
+        return NULL;
+    for (k = 0; k < ctx->nwins; k++) {
+        if (ctx->wins[k].seg == seg && ctx->wins[k].base != NULL &&
+            ctx->wins[k].len > 0)
+            return &ctx->wins[k];
+    }
+    return NULL;
+}
+
+/* Live-window bounds: off+len must sit inside win->len (overflow-safe).
+ * RANGE on live overrun (caller buffer too small). */
+static civ_error_t save_live_check(const civ_save_seg_win_t *win,
+                                   uint16_t off, size_t len)
+{
+    size_t o;
+
+    if (!win || !win->base)
+        return CIV_ERR_NOENT;
+    o = (size_t)off;
+    if (len > win->len)
+        return CIV_ERR_RANGE;
+    if (o > win->len - len)
+        return CIV_ERR_RANGE;
+    return CIV_OK;
+}
+
+/* One contiguous live copy (words/block core): reserves len image bytes,
+ * then directional memcpy between win->base+off and image+cursor_before.
+ * ctx NULL / seg unmapped = reservation-only (zeros path preserved).
+ * TRUNCATED leaves *cursor at the failing start (xfer_reserve shape). */
+static civ_error_t save_live_copy_one(uint8_t *image, size_t cap,
+                                       size_t *cursor, uint16_t seg,
+                                       uint16_t off, size_t len,
+                                       const civ_save_ctx_t *ctx)
+{
+    const civ_save_seg_win_t *win;
+    size_t img_off;
+    civ_error_t rc;
+
+    if (!image || !cursor)
+        return CIV_ERR_NOENT;
+    win = save_ctx_find(ctx, seg);
+    if (!win)
+        return xfer_reserve(cursor, cap, len);
+    rc = save_live_check(win, off, len);
+    if (rc != CIV_OK)
+        return rc;
+    img_off = *cursor;
+    rc = xfer_reserve(cursor, cap, len);
+    if (rc != CIV_OK)
+        return rc;
+    if (len == 0)
+        return CIV_OK;
+    if (ctx->direction == CIV_SAVE_DIR_SAVE)
+        memcpy(image + img_off, win->base + (size_t)off, len);
+    else
+        memcpy(win->base + (size_t)off, image + img_off, len);
+    return CIV_OK;
+}
+
+civ_error_t save_xfer_words_live(uint8_t *image, size_t cap, size_t *cursor,
+                                 uint16_t seg, uint16_t off, unsigned words,
+                                 const civ_save_ctx_t *ctx)
+{
+    /* Orig FUN_10f8_0f40 @ 10f8:0f40 live half: words*2 bytes between
+     * MK_FP(seg, off) and image+*cursor (direction by ctx->direction,
+     * mirroring g_nSaveDirection @ 1310:0008). seg/off kept as anchors. */
+    size_t len;
+
+    if (!image || !cursor)
+        return CIV_ERR_NOENT;
+    if ((size_t)words > SIZE_MAX / 2u)
+        return CIV_ERR_RANGE;
+    len = (size_t)words * 2u;
+    return save_live_copy_one(image, cap, cursor, seg, off, len, ctx);
+}
+
+civ_error_t save_xfer_block_live(uint8_t *image, size_t cap, size_t *cursor,
+                                 uint16_t seg, uint16_t off, unsigned len,
+                                 const civ_save_ctx_t *ctx)
+{
+    /* Orig FUN_10f8_0fcf @ 10f8:0fcf live half: len bytes via mem_copy_far.
+     * Same contract as words_live, byte count. */
+    if (!image || !cursor)
+        return CIV_ERR_NOENT;
+    return save_live_copy_one(image, cap, cursor, seg, off, (size_t)len,
+                              ctx);
+}
+
+civ_error_t save_xfer_array_live(uint8_t *image, size_t cap, size_t *cursor,
+                                 uint16_t seg, uint16_t base, unsigned n,
+                                 unsigned elem_len,
+                                 const civ_save_ctx_t *ctx)
+{
+    /* Orig FUN_10f8_1035 @ 10f8:1035 live half: n elems, live stride
+     * CIV_SAVE_ARRAY_LIVE_STRIDE (0x20), elem_len image bytes each
+     * (full 0x20; small-map 0x0e/0x0c/0x0b/0x0d prefix). Per-elem
+     * reservation + directional copy; TRUNCATED (image) leaves *cursor at
+     * the failing elem start, RANGE on live-window overrun. Unmapped seg
+     * falls back to the reservation-only walk (same as save_xfer_array).
+     * No Win16, no globals. */
+    const civ_save_seg_win_t *win;
+    unsigned i;
+
+    if (!image || !cursor)
+        return CIV_ERR_NOENT;
+    if (n == 0 || elem_len == 0)
+        return CIV_OK;
+    if ((size_t)n > SIZE_MAX / (size_t)elem_len)
+        return CIV_ERR_RANGE;
+    if ((size_t)n > SIZE_MAX / (size_t)CIV_SAVE_ARRAY_LIVE_STRIDE)
+        return CIV_ERR_RANGE;
+    win = save_ctx_find(ctx, seg);
+    if (!win) {
+        for (i = 0; i < n; i++) {
+            civ_error_t rc =
+                xfer_reserve(cursor, cap, (size_t)elem_len);
+
+            if (rc != CIV_OK)
+                return rc;
+        }
+        return CIV_OK;
+    }
+    for (i = 0; i < n; i++) {
+        size_t live_off;
+        size_t img_off;
+        civ_error_t rc;
+
+        if ((size_t)i > (SIZE_MAX - (size_t)base) /
+                (size_t)CIV_SAVE_ARRAY_LIVE_STRIDE)
+            return CIV_ERR_RANGE;
+        live_off = (size_t)base +
+            (size_t)i * (size_t)CIV_SAVE_ARRAY_LIVE_STRIDE;
+        /* Live elem must fit win (elem_len prefix of the 0x20 stride). */
+        if (elem_len > win->len || live_off > win->len - (size_t)elem_len)
+            return CIV_ERR_RANGE;
+        img_off = *cursor;
+        rc = xfer_reserve(cursor, cap, (size_t)elem_len);
+        if (rc != CIV_OK)
+            return rc;
+        if (ctx->direction == CIV_SAVE_DIR_SAVE)
+            memcpy(image + img_off, win->base + live_off, (size_t)elem_len);
+        else
+            memcpy(win->base + live_off, image + img_off, (size_t)elem_len);
+    }
+    return CIV_OK;
+}
+
+civ_error_t save_xfer_strided_live(uint8_t *image, size_t cap,
+                                   size_t *cursor, uint16_t seg,
+                                   uint16_t base, unsigned n,
+                                   const civ_save_ctx_t *ctx)
+{
+    /* Orig FUN_10f8_10bd @ 10f8:10bd live half: n elems, each skips
+     * CIV_SAVE_STRIDED_SKIP (0xc) live bytes then moves
+     * CIV_SAVE_STRIDED_WORDS (0xb) words = CIV_SAVE_STRIDED_ELEM_LEN (22B)
+     * packed per elem in the image (28 elems at
+     * CIV_SAVE_OFF_STRIDED_1420_1A38). Live stride per elem is
+     * CIV_SAVE_STRIDED_LIVE_STRIDE (0xc+22). Per-elem reservation +
+     * directional copy; overrun leaves *cursor at the failing elem start.
+     * Unmapped seg = reservation-only. seg/base anchors kept. */
+    const civ_save_seg_win_t *win;
+    unsigned i;
+
+    if (!image || !cursor)
+        return CIV_ERR_NOENT;
+    if (n == 0)
+        return CIV_OK;
+    win = save_ctx_find(ctx, seg);
+    if (!win) {
+        for (i = 0; i < n; i++) {
+            civ_error_t rc = xfer_reserve(
+                cursor, cap, (size_t)CIV_SAVE_STRIDED_ELEM_LEN);
+
+            if (rc != CIV_OK)
+                return rc;
+        }
+        return CIV_OK;
+    }
+    for (i = 0; i < n; i++) {
+        size_t live_off;
+        size_t img_off;
+        civ_error_t rc;
+
+        if ((size_t)i > (SIZE_MAX - (size_t)base) /
+                (size_t)CIV_SAVE_STRIDED_LIVE_STRIDE)
+            return CIV_ERR_RANGE;
+        live_off = (size_t)base +
+            (size_t)i * (size_t)CIV_SAVE_STRIDED_LIVE_STRIDE;
+        if ((size_t)CIV_SAVE_STRIDED_ELEM_LEN > win->len ||
+            live_off > win->len - (size_t)CIV_SAVE_STRIDED_ELEM_LEN)
+            return CIV_ERR_RANGE;
+        img_off = *cursor;
+        rc = xfer_reserve(cursor, cap, (size_t)CIV_SAVE_STRIDED_ELEM_LEN);
+        if (rc != CIV_OK)
+            return rc;
+        if (ctx->direction == CIV_SAVE_DIR_SAVE)
+            memcpy(image + img_off, win->base + live_off,
+                   (size_t)CIV_SAVE_STRIDED_ELEM_LEN);
+        else
+            memcpy(win->base + live_off, image + img_off,
+                   (size_t)CIV_SAVE_STRIDED_ELEM_LEN);
+    }
+    return CIV_OK;
+}
+
+civ_error_t save_marshal_fields_live(uint8_t *image, size_t cap,
+                                      const civ_save_ctx_t *ctx)
+{
+    /* Save_MarshalFields live driver, Orig FUN_10f8_090c @ 10f8:090c:
+     * same ordered CIV_SAVE_OFF_* walk as save_marshal_fields (full-size
+     * path; small-map shrink TODO) but through the *_live xfers with ctx.
+     * ctx NULL == reservation-only (identical to save_marshal_fields).
+     * Direction from ctx->direction (SAVE live->image, else image->live);
+     * unmapped segs (1298/1350/1388 frontier, caller holes, indirect map
+     * when 1420 window is missing) stay reservation-only. Cursor mirrors
+     * g_nSaveCursorOff @ 1420:a2d6 over base @ 1420:a2da (local, no
+     * globals). OS-free, no Win16 far dereference. */
+    size_t cursor = 0;
+    civ_error_t rc;
+
+#define SAVE_MARSHAL_LIVE_SEEK(off)                                             \
+    do {                                                                       \
+        rc = marshal_seek(&cursor, cap, (size_t)(off));                         \
+        if (rc != CIV_OK)                                                      \
+            return rc;                                                         \
+    } while (0)
+#define SAVE_MARSHAL_LIVE_CHECK(call)                                           \
+    do {                                                                       \
+        rc = (call);                                                            \
+        if (rc != CIV_OK)                                                      \
+            return rc;                                                         \
+    } while (0)
+
+    if (!image)
+        return CIV_ERR_NOENT;
+    if (cap < (size_t)CIV_SAVE_BUF_MIN)
+        return CIV_ERR_TRUNCATED;
+
+    SAVE_MARSHAL_LIVE_SEEK(CIV_SAVE_OFF_PRE);
+    SAVE_MARSHAL_LIVE_CHECK(
+        save_xfer_words_live(image, cap, &cursor, 0x1310u, 0x0000u, 1u, ctx));
+    SAVE_MARSHAL_LIVE_SEEK(CIV_SAVE_OFF_F_12D8_42FE);
+    SAVE_MARSHAL_LIVE_CHECK(
+        save_xfer_words_live(image, cap, &cursor, 0x12d8u, 0x42feu, 1u, ctx));
+    SAVE_MARSHAL_LIVE_SEEK(CIV_SAVE_OFF_F_12D8_4300);
+    SAVE_MARSHAL_LIVE_CHECK(
+        save_xfer_words_live(image, cap, &cursor, 0x12d8u, 0x4300u, 1u, ctx));
+    SAVE_MARSHAL_LIVE_SEEK(CIV_SAVE_OFF_F_12D8_42FC);
+    SAVE_MARSHAL_LIVE_CHECK(
+        save_xfer_words_live(image, cap, &cursor, 0x12d8u, 0x42fcu, 1u, ctx));
+    SAVE_MARSHAL_LIVE_SEEK(CIV_SAVE_OFF_F_13C0_0000);
+    SAVE_MARSHAL_LIVE_CHECK(
+        save_xfer_words_live(image, cap, &cursor, 0x13c0u, 0x0000u, 1u, ctx));
+    SAVE_MARSHAL_LIVE_SEEK(CIV_SAVE_OFF_F_12D8_42FA);
+    SAVE_MARSHAL_LIVE_CHECK(
+        save_xfer_words_live(image, cap, &cursor, 0x12d8u, 0x42fau, 1u, ctx));
+    SAVE_MARSHAL_LIVE_SEEK(CIV_SAVE_OFF_F_12D8_42F6);
+    SAVE_MARSHAL_LIVE_CHECK(
+        save_xfer_words_live(image, cap, &cursor, 0x12d8u, 0x42f6u, 1u, ctx));
+    SAVE_MARSHAL_LIVE_SEEK(CIV_SAVE_OFF_F_12D8_42F8);
+    SAVE_MARSHAL_LIVE_CHECK(
+        save_xfer_words_live(image, cap, &cursor, 0x12d8u, 0x42f8u, 1u, ctx));
+    SAVE_MARSHAL_LIVE_SEEK(CIV_SAVE_OFF_F_12D0_0062);
+    SAVE_MARSHAL_LIVE_CHECK(
+        save_xfer_words_live(image, cap, &cursor, 0x12d0u, 0x0062u, 1u, ctx));
+    SAVE_MARSHAL_LIVE_SEEK(CIV_SAVE_OFF_A_12D8_01DA);
+    SAVE_MARSHAL_LIVE_CHECK(save_xfer_array_live(image, cap, &cursor, 0x12d8u,
+                                                 0x01dau, 8u, 0x20u, ctx));
+    SAVE_MARSHAL_LIVE_SEEK(CIV_SAVE_OFF_A_12D8_02DA);
+    SAVE_MARSHAL_LIVE_CHECK(save_xfer_array_live(image, cap, &cursor, 0x12d8u,
+                                                 0x02dau, 8u, 0x20u, ctx));
+    SAVE_MARSHAL_LIVE_SEEK(CIV_SAVE_OFF_A_12D8_03DA);
+    SAVE_MARSHAL_LIVE_CHECK(save_xfer_array_live(image, cap, &cursor, 0x12d8u,
+                                                 0x03dau, 8u, 0x20u, ctx));
+    SAVE_MARSHAL_LIVE_SEEK(CIV_SAVE_OFF_BLK_12D8_3200);
+    SAVE_MARSHAL_LIVE_CHECK(save_xfer_block_live(image, cap, &cursor, 0x12d8u,
+                                                 0x3200u, 0x4b0u, ctx));
+    SAVE_MARSHAL_LIVE_SEEK(CIV_SAVE_OFF_BLK_12D8_2D50);
+    SAVE_MARSHAL_LIVE_CHECK(save_xfer_block_live(image, cap, &cursor, 0x12d8u,
+                                                 0x2d50u, 0x4b0u, ctx));
+    SAVE_MARSHAL_LIVE_SEEK(CIV_SAVE_OFF_BLK_1420_54FC);
+    SAVE_MARSHAL_LIVE_CHECK(save_xfer_block_live(image, cap, &cursor, 0x1420u,
+                                                 0x54fcu, 0xe00u, ctx));
+    SAVE_MARSHAL_LIVE_SEEK(CIV_SAVE_OFF_STRIDED_1420_1A38);
+    SAVE_MARSHAL_LIVE_CHECK(save_xfer_strided_live(image, cap, &cursor,
+                                                   0x1420u, 0x1a38u, 28u,
+                                                   ctx));
+    SAVE_MARSHAL_LIVE_SEEK(CIV_SAVE_OFF_BLK_1420_62FC);
+    SAVE_MARSHAL_LIVE_CHECK(save_xfer_block_live(image, cap, &cursor, 0x1420u,
+                                                 0x62fcu, 0x3000u, ctx));
+    SAVE_MARSHAL_LIVE_SEEK(CIV_SAVE_OFF_BLK_13E8_000A);
+    SAVE_MARSHAL_LIVE_CHECK(save_xfer_block_live(image, cap, &cursor, 0x13e8u,
+                                                 0x000au, 0xfa0u, ctx));
+    SAVE_MARSHAL_LIVE_SEEK(CIV_SAVE_OFF_A_12D8_04DA);
+    SAVE_MARSHAL_LIVE_CHECK(save_xfer_array_live(image, cap, &cursor, 0x12d8u,
+                                                 0x04dau, 0x100u, 0x20u,
+                                                 ctx));
+    SAVE_MARSHAL_LIVE_SEEK(CIV_SAVE_OFF_BLK_1390_03AF);
+    SAVE_MARSHAL_LIVE_CHECK(save_xfer_block_live(image, cap, &cursor, 0x1390u,
+                                                 0x03afu, 0x1000u, ctx));
+    SAVE_MARSHAL_LIVE_SEEK(CIV_SAVE_OFF_BLK_12D8_36B0);
+    SAVE_MARSHAL_LIVE_CHECK(save_xfer_block_live(image, cap, &cursor, 0x12d8u,
+                                                 0x36b0u, 0x240u, ctx));
+    SAVE_MARSHAL_LIVE_SEEK(CIV_SAVE_OFF_BLK_1248_0004);
+    SAVE_MARSHAL_LIVE_CHECK(save_xfer_block_live(image, cap, &cursor, 0x1248u,
+                                                 0x0004u, 0x104u, ctx));
+    SAVE_MARSHAL_LIVE_SEEK(CIV_SAVE_OFF_BLK_1290_01B2);
+    SAVE_MARSHAL_LIVE_CHECK(save_xfer_block_live(image, cap, &cursor, 0x1290u,
+                                                 0x01b2u, 0x5a0u, ctx));
+    SAVE_MARSHAL_LIVE_SEEK(CIV_SAVE_OFF_F_1308_0020);
+    SAVE_MARSHAL_LIVE_CHECK(
+        save_xfer_words_live(image, cap, &cursor, 0x1308u, 0x0020u, 1u, ctx));
+    SAVE_MARSHAL_LIVE_SEEK(CIV_SAVE_IMAGE_MAP_OFF);
+    SAVE_MARSHAL_LIVE_CHECK(
+        save_xfer_block_live(image, cap, &cursor, 0x1420u, 0xb394u,
+                             CIV_SAVE_IMAGE_MAP_LEN, ctx));
+
+#undef SAVE_MARSHAL_LIVE_SEEK
+#undef SAVE_MARSHAL_LIVE_CHECK
+
+    if (cursor != (size_t)CIV_SAVE_IMAGE_SIZE)
+        return CIV_ERR_BAD_DATA;
     return CIV_OK;
 }

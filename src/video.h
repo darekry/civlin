@@ -44,27 +44,34 @@ civ_error_t video_check_driver_caps(SDL_Renderer *ren);
  * on the 8-bit surfaces TBD). */
 civ_error_t palette_init(void);
 
-/* Palette_AnimateRange @ 1090:0376 (stub; range repaint on the active
- * 8-bit surface; exact source-lock semantics TBD, see Ghidra). Palette
- * opcode path: MainPort_ApplyPalette @ 1200:00a8 issues opcode 1 (full
- * apply) and Anim_AdvanceFrames @ 10b0:0461 issues opcodes 1/0xe (timed
- * fades); SDL_Palette equivalent on the active 8-bit surface TBD. */
+/* Palette_AnimateRange @ 1090:0376 (ported; range repaint via
+ * SDL_SetPaletteColors staging on a temp 256-entry palette, no globals.
+ * Orig copies RGB triples + flag byte then ANIMATEPALETTE; callers issue
+ * opcode 1 (full apply from MainPort_ApplyPalette @ 1200:00a8) and timed
+ * 1/0xe fades from Anim_AdvanceFrames @ 10b0:0461 (title/HoF fades).
+ * Colors feed from gfx_godpal_get (0x00..0xeb) + black tail past 0xec
+ * (LOGPALETTE 0x300 zero tail); propagates UNSUPPORTED until the godpal
+ * dump lands (no fake bytes). Range outside [0,256) reports RANGE. */
 civ_error_t palette_animate_range(int first, int count);
 
-/* GfxPort_* @ 10d0:0000/0956/0854/08f1 + bitmap @ 10d0:0cfa (stubs).
- * Opaque drawing port: the original port struct holds ~0x20 words (DC +
+/* GfxPort_* @ 10d0:0000/0956/0854/08f1 + bitmap @ 10d0:0cfa.
+ * Drawing port: the original port struct holds ~0x20 words (DC +
  * compatible DC + bitmap via 10d0:0cfa + clip rect + palette refs); field
- * map not yet decoded, so the struct stays opaque until the 10d0:0cfa
- * allocator is RE'd.	SDL_Texture + SDL render-target bridge TBD. */
+ * map not yet decoded, so the Linux shape stays minimal but concrete
+ * (see video.c): tex/w/h backing store + DC placeholder (borrowed
+ * SDL_Renderer from GETDC) + clip rect placeholder (SelectClipRgn) +
+ * palette ref placeholder (CREATEPALETTE). SDL_Texture TARGET +
+ * SDL_SetRenderTarget round-trip bridge for Blit/PresentRect. */
 typedef struct gfx_port gfx_port_t;
 
 /* Orig: FUN_10d0_0cfa @ 10d0:0cfa -> gfx_port_alloc_bitmap
  * (GfxPort_AllocBitmap; bitmap helper behind GfxPort_Create @ 10d0:0000 /
  * GR_PortOpen). Orig path: GETDC + CREATECOMPATIBLEDC + bitmap select
- * into the fresh port (dimensions from the port open request). SDL3 TBD:
- * streaming INDEX8 or target-capable RGBA texture selected into the port
- * (palette re-applied via SDL_SetPaletteColors on present). NULL out
- * reports NOENT; w/h <= 0 reports RANGE; otherwise UNSUPPORTED. */
+ * into the fresh port (dimensions from the port open request). SDL3 port:
+ * SDL_CreateTexture INDEX8 TARGET selected as the port backing store
+ * (INDEX8 keeps ANIMATEPALETTE possible via SDL_SetPaletteColors;
+ * TARGET allows the Blit/PresentRect render-target path). NULL ren/out
+ * reports NOENT; w/h <= 0 reports RANGE; SDL failure reports IO. */
 civ_error_t gfx_port_alloc_bitmap(SDL_Renderer *ren, int w, int h,
                                   SDL_Texture **out);
 
@@ -79,15 +86,32 @@ civ_error_t gfx_port_create(SDL_Renderer *ren, int w, int h, gfx_port_t **out);
 civ_error_t gfx_port_set_active(gfx_port_t *port);
 
 /* Orig: FUN_10d0_0854 @ 10d0:0854 -> gfx_port_present_rect
- * (GfxPort_PresentRect). BITBLT rop 0xcc0020 (SRCCOPY) to the screen +
- * VALIDATERECT; SDL3 equivalent is an SDL_RenderTexture rect present.
- * NULL port/renderer reports NOENT (NULL rect = full port, kept). */
+ * (GfxPort_PresentRect). Ported: BITBLT rop 0xcc0020 (SRCCOPY) to the
+ * screen maps to SDL_RenderTexture (whole texture when rect is NULL,
+ * else rect as dst with NULL src); VALIDATERECT is a no-op on SDL3 (no
+ * dirty-region validation needed, no HWND to validate). Error mapping
+ * (consistent across video.c): NULL port/renderer -> NOENT (NULL rect =
+ * full port, kept); missing backing texture / SDL_GetTextureSize fail ->
+ * BAD_DATA; SDL_RenderTexture fail -> IO (SDL_GetError logged by
+ * caller; NOMEM only from allocation paths: SDL_CreatePalette/Texture,
+ * never from present). */
 civ_error_t gfx_port_present_rect(gfx_port_t *port, SDL_Renderer *ren,
                                   const SDL_Rect *rect);
 
 /* Orig: FUN_10d0_08f1 @ 10d0:08f1 -> gfx_port_blit (GfxPort_Blit).
- * Port-to-port BITBLT (same 0xcc0020 rop family); SDL blit TBD. NULL
- * ports report NOENT (NULL src_rect = whole source, kept). */
+ * Ported via SDL_SetRenderTarget round-trip on the minimal gfx_port_t
+ * (see video.c: tex/w/h + borrowed ren as the DC placeholder + clip +
+ * palette placeholders covering the ~0x20-word Orig struct): save
+ * SDL_GetRenderTarget, SDL_SetRenderTarget(dst tex),
+ * SDL_RenderTexture(src tex, src_rect -> dst_x/dst_y rect), restore
+ * target. Same 0xcc0020 SRCCOPY rop family as PresentRect @ 10d0:0854;
+ * VALIDATERECT is a no-op on SDL3. Exact Orig field map still TBD
+ * (src/dst HDC + HBITMAP via 10d0:0cfa + clip-region words), so ports
+ * without a borrowed ren (both ren NULL: GfxPort_Create @ 10d0:0000 /
+ * CreateCompatible still stubbed) report UNSUPPORTED. Error mapping:
+ * NULL ports -> NOENT (NULL src_rect = whole source, kept); missing
+ * backing tex -> BAD_DATA; src_rect w/h <= 0 -> RANGE; SDL target-set /
+ * RenderTexture / target-restore fail -> IO. */
 civ_error_t gfx_port_blit(gfx_port_t *dst, const gfx_port_t *src,
                           const SDL_Rect *src_rect, int dst_x, int dst_y);
 
@@ -136,14 +160,20 @@ civ_error_t util_draw_progress_bar(gfx_port_t *port, const SDL_Rect *rect,
 
 /* Orig: FUN_10d0_09ee @ 10d0:09ee -> gfx_port_change_color
  * (GfxPort_ChangeColor / GR_PortChangeColor; GET/SETBITMAPBITS color
- * remap). Follows the Create @ 10d0:0000 / SetActive @ 10d0:0956 /
+ * remap tail). Follows the Create @ 10d0:0000 / SetActive @ 10d0:0956 /
  * PresentRect @ 10d0:0854 / Blit @ 10d0:08f1 / AllocBitmap @ 10d0:0cfa /
  * FillOrCopy @ 10c0:xxxx / LoadRscFrame @ 1198:xxxx chain: remaps one
  * palette index to another inside the port bitmap (orig: GETBITMAPBITS
- * scan + SETBITMAPBITS write-back). SDL3 TBD: INDEX8 pixel remap or
- * SDL_SetPaletteColors alias on the port backing store. NULL port
- * reports NOENT; indices outside 0..255 report RANGE (godpal.c uses
- * 0x00..0xeb, see gfx_indexed.h); otherwise UNSUPPORTED. */
+ * scan of the DIB bits + SETBITMAPBITS write-back of replaced pixels).
+ * SDL3 plan: (a) true pixel remap needs CPU bits via
+ * SDL_LockTexture/UnlockTexture on the port INDEX8 TARGET backing
+ * store, then index swap + Unlock; (b) cheap alias is a single-entry
+ * SDL_SetPaletteColors copy (old color := new color) on the port
+ * palette (see palette_apply_to_port). Bitmap bits unavailable while
+ * the backing store stays a GPU TARGET texture with no locked copy, so
+ * this stays CIV_ERR_UNSUPPORTED (do not fake via palette alias: that
+ * would merge two indices visibly). NULL port -> NOENT; indices outside
+ * 0..255 -> RANGE (godpal.c uses 0x00..0xeb, see gfx_indexed.h). */
 civ_error_t gfx_port_change_color(gfx_port_t *port, int old_index,
                                   int new_index);
 
@@ -179,22 +209,29 @@ civ_error_t gfx_port_create_compatible(SDL_Renderer *ren, int w, int h,
 /* Orig: FUN_1200_00a8 @ 1200:00a8 MainPort_ApplyPalette tail +
  * FUN_1090_0376 @ 1090:0376 Palette_AnimateRange -> palette_apply_to_port
  * (Palette_ApplyToPort; video-side helper, map-side
- * mainport_apply_palette in map.h stays the caller). Applies
- * [first, first+count) via SDL_SetPaletteColors on the port backing
- * store (orig: RGB triples + flag byte copy then ANIMATEPALETTE; opcode
- * 1 full apply + 0xe fade from MainPort_ApplyPalette, timed 1/0xe from
- * Anim_AdvanceFrames @ 10b0:0461). NULL port reports NOENT; first < 0
- * or count <= 0 or first+count > 256 reports RANGE (godpal.c covers
- * 0x00..0xeb, see gfx_indexed.h); otherwise UNSUPPORTED. */
+ * mainport_apply_palette in map.h stays the caller). Ported: applies
+ * [first, first+count) via SDL_SetPaletteColors on the port INDEX8
+ * backing store (SDL_GetTexturePalette when present, else a temp
+ * 256-entry palette attached via SDL_SetTexturePalette; orig: RGB
+ * triples + flag byte copy then ANIMATEPALETTE, opcode 1 full apply +
+ * 0xe fade from MainPort_ApplyPalette, timed 1/0xe from
+ * Anim_AdvanceFrames @ 10b0:0461). Colors feed from gfx_godpal_get
+ * (godpal.c 0x00..0xeb) + black tail past 0xec; propagates UNSUPPORTED
+ * until the dump lands (no fake bytes). NULL port reports NOENT; first
+ * < 0 or count <= 0 or first+count > 256 reports RANGE; missing backing
+ * texture reports BAD_DATA; SDL failure reports IO/NOMEM. */
 civ_error_t palette_apply_to_port(gfx_port_t *port, int first, int count);
 
 /* Orig: FUN_1008_0329 @ 1008:0329 WinMain_Shutdown video-only tail ->
  * video_shutdown_display. DESTROYWINDOW for the display ports/windows
  * plus REMOVEFONTRESOURCE(CIV_FONT_FILE "civfonts.fon" @ 1420:00a4/00fe,
- * added by Font_EnumFamiliesInit @ 1008:0e99); KILLTIMER/FREEPROCINSTANCE
- * tails live in map/dialog shutdown (see map.h/boot.c). SDL3
- * window/renderer stay caller-owned (see boot_shutdown), so this
- * installs/removes nothing yet. Void stub: no globals, no exit(). */
+ * added by Font_EnumFamiliesInit @ 1008:0e99; NE DLL/font container
+ * 244224 B, FON header + font-directory table offsets TBD, SDL_ttf
+ * parse plan documented at font_enum_families_init in boot.h/boot.c);
+ * KILLTIMER/FREEPROCINSTANCE tails live in map/dialog shutdown (see
+ * map.h/boot.c). SDL3 window/renderer stay caller-owned (see
+ * boot_shutdown), so this installs/removes nothing yet. Void stub: no
+ * globals, no exit(). */
 void video_shutdown_display(void);
 
 #endif /* CIVLIN_VIDEO_H */

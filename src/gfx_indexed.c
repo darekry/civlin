@@ -5,10 +5,13 @@
 
 SDL_Surface *gfx_indexed_to_surface(const rsc_indexed_t *img)
 {
-    /* Strict 8-bit + palette gate for the packet H rsc_get_indexed plan
-     * (see gfx_indexed.h): rejects non-8-bit, empty, or pixel-less views
-     * before touching SDL, so a future ResMgr producer cannot smuggle a
-     * malformed slice into an INDEX8 surface. */
+    /* X1 8-bit + palette gate (consumer half of the rsc_get_indexed
+     * producer: rsc_record_data slice + rsc_decode_bitmap @ 1198:xxxx
+     * strict gate w/h > 0, bpp == 8, pal 1..255, pixel < pal_count).
+     * Rejects non-8-bit, empty, or pixel-less views before touching SDL,
+     * so a malformed slice cannot reach an INDEX8 surface; valid
+     * producer views flow unchanged (palette via SDL_SetPaletteColors).
+     * No behavior break for valid inputs. */
     SDL_Surface *surf = NULL;
     SDL_Palette *pal = NULL;
     SDL_Color colors[256];
@@ -91,8 +94,9 @@ civ_error_t gfx_godpal_get(int index, uint8_t rgb[3])
      * 1090:0488 Palette_Init (LOGPALETTE 0x300 -> CREATEPALETTE ->
      * DAT_1420_9966). Byte payload not yet dumped from godpal.c /
      * DAT_1420_9966, so no static const table is emitted here (no fake
-     * bytes); dump 0xec x 3 RGB bytes, then fill *rgb from the table.
+     * bytes); dump plan: Ghidra bytes @ 1420:9966, 0xec*3 (0x2c4) RGB,
+     * cross-check vs godpal.c, then fill *rgb from the table.
      * SDL3 consumer: SDL_SetPaletteColors via palette_apply_to_port /
-     * palette_animate_range (see video.h). */
+     * palette_animate_range (see video.h). Bounds above stay live. */
     return CIV_ERR_UNSUPPORTED;
 }
