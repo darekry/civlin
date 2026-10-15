@@ -1,0 +1,29 @@
+# Original game assets — copyrighted, never commit
+civ1win/
+unpacked/
+
+# Ghidra generated state
+*.gpr
+*.gpr~
+*.lock
+*.lock~
+CivLin.rep/
+*.gpr~
+*.mgc
+
+# Build output
+build/
+*.o
+*.d
+*.a
+*.so
+civlin
+civlin.exe
+a.out
+
+# Local tooling / OS
+.kilo/
+.vscode/
+.idea/
+*~
+.DS_Store
