@@ -93,4 +93,22 @@ int title_poll_skip(void);
  * win/ren. No exit(). */
 civ_error_t title_play_intro_sdl(SDL_Window *win, SDL_Renderer *ren);
 
+/* Orig: none (AF1 Linux-port helper; MPLOGO.BMP has NO filename string
+ * in civ.exe — NE resource or RSC frame, NOT a file load — so there is
+ * no Orig file-load address; the Linux port passes the path explicitly)
+ * -> title_mplogo_show (Title_MplogoShow). Loads the 1-bpp BMP at path
+ * (unpacked/MPLOGO.BMP or civ1win/MPLOGO.BMP, read-only, never writes)
+ * via gfx_bmp_load_indexed (gfx_indexed.h: gfx_bmp_parse file header
+ * 42 4D "BM" + DIB 40 + w/h/planes/bpp/compression/palette/pixels +
+ * gfx_bmp_to_indexed bit unpack with 4 B row padding), bridges the
+ * rsc_indexed_t via gfx_indexed_to_texture (SDL only here, never in the
+ * parse funcs), renders one centered frame + present. Single frame (the
+ * caller owns the anim loop / title_poll_skip; cf.
+ * title_play_intro_sdl). Returns CIV_OK on the presented frame;
+ * CIV_ERR_NOENT on NULL win/ren/path; otherwise the loader/bridge code
+ * passthrough (IO/NOMEM/BAD_DATA/RANGE/UNSUPPORTED/TRUNCATED). No
+ * exit(), no globals, C17. */
+civ_error_t title_mplogo_show(SDL_Window *win, SDL_Renderer *ren,
+                              const char *path);
+
 #endif /* CIVLIN_TITLE_H */

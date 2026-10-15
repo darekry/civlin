@@ -882,7 +882,7 @@ rsc_error_t rsc_gdat_detail(const uint8_t *data, size_t size,
     /* Rsc_GdatDetail @ 1198:xxxx STUB (6 recs, unk 0x146a; terrain-table
      * hypothesis: weights @ 1420:17d6 *3 + 1420:17d8, moisture @
      * 1420:12b8/1420:12bc). Stride TBD via Ghidra 1198 compare; no fake:
-     * *entry/*entry_len untouched on UNSUPPORTED. Borrowed slice, no
+     * *entry / *entry_len untouched on UNSUPPORTED. Borrowed slice, no
      * SDL/exit/globals, C17. */
     (void)index;
     if (!data || !entry || !entry_len)
@@ -899,7 +899,7 @@ rsc_error_t rsc_kdat_detail(const uint8_t *data, size_t size,
     /* Rsc_KdatDetail @ 1198:xxxx STUB (13 recs, unk 0x14be; table
      * hypothesis, stride unknown). Layout TBD via Ghidra 1198 compare;
      * caller logs rsc_record_data slice head 16 B via gfx_probe_head_hex
-     * (read-only, no asset writes). No fake: *entry/*entry_len untouched
+     * (read-only, no asset writes). No fake: *entry / *entry_len untouched
      * on UNSUPPORTED. Borrowed slice, no SDL/exit/globals, C17. */
     (void)index;
     if (!data || !entry || !entry_len)
@@ -2338,4 +2338,544 @@ void rsc_dispose_manager(rsc_mgr_t **pmgr, FILE **pfp)
         rsc_mgr_free(*pmgr);
         *pmgr = NULL;
     }
+}
+
+/* --- AC1: CvPc header + index (segment 1198, OS-free) --- */
+
+#define RSC_CVPC_HEAD_SCAN_MAX 64u
+#define RSC_CVPC_DIM_MAX 640u
+/* GDAT stride hypothesis (worldgen_score_city_sites weights[0x18]):
+ * sizeof row? TBD via Ghidra 1198 compare; documented, not applied. */
+#define RSC_GDAT_STRIDE_HYP 0x18u
+
+long rsc_cvpc_head_off(const uint8_t *data, size_t size)
+{
+    /* Rsc_CvPcHeadOff @ 1198:xxxx: scan for a plausible INDEX8 header
+     * (LE layout matching rsc_decode_bitmap: u16 w + u16 h + u8 bpp==8 +
+     * u8 pal 1..255). CvPc slices (BB DF...) fail the probe at 0, so the
+     * header may sit at offset (8-byte tag + compressed data hypothesis,
+     * w/h after decompress) or the codec differs (EDI LZSS2 ring 0x20?
+     * GIF LZW?). Only header fields are gated here (w/h 1..640); pixel
+     * bounds are NOT required since compressed slices may be shorter. */
+    size_t scan = 0;
+    size_t off = 0;
+
+    if (!data)
+        return -1;
+    if (size < 6)
+        return -1;
+    scan = size < RSC_CVPC_HEAD_SCAN_MAX ? size : RSC_CVPC_HEAD_SCAN_MAX;
+    if (scan < 6)
+        return -1;
+    for (off = 0; off + 6 <= scan; off++) {
+        uint32_t w = (uint32_t)data[off] | ((uint32_t)data[off + 1] << 8);
+        uint32_t h = (uint32_t)data[off + 2] | ((uint32_t)data[off + 3] << 8);
+        uint8_t bpp = data[off + 4];
+        uint8_t pal = data[off + 5];
+
+        if (w < 1 || w > RSC_CVPC_DIM_MAX)
+            continue;
+        if (h < 1 || h > RSC_CVPC_DIM_MAX)
+            continue;
+        if (bpp != 8)
+            continue;
+        if (pal == 0)
+            continue;
+        return (long)off;
+    }
+    return -1;
+}
+
+rsc_error_t rsc_gdat_stride(const uint8_t *data, size_t size,
+                            size_t *stride_out)
+{
+    /* Rsc_GdatStride @ 1198:xxxx STUB (6 recs, unk 0x146a; weights @
+     * 1420:17d6 *3 + 1420:17d8 hypothesis, moisture @ 1420:12b8/12bc).
+     * Candidate RSC_GDAT_STRIDE_HYP (0x18) from weights[0x18] is
+     * documented, not returned: stride TBD via Ghidra 1198 compare, so
+     * *stride_out stays untouched on UNSUPPORTED (no decode fake). */
+    (void)RSC_GDAT_STRIDE_HYP;
+    if (!data || !stride_out)
+        return RSC_ERR_NOENT;
+    if (size == 0)
+        return RSC_ERR_TRUNCATED;
+    return RSC_ERR_UNSUPPORTED;
+}
+
+rsc_error_t rsc_kdat_stride(const uint8_t *data, size_t size,
+                            size_t *stride_out)
+{
+    /* Rsc_KdatStride @ 1198:xxxx STUB (13 recs, unk 0x14be; table
+     * hypothesis, stride unknown). Layout TBD via Ghidra 1198 compare;
+     * caller logs the rsc_record_data slice head 16 B via
+     * gfx_probe_head_hex (read-only). No fake: *stride_out untouched on
+     * UNSUPPORTED. Borrowed slice, no SDL/exit/globals, C17. */
+    if (!data || !stride_out)
+        return RSC_ERR_NOENT;
+    if (size == 0)
+        return RSC_ERR_TRUNCATED;
+    return RSC_ERR_UNSUPPORTED;
+}
+
+rsc_error_t rsc_text_index(const uint8_t *data, size_t size,
+                           size_t *offsets, size_t cap, size_t *out_n)
+{
+    /* Rsc_TextIndex @ 1198:xxxx: per-slice NUL walk (single-string
+     * records yield 1 offset; concatenated blobs yield N; empty strings
+     * count; trailing unterminated bytes ignored). The 398-rec full index
+     * (civdata0 TEXT unk 0x01b6) is a caller loop over rsc_record_data
+     * slices (borrowed, valid while rsc_file lives) calling this per
+     * slice; offsets are per-slice (add slice base for absolute logs). */
+    size_t pos = 0;
+    size_t n = 0;
+
+    if (!data || !out_n)
+        return RSC_ERR_NOENT;
+    if (cap > 0 && !offsets)
+        return RSC_ERR_NOENT;
+    if (size == 0)
+        return RSC_ERR_TRUNCATED;
+    *out_n = 0;
+    while (pos < size) {
+        const uint8_t *nul =
+            (const uint8_t *)memchr(data + pos, 0, size - pos);
+        if (!nul)
+            break;
+        if (n >= cap) {
+            *out_n = n;
+            return RSC_ERR_RANGE;
+        }
+        offsets[n++] = pos;
+        pos = (size_t)(nul - data) + 1u;
+    }
+    *out_n = n;
+    if (n == 0)
+        return RSC_ERR_BAD_MAGIC;
+    return RSC_OK;
+}
+
+rsc_error_t rsc_strlist_all(const uint8_t *data, size_t size,
+                            void (*cb)(unsigned index, const uint8_t *str,
+                                       size_t len, void *ctx),
+                            void *ctx)
+{
+    /* Rsc_StrListAll @ 1198:xxxx: count + per-index get loop (32 recs
+     * civdata0 STR#; BE count via rsc_strlist_count, u8-len entries via
+     * rsc_strlist_get, trailing allowed). Log-ready: no I/O here, caller
+     * logs inside cb in index order; NULL cb is a validate-only walk. */
+    uint16_t count = 0;
+    rsc_error_t cr;
+    unsigned i = 0;
+
+    if (!data)
+        return RSC_ERR_NOENT;
+    cr = rsc_strlist_count(data, size, &count);
+    if (cr != RSC_OK)
+        return cr;
+    for (i = 0; i < (unsigned)count; i++) {
+        const uint8_t *str = NULL;
+        size_t len = 0;
+        rsc_error_t gr = rsc_strlist_get(data, size, i, &str, &len);
+        if (gr != RSC_OK)
+            return gr;
+        if (cb)
+            cb(i, str, len, ctx);
+    }
+    return RSC_OK;
+}
+
+int rsc_cvpc_is_compressed(const uint8_t *data, size_t size)
+{
+    /* Rsc_CvPcIsCompressed @ 1198:xxxx predicate (BB DF... observation):
+     * first byte >= 0x80 (literal tag under gfx_decode_rle <0x80 repeat /
+     * >=0x80 literal) + strict probe fails at 0 (bad w/h/bpp/pal) +
+     * plausible header at offset > 0 (8-byte tag + compressed data
+     * hypothesis; alt codecs EDI LZSS2 ring 0x20? GIF LZW? TBD). Raw
+     * INDEX8 at 0 or no offset header (or short/NULL input) is 0. */
+    rsc_indexed_t probe;
+    long off = 0;
+
+    if (!data || size == 0)
+        return 0;
+    if (data[0] < 0x80)
+        return 0;
+    if (rsc_decode_bitmap(data, size, &probe) == RSC_OK)
+        return 0;
+    off = rsc_cvpc_head_off(data, size);
+    return off > 0 ? 1 : 0;
+}
+
+/* --- AD1: slice diagnostics + stats (segment 1198, OS-free) --- */
+
+size_t rsc_slice_len(const rsc_file_t *f, size_t i)
+{
+    /* Rsc_SliceLen @ 1198:xxxx diagnostic accessor over ResMgr_LoadRsc
+     * @ 1190:0000 dir walk (rsc_record_data slice: BE24 @ +5 / BE16 @ +10,
+     * len 0 derives to next/EOF; borrowed, valid while rsc_file lives).
+     * Returns size on RSC_OK, 0 on any error (NULL file, RANGE end,
+     * UNSUPPORTED dir unproven, TRUNCATED overrun). No SDL/exit/globals. */
+    const uint8_t *data = NULL;
+    size_t size = 0;
+
+    if (!f)
+        return 0;
+    if (rsc_record_data(f, i, &data, &size) != RSC_OK)
+        return 0;
+    return size;
+}
+
+rsc_error_t rsc_text_stats(const rsc_file_t *f, rsc_text_stats_t *out)
+{
+    /* Rsc_TextStats @ 1198:xxxx aggregate (TEXT 398 recs civdata0, unk
+     * 0x01b6; menu @ 1420:435b, difficulty @ 1420:2a5a; " 90% Science)").
+     * Loops rsc_record_data slices 0..8191 until RANGE/UNSUPPORTED; per
+     * slice counts strings via rsc_text_index (Rsc_TextIndex @ 1198:xxxx;
+     * cap 64 stack, heap 1024 retry on RANGE), chars/longest via bounded
+     * NUL lens, hits via rsc_text_find " 90%" (Rsc_TextFind @ 1198:xxxx,
+     * record-level). Non-TEXT (BAD_MAGIC, no NUL) and empty (TRUNCATED)
+     * slices skip; no logging here (no flood; caller logs). */
+    static const uint8_t kNeedle[] = {' ', '9', '0', '%'};
+    size_t total_strings = 0;
+    size_t total_chars = 0;
+    size_t longest = 0;
+    size_t hits = 0;
+    size_t i = 0;
+
+    if (!f || !out)
+        return RSC_ERR_NOENT;
+    out->total_strings = 0;
+    out->total_chars = 0;
+    out->longest_len = 0;
+    out->hits_90pct = 0;
+    for (i = 0; i < 8192u; i++) {
+        const uint8_t *data = NULL;
+        size_t size = 0;
+        size_t offs_stack[64];
+        size_t n = 0;
+        size_t k = 0;
+        rsc_error_t dr = rsc_record_data(f, i, &data, &size);
+
+        if (dr == RSC_ERR_RANGE || dr == RSC_ERR_UNSUPPORTED)
+            break;
+        if (dr != RSC_OK)
+            continue;
+        {
+            rsc_error_t tr =
+                rsc_text_index(data, size, offs_stack, 64u, &n);
+            if (tr == RSC_ERR_TRUNCATED)
+                continue;
+            if (tr == RSC_ERR_BAD_MAGIC)
+                continue;
+            if (tr == RSC_ERR_RANGE) {
+                /* More than 64 strings in one slice: retry with a bounded
+                 * heap buffer (1024 offsets); still RANGE after that counts
+                 * the capped 1024 (diagnostic truncation, documented). */
+                size_t cap_big = 1024u;
+                size_t *offs_big =
+                    (size_t *)malloc(cap_big * sizeof(size_t));
+                size_t n_big = 0;
+                if (!offs_big) {
+                    /* NOMEM: count the 64 we already have, keep walking. */
+                    n = 64u;
+                } else {
+                    rsc_error_t tr2 =
+                        rsc_text_index(data, size, offs_big, cap_big,
+                                       &n_big);
+                    if (tr2 == RSC_OK || tr2 == RSC_ERR_RANGE) {
+                        /* Count + measure from the big buffer. */
+                        for (k = 0; k < n_big; k++) {
+                            size_t off = offs_big[k];
+                            const uint8_t *nul = NULL;
+                            size_t len = 0;
+                            if (off >= size)
+                                continue;
+                            nul = (const uint8_t *)memchr(data + off, 0,
+                                                          size - off);
+                            if (!nul)
+                                continue;
+                            len = (size_t)(nul - (data + off));
+                            total_strings++;
+                            total_chars += len;
+                            if (len > longest)
+                                longest = len;
+                        }
+                        free(offs_big);
+                        if (rsc_text_find(data, size, kNeedle,
+                                          sizeof(kNeedle)) >= 0)
+                            hits++;
+                        continue;
+                    }
+                    free(offs_big);
+                    if (tr2 == RSC_ERR_TRUNCATED ||
+                        tr2 == RSC_ERR_BAD_MAGIC)
+                        continue;
+                    n = 64u;
+                }
+            }
+            if (tr != RSC_OK && tr != RSC_ERR_RANGE)
+                continue;
+            /* n holds stored offsets (cap when RANGE); measure them. */
+            for (k = 0; k < n; k++) {
+                size_t off = offs_stack[k];
+                const uint8_t *nul = NULL;
+                size_t len = 0;
+                if (off >= size)
+                    continue;
+                nul = (const uint8_t *)memchr(data + off, 0, size - off);
+                if (!nul)
+                    continue;
+                len = (size_t)(nul - (data + off));
+                total_strings++;
+                total_chars += len;
+                if (len > longest)
+                    longest = len;
+            }
+            if (rsc_text_find(data, size, kNeedle, sizeof(kNeedle)) >= 0)
+                hits++;
+        }
+    }
+    out->total_strings = total_strings;
+    out->total_chars = total_chars;
+    out->longest_len = longest;
+    out->hits_90pct = hits;
+    return RSC_OK;
+}
+
+const uint8_t *rsc_gdat_row(const uint8_t *data, size_t size,
+                             unsigned index)
+{
+    /* Rsc_GdatRow @ 1198:xxxx diagnostic row view (GDAT 6 recs, unk 0x146a;
+     * weights @ 1420:17d6 *3 + 1420:17d8 hypothesis, moisture @ 1420:12b8/
+     * 12bc; cf. worldgen_score_city_sites @ 1028:0fb4 weights[0x18]).
+     * Tries stride RSC_GDAT_ROW_STRIDE (0x18): row = 0x18 bytes at
+     * index*stride. Bounds only, overflow-safe; layout TBD via Ghidra 1198
+     * compare, no field split, no decode fake. Borrowed slice. */
+    size_t off = 0;
+
+    if (!data)
+        return NULL;
+    if (size == 0)
+        return NULL;
+    off = (size_t)index * (size_t)RSC_GDAT_ROW_STRIDE;
+    if (index != 0 &&
+        off / (size_t)index != (size_t)RSC_GDAT_ROW_STRIDE)
+        return NULL;
+    if (off + (size_t)RSC_GDAT_ROW_STRIDE > size)
+        return NULL;
+    return data + off;
+}
+
+const uint8_t *rsc_kdat_row(const uint8_t *data, size_t size,
+                             unsigned index)
+{
+    /* Rsc_KdatRow @ 1198:xxxx diagnostic row view (KDAT 13 recs, unk 0x14be;
+     * table hypothesis, stride TBD; tried as RSC_KDAT_ROW_STRIDE 0x20 until
+     * the Ghidra 1198 compare lands; caller logs head 16 B via
+     * gfx_probe_head_hex, read-only). Same bounds shape as rsc_gdat_row:
+     * row = 0x20 bytes at index*stride. Borrowed slice, no fake. */
+    size_t off = 0;
+
+    if (!data)
+        return NULL;
+    if (size == 0)
+        return NULL;
+    off = (size_t)index * (size_t)RSC_KDAT_ROW_STRIDE;
+    if (index != 0 &&
+        off / (size_t)index != (size_t)RSC_KDAT_ROW_STRIDE)
+        return NULL;
+    if (off + (size_t)RSC_KDAT_ROW_STRIDE > size)
+        return NULL;
+    return data + off;
+}
+
+/* --- AE2: TEXT full walk + GDAT/KDAT row decode (segment 1198, OS-free) --- */
+
+rsc_error_t rsc_text_get_all(const rsc_file_t *f, rsc_text_loc_t *locs,
+                             size_t cap, size_t *out_n, size_t *out_total)
+{
+    /* Rsc_TextGetAll @ 1198:xxxx file walk (TEXT 398 recs civdata0, unk
+     * 0x01b6; total 14977 strings via the rsc_text_stats shape). Walks dir
+     * slices 0..8191 via rsc_record_data (borrowed, valid while rsc_file
+     * lives) until RANGE (end) or UNSUPPORTED (dir unproven); per slice
+     * indexes via rsc_text_index (cap 64 stack, heap 1024 retry on RANGE;
+     * TRUNCATED empty and BAD_MAGIC non-TEXT skipped). Collects the first
+     * cap locations (rec = slice index, off = per-slice offset) and counts
+     * the full total (summary always, no flood, no logging here). */
+    size_t stored = 0;
+    size_t total = 0;
+    size_t i = 0;
+
+    if (!f || !out_n || !out_total)
+        return RSC_ERR_NOENT;
+    if (cap > 0 && !locs)
+        return RSC_ERR_NOENT;
+    for (i = 0; i < 8192u; i++) {
+        const uint8_t *data = NULL;
+        size_t size = 0;
+        size_t offs_stack[64];
+        size_t n = 0;
+        size_t k = 0;
+        rsc_error_t dr = rsc_record_data(f, i, &data, &size);
+
+        if (dr == RSC_ERR_RANGE || dr == RSC_ERR_UNSUPPORTED)
+            break;
+        if (dr != RSC_OK)
+            continue;
+        {
+            rsc_error_t tr =
+                rsc_text_index(data, size, offs_stack, 64u, &n);
+            if (tr == RSC_ERR_TRUNCATED)
+                continue;
+            if (tr == RSC_ERR_BAD_MAGIC)
+                continue;
+            if (tr == RSC_ERR_RANGE) {
+                size_t cap_big = 1024u;
+                size_t *offs_big =
+                    (size_t *)malloc(cap_big * sizeof(size_t));
+                size_t n_big = 0;
+
+                if (!offs_big) {
+                    n = 64u;
+                } else {
+                    rsc_error_t tr2 =
+                        rsc_text_index(data, size, offs_big, cap_big,
+                                       &n_big);
+                    if (tr2 == RSC_OK || tr2 == RSC_ERR_RANGE) {
+                        for (k = 0; k < n_big; k++) {
+                            total++;
+                            if (stored < cap) {
+                                locs[stored].rec = i;
+                                locs[stored].off = offs_big[k];
+                                stored++;
+                            }
+                        }
+                        free(offs_big);
+                        continue;
+                    }
+                    free(offs_big);
+                    if (tr2 == RSC_ERR_TRUNCATED ||
+                        tr2 == RSC_ERR_BAD_MAGIC)
+                        continue;
+                    n = 64u;
+                }
+            }
+            if (tr != RSC_OK && tr != RSC_ERR_RANGE)
+                continue;
+            for (k = 0; k < n; k++) {
+                total++;
+                if (stored < cap) {
+                    locs[stored].rec = i;
+                    locs[stored].off = offs_stack[k];
+                    stored++;
+                }
+            }
+        }
+    }
+    *out_n = stored;
+    *out_total = total;
+    return total > cap ? RSC_ERR_RANGE : RSC_OK;
+}
+
+rsc_error_t rsc_text_search_all(const rsc_file_t *f, const uint8_t *needle,
+                                size_t needle_len, rsc_text_loc_t *hits,
+                                size_t cap, size_t *out_n,
+                                size_t *out_total)
+{
+    /* Rsc_TextSearchAll @ 1198:xxxx file scan (" 90%" hits=3 in civdata0,
+     * 0 others; record-level via rsc_text_find, matches rsc_text_stats
+     * hits_90pct). Walks slices 0..8191 via rsc_record_data (borrowed)
+     * until RANGE/UNSUPPORTED; per slice verifies TEXT via rsc_text_index
+     * cap-1 probe (TRUNCATED/BAD_MAGIC skipped, OK/RANGE kept) then scans
+     * via rsc_text_find (portable memmem, no flood, no logging here). */
+    size_t stored = 0;
+    size_t total = 0;
+    size_t i = 0;
+
+    if (!f || !needle || !out_n || !out_total)
+        return RSC_ERR_NOENT;
+    if (needle_len == 0)
+        return RSC_ERR_NOENT;
+    if (cap > 0 && !hits)
+        return RSC_ERR_NOENT;
+    for (i = 0; i < 8192u; i++) {
+        const uint8_t *data = NULL;
+        size_t size = 0;
+        size_t probe[1];
+        size_t pn = 0;
+        long found = -1;
+        rsc_error_t dr = rsc_record_data(f, i, &data, &size);
+
+        if (dr == RSC_ERR_RANGE || dr == RSC_ERR_UNSUPPORTED)
+            break;
+        if (dr != RSC_OK)
+            continue;
+        {
+            rsc_error_t tr = rsc_text_index(data, size, probe, 1u, &pn);
+            if (tr == RSC_ERR_TRUNCATED)
+                continue;
+            if (tr == RSC_ERR_BAD_MAGIC)
+                continue;
+            if (tr != RSC_OK && tr != RSC_ERR_RANGE)
+                continue;
+        }
+        found = rsc_text_find(data, size, needle, needle_len);
+        if (found < 0)
+            continue;
+        total++;
+        if (stored < cap) {
+            hits[stored].rec = i;
+            hits[stored].off = (size_t)found;
+            stored++;
+        }
+    }
+    *out_n = stored;
+    *out_total = total;
+    return total > cap ? RSC_ERR_RANGE : RSC_OK;
+}
+
+rsc_error_t rsc_gdat_decode_row(const uint8_t *data, size_t size,
+                                unsigned index, rsc_gdat_row_dec_t *out)
+{
+    /* Rsc_GdatDecodeRow @ 1198:xxxx diagnostic u16 (GDAT 6 recs, unk 0x146a;
+     * stride 0x18 via rsc_gdat_row bounds; 12 x u16 BE try to match the
+     * dir-layer BE via ResMgr_ReadU16 @ 1190:1953; TBD via Ghidra 1198
+     * compare, no field split beyond the array, no fake). */
+    const uint8_t *row = NULL;
+    unsigned k = 0;
+
+    if (!data || !out)
+        return RSC_ERR_NOENT;
+    if (size == 0)
+        return RSC_ERR_TRUNCATED;
+    row = rsc_gdat_row(data, size, index);
+    if (!row)
+        return RSC_ERR_RANGE;
+    for (k = 0; k < 12u; k++) {
+        out->v[k] = (uint16_t)(((uint16_t)row[2u * k] << 8) |
+                               (uint16_t)row[2u * k + 1u]);
+    }
+    return RSC_OK;
+}
+
+rsc_error_t rsc_kdat_decode_row(const uint8_t *data, size_t size,
+                                unsigned index, rsc_kdat_row_dec_t *out)
+{
+    /* Rsc_KdatDecodeRow @ 1198:xxxx diagnostic u16 (KDAT 13 recs, unk 0x14be;
+     * stride 0x20 via rsc_kdat_row bounds; 16 x u16 BE, same BE try as
+     * GDAT until the Ghidra 1198 compare lands; no fake). */
+    const uint8_t *row = NULL;
+    unsigned k = 0;
+
+    if (!data || !out)
+        return RSC_ERR_NOENT;
+    if (size == 0)
+        return RSC_ERR_TRUNCATED;
+    row = rsc_kdat_row(data, size, index);
+    if (!row)
+        return RSC_ERR_RANGE;
+    for (k = 0; k < 16u; k++) {
+        out->v[k] = (uint16_t)(((uint16_t)row[2u * k] << 8) |
+                               (uint16_t)row[2u * k + 1u]);
+    }
+    return RSC_OK;
 }

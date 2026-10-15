@@ -479,7 +479,7 @@ long rsc_text_find(const uint8_t *data, size_t size,
  * TBD: needs Ghidra compare vs the 1198 table decoder before any field
  * split (endian/stride unknown; no fake). Stub: NOENT on NULL
  * data/entry/entry_len, TRUNCATED when size == 0, otherwise
- * RSC_ERR_UNSUPPORTED with *entry/*entry_len untouched. Borrowed slice,
+ * RSC_ERR_UNSUPPORTED with *entry / *entry_len untouched. Borrowed slice,
  * no SDL/exit/globals, C17. */
 rsc_error_t rsc_gdat_detail(const uint8_t *data, size_t size,
                             unsigned index, const uint8_t **entry,
@@ -489,7 +489,7 @@ rsc_error_t rsc_gdat_detail(const uint8_t *data, size_t size,
  * Layout TBD via Ghidra 1198 compare; caller logs the rsc_record_data
  * slice head 16 B via gfx_probe_head_hex (read-only, no asset writes).
  * Stub: NOENT on NULL data/entry/entry_len, TRUNCATED when size == 0,
- * otherwise RSC_ERR_UNSUPPORTED with *entry/*entry_len untouched (no
+ * otherwise RSC_ERR_UNSUPPORTED with *entry / *entry_len untouched (no
  * decode fake). Borrowed slice, no SDL/exit/globals, C17. */
 rsc_error_t rsc_kdat_detail(const uint8_t *data, size_t size,
                             unsigned index, const uint8_t **entry,
@@ -506,7 +506,7 @@ rsc_error_t rsc_kdat_detail(const uint8_t *data, size_t size,
  * rsc_gdat_detail #4 (stub UNSUPPORTED); KDAT to rsc_kdat_detail #5
  * (stub UNSUPPORTED); CvPc/unknown tags validate (NOENT on NULL
  * tag/data/str/len, TRUNCATED when size == 0) then UNSUPPORTED with
- * *str/*len untouched (CvPc: no fake, images_strict=0 proves no raw
+ * *str / *len untouched (CvPc: no fake, images_strict=0 proves no raw
  * INDEX8 at slice start). No SDL/exit/globals, C17. */
 rsc_error_t rsc_string_lookup(const uint8_t tag[4], const uint8_t *data,
                               size_t size, unsigned index,
@@ -798,5 +798,283 @@ rsc_error_t rsc_dump_stats(const rsc_mgr_t *mgr, FILE *out);
  * (NULL pmgr/pfp, NULL *pmgr / *pfp are no-ops). Payload free + node free
  * order matches rsc_mgr_free; no exit, no globals. */
 void rsc_dispose_manager(rsc_mgr_t **pmgr, FILE **pfp);
+
+/* --- AC1: CvPc header + index (segment 1198, OS-free) ---
+ * Context (read-only diagnosis, no asset writes): CvPc slices start with
+ *   BB DF... and fail the strict INDEX8 probe at offset 0 via
+ *   rsc_decode_bitmap @ 1198:xxxx (w/h/bpp/pal gate: u16 w LE + u16 h LE +
+ *   u8 bpp==8 + u8 pal 1..255 + RGB + indices). gfx_decode_rle tag
+ *   hypothesis (<0x80 repeat / >=0x80 literal, see gfx_indexed.h) explains
+ *   BB (>=0x80 literal) as compressed-stream start, not a bitmap header.
+ *   Two hypotheses for the real header: (a) header at offset (8-byte tag +
+ *   compressed data, w/h after decompress) so rsc_cvpc_head_off scans for a
+ *   plausible header within the first 64 B; (b) different codec entirely
+ *   (EDI LZSS2 ring 0x20? GIF LZW? TBD via Ghidra 1198 compare). Caller
+ *   plan (caller-side, e.g. rsc_dump.c, so this file stays SDL-free):
+ *   slice via rsc_record_data (borrowed, valid while rsc_file lives),
+ *   log head 16 B via gfx_probe_head_hex, then dispatch below. Rules:
+ *   C17, zero SDL, no exit(), no globals, borrowed slices. */
+
+/* Orig: FUN_1198_xxxx @ 1198:xxxx -> Rsc_CvPcHeadOff.
+ * Scan a CvPc slice for a plausible INDEX8 header (same LE layout as
+ * rsc_decode_bitmap: u16 w LE @ +0, u16 h LE @ +2, u8 bpp @ +4, u8 pal @
+ * +5). Plausible means w in 1..640, h in 1..640, bpp == 8, pal in 1..255
+ * (u8 pal != 0). Scans offsets 0..min(64,size)-6, returns the first match
+ * or -1. OS-free port (scan only, no decode fake): -1 on NULL data,
+ * size < 6, or no plausible header. Full pixel-bounds (6+3*pal+w*h) are
+ * NOT required here: under hypothesis (a) w/h describe the decompressed
+ * frame, so the compressed slice may be shorter. No SDL/exit/globals. */
+long rsc_cvpc_head_off(const uint8_t *data, size_t size);
+/* Orig: FUN_1198_xxxx @ 1198:xxxx -> Rsc_GdatStride (STUB).
+ * GDAT stride (6 recs, unk 0x146a; terrain-table hypothesis: weights @
+ * 1420:17d6 *3 + 1420:17d8, moisture @ 1420:12b8/1420:12bc). Candidate
+ * stride 0x18 (weights[0x18] from worldgen_score_city_sites: sizeof row?
+ * TBD via Ghidra 1198 table-decoder compare before any field split;
+ * endian/stride unknown, no fake). Stub: NOENT on NULL data/stride_out,
+ * TRUNCATED when size == 0, otherwise RSC_ERR_UNSUPPORTED with
+ * *stride_out untouched. Borrowed slice, no SDL/exit/globals, C17. */
+rsc_error_t rsc_gdat_stride(const uint8_t *data, size_t size,
+                            size_t *stride_out);
+/* Orig: FUN_1198_xxxx @ 1198:xxxx -> Rsc_KdatStride (STUB).
+ * KDAT stride (13 recs, unk 0x14be; table hypothesis, stride unknown;
+ * TBD via Ghidra 1198 compare; caller logs the rsc_record_data slice head
+ * 16 B via gfx_probe_head_hex, read-only). Stub: NOENT on NULL
+ * data/stride_out, TRUNCATED when size == 0, otherwise
+ * RSC_ERR_UNSUPPORTED with *stride_out untouched (no decode fake).
+ * Borrowed slice, no SDL/exit/globals, C17. */
+rsc_error_t rsc_kdat_stride(const uint8_t *data, size_t size,
+                            size_t *stride_out);
+/* Orig: FUN_1198_xxxx @ 1198:xxxx -> Rsc_TextIndex.
+ * TEXT full index within ONE borrowed slice (covers both hypotheses:
+ * per-record single string -> exactly 1 offset (0); concatenated TEXT
+ * blobs -> N offsets, one per NUL-terminated string). Walks NULs via
+ * memchr: each stored offset is the start of a NUL-terminated string;
+ * empty strings (consecutive NULs) count; trailing unterminated bytes
+ * are ignored (same trailing-tolerant policy as rsc_decode_strlist).
+ * Full 398-rec index (civdata0 TEXT, unk 0x01b6) is a caller loop over
+ * rsc_record_data slices calling this per slice (offsets are per-slice;
+ * add the slice base for file-absolute logging). OS-free port, bounds
+ * only: NOENT on NULL data/out_n (NULL offsets allowed only when cap ==
+ * 0 as a count query), TRUNCATED when size == 0, BAD_MAGIC when no NUL
+ * is present within size (no strings), RANGE when cap holds fewer than
+ * the strings present (*out_n = number stored, caller grows and
+ * retries). No SDL/exit/globals, C17. */
+rsc_error_t rsc_text_index(const uint8_t *data, size_t size,
+                           size_t *offsets, size_t cap, size_t *out_n);
+/* Orig: FUN_1198_xxxx @ 1198:xxxx -> Rsc_StrListAll.
+ * STR# full walk (32 recs civdata0, unk 0x002a) via the rsc_strlist_count
+ * + rsc_strlist_get loop (same BE count / u8-len walk, trailing allowed).
+ * Log-ready: this function performs no I/O itself; the caller logs inside
+ * cb (e.g. head bytes or "%.*s"). cb may be NULL for a validate-only walk
+ * (still walks every entry, still returns TRUNCATED/NOENT on bad data);
+ * ctx is passed through untouched (may be NULL). Returns RSC_ERR_NOENT
+ * on NULL data (or OOR inside the walk, passthrough from strlist_get),
+ * RSC_ERR_TRUNCATED on short slice (passthrough), RSC_OK after all count
+ * entries are visited (cb called in index order 0..count-1). Borrowed
+ * slices, no SDL/exit/globals, C17. */
+rsc_error_t rsc_strlist_all(const uint8_t *data, size_t size,
+                            void (*cb)(unsigned index, const uint8_t *str,
+                                       size_t len, void *ctx),
+                            void *ctx);
+/* Orig: FUN_1198_xxxx @ 1198:xxxx -> Rsc_CvPcIsCompressed (predicate).
+ * Compressed-stream predicate for CvPc slices (BB DF... observation):
+ * true (1) iff first byte >= 0x80 (literal tag under the gfx_decode_rle
+ * <0x80 repeat / >=0x80 literal hypothesis) AND the strict INDEX8 probe
+ * fails at offset 0 (rsc_decode_bitmap != RSC_OK: bad w/h/bpp/pal at slice
+ * start) AND a plausible header exists at offset > 0 via
+ * rsc_cvpc_head_off (w/h 1..640 + bpp==8 + pal 1..255 within first 64 B).
+ * Otherwise false (0), including NULL data, size == 0, raw INDEX8 at 0,
+ * or no offset header. OS-free port (bool as int, no error code): never
+ * fails, never logs. No SDL/exit/globals, C17. */
+int rsc_cvpc_is_compressed(const uint8_t *data, size_t size);
+
+/* --- AD1: slice diagnostics + stats (segment 1198, OS-free) ---
+ * Context (read-only, no asset writes): civdata0 rsrcRSED STR#(32)/
+ * TEXT(398,unk 0x01b6)/GDAT(6,unk 0x146a)/KDAT(13,unk 0x14be)/CvPc(3);
+ * slices are borrowed via rsc_record_data (valid while rsc_file lives).
+ * Caller plan (caller-side e.g. rsc_dump.c, so this file stays SDL-free):
+ * slice via rsc_record_data, then dispatch below. Rules: C17, zero SDL,
+ * no exit(), no globals, borrowed read-only slices. */
+
+/* GDAT row stride hypothesis (Orig FUN_1198_xxxx @ 1198:xxxx ->
+ * Rsc_GdatRow stride doc): 0x18 bytes per row from weights[0x18] in
+ * worldgen_score_city_sites @ 1028:0fb4 (weights @ 1420:17d6*3+17d8,
+ * moisture @ 1420:12b8/1420:12bc; 6 GDAT recs, unk 0x146a). TBD via
+ * Ghidra 1198 table-decoder compare before any field split; documented,
+ * applied as a diagnostic row view only (no field decode). */
+#define RSC_GDAT_ROW_STRIDE 0x18u
+/* KDAT row stride hypothesis (Orig FUN_1198_xxxx @ 1198:xxxx ->
+ * Rsc_KdatRow stride doc): 0x20 bytes per row, TBD. KDAT 13 recs, unk
+ * 0x14be; table hypothesis, stride unknown; 0x20 is the diagnostic try
+ * (power-of-two neighbour of 0x18) until the Ghidra 1198 compare lands.
+ * Documented, applied as a diagnostic row view only (no field decode). */
+#define RSC_KDAT_ROW_STRIDE 0x20u
+
+/* Orig: FUN_1190_0000 @ 1190:0000 -> Rsc_SliceLen (diagnostic accessor).
+ * Record_data slice len accessor: returns the borrowed slice size for
+ * record i via rsc_record_data (ResMgr_LoadRsc @ 1190:0000 BE EOF-dir
+ * walk; file-off BE24 @ +5 / len BE16 @ +10, len 0 derives to next/EOF).
+ * OS-free port (bounds only, no walk change): returns size on RSC_OK,
+ * 0 on any error (NULL file, RANGE end, UNSUPPORTED dir unproven,
+ * TRUNCATED overrun) and on NULL file. No SDL/exit/globals, C17,
+ * read-only borrowed slice (no copy). */
+size_t rsc_slice_len(const rsc_file_t *f, size_t i);
+
+/* TEXT aggregate stats (Orig FUN_1198_xxxx @ 1198:xxxx -> Rsc_TextStats).
+ * TEXT 398 recs civdata0, unk 0x01b6; e.g. menu @ 1420:435b, difficulty
+ * @ 1420:2a5a; observed " 90% Science)", "  80% Tax,". total_strings
+ * counts NUL-terminated strings via rsc_text_index per slice (Rsc_TextIndex
+ * @ 1198:xxxx; empty strings count, trailing unterminated bytes ignored);
+ * total_chars sums each indexed string len (NUL offset, bounds-checked);
+ * longest_len is the max string len; hits_90pct counts slices containing
+ * " 90%" (leading space, 4 B) via rsc_text_find (Rsc_TextFind @ 1198:xxxx,
+ * record-level, matches dump_text_all). Non-TEXT slices (no NUL ->
+ * BAD_MAGIC) and empty slices (TRUNCATED) are skipped, never fail. */
+typedef struct rsc_text_stats {
+    size_t total_strings;
+    size_t total_chars;
+    size_t longest_len;
+    size_t hits_90pct;
+} rsc_text_stats_t;
+
+/* Orig: FUN_1198_xxxx @ 1198:xxxx -> Rsc_TextStats (aggregate).
+ * OS-free port (loop rsc_record_data + rsc_decode_text shape via
+ * rsc_text_index + rsc_text_find, bounds, no flood): walks dir slices
+ * 0..8191 until RANGE (end) or UNSUPPORTED (dir unproven); per slice
+ * indexes via rsc_text_index (cap 64 stack, heap 1024 retry on RANGE),
+ * chars/longest via bounded NUL lens, hits via rsc_text_find " 90%".
+ * No logging here (no flood; caller logs, e.g. dump_text_stats in
+ * rsc_dump.c). NOENT on NULL f/out (*out untouched), otherwise RSC_OK
+ * with zeros when no TEXT slices (e.g. CvD1/2/3/4 CvPc-only). Borrowed
+ * slices, no SDL/exit/globals, C17. */
+rsc_error_t rsc_text_stats(const rsc_file_t *f, rsc_text_stats_t *out);
+
+/* Orig: FUN_1198_xxxx @ 1198:xxxx -> Rsc_GdatRow (diagnostic row view).
+ * GDAT 6 recs, unk 0x146a; terrain-table hypothesis (weights @ 1420:17d6
+ * *3 + 1420:17d8, moisture @ 1420:12b8/1420:12bc; cf.
+ * worldgen_score_city_sites @ 1028:0fb4 weights[0x18]). Tries stride
+ * RSC_GDAT_ROW_STRIDE (0x18): row = 0x18 bytes at index*stride.
+ * OS-free port (bounds only, no field split): returns pointer into the
+ * borrowed slice (valid while container lives) or NULL on NULL data,
+ * size == 0, overflow, or index*stride+stride > size. No SDL/exit/
+ * globals, C17. Layout TBD via Ghidra 1198 compare; no decode fake. */
+const uint8_t *rsc_gdat_row(const uint8_t *data, size_t size,
+                             unsigned index);
+
+/* Orig: FUN_1198_xxxx @ 1198:xxxx -> Rsc_KdatRow (diagnostic row view).
+ * KDAT 13 recs, unk 0x14be; table hypothesis, stride TBD (tried as
+ * RSC_KDAT_ROW_STRIDE 0x20 until the Ghidra 1198 compare lands; caller
+ * logs the rsc_record_data slice head 16 B via gfx_probe_head_hex,
+ * read-only). Same shape as rsc_gdat_row: row = 0x20 bytes at
+ * index*stride. Returns pointer into the borrowed slice or NULL on
+ * NULL data, size == 0, overflow, or overrun. No SDL/exit/globals,
+ * C17, no decode fake. */
+const uint8_t *rsc_kdat_row(const uint8_t *data, size_t size,
+                             unsigned index);
+
+/* --- AE2: TEXT full walk + GDAT/KDAT row decode (segment 1198, OS-free) ---
+ * Context (read-only, no asset writes): civdata0 rsrcRSED TEXT 398 recs
+ *   (unk 0x01b6) totals 14977 strings via rsc_text_stats (Rsc_TextStats @
+ *   1198:xxxx: NUL walk via rsc_text_index per slice + chars/longest +
+ *   hits for " 90%" via rsc_text_find; observed hits=3 in civdata0, 0 in
+ *   CvD1/2/3/4 CvPc-only); GDAT 6 recs stride 0x18 (unk 0x146a, weights
+ *   @ 1420:17d6 *3 + 1420:17d8 hypothesis, moisture @ 1420:12b8/12bc;
+ *   cf. worldgen_score_city_sites @ 1028:0fb4 weights[0x18]) + KDAT 13
+ *   recs stride 0x20 (unk 0x14be). Slices borrowed via rsc_record_data
+ *   (valid while rsc_file lives). Caller plan (caller-side e.g. rsc_dump.c
+ *   dump_text_full / dump_godpal_search_run, SDL-free): walk via
+ *   rsc_text_get_all / rsc_text_search_all (capped detail, summary always,
+ *   no flood, no logging here) + row decode via rsc_gdat/kdat_decode_row
+ *   (u16 BE arrays, bounds, no fake) + godpal run via gfx_godpal_search
+ *   (read-only, no writes, no fake table). Rules: C17, zero SDL, no exit(),
+ *   no globals, borrowed read-only slices. */
+
+/* TEXT string location (file-level walk position).
+ * rec is the directory slice index (rsc_record_data i), off is the
+ * per-slice byte offset from rsc_text_index (start of a NUL-terminated
+ * string within that slice). */
+typedef struct rsc_text_loc {
+    size_t rec;
+    size_t off;
+} rsc_text_loc_t;
+
+/* GDAT decoded row (diagnostic u16 view).
+ * 0x18 bytes per row (RSC_GDAT_ROW_STRIDE) = 12 x u16 BE (weights
+ * hypothesis @ 1420:17d6; endian TBD via Ghidra 1198 compare, BE tried
+ * to match the dir-layer BE via ResMgr_ReadU16 @ 1190:1953). */
+typedef struct rsc_gdat_row_dec {
+    uint16_t v[12];
+} rsc_gdat_row_dec_t;
+
+/* KDAT decoded row (diagnostic u16 view).
+ * 0x20 bytes per row (RSC_KDAT_ROW_STRIDE) = 16 x u16 BE (same BE try
+ * as GDAT until the Ghidra 1198 table-decoder compare lands). */
+typedef struct rsc_kdat_row_dec {
+    uint16_t v[16];
+} rsc_kdat_row_dec_t;
+
+/* Orig: FUN_1198_xxxx @ 1198:xxxx -> Rsc_TextGetAll (file walk).
+ * TEXT full walk (398 recs civdata0, unk 0x01b6; total 14977 strings via
+ * rsc_text_stats shape): walks dir slices 0..8191 via rsc_record_data
+ * (borrowed) until RANGE (end) or UNSUPPORTED (dir unproven); per slice
+ * indexes via rsc_text_index (Rsc_TextIndex @ 1198:xxxx; cap 64 stack,
+ * heap 1024 retry on RANGE, same as rsc_text_stats; empty TRUNCATED and
+ * non-TEXT BAD_MAGIC skipped, never fail). Collects file-level locations
+ * (rec = slice index, off = per-slice offset) for the first cap strings;
+ * counts the full total regardless of cap (summary always, no flood, no
+ * logging here; caller logs capped detail + summary, e.g. dump_text_full).
+ * OS-free port, bounds only: NOENT on NULL f/out_n/out_total (NULL locs
+ * allowed only when cap == 0 as a count query; *out_n / *out_total untouched
+ * on NOENT), otherwise fills *out_n = stored (min(total,cap)) and
+ * *out_total = total strings; returns RSC_OK when total <= cap, RANGE when
+ * total > cap (truncated detail, full summary). Zeros when no TEXT slices
+ * (e.g. CvD1/2/3/4). Borrowed slices, no SDL/exit/globals, C17. */
+rsc_error_t rsc_text_get_all(const rsc_file_t *f, rsc_text_loc_t *locs,
+                             size_t cap, size_t *out_n, size_t *out_total);
+
+/* Orig: FUN_1198_xxxx @ 1198:xxxx -> Rsc_TextSearchAll (file scan).
+ * TEXT needle scan (" 90%" hits=3 in civdata0, 0 others; record-level via
+ * rsc_text_find @ 1198:xxxx, matches rsc_text_stats hits_90pct): walks dir
+ * slices 0..8191 via rsc_record_data (borrowed) until RANGE/UNSUPPORTED;
+ * per slice verifies TEXT via rsc_text_index (cap 1 probe; TRUNCATED empty
+ * and BAD_MAGIC non-TEXT skipped) then scans via rsc_text_find
+ * (Rsc_TextFind @ 1198:xxxx; portable memmem). Collects file-level hits
+ * (rec = slice index, off = needle offset within that slice) for the first
+ * cap hits; counts the full total regardless of cap (summary always, no
+ * flood, no logging here; caller logs capped 32-char contexts, e.g.
+ * dump_text_full). NOENT on NULL f/needle/out_n/out_total or needle_len
+ * == 0 (NULL hits allowed only when cap == 0 as a count query;
+ * *out_n / *out_total untouched on NOENT), otherwise fills *out_n = stored
+ * and *out_total = total hits; returns RSC_OK when total <= cap, RANGE when
+ * total > cap. Zeros when no hits. Borrowed slices, no SDL/exit/globals. */
+rsc_error_t rsc_text_search_all(const rsc_file_t *f, const uint8_t *needle,
+                                size_t needle_len, rsc_text_loc_t *hits,
+                                size_t cap, size_t *out_n,
+                                size_t *out_total);
+
+/* Orig: FUN_1198_xxxx @ 1198:xxxx -> Rsc_GdatDecodeRow (diagnostic u16).
+ * GDAT 6 recs, unk 0x146a; stride RSC_GDAT_ROW_STRIDE (0x18) from
+ * weights[0x18] in worldgen_score_city_sites @ 1028:0fb4 (weights @
+ * 1420:17d6 *3 + 1420:17d8, moisture @ 1420:12b8/1420:12bc). Decodes one
+ * row as 12 x u16 BE (row = 0x18 bytes at index*stride via rsc_gdat_row
+ * bounds; BE tried to match the dir-layer BE, TBD via Ghidra 1198
+ * compare; no field split beyond the u16 array, no decode fake).
+ * OS-free port (bounds + copy): NOENT on NULL data/out (*out untouched),
+ * TRUNCATED when size == 0, RANGE on overflow or index*stride+stride >
+ * size, otherwise fills *out (12 BE16s) and returns RSC_OK. Borrowed
+ * slice, no SDL/exit/globals, C17. */
+rsc_error_t rsc_gdat_decode_row(const uint8_t *data, size_t size,
+                                unsigned index, rsc_gdat_row_dec_t *out);
+
+/* Orig: FUN_1198_xxxx @ 1198:xxxx -> Rsc_KdatDecodeRow (diagnostic u16).
+ * KDAT 13 recs, unk 0x14be; stride RSC_KDAT_ROW_STRIDE (0x20, diagnostic
+ * try until the Ghidra 1198 compare lands; caller logs head 16 B via
+ * gfx_probe_head_hex, read-only). Same shape as rsc_gdat_decode_row:
+ * row = 0x20 bytes at index*stride via rsc_kdat_row bounds, decoded as
+ * 16 x u16 BE. NOENT on NULL data/out (*out untouched), TRUNCATED when
+ * size == 0, RANGE on overflow/overrun, otherwise fills *out and returns
+ * RSC_OK. Borrowed slice, no SDL/exit/globals, C17, no decode fake. */
+rsc_error_t rsc_kdat_decode_row(const uint8_t *data, size_t size,
+                                unsigned index, rsc_kdat_row_dec_t *out);
 
 #endif /* CIVLIN_RSC_LOADER_H */

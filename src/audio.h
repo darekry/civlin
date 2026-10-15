@@ -94,6 +94,41 @@ civ_error_t audio_play_id(int id);
 int sound_normalize_id(int id);
 const char *sound_map_id_to_wav(int file_id);
 
+/* AF2/AG3: WAV silent-gap check (OS-free port of the Sound_MapIdToWav @
+ * 1150:019e table-default @ 1150:025b branch; no SDL, no globals, no
+ * exit(), read-only; doc only, play impls untouched). Jump table @
+ * 1150:0266 holds 41 entries for file IDs 0x83..0xAB inclusive
+ * (0xAB-0x83+1 = 41; names @ 1420:3080..315a, dump-confirmed); gaps hit
+ * the default @ 1150:025b = silent (no file, playback skipped):
+ *   silent: 0x84, 0x93..0xA1, 0xA4, 0xA9 (+ out-of-range file IDs).
+ * Returns 1 when file_id is silent (sound_map_id_to_wav would return
+ * NULL), 0 when a WAV name is mapped. Parity: implemented via
+ * sound_map_id_to_wav so audio_play_id @ 1150:00c9 + sound_map_id_to_wav
+ * above stay untouched. */
+int audio_gap_is_silent(int file_id);
+
+/* AH3: leader WAV name table (2026-10-15). OS-free static const port of
+ * the Sound_MapIdToWav @ 1150:019e jump table @ 1150:0266 leader slice
+ * (names @ 1420:3080..315a, dump-confirmed; full map context: 0x83
+ * OPENING, 0x85..0x92 leaders below, 0xA2 WINTUNE, 0xA3 LOSE2, 0xA5
+ * S_BEEP, 0xA6 THEY_DIE, 0xA7 WE_DIE, 0xA8 S_LAND, 0xAA AIRNUKE, 0xAB
+ * Cannon). 14-entry table, index 0..13 == file_id 0x85..0x92:
+ *   0 LINC, 1 MONT, 2 RAMS, 3 SHAK, 4 NAPO, 5 CEAS, 6 STAL, 7 ALEX,
+ *   8 ELIZ, 9 HAMA, 10 MAO, 11 GENG, 12 GAND, 13 FRED (all "*.wav" exactly
+ *   as in sound_map_id_to_wav above). Gaps (0x84, 0x93..0xA1, 0xA4, 0xA9
+ *   + out-of-range) stay silent already via audio_gap_is_silent above;
+ *   play impls (sound_play_file/audio_play_id) stay untouched. No SDL, no
+ *   globals, no exit(), read-only. */
+#define CIV_AUDIO_LEADER_COUNT 14
+
+/* Count helper: returns CIV_AUDIO_LEADER_COUNT (14). */
+int audio_leader_count(void);
+
+/* At helper: leader WAV name for index 0..CIV_AUDIO_LEADER_COUNT-1
+ * (file_id 0x85 + index), NULL when index is out of range. No globals
+ * (function-local static const view), no exit(), read-only. */
+const char *audio_leader_names(int index);
+
 void audio_shutdown(void);
 
 #endif /* CIVLIN_AUDIO_H */

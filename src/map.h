@@ -269,4 +269,22 @@ civ_error_t map_refresh_all_views(int civ);
  * CIV_ERR_UNSUPPORTED. No globals, no exit(), read-only. */
 civ_error_t mainport_apply_palette(int first, int count);
 
+/* --- AI-C tile table (2026-10-15) ---
+ * Tile codes from the worldgen.h frontier (Map_GenerateRandomOrLoad @
+ * 1028:0000 pipeline + Map_LabelContinents @ 1028:0a93 tails): 10
+ * (decimal, 0x0A) ocean, 1/2/0x0b scored land, 0x0c river seed, 0x0f
+ * border, 0 cleared. OS-free static const port: no globals, no exit(),
+ * read-only. Undecoded slots stay "?" (TODO, no fake terrain names
+ * beyond confirmed). Table covers 0..16 (max observed 0x0f, one past
+ * for growth to 0x10); anything else is "?" via the same fallback. */
+#define CIV_TILE_TYPE_MAX 16
+
+/* Dump-observed tile type name (Orig tile byte in the 64 KB buffer, see
+ * map_get_tile @ 11e8:0dcf). OS-free static const port (implemented):
+ * 0 "cleared", 1/2/0x0b "land", 10 (decimal) "ocean" (see Map_IsSeaLand
+ * @ 1110:16c0 == 10; note decimal 10 = 0x0A, not 0x10), 0x0c
+ * "river seed", 0x0f "border"; every other code returns "?" (TODO).
+ * Returns a read-only literal, never NULL. No globals, no exit(). */
+const char *tile_type_name(int tile);
+
 #endif /* CIVLIN_MAP_H */

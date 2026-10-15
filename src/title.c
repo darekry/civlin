@@ -19,6 +19,7 @@
 #include <SDL3/SDL.h>
 
 #include "audio.h"
+#include "gfx_indexed.h"
 
 civ_error_t title_play_intro(void)
 {
@@ -407,5 +408,61 @@ civ_error_t title_play_intro_sdl(SDL_Window *win, SDL_Renderer *ren)
     if (skipped && audio_started)
         (void)audio_play_id(CIV_SOUND_STOP);
     SDL_Log("title: intro done (frames=%u skipped=%d)", frame, skipped);
+    return CIV_OK;
+}
+
+civ_error_t title_mplogo_show(SDL_Window *win, SDL_Renderer *ren,
+                              const char *path)
+{
+    /* AF1 Linux-port MPLOGO display (no Orig file-load address: MPLOGO.BMP
+     * has NO filename string in civ.exe — NE resource or RSC frame, NOT a
+     * file load; the Linux port passes the path explicitly, read-only).
+     * Loads via gfx_bmp_load_indexed (OS-free parse + 1-bpp unpack, fopen
+     * "rb" only inside the loader, never writes), bridges via
+     * gfx_indexed_to_texture (SDL only here), renders one centered frame
+     * + present. Single frame; the caller owns the loop/skip. */
+    rsc_indexed_t img;
+    uint8_t *px = NULL;
+    SDL_Texture *tex = NULL;
+    float tw = 0.0f;
+    float th = 0.0f;
+    int out_w = 640;
+    int out_h = 480;
+    civ_error_t lr;
+
+    if (!win || !ren || !path || path[0] == '\0')
+        return CIV_ERR_NOENT;
+    memset(&img, 0, sizeof(img));
+    lr = gfx_bmp_load_indexed(path, &img, &px);
+    if (lr != CIV_OK)
+        return lr;
+    tex = gfx_indexed_to_texture(ren, &img);
+    if (!tex) {
+        free(px);
+        return CIV_ERR_UNSUPPORTED;
+    }
+    if (!SDL_GetTextureSize(tex, &tw, &th)) {
+        SDL_DestroyTexture(tex);
+        free(px);
+        return CIV_ERR_UNSUPPORTED;
+    }
+    if (!SDL_GetRenderOutputSize(ren, &out_w, &out_h)) {
+        out_w = 640;
+        out_h = 480;
+    }
+    SDL_SetRenderDrawColor(ren, 4, 8, 24, 255);
+    SDL_RenderClear(ren);
+    {
+        SDL_FRect dst;
+
+        dst.x = ((float)out_w - tw) / 2.0f;
+        dst.y = ((float)out_h - th) / 2.0f;
+        dst.w = tw;
+        dst.h = th;
+        SDL_RenderTexture(ren, tex, NULL, &dst);
+    }
+    SDL_RenderPresent(ren);
+    SDL_DestroyTexture(tex);
+    free(px);
     return CIV_OK;
 }

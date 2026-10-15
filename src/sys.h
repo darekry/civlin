@@ -159,4 +159,27 @@ civ_error_t sys_check_free_memory(void);
  * 0 on NULL fp/src or len == 0). */
 size_t file_write_chunk(FILE *fp, const uint8_t *src, size_t len);
 
+/* Orig NE entry table (MZ e_lfanew @ 0x3C + NE magic @ ne_off, entry table
+ * @ NE+0x04/0x06, bundle walk) -> ne_entry_count (AH2). OS-free file-scan
+ * read-only port (fopen "rb", LE16/LE32 reads, fseek/ftell bounds, no
+ * writes, never writes unpacked/civ.exe or civfonts.fon): sums bundle counts
+ * until cnt == 0 terminator (fixed 3 B vs moveable 6 B with seg 0xFF =
+ * flags + CD 3F + seg + off LE, e.g. unpacked/civ.exe 11 moveable @ 0x8b4
+ * len 70, unpacked/civfonts.fon 0 @ 0x3c7 len 2). Returns total entries
+ * (0 for font-only NE) or -1 on NULL path / open / short / bad MZ/NE /
+ * table overrun. No globals, no exit(), C17. */
+int ne_entry_count(const char *path);
+
+/* Orig NE entry table (same MZ e_lfanew @ 0x3C / NE magic / bundle anchors
+ * as ne_entry_count) -> ne_entry_addr (AH2). OS-free file-scan read-only
+ * port (same fopen "rb" + LE reads, no writes): 0-based index -> seg:off
+ * via bundle walk (fixed: seg = bundle seg, off = u16 LE @ entry+1;
+ * moveable 0xFF: seg = byte 3, off = u16 LE @ +4, e.g. civ.exe idx 0 ->
+ * seg 2 off 0x0e12). NULL path/outs or index < 0 -> -1; header/table errors
+ * -> -1 (outs untouched); index >= count -> -1 OOR (outs untouched); else
+ * sets *seg_out and *off_out and returns 0. No globals, no exit(), C17,
+ * read-only. */
+int ne_entry_addr(const char *path, int index,
+                  uint16_t *seg_out, uint16_t *off_out);
+
 #endif /* CIVLIN_SYS_H */

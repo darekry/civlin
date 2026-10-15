@@ -50,7 +50,11 @@ civ_error_t video_blit_indexed(SDL_Renderer *ren, SDL_Texture *tex, int x, int y
  * (gfx_probe_rsc_image @ 1198:xxxx strict raw INDEX8 gate + gfx_decode_rle
  * CvPc RLE path, see gfx_indexed.h); real RSC frames stay gated there,
  * this present shares the SDL_RenderTexture core with
- * gfx_port_present_rect @ 10d0:0854 (no impl change here).
+ * gfx_port_present_rect @ 10d0:0854 (no impl change here). AD2: frame
+ * bytes reach this present only after the gfx_rle_expand_best dispatcher
+ * (RLL/INV/LZSS/RAW0/2/4/8 + per-method fail log via
+ * gfx_rle_expand_best_ex + gfx_try_fail_str/gfx_expand_method_str, see
+ * gfx_indexed.h); VALIDATERECT stays a no-op, synthetic ok unchanged.
  * NULL ren -> NOENT; SDL_RenderPresent fail -> IO. */
 civ_error_t video_present(SDL_Renderer *ren);
 void video_shutdown(void);
@@ -121,7 +125,12 @@ civ_error_t gfx_port_set_active(gfx_port_t *port);
  * core. AA2: synthetic surface (4x2 via gfx_indexed_to_surface) + texture
  * (64x64 via gfx_indexed_to_texture) ok links to the probe gate
  * (gfx_probe_rsc_image @ 1198:xxxx raw gate + gfx_decode_rle CvPc path,
- * see gfx_indexed.h); real frames stay gated there. Error mapping (consistent across video.c):
+ * see gfx_indexed.h); real frames stay gated there. AD2 (doc only, no
+ * impl change): frame bytes reach this present only after the
+ * gfx_rle_expand_best dispatcher (RLL/INV/LZSS/RAW0/2/4/8 best-method +
+ * per-method fail log via gfx_rle_expand_best_ex +
+ * gfx_try_fail_str/gfx_expand_method_str, see gfx_indexed.h);
+ * VALIDATERECT stays a no-op, synthetic ok unchanged. Error mapping (consistent across video.c):
  * NULL port/renderer -> NOENT (NULL rect = full port, kept); missing
  * backing texture / SDL_GetTextureSize fail -> BAD_DATA;
  * SDL_RenderTexture fail -> IO (SDL_GetError logged by caller; NOMEM only
@@ -136,8 +145,11 @@ civ_error_t gfx_port_present_rect(gfx_port_t *port, SDL_Renderer *ren,
  * SDL_GetRenderTarget, SDL_SetRenderTarget(dst tex),
  * SDL_RenderTexture(src tex, src_rect -> dst_x/dst_y rect), restore
  * target. Same 0xcc0020 SRCCOPY rop family as PresentRect @ 10d0:0854;
- * VALIDATERECT is a no-op on SDL3. Exact Orig field map still TBD
- * (src/dst HDC + HBITMAP via 10d0:0cfa + clip-region words), so ports
+ * VALIDATERECT is a no-op on SDL3. AD2 (doc only, no impl change):
+ * blitted frames reach here only after the gfx_rle_expand_best
+ * dispatcher (RLL/INV/LZSS/RAW0/2/4/8 + fail log via
+ * gfx_rle_expand_best_ex, see gfx_indexed.h). Exact Orig field map still
+ * TBD (src/dst HDC + HBITMAP via 10d0:0cfa + clip-region words), so ports
  * without a borrowed ren (both ren NULL: GfxPort_Create @ 10d0:0000 /
  * CreateCompatible still stubbed) report UNSUPPORTED. Error mapping:
  * NULL ports -> NOENT (NULL src_rect = whole source, kept); missing
@@ -237,6 +249,33 @@ civ_error_t gfx_port_release_dc(gfx_port_t *port, SDL_Renderer *dc);
 civ_error_t gfx_port_create_compatible(SDL_Renderer *ren, int w, int h,
                                        gfx_port_t **out);
 
+/* AK2: font glyph blit (2026-10-16).
+ * Orig Font_EnumFamiliesInit @ 1008:0e99 FNT glyph-bits side via
+ * font_render_glyph @ 1008:0e99 dfBitsOffset (see boot.h font_fnt_bits /
+ * font_render_glyph + gfx_indexed.h font_glyph_to_surface, read via Read,
+ * not edited) -> font_blit_glyph (SDL bridge port, no Win16).
+ * Glyph is the borrowed 8-bit surface from font_glyph_to_surface (w/h +
+ * MSB-first bits, bit 7 = leftmost; valid while the FNT image /
+ * font_render_glyph dst lives, never freed here); tex is the caller-owned
+ * dest texture (INDEX8 TARGET port backing store or screen texture, never
+ * owned/freed here); win/ren are borrowed (win kept for WinMain-order
+ * call-site symmetry, ignored, may be NULL; ren is the DC placeholder,
+ * borrowed, never owned). SDL path: SDL_CreateTextureFromSurface(ren,
+ * glyph) temp + SDL_SetRenderTarget(ren, tex) + SDL_RenderTexture(tmp ->
+ * x/y rect) + target restore + temp destroy (same SRCCOPY 0xcc0020 family
+ * as GfxPort_Blit @ 10d0:08f1 / GfxPort_PresentRect @ 10d0:0854;
+ * VALIDATERECT is a no-op on SDL3). No globals, no exit(), C17; SDL only
+ * here (dialog HLP stays SDL-free). Error mapping (consistent with
+ * video.c): NULL ren/tex/glyph -> NOENT (NULL win = ignored, kept);
+ * glyph w/h <= 0 -> BAD_DATA; SDL temp-create / target-set / Render /
+ * target-restore fail -> IO. Parity: bit order matches font_fnt_bits
+ * MSB-first + font_render_glyph tight stride (w+7)/8 +
+ * font_glyph_to_surface expand (see gfx_indexed.h);
+ * font_render_glyph/text_width/height + help_hlp_* untouched (no break). */
+civ_error_t font_blit_glyph(SDL_Window *win, SDL_Renderer *ren,
+                            SDL_Texture *tex, int x, int y,
+                            const SDL_Surface *glyph);
+
 /* Orig: FUN_1200_00a8 @ 1200:00a8 MainPort_ApplyPalette tail +
  * FUN_1090_0376 @ 1090:0376 Palette_AnimateRange -> palette_apply_to_port
  * (Palette_ApplyToPort; video-side helper, map-side
@@ -260,12 +299,15 @@ civ_error_t palette_apply_to_port(gfx_port_t *port, int first, int count);
  * video_shutdown_display. DESTROYWINDOW for the display ports/windows
  * plus REMOVEFONTRESOURCE(CIV_FONT_FILE "civfonts.fon" @ 1420:00a4/00fe,
  * added by Font_EnumFamiliesInit @ 1008:0e99; NE DLL/font container
- * 244224 B, FON header + font-directory table offsets TBD, SDL_ttf
- * parse plan documented at font_enum_families_init in boot.h/boot.c);
+ * 244224 B, MZ "MZ" + e_lfanew 0x250 + NE "NE" + RT_FONTDIR x1/RT_FONT x21
+ * parsed OS-free via font_fon_parse/font_face_count/font_face_list in
+ * boot.h/boot.c, borrowed bytes, no TTF raster here; ENUMFONTFAMILIES
+ * family list + SDL_ttf face bridge TBD);
  * KILLTIMER/FREEPROCINSTANCE tails live in map/dialog shutdown (see
  * map.h/boot.c). SDL3 window/renderer stay caller-owned (see
  * boot_shutdown), so this installs/removes nothing yet. Void stub: no
- * globals, no exit(). */
+ * globals, no exit(). AF2 doc only: Blit @ 10d0:08f1 / AllocBitmap @
+ * 10d0:0cfa / PresentRect @ 10d0:0854 impls untouched. */
 void video_shutdown_display(void);
 
 #endif /* CIVLIN_VIDEO_H */

@@ -78,7 +78,11 @@ civ_error_t video_present(SDL_Renderer *ren)
      * incl. dummy video; 4x2 surface read-back via gfx_indexed_to_surface
      * passes. AA2: same synthetic surface/texture ok feeds the probe gate
      * (gfx_probe_rsc_image @ 1198:xxxx raw gate + gfx_decode_rle CvPc path,
-     * see gfx_indexed.h); real frames stay gated there. */
+     * see gfx_indexed.h); real frames stay gated there. AD2 (doc only,
+     * no impl change): frames reach this present only after the
+     * gfx_rle_expand_best dispatcher (RLL/INV/LZSS/RAW0/2/4/8 +
+     * per-method fail log via gfx_rle_expand_best_ex +
+     * gfx_try_fail_str/gfx_expand_method_str, see gfx_indexed.h). */
     if (!ren)
         return CIV_ERR_NOENT;
     if (!SDL_RenderPresent(ren))
@@ -239,7 +243,11 @@ civ_error_t gfx_port_present_rect(gfx_port_t *port, SDL_Renderer *ren,
      * passes on dummy video. AA2: synthetic surface/texture ok links to
      * the probe gate (gfx_probe_rsc_image @ 1198:xxxx raw gate +
      * gfx_decode_rle CvPc path, see gfx_indexed.h); real frames stay
-     * gated there. Error mapping: NULL -> NOENT, missing
+     * gated there. AD2 (doc only, no impl change): frames reach this
+     * present only after the gfx_rle_expand_best dispatcher (RLL/INV/
+     * LZSS/RAW0/2/4/8 best-method + per-method fail log via
+     * gfx_rle_expand_best_ex + gfx_try_fail_str/gfx_expand_method_str).
+     * Error mapping: NULL -> NOENT, missing
      * tex/size fail -> BAD_DATA, SDL_RenderTexture fail -> IO (NOMEM
      * never from present, only from CreatePalette/Texture alloc paths). */
     SDL_FRect dst;
@@ -267,7 +275,10 @@ civ_error_t gfx_port_blit(gfx_port_t *dst, const gfx_port_t *src,
     /* Orig FUN_10d0_08f1 @ 10d0:08f1 -> GfxPort_Blit. Port-to-port
      * BITBLT rop 0xcc0020 (SRCCOPY) via SDL_SetRenderTarget(dst tex) +
      * SDL_RenderTexture(src tex) + target restore; VALIDATERECT is a
-     * no-op on SDL3 (no dirty-region to validate). Error mapping
+     * no-op on SDL3 (no dirty-region to validate). AD2 (doc only, no
+     * impl change): blitted frames reach here only after the
+     * gfx_rle_expand_best dispatcher (RLL/INV/LZSS/RAW0/2/4/8 + fail log
+     * via gfx_rle_expand_best_ex, see gfx_indexed.h). Error mapping
      * (consistent with present_rect above): NULL -> NOENT, missing tex
      * -> BAD_DATA, degenerate src_rect -> RANGE, SDL target/Render/
      * restore fail -> IO. Ports without a borrowed ren (both NULL:
@@ -561,8 +572,61 @@ void video_shutdown_display(void)
     /* Orig: FUN_1008_0329 @ 1008:0329 WinMain_Shutdown video-only tail.
      * DESTROYWINDOW for the display ports/windows plus
      * REMOVEFONTRESOURCE(CIV_FONT_FILE "civfonts.fon" @ 1420:00a4/00fe,
-     * added by Font_EnumFamiliesInit @ 1008:0e99); KILLTIMER/
+     * added by Font_EnumFamiliesInit @ 1008:0e99; NE DLL/font container
+     * 244224 B, MZ "MZ" + e_lfanew 0x250 + NE "NE" + RT_FONTDIR x1/RT_FONT
+     * x21 parsed OS-free via font_fon_parse in boot.h/boot.c, borrowed
+     * bytes, no TTF raster; ENUMFONTFAMILIES/SDL_ttf bridge TBD, see
+     * boot.c font_face_count/list stubs); KILLTIMER/
      * FREEPROCINSTANCE tails live in map/dialog shutdown (see boot.c
      * boot_shutdown). SDL3 window/renderer stay caller-owned, nothing to
-     * free yet; no globals, no exit(). */
+     * free yet; no globals, no exit(). AF2 doc only: Blit @ 10d0:08f1 /
+     * AllocBitmap @ 10d0:0cfa / PresentRect @ 10d0:0854 impls untouched. */
+}
+
+civ_error_t font_blit_glyph(SDL_Window *win, SDL_Renderer *ren,
+                            SDL_Texture *tex, int x, int y,
+                            const SDL_Surface *glyph)
+{
+    /* AK2 font blit @ 1008:0e99 (see video.h). SDL bridge port on the
+     * GfxPort_Blit @ 10d0:08f1 / PresentRect @ 10d0:0854 SRCCOPY family:
+     * temp texture from the borrowed glyph surface + render-target blit
+     * onto the caller-owned tex + restore. Borrowed glyph from
+     * font_glyph_to_surface (w/h + MSB-first bits, bit 7 = leftmost; never
+     * freed here); caller-owned tex never owned/freed here; win/ren
+     * borrowed (win ignored, may be NULL; ren never owned). No globals, no
+     * exit(). Blit @ 10d0:08f1 / AllocBitmap @ 10d0:0cfa / PresentRect @
+     * 10d0:0854 / ChangeColor @ 10d0:09ee impls untouched. Parity with
+     * font_fnt_bits MSB-first + font_render_glyph tight stride (w+7)/8. */
+    SDL_Texture *tmp = NULL;
+    SDL_Texture *prev = NULL;
+    SDL_FRect dst;
+
+    (void)win;
+    if (!ren || !tex || !glyph)
+        return CIV_ERR_NOENT;
+    if (glyph->w <= 0 || glyph->h <= 0)
+        return CIV_ERR_BAD_DATA;
+    tmp = SDL_CreateTextureFromSurface(ren, (SDL_Surface *)glyph);
+    if (!tmp)
+        return CIV_ERR_IO;
+    prev = SDL_GetRenderTarget(ren);
+    if (!SDL_SetRenderTarget(ren, tex)) {
+        SDL_DestroyTexture(tmp);
+        return CIV_ERR_IO;
+    }
+    dst.x = (float)x;
+    dst.y = (float)y;
+    dst.w = (float)glyph->w;
+    dst.h = (float)glyph->h;
+    if (!SDL_RenderTexture(ren, tmp, NULL, &dst)) {
+        (void)SDL_SetRenderTarget(ren, prev);
+        SDL_DestroyTexture(tmp);
+        return CIV_ERR_IO;
+    }
+    if (!SDL_SetRenderTarget(ren, prev)) {
+        SDL_DestroyTexture(tmp);
+        return CIV_ERR_IO;
+    }
+    SDL_DestroyTexture(tmp);
+    return CIV_OK;
 }

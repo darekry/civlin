@@ -145,14 +145,357 @@ civ_error_t dlg_center_window(const dlg_rect_t *parent, const dlg_rect_t *dlg,
  * resource or RSC frame, see title.h). */
 #define CIV_HELP_FILE_NAME "civhelp.hlp"
 
+/* AF2: HLP header (civhelp.hlp Win 3.x help, unpacked 72787 B read-only,
+ * never written; packed civ1win/CIVHELP.HLP is EDILZSS2 33323 B).
+ * Dump-confirmed 2026-10-15 (unpacked/civhelp.hlp, read-only):
+ *   magic u32 LE at +0x00 = 0x00035F3F (bytes 3F 5F 03 00),
+ *   followed by 46 00 00 00 + FF FF FF FF + topic blocks (e.g.
+ *   "Civilization" at file 0x25, "Sid Meier's Civilization!" at 0x4B7).
+ * OS-free header-only port (no SDL, no globals, no exit(), borrowed bytes,
+ * no copy): validates magic + bounds only; topic/B-tree decode stays a
+ * TODO (no fake topics). WINHELP exact Orig FUN_* TBD (call site issues
+ * WINHELP on CIV_HELP_FILE_NAME via dialog_open_help below). */
+#define CIV_HLP_MAGIC0 0x3Fu
+#define CIV_HLP_MAGIC1 0x5Fu
+#define CIV_HLP_MAGIC2 0x03u
+#define CIV_HLP_MAGIC3 0x00u
+#define CIV_HLP_MIN_SIZE 16u
+
+typedef struct help_hlp_info {
+    uint32_t magic; /* LE u32 at +0 (0x00035F3F on disk) */
+    uint32_t size;  /* total image bytes (72787 on disk) */
+} help_hlp_info_t;
+
+/* HLP header side of dialog_open_help/help_open_topic below. OS-free 1:1
+ * magic + bounds check on borrowed bytes (caller-owned, never writes
+ * civhelp.hlp): NULL data/out -> NOENT; len < 16 -> TRUNCATED; magic
+ * mismatch (incl. EDILZSS2-packed "EDILZSS2" input) -> BAD_DATA.
+ * TODO: dump the topic/B-tree directory (offsets/counts TBD from the
+ * 72787 B image; use rsc_dump-style read-only dump, no fake) + wire the
+ * topic-id -> file-offset map for help_open_topic. */
+civ_error_t help_hlp_parse(const uint8_t *data, size_t len,
+                           help_hlp_info_t *out);
+
+/* AG3: HLP system header + topic lookup + custom-class names (2026-10-15).
+ * HLP system header (civhelp.hlp Win 3.x help, unpacked 72787 B read-only,
+ * never written): magic 3F 5F 03 00 at +0x00 (LE u32 0x00035F3F, already
+ * validated by help_hlp_parse above) + version LE u32 at +0x04 (0x46 on
+ * disk) + flags LE u32 at +0x08 (0xFFFFFFFF on disk) + topic_count LE u32
+ * at +0x10 (0x36 = 54 on disk; exact directory/topic semantics TBD vs the
+ * B-tree dump) + bounds (len >= 20). Observed but NOT enforced (mapping
+ * TBD, never gates success): LE u32 at +0x0C = 0x00011C53 = 72787 (== file
+ * size on disk). OS-free header-only port (no SDL, no globals, no exit(),
+ * borrowed bytes, no copy); topic B-tree decode stays a TODO (no fake
+ * topics, help_hlp_topic below always returns -1 until wired).
+ * WINHELP exact Orig FUN_* TBD. Custom-class names from
+ * Ctrl_RegisterCustomClasses @ 1058:0b4d (REGISTERCLASS x4 strings @
+ * 0xac6/0xad2/0xadf/0xaea + brushes/pens; register/free/paint stubs above
+ * stay untouched): OS-free static const 4-entry table below. */
+#define CIV_HLP_SYSTEM_MIN_SIZE 20u
+
+typedef struct help_hlp_system {
+    uint32_t magic;       /* LE u32 at +0x00 (0x00035F3F on disk) */
+    uint32_t version;     /* LE u32 at +0x04 (0x46 on disk) */
+    uint32_t flags;       /* LE u32 at +0x08 (0xFFFFFFFF on disk) */
+    uint32_t topic_count; /* LE u32 at +0x10 (0x36 on disk; exact dir TBD) */
+    uint32_t size;        /* total image bytes (72787 on disk, == len) */
+} help_hlp_system_t;
+
+/* HLP system header side (header-only). OS-free 1:1 magic + bounds check
+ * on borrowed bytes (caller-owned, never writes civhelp.hlp): NULL
+ * data/out -> NOENT; len < 20 -> TRUNCATED; magic mismatch (incl.
+ * EDILZSS2-packed "EDILZSS2" input) -> BAD_DATA. Fills version/flags/
+ * topic_count from the header words above + size = (uint32_t)len.
+ * TODO: dump the topic/B-tree directory (offsets/counts TBD from the
+ * 72787 B image; rsc_dump-style read-only dump, no fake) + wire the
+ * topic-id -> file-offset map for help_hlp_topic below. */
+civ_error_t help_hlp_system(const uint8_t *data, size_t len,
+                            help_hlp_system_t *out);
+
+/* Topic id -> file offset via the HLP topic B-tree (stub). OS-free,
+ * read-only, no globals, no exit(): NULL data or len < 16 or magic
+ * mismatch -> -1 (no fake, no crash); any valid-header input also returns
+ * -1 until the B-tree directory is dumped and wired (exact Orig FUN_*
+ * TBD; use rsc_dump-style read-only dump of the 72787 B image, never
+ * fabricate offsets). */
+long help_hlp_topic(const uint8_t *data, size_t len, uint32_t topic_id);
+
+/* Custom-class name table (OS-free static const 4-entry port of the
+ * REGISTERCLASS strings in Ctrl_RegisterCustomClasses @ 1058:0b4d;
+ * brushes/pens + register/free/paint stubs above stay untouched).
+ * Index 0..3: 0 "RanDoMRadio" (str @ 0xac6), 1 "RanDoMStatic" (@ 0xad2),
+ * 2 "RanDoMUser" (@ 0xadf), 3 "Region" (@ 0xaea). */
+#define CIV_CTRL_CLASS_COUNT 4
+
+/* Returns the class name for index 0..CIV_CTRL_CLASS_COUNT-1, NULL when
+ * index is out of range. No globals (function-local static const view),
+ * no exit(), read-only. */
+const char *ctrl_class_names(int index);
+
+/* AH3: HLP PAGE header + B-tree find (2026-10-15).
+ * HLP PAGE (Win 3.x help B-tree page inside unpacked civhelp.hlp 72787 B
+ * read-only, never written; packed civ1win/CIVHELP.HLP EDILZSS2 rejected
+ * by help_hlp_parse above). Layout parsed header-only (borrowed bytes, no
+ * copy, no SDL, no globals, no exit()):
+ *   +0x00 wMagic  u16 LE (page magic, exact value TBD from dump)
+ *   +0x02 wFlags  u16 LE (leaf/internal flags, exact bits TBD)
+ *   +0x04 lFirst  i32 LE (first key/free link, exact semantics TBD)
+ *   +0x08 nEntries u16 LE (index-array count, offsets TBD)
+ * MIN_SIZE 10 covers the fixed header; the variable index array follows
+ * (entry offsets/counts TBD from an rsc_dump-style read-only dump, no
+ * fake). WINHELP exact Orig FUN_* TBD. Parity: help_hlp_parse/
+ * help_hlp_system/help_hlp_topic above stay untouched (doc only). */
+#define CIV_HLP_PAGE_MIN_SIZE 10u
+
+typedef struct help_hlp_page {
+    uint16_t magic; /* LE u16 at page+0x00 (wMagic, value TBD) */
+    uint16_t flags; /* LE u16 at page+0x02 (wFlags, bits TBD) */
+    int32_t first;  /* LE i32 at page+0x04 (lFirst, semantics TBD) */
+    uint16_t count; /* LE u16 at page+0x08 (nEntries, index count TBD) */
+    uint32_t size;  /* remaining bytes from page_off (len - page_off) */
+} help_hlp_page_t;
+
+/* HLP PAGE header side (header-only). OS-free 1:1 LE decode on borrowed
+ * bytes (caller-owned file image, never writes civhelp.hlp): NULL
+ * data/out -> NOENT; page_off OOR or len-page_off < 10 -> TRUNCATED
+ * (overflow-safe); else fills magic/flags/first/count + size and returns
+ * CIV_OK (wMagic value NOT gated: exact set TBD from dump). TODO: confirm
+ * wMagic/wFlags/lFirst semantics + index-array entry layout from the
+ * 72787 B image dump, then wire the PAGE walk for help_hlp_btree_find
+ * below (no fake offsets). */
+civ_error_t help_hlp_page(const uint8_t *data, size_t len, uint32_t page_off,
+                          help_hlp_page_t *out);
+
+/* Topic id -> file offset via the HLP PAGE B-tree walk (stub). OS-free,
+ * read-only, no globals, no exit(): NULL data or len < 16 or magic
+ * mismatch (incl. EDILZSS2-packed input) -> -1 (no fake, no crash;
+ * same header gate as help_hlp_topic for parity); any valid-header input
+ * also returns -1 until B-tree pages are wired (exact Orig FUN_* TBD).
+ * TODO: walk PAGEs via help_hlp_page above (directory offsets/counts TBD;
+ * rsc_dump-style read-only dump of the 72787 B image, never fabricate;
+ * unknown ids stay -1). help_hlp_topic above stays untouched. */
+long help_hlp_btree_find(const uint8_t *data, size_t len, uint32_t topic_id);
+
+/* AI-B: HLP B-tree root/next + topic list (2026-10-15).
+ * HLP B-tree walk inside unpacked civhelp.hlp (72787 B read-only, never
+ * written; packed civ1win/CIVHELP.HLP EDILZSS2 rejected by
+ * help_hlp_parse above). OS-free ports (no SDL, no globals, no exit(),
+ * borrowed bytes, no copy, read-only); exact Orig FUN_* TBD. Parity:
+ * help_hlp_parse/help_hlp_system/help_hlp_topic/help_hlp_page/
+ * help_hlp_btree_find above stay untouched (doc only); diplomacy
+ * (Diplomacy_PostContact @ 1168:0a07, Diplomacy_EvalBribe @ 1078:455c),
+ * UI_DrawEndTurnPrompt @ 10d8:00e0, Dialog_MenuZ_Modal @ 1220:0156
+ * (id math + modal), Dlg_CenterWindow @ 10a0:xxxx, Help_OpenTopic @
+ * 1160:xxxx below stay untouched. */
+#define CIV_HLP_BTREE_ROOT_OFF 0x14u
+#define CIV_HLP_BTREE_ROOT_MIN_SIZE 24u
+#define CIV_HLP_BTREE_MAX_STEPS 256u
+
+/* Orig: FUN_xxxx_xxxx @ xxxx:xxxx TBD -> Help_HlpBtreeRoot.
+ * B-tree root page offset via the system-header lFirst link (LE i32 at
+ * +CIV_HLP_BTREE_ROOT_OFF, candidate root; exact semantics TBD vs the
+ * 72787 B directory dump, e.g. |SYSTEM at file 16, |TTLBTREE at 70692).
+ * OS-free 1:1 header-field read on borrowed bytes: NULL data -> -1;
+ * len < 24 -> -1; magic mismatch (incl. EDILZSS2-packed input) -> -1;
+ * root link negative/OOR/short-tail (< 10 B remain) -> -1 (no fake).
+ * Else returns the root page file offset (>= 20, < len). wMagic NOT
+ * gated (values TBD). No globals, no exit(). */
+long help_hlp_btree_root(const uint8_t *data, size_t len);
+
+/* Orig: FUN_xxxx_xxxx @ xxxx:xxxx TBD -> Help_HlpBtreeNext.
+ * Next page in the chain via the PAGE header (wMagic/wFlags/lFirst +
+ * nEntries index, see help_hlp_page_t; lFirst is the next-page link,
+ * exact chain semantics TBD from the 72787 B dump). OS-free link follow
+ * on borrowed bytes: NULL data or len < 16 or magic mismatch -> -1;
+ * help_hlp_page failure (page_off OOR/short) -> -1; lFirst negative/
+ * OOR/short-tail -> -1; self-loop (next == page_off) -> -1 (loop
+ * guard; multi-hop revisit guard lives in help_topic_list via its
+ * visited set + CIV_HLP_BTREE_MAX_STEPS cap). Else returns the next
+ * page file offset. No globals, no exit(), no fake. */
+long help_hlp_btree_next(const uint8_t *data, size_t len, uint32_t page_off);
+
+/* Orig: FUN_xxxx_xxxx @ xxxx:xxxx TBD -> Help_TopicList.
+ * All topic ids via the B-tree page-chain walk (root via
+ * help_hlp_btree_root + next via help_hlp_btree_next). OS-free walk
+ * with cap, bounds, no fake: data NULL or out_count NULL -> NOENT;
+ * len < 16 -> TRUNCATED; magic mismatch -> BAD_DATA (out_count set to
+ * 0 when non-NULL); cap > 0 with out_ids NULL -> NOENT. Valid header
+ * with unusable root link -> CIV_OK + *out_count = 0 (empty walk, no
+ * fake). Otherwise walks up to CIV_HLP_BTREE_MAX_STEPS pages (visited
+ * set breaks multi-hop loops, self-loop/OOR/short-tail ends the
+ * chain), fills out_ids[0..cap) with the first N page offsets and
+ * always sets *out_count to the total pages visited (summary always,
+ * detail capped, no flood). NOTE: ids are currently page file offsets
+ * (one per page); per-entry topic-id decode from the nEntries index
+ * array stays TODO (layout TBD, never fabricated). out_ids may be NULL
+ * when cap == 0 (count-only walk). Caller-owned buffers only (never
+ * writes civhelp.hlp). No globals, no exit(). */
+civ_error_t help_topic_list(const uint8_t *data, size_t len,
+                            uint32_t *out_ids, size_t cap,
+                            size_t *out_count);
+
+/* --- AJ2: HLP topic record decode (2026-10-15).
+ * HLP topic record inside unpacked civhelp.hlp (72787 B read-only, never
+ * written; packed civ1win/CIVHELP.HLP EDILZSS2 rejected by help_hlp_parse
+ * above). Candidate record layout parsed header-only (borrowed bytes, no
+ * copy, no SDL, no globals, no exit(), read-only); exact Orig FUN_* TBD:
+ *   +0x00 rec_size u32 LE (total record bytes incl. header, >= 8)
+ *   +0x04 format   u16 LE (0 = raw text, != 0 = compressed/encoded)
+ *   +0x06 text_off u16 LE (record-relative offset to NUL-terminated text,
+ *     >= 8 and < rec_size; absolute text start = topic_off + text_off)
+ * MIN_SIZE 8 covers the fixed header; the topic body (formatted text,
+ * embedded codes, bitmap refs) stays TODO. WINHELP exact Orig FUN_* TBD.
+ * Parity: help_hlp_parse/help_hlp_system/help_hlp_topic/help_hlp_page/
+ * help_hlp_btree_find/help_hlp_btree_root/help_hlp_btree_next/
+ * help_topic_list above stay untouched (doc only); diplomacy
+ * (Diplomacy_PostContact @ 1168:0a07, Diplomacy_EvalBribe @ 1078:455c),
+ * UI_DrawEndTurnPrompt @ 10d8:00e0, Dialog_MenuZ_Modal @ 1220:0156
+ * (id math + modal), Dlg_CenterWindow @ 10a0:xxxx stay untouched. */
+#define CIV_HLP_TOPIC_MIN_SIZE 8u
+#define CIV_HLP_TOPIC_FORMAT_RAW 0u
+
+typedef struct help_hlp_topic_header {
+    uint32_t size;     /* LE u32 at topic_off+0x00 (record bytes, >= 8) */
+    uint16_t format;   /* LE u16 at topic_off+0x04 (0 = raw, != 0 compr.) */
+    uint16_t text_off; /* LE u16 at topic_off+0x06 (record-rel. to text) */
+    uint32_t topic_off; /* echo of the record file offset (for callers) */
+} help_hlp_topic_header_t;
+
+/* Orig: FUN_xxxx_xxxx @ xxxx:xxxx TBD -> Help_HlpTopicHeader.
+ * Topic record header side (header-only). OS-free 1:1 LE decode on
+ * borrowed bytes (caller-owned file image, never writes civhelp.hlp):
+ * NULL data/out -> NOENT; len < 16 -> TRUNCATED (global HLP gate);
+ * magic mismatch (incl. EDILZSS2-packed input) -> BAD_DATA; topic_off
+ * OOR or short tail (< 8) -> RANGE; rec_size < 8 or
+ * topic_off + rec_size OOR (> len, overflow-safe) -> RANGE; text_off <
+ * 8 or >= rec_size or topic_off + text_off OOR -> RANGE. Else fills
+ * size/format/text_off + topic_off echo and returns CIV_OK (format
+ * value NOT gated here: compressed records still decode the header;
+ * the body/text stage decides UNSUPPORTED). No globals, no exit(). */
+civ_error_t help_hlp_topic_header(const uint8_t *data, size_t len,
+                                  uint32_t topic_off,
+                                  help_hlp_topic_header_t *out);
+
+/* Orig: FUN_xxxx_xxxx @ xxxx:xxxx TBD -> Help_HlpTopicText.
+ * Topic text via the header text offset above. OS-free text extract on
+ * borrowed bytes (no copy, no decompress fake, no SDL, no globals, no
+ * exit()): same header gate as help_hlp_topic_header (NULL data or
+ * out_text+out_len both NULL? see below; len < 16 -> TRUNCATED; magic
+ * mismatch -> BAD_DATA; header RANGE propagates as RANGE); format !=
+ * CIV_HLP_TOPIC_FORMAT_RAW (compressed/encoded) -> UNSUPPORTED (no
+ * fake decompress; TODO: wire the decompressor + formatting-code
+ * stripper); missing NUL terminator within [topic_off+text_off,
+ * topic_off+size) -> RANGE. On success sets *out_text to the borrowed
+ * NUL-terminated bytes (data + topic_off + text_off) and *out_len to
+ * the strlen (excludes NUL; may be 0 for empty text) and returns
+ * CIV_OK. NULL data -> NOENT; NULL out_text or NULL out_len -> NOENT
+ * (outputs zeroed when non-NULL: *out_text = NULL, *out_len = 0 on
+ * any error). Formatting codes are NOT skipped yet (raw bytes
+ * returned; TODO: strip WinHelp codes/bitmap refs vs the 72787 B dump,
+ * never fabricate). */
+civ_error_t help_hlp_topic_text(const uint8_t *data, size_t len,
+                                uint32_t topic_off,
+                                const uint8_t **out_text, size_t *out_len);
+
+/* Orig: FUN_xxxx_xxxx @ xxxx:xxxx TBD -> Help_TopicGet.
+ * Topic id -> text via the full chain (btree_find + header + text).
+ * OS-free dispatcher (no Win16, no HELP viewer, no globals, no exit(),
+ * borrowed bytes only): NULL data or NULL out_text or NULL out_len ->
+ * NOENT; len < 16 -> TRUNCATED; magic mismatch -> BAD_DATA;
+ * help_hlp_btree_find miss (< 0, incl. unwired B-tree stub) -> NOENT;
+ * header/text RANGE propagates as RANGE; compressed format propagates
+ * as UNSUPPORTED. On success sets *out_text / *out_len exactly like
+ * help_hlp_topic_text above and returns CIV_OK (borrowed view into
+ * data, caller-owned buffers only, never writes civhelp.hlp). Outputs
+ * zeroed (*out_text = NULL, *out_len = 0) on any error when non-NULL.
+ * TODO: wire the B-tree directory (offsets/counts TBD; unknown ids
+ * stay NOENT, never faked) + decompressor/formatting stripper. */
+civ_error_t help_topic_get(const uint8_t *data, size_t len,
+                           uint32_t topic_id,
+                           const uint8_t **out_text, size_t *out_len);
+
+/* --- AK2: HLP body decompress + full-chain get (2026-10-16).
+ * HLP topic body inside unpacked civhelp.hlp (72787 B read-only, never
+ * written; packed civ1win/CIVHELP.HLP EDILZSS2 rejected by help_hlp_parse
+ * above). Candidate body framing (header-only, borrowed bytes, exact
+ * semantics TBD from the 72787 B dump + Ghidra WINHELP call sites):
+ *   +0x00 decomp_size u32 LE (decompressed byte count, > 0)
+ *   +0x04 LZ code stream (codec TBD, see help_hlp_decompress below).
+ * Parity: help_hlp_parse/help_hlp_system/help_hlp_topic/help_hlp_page/
+ * help_hlp_btree_find/help_hlp_btree_root/help_hlp_btree_next/
+ * help_topic_list/help_hlp_topic_header/help_hlp_topic_text/help_topic_get
+ * above stay untouched (doc only, no break); diplomacy
+ * (Diplomacy_PostContact @ 1168:0a07, Diplomacy_EvalBribe @ 1078:455c),
+ * UI_DrawEndTurnPrompt @ 10d8:00e0, Dialog_MenuZ_Modal @ 1220:0156
+ * (id math + modal), Dlg_CenterWindow @ 10a0:xxxx stay untouched. No SDL,
+ * no globals, no exit(), C17; SDL lives only in video font_blit_glyph
+ * (see video.h). */
+
+/* Orig: FUN_xxxx_xxxx @ xxxx:xxxx TBD -> Help_HlpDecompressedSize.
+ * Decompressed-size word side (header-only). OS-free LE u32 read at
+ * src+0x00 on borrowed bytes (caller-owned image slice, never writes
+ * civhelp.hlp): NULL src/out -> NOENT; src_len < 4 -> TRUNCATED; else
+ * fills *out_size with the LE u32 and returns CIV_OK (value NOT gated:
+ * 0/huge still reported; dst-capacity check lives in help_hlp_decompress
+ * below). No globals, no exit(). */
+civ_error_t help_hlp_decompressed_size(const uint8_t *src, size_t src_len,
+                                       size_t *out_size);
+
+/* Orig: FUN_xxxx_xxxx @ xxxx:xxxx TBD -> Help_HlpDecompress.
+ * HLP 3.x topic-body LZ side. OS-free stub with explicit src/dst bounds
+ * (borrowed src vs caller-owned dst, never writes civhelp.hlp; no SDL, no
+ * globals, no exit(), no fake bytes, dst never touched on stub).
+ * HLP 3.x LZ vs EDI note (parity read-only via Read, not edited/reused
+ * blindly): EDI LZSS2 (tools/unpack_edi.py + gfx_try_lzss_edi @ 10f8:040a
+ * family, see gfx_indexed.h: 4K ring prefilled 0x20, curpos 4096-18=4078,
+ * flags LSB-first 1=literal 1B / 0=match 2B matchpos=((x1&0xF0)<<4)|x0
+ * matchlen=(x1&0x0F)+3) is the *installer* framing (25-B EDI header +
+ * unpacked_len prefix, raw code stream); HLP 3.x topic bodies use their
+ * own WinHelp 3.x LZ variant (decomp_size word + code stream with
+ * window/bias TBD from the 72787 B dump, not proven same as EDI), so this
+ * does NOT alias gfx_try_lzss_edi output (no fake decompress). NULL
+ * src/dst -> NOENT (NULL out_len = skip, zeroed when present); src_len < 4
+ * or dst_cap == 0 -> TRUNCATED; otherwise UNSUPPORTED until the HLP codec
+ * is dumped/wired (TODO: rsc_dump-style read-only dump of a compressed
+ * topic body vs raw, confirm window/bias/decomp_size semantics, then wire
+ * a real LZSS trial here; unknown bodies stay UNSUPPORTED, never faked).
+ * Outputs zeroed (*out_len = 0 when non-NULL) on any error. */
+civ_error_t help_hlp_decompress(const uint8_t *src, size_t src_len,
+                                uint8_t *dst, size_t dst_cap,
+                                size_t *out_len);
+
+/* Orig: FUN_xxxx_xxxx @ xxxx:xxxx TBD -> Help_TopicGetFull.
+ * Topic id -> decompressed text via the full chain (btree_find + header +
+ * text + decompress). OS-free dispatcher (no Win16, no HELP viewer, no
+ * SDL, no globals, no exit(), borrowed bytes only, never writes
+ * civhelp.hlp): NULL data/out_text/out_len -> NOENT; len < 16 ->
+ * TRUNCATED; magic mismatch (incl. EDILZSS2-packed input) -> BAD_DATA;
+ * help_hlp_btree_find miss (< 0, incl. unwired B-tree stub) -> NOENT;
+ * header/text RANGE propagates as RANGE; format !=
+ * CIV_HLP_TOPIC_FORMAT_RAW (compressed/encoded) -> UNSUPPORTED (no fake
+ * decompress; TODO: wire help_hlp_decompress with caller scratch +
+ * formatting-code stripper once the codec lands). On success (raw only)
+ * sets *out_text / *out_len exactly like help_hlp_topic_text above and
+ * returns CIV_OK (borrowed view into data, caller-owned buffers only).
+ * Outputs zeroed (*out_text = NULL, *out_len = 0) on any error when
+ * non-NULL. Unknown ids stay NOENT, never faked. */
+civ_error_t help_topic_get_full(const uint8_t *data, size_t len,
+                                uint32_t topic_id,
+                                const uint8_t **out_text, size_t *out_len);
+
 /* WINHELP(CIV_HELP_FILE_NAME) bridge (stub; topic NULL = contents page).
  * Win16 WINHELP -> SDL3 help viewer TBD. */
 civ_error_t dialog_open_help(const char *topic);
 
 /* Orig: FUN_1160_xxxx @ 1160:xxxx -> Help_OpenTopic. WINHELP
  * (CIV_HELP_FILE_NAME) topic opener; thin wrapper wiring dialog_open_help
- * above (topic NULL = contents page). Win16 WINHELP -> SDL3 help viewer
- * TBD; stub CIV_ERR_UNSUPPORTED. No globals, no exit(), read-only. */
+ * above. Topic-id contract (AF2 doc, no impl change): topic NULL = contents
+ * page; non-NULL = NUL-terminated topic/context id selecting the HLP topic
+ * record decoded via help_hlp_parse above (exact id string set TBD from
+ * the WINHELP call sites + 72787 B topic directory dump; unknown ids stay
+ * UNSUPPORTED via dialog_open_help, never faked). Win16 WINHELP -> SDL3
+ * help viewer TBD; stub CIV_ERR_UNSUPPORTED. No globals, no exit(),
+ * read-only: never writes civhelp.hlp. */
 civ_error_t help_open_topic(const char *topic);
 
 /* Sequence player (stubs). anim_advance_frames: 0 = busy, nonzero = done.

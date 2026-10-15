@@ -245,6 +245,434 @@ civ_error_t font_enum_families_init(void)
     return CIV_ERR_UNSUPPORTED;
 }
 
+/* AF2: FON header port (see boot.h font_fon_info_t). OS-free, no SDL. */
+static uint16_t font_fon_u16le(const uint8_t *p)
+{
+    return (uint16_t)((uint16_t)p[0] | ((uint16_t)p[1] << 8));
+}
+
+static uint32_t font_fon_u32le(const uint8_t *p)
+{
+    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) |
+        ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
+}
+
+civ_error_t font_fon_parse(const uint8_t *data, size_t len,
+                           font_fon_info_t *out)
+{
+    /* Orig Font_EnumFamiliesInit @ 1008:0e99 FON header side (ADDFONTRESOURCE
+     * CIV_FONT_FILE @ 1420:00a4/00fe). OS-free 1:1 header check on borrowed
+     * bytes (caller-owned, no copy, never writes civfonts.fon): MZ at +0,
+     * e_lfanew u32 LE at +0x3C -> NE sig -> resource-table walk counting
+     * RT_FONTDIR (0x8007) / RT_FONT (0x8008). Dump-confirmed (unpacked/
+     * civfonts.fon 244224 B, read-only): e_lfanew 0x250, align shift 9,
+     * fontdir x1 (file 0x600, nfonts 0x15), faces x21. No SDL (parse only),
+     * no globals, no exit(). TODO: per-face FNT decode (df metrics +
+     * bitmap bits behind the FONTDIR entry; face names CIVBABYLON..
+     * CIVTIMES36 at file 0x600.. + resident "FONTRES") -> SDL_ttf bridge
+     * TBD (no TTF raster here, see font_face_list stub below). */
+    uint32_t ne_off;
+    uint16_t res_off;
+    size_t rt;
+    size_t p;
+    uint16_t fontdir_count = 0;
+    uint16_t face_count = 0;
+
+    if (!data || !out)
+        return CIV_ERR_NOENT;
+    if (len < CIV_FON_MIN_SIZE)
+        return CIV_ERR_TRUNCATED;
+    if (data[0] != CIV_FON_MAGIC_MZ0 || data[1] != CIV_FON_MAGIC_MZ1)
+        return CIV_ERR_BAD_DATA;
+    ne_off = font_fon_u32le(data + 0x3Cu);
+    if ((size_t)ne_off + CIV_FON_NE_MIN_SIZE > len)
+        return CIV_ERR_TRUNCATED;
+    if (data[ne_off] != CIV_FON_MAGIC_NE0 ||
+        data[ne_off + 1u] != CIV_FON_MAGIC_NE1)
+        return CIV_ERR_BAD_DATA;
+    res_off = font_fon_u16le(data + ne_off + 0x24u);
+    rt = (size_t)ne_off + (size_t)res_off;
+    if (rt + 2u > len)
+        return CIV_ERR_TRUNCATED;
+    out->ne_offset = ne_off;
+    out->align_shift = font_fon_u16le(data + rt);
+    p = rt + 2u;
+    for (;;) {
+        uint16_t rtype;
+        uint16_t rcount;
+
+        if (p + 8u > len)
+            return CIV_ERR_TRUNCATED;
+        rtype = font_fon_u16le(data + p);
+        if (rtype == 0u)
+            break;
+        rcount = font_fon_u16le(data + p + 2u);
+        if (rtype == CIV_FON_RES_FONTDIR)
+            fontdir_count = rcount;
+        else if (rtype == CIV_FON_RES_FONT)
+            face_count = rcount;
+        p += 8u;
+        if (p + (size_t)rcount * 12u > len)
+            return CIV_ERR_TRUNCATED;
+        p += (size_t)rcount * 12u;
+    }
+    out->fontdir_count = fontdir_count;
+    out->face_count = face_count;
+    return CIV_OK;
+}
+
+int font_face_count(const font_fon_info_t *info)
+{
+    /* Orig ENUMFONTFAMILIES @ 1008:0e99 face-count side. OS-free: parsed
+     * RT_FONT count (21 on disk); 0 on NULL. Names via font_face_list
+     * below (order TBD, still NULL stub). No SDL, no globals, no exit(). */
+    if (!info)
+        return 0;
+    return (int)info->face_count;
+}
+
+const char *font_face_list(const font_fon_info_t *info, int index)
+{
+    /* Orig ENUMFONTFAMILIES @ 1008:0e99 family-name side. OS-free stub:
+     * index -> family name once the fontdir-string order (CIVBABYLON..
+     * CIVTIMES36 at file 0x600 + resident "FONTRES", 21 faces) is wired
+     * to the enumeration order; NULL until then (same contract as
+     * tribe_get_name_list / boot_video_caps_describe). NULL info or
+     * out-of-range -> NULL. No SDL, no globals, no exit(), read-only. */
+    if (!info || index < 0 || index >= (int)info->face_count)
+        return NULL;
+    /* TODO: wire fontdir face strings in ENUMFONTFAMILIES order. */
+    return NULL;
+}
+
+/* AG2: FNT raster + menu strings (see boot.h). OS-free, no SDL. Reuses the
+ * font_fon_u16le/u32le helpers above (packed LE reads, no alignment). */
+civ_error_t font_fnt_parse(const uint8_t *data, size_t len,
+                            font_fnt_info_t *out)
+{
+    /* Orig Font_EnumFamiliesInit @ 1008:0e99 FNT header side. Packed
+     * Windows 2.x/3.x FNT header through dfBitsOffset (117 B); dfReserved
+     * parsed only when the image holds it. Borrowed bytes, never writes
+     * civfonts.fon. TODO: bitmap rows behind dfBitsOffset + dfCharTable. */
+    uint16_t version;
+    uint32_t size;
+    size_t p;
+    unsigned i;
+
+    if (!data || !out)
+        return CIV_ERR_NOENT;
+    if (len < CIV_FNT_MIN_SIZE)
+        return CIV_ERR_TRUNCATED;
+    version = font_fon_u16le(data + 0x00u);
+    if (version != CIV_FNT_VERSION_2 && version != CIV_FNT_VERSION_3)
+        return CIV_ERR_BAD_DATA;
+    size = font_fon_u32le(data + 0x02u);
+    if (size > (uint32_t)len)
+        return CIV_ERR_TRUNCATED;
+    if (size != 0u && size < CIV_FNT_MIN_SIZE)
+        return CIV_ERR_BAD_DATA;
+    out->dfVersion = version;
+    out->dfSize = size;
+    for (i = 0; i < CIV_FNT_COPYRIGHT_LEN; i++)
+        out->dfCopyright[i] = (char)data[0x06u + i];
+    out->dfType = font_fon_u16le(data + 0x42u);
+    out->dfPoints = font_fon_u16le(data + 0x44u);
+    out->dfVertRes = font_fon_u16le(data + 0x46u);
+    out->dfHorizRes = font_fon_u16le(data + 0x48u);
+    out->dfAscent = font_fon_u16le(data + 0x4Au);
+    out->dfInternalLeading = font_fon_u16le(data + 0x4Cu);
+    out->dfExternalLeading = font_fon_u16le(data + 0x4Eu);
+    out->dfItalic = data[0x50u];
+    out->dfUnderline = data[0x51u];
+    out->dfStrikeOut = data[0x52u];
+    out->dfWeight = font_fon_u16le(data + 0x53u);
+    out->dfCharSet = data[0x55u];
+    out->dfPixWidth = font_fon_u16le(data + 0x56u);
+    out->dfPixHeight = font_fon_u16le(data + 0x58u);
+    out->dfPitchAndFamily = data[0x5Au];
+    out->dfAvgWidth = font_fon_u16le(data + 0x5Bu);
+    out->dfMaxWidth = font_fon_u16le(data + 0x5Du);
+    out->dfFirstChar = data[0x5Fu];
+    out->dfLastChar = data[0x60u];
+    out->dfDefaultChar = data[0x61u];
+    out->dfBreakChar = data[0x62u];
+    out->dfWidthBytes = font_fon_u16le(data + 0x63u);
+    out->dfDevice = font_fon_u32le(data + 0x65u);
+    out->dfFace = font_fon_u32le(data + 0x69u);
+    out->dfBitsPointer = font_fon_u32le(data + 0x6Du);
+    out->dfBitsOffset = font_fon_u32le(data + 0x71u);
+    out->dfReserved = (len >= 0x76u) ? data[0x75u] : 0u;
+    if (out->dfFirstChar > out->dfLastChar)
+        return CIV_ERR_BAD_DATA;
+    if (out->dfFace != 0u && (size_t)out->dfFace >= len)
+        return CIV_ERR_BAD_DATA;
+    if (out->dfBitsOffset != 0u && (size_t)out->dfBitsOffset >= len)
+        return CIV_ERR_BAD_DATA;
+    p = (size_t)(out->dfLastChar - out->dfFirstChar + 1u);
+    (void)p; /* char-table extent validated by font_face_bitmap bounds */
+    return CIV_OK;
+}
+
+civ_error_t font_face_bitmap(const uint8_t *data, size_t len,
+                             const font_fnt_info_t *info, int c,
+                             int *w_out, int *h_out,
+                             const uint8_t **bits_out)
+{
+    /* Orig Font_EnumFamiliesInit @ 1008:0e99 FNT glyph side. Bounds are
+     * OS-free; raster needs dfBitsOffset + dfCharTable (per-char width
+     * and offset tables following the header) which are not yet decoded
+     * from the civfonts.fon faces, so the tail stays UNSUPPORTED (outs
+     * untouched). No SDL, no globals, no exit(), read-only. */
+    if (!data || !info || !w_out || !h_out || !bits_out)
+        return CIV_ERR_NOENT;
+    if (len < CIV_FNT_MIN_SIZE)
+        return CIV_ERR_TRUNCATED;
+    if (c < (int)info->dfFirstChar || c > (int)info->dfLastChar)
+        return CIV_ERR_RANGE;
+    /* TODO: locate glyph row via dfBitsOffset + dfCharTable (width table
+     * + offset table sized by dfLastChar-dfFirstChar+1, stride dfWidthBytes
+     * x dfPixHeight), then set w_out, h_out + bits_out into data. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t font_fnt_char_entry(const uint8_t *data, size_t len,
+                                const font_fnt_info_t *info, int c,
+                                int *width_out, uint32_t *offset_out)
+{
+    /* Orig Font_EnumFamiliesInit @ 1008:0e99 FNT dfCharTable side (AH2).
+     * OS-free header/entry-only 1:1 on borrowed bytes (caller-owned FNT
+     * image, never writes civfonts.fon). v2 4-B entries (all 21 faces
+     * 0x0200); v3 TODO. No SDL, no globals, no exit(), read-only. */
+    size_t ct_off;
+    unsigned nchars;
+    unsigned idx;
+    size_t epos;
+    uint16_t w;
+    uint16_t off;
+
+    if (!data || !info || !width_out || !offset_out)
+        return CIV_ERR_NOENT;
+    if (len < CIV_FNT_MIN_SIZE)
+        return CIV_ERR_TRUNCATED;
+    if (info->dfVersion != CIV_FNT_VERSION_2 &&
+        info->dfVersion != CIV_FNT_VERSION_3)
+        return CIV_ERR_BAD_DATA;
+    if (info->dfVersion == CIV_FNT_VERSION_3)
+        /* TODO: v3 6-B entries (width u16 + offset u32?); no v3 face in
+         * civfonts.fon to validate against, so stub rather than mis-parse. */
+        return CIV_ERR_UNSUPPORTED;
+    if (info->dfFirstChar > info->dfLastChar)
+        return CIV_ERR_BAD_DATA;
+    if (c < (int)info->dfFirstChar || c > (int)info->dfLastChar)
+        return CIV_ERR_RANGE;
+    nchars = (unsigned)info->dfLastChar - (unsigned)info->dfFirstChar + 1u;
+    /* Header 118 B with dfReserved (0x76) when len allows it, else 117 B
+     * (0x75); all disk faces use 118 (bitsOff 0x352 == 0x76 + 183*4). */
+    ct_off = (len >= 0x76u) ? 0x76u : 0x75u;
+    if (len < ct_off)
+        return CIV_ERR_TRUNCATED;
+    /* Table has nchars+1 entries (sentinel for last glyph length). */
+    if (nchars + 1u > (len - ct_off) / 4u)
+        return CIV_ERR_TRUNCATED;
+    idx = (unsigned)(c - (int)info->dfFirstChar);
+    epos = ct_off + (size_t)idx * 4u;
+    if (epos + 4u > len)
+        return CIV_ERR_TRUNCATED;
+    w = font_fon_u16le(data + epos);
+    off = font_fon_u16le(data + epos + 2u);
+    if ((size_t)off >= len)
+        return CIV_ERR_BAD_DATA;
+    *width_out = (int)w;
+    *offset_out = (uint32_t)off;
+    return CIV_OK;
+}
+
+civ_error_t font_fnt_bits(const uint8_t *data, size_t len,
+                          const font_fnt_info_t *info, int c,
+                          const uint8_t **bits_out,
+                          int *width_out, int *height_out)
+{
+    /* Orig Font_EnumFamiliesInit @ 1008:0e99 FNT glyph-bits side (AH2).
+     * OS-free 1:1 on borrowed bytes via font_fnt_char_entry + sentinel
+     * next-offset for length; MSB-first, stride (max+7)/8, height pixHeight.
+     * No SDL, no globals, no exit(), read-only. */
+    size_t ct_off;
+    unsigned nchars;
+    unsigned idx;
+    size_t table_end;
+    size_t epos_next;
+    int w_tmp;
+    uint32_t off_tmp;
+    uint16_t next_off;
+    civ_error_t err;
+
+    if (!data || !info || !bits_out || !width_out || !height_out)
+        return CIV_ERR_NOENT;
+    if (len < CIV_FNT_MIN_SIZE)
+        return CIV_ERR_TRUNCATED;
+    err = font_fnt_char_entry(data, len, info, c, &w_tmp, &off_tmp);
+    if (err != CIV_OK)
+        return err;
+    if (info->dfPixHeight == 0u)
+        return CIV_ERR_BAD_DATA;
+    nchars = (unsigned)info->dfLastChar - (unsigned)info->dfFirstChar + 1u;
+    ct_off = (len >= 0x76u) ? 0x76u : 0x75u;
+    table_end = ct_off + (size_t)(nchars + 1u) * 4u;
+    if (table_end > len)
+        return CIV_ERR_TRUNCATED;
+    if ((size_t)off_tmp < table_end)
+        return CIV_ERR_BAD_DATA;
+    if (info->dfBitsOffset != 0u && off_tmp < info->dfBitsOffset)
+        return CIV_ERR_BAD_DATA;
+    idx = (unsigned)(c - (int)info->dfFirstChar);
+    epos_next = ct_off + (size_t)(idx + 1u) * 4u;
+    if (epos_next + 4u > len)
+        return CIV_ERR_TRUNCATED;
+    next_off = font_fon_u16le(data + epos_next + 2u);
+    if ((size_t)next_off <= (size_t)off_tmp)
+        return CIV_ERR_BAD_DATA;
+    if ((size_t)next_off > len)
+        return CIV_ERR_BAD_DATA;
+    *bits_out = data + (size_t)off_tmp;
+    *width_out = w_tmp;
+    *height_out = (int)info->dfPixHeight;
+    return CIV_OK;
+}
+
+/* AI-A: FNT glyph render + text metrics (see boot.h). OS-free, no SDL. */
+civ_error_t font_render_glyph(const uint8_t *data, size_t len,
+                              const font_fnt_info_t *info, int c,
+                              uint8_t *dst, size_t dst_cap,
+                              int *w_out, int *h_out)
+{
+    /* Orig Font_EnumFamiliesInit @ 1008:0e99 FNT glyph-bits side
+     * (dfBitsOffset + dfCharTable). OS-free bit-copy 1:1 via font_fnt_bits:
+     * borrowed MSB-first rows with source stride (dfMaxWidth+7)/8 repacked
+     * tightly into caller-owned dst with stride (w+7)/8. No SDL, no
+     * globals, no exit(), read-only (writes only caller-owned dst). */
+    const uint8_t *src_bits = NULL;
+    int w_tmp = 0;
+    int h_tmp = 0;
+    civ_error_t err;
+    unsigned src_stride;
+    unsigned dst_stride;
+    size_t need;
+    int y;
+    int x;
+    size_t i;
+
+    if (!data || !info || !dst || !w_out || !h_out)
+        return CIV_ERR_NOENT;
+    if (len < CIV_FNT_MIN_SIZE)
+        return CIV_ERR_TRUNCATED;
+    err = font_fnt_bits(data, len, info, c, &src_bits, &w_tmp, &h_tmp);
+    if (err != CIV_OK)
+        return err;
+    if (!src_bits)
+        return CIV_ERR_BAD_DATA;
+    if (w_tmp < 0 || h_tmp <= 0)
+        return CIV_ERR_BAD_DATA;
+    if (w_tmp == 0) {
+        *w_out = 0;
+        *h_out = h_tmp;
+        return CIV_OK;
+    }
+    src_stride = ((unsigned)info->dfMaxWidth + 7u) / 8u;
+    if (src_stride == 0u)
+        return CIV_ERR_BAD_DATA;
+    if ((unsigned)w_tmp > src_stride * 8u)
+        return CIV_ERR_BAD_DATA;
+    dst_stride = ((unsigned)w_tmp + 7u) / 8u;
+    need = (size_t)dst_stride * (size_t)h_tmp;
+    if (dst_cap < need)
+        return CIV_ERR_TRUNCATED;
+    for (i = 0; i < need; i++)
+        dst[i] = 0u;
+    for (y = 0; y < h_tmp; y++) {
+        for (x = 0; x < w_tmp; x++) {
+            unsigned sx = (unsigned)x;
+            unsigned src_idx = (unsigned)y * src_stride + sx / 8u;
+            unsigned src_shift = 7u - (sx % 8u);
+            unsigned bit;
+            unsigned dst_idx;
+            unsigned dst_shift;
+
+            bit = (unsigned)((src_bits[src_idx] >> src_shift) & 1u);
+            if (bit == 0u)
+                continue;
+            dst_idx = (unsigned)y * dst_stride + sx / 8u;
+            dst_shift = 7u - (sx % 8u);
+            dst[dst_idx] = (uint8_t)(dst[dst_idx] | (uint8_t)(1u << dst_shift));
+        }
+    }
+    *w_out = w_tmp;
+    *h_out = h_tmp;
+    return CIV_OK;
+}
+
+int font_text_width(const uint8_t *data, size_t len,
+                    const font_fnt_info_t *info, const char *s)
+{
+    /* Orig status stride @ 1098:0dda + Text_DrawStatusRow @ 11f8:0278 width
+     * side. OS-free sum of per-char entry widths (tracking 0, see boot.h).
+     * NULL -> 0. No SDL, no globals, no exit(), read-only. */
+    int total = 0;
+    size_t i;
+
+    if (!data || !info || !s)
+        return 0;
+    if (len < CIV_FNT_MIN_SIZE)
+        return 0;
+    for (i = 0; s[i] != '\0'; i++) {
+        int c = (unsigned char)s[i];
+        int w = 0;
+        uint32_t off = 0u;
+        civ_error_t err;
+
+        err = font_fnt_char_entry(data, len, info, c, &w, &off);
+        if (err != CIV_OK)
+            continue;
+        if (w < 0)
+            continue;
+        total += w;
+    }
+    return total;
+}
+
+int font_text_height(const font_fnt_info_t *info)
+{
+    /* Orig status stride @ 1098:0dda (tmHeight) via dfPixHeight (see
+     * boot.h). OS-free, no SDL, no globals, no exit(), read-only. */
+    if (!info)
+        return -1;
+    return (int)info->dfPixHeight;
+}
+
+/* Orig Menu_InitMainBar @ 1048:0000 string side. OS-free static const port
+ * (read-only, no Win16, never written); entry [3] mirrors
+ * CIV_MAINMENU_TEXT @ 1420:435b (canonical owner see mainmenu.h). */
+const char *const menu_strings[] = {
+    "&Save Game\tCtrl+S", /* 14b0:0010 */
+    "&Auto Save",           /* 14b0:0092 */
+    "Save First",           /* 14d0:0028 */
+    "_Start a New Game_Load a Saved Game_Play on EARTH_Customize World_View Hall of Fame_Quit", /* 1420:435b */
+};
+
+int menu_strings_count(void)
+{
+    /* OS-free count for the table above (same shape as font_face_count). */
+    return (int)(sizeof(menu_strings) / sizeof(menu_strings[0]));
+}
+
+const char *menu_string_at(int index)
+{
+    /* Bounded accessor (NULL on OOB, same contract as font_face_list /
+     * tribe_get_name_list / boot_video_caps_describe). */
+    if (index < 0 || index >= menu_strings_count())
+        return NULL;
+    return menu_strings[index];
+}
+
 civ_error_t config_load_prefs(void)
 {
     /* TODO: Orig FUN_1008_0b4a @ 1008:0b4a -> Config_LoadPrefs. _LOPEN

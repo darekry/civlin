@@ -252,6 +252,14 @@ civ_error_t game_append_year_text(void)
     return CIV_ERR_UNSUPPORTED;
 }
 
+const char *year_suffix(int year)
+{
+    /* AG2: 1420:173c "BC" when year<0 / 1420:1740 "AD". OS-free 1:1;
+     * complements game_append_year_text @ 1088:1dd0 (abs via Util_IntToDec
+     * @ 1000:2928 + this suffix onto 12d8:24fa). Read-only literal. */
+    return year < 0 ? "BC" : "AD";
+}
+
 civ_error_t gfx_draw_tech_icon(int index, int x, int y, int palette)
 {
     (void)index;
@@ -496,38 +504,93 @@ int unit_find_diplomat_target(int ux, int uy, const int *dx, const int *dy,
     return best;
 }
 
-civ_error_t unit_do_found_city(int civ, int unit_idx)
+civ_error_t unit_do_found_city(uint8_t *units, int unit_idx, int n_units,
+                               uint8_t *cities, int city_idx, int n_cities)
 {
-    (void)civ;
-    (void)unit_idx;
-    /* TODO: Orig Civ_ProcessUnitMoves @ 11f0:0000 order 0x62 case
-     * (jump tables 1420:43b8+0x8f x0x0e, +0x4b x0x11, 1420:435b+0x28
-     * x0x20). Found-city/irrigate?: type 0x1a settler founds via
-     * Unit_FoundCityIfHome @ 11c0:16a4 (unit_found_city_if_home) when
-     * home (+10/6307); needs 1420:5500 city records + map tile claim. */
-    return CIV_ERR_UNSUPPORTED;
+    /* Orig Civ_ProcessUnitMoves @ 11f0:0000 order 0x62 case (jump tables
+     * 1420:43b8+0x8f x0x0e, +0x4b x0x11, 1420:435b+0x28 x0x20) via
+     * Unit_FoundCityIfHome @ 11c0:16a4: type 0x1a settler founds when
+     * home-city +10/6307 matches the city index. Join path is OS-free
+     * (consume + city_grow); new-city needs map tile claim + record
+     * alloc + Win16 dialog (see map_get_tile/map_set_tile @ 11e8:0dcf/
+     * 0e19, map.h, parallel-owned). No globals, no exit(). */
+    uint8_t *urec;
+    int utype;
+    int home;
+    civ_error_t gr;
+
+    if (units == NULL || cities == NULL)
+        return CIV_ERR_NOENT;
+    if (n_units <= 0 || n_cities <= 0)
+        return CIV_ERR_RANGE;
+    if (unit_idx < 0 || unit_idx >= n_units)
+        return CIV_ERR_RANGE;
+    if (city_idx < 0 || city_idx >= n_cities)
+        return CIV_ERR_RANGE;
+    urec = units + (size_t)unit_idx * (size_t)CIV_UNIT_REC_LEN;
+    utype = urec[CIV_UNIT_OFF_TYPE];
+    if (utype != CIV_UNIT_TYPE_SETTLER)
+        return CIV_ERR_RANGE;
+    home = urec[CIV_UNIT_OFF_HOME];
+    if (home != city_idx) {
+        /* TODO: Orig 11c0:16a4 new-city tail + 1420:5500 alloc + map tile
+         * claim (map_get_tile/map_set_tile, see map.h) + Win16 dialog
+         * pump. Join (home == city_idx) is done below; founding on a
+         * fresh tile stays CIV_ERR_UNSUPPORTED. */
+        return CIV_ERR_UNSUPPORTED;
+    }
+    if (city_get_valid(cities, city_idx, n_cities) == 0)
+        return CIV_ERR_RANGE;
+    gr = city_grow(cities, city_idx, n_cities);
+    if (gr != CIV_OK)
+        return gr;
+    /* Consume the settler: empty slot + no moves left. */
+    urec[CIV_UNIT_OFF_TYPE] = (uint8_t)CIV_UNIT_TYPE_EMPTY;
+    urec[CIV_UNIT_OFF_MOVES] = 0;
+    return CIV_OK;
 }
 
-civ_error_t unit_do_fortify(int civ, int unit_idx)
+civ_error_t unit_do_fortify(uint8_t *units, int unit_idx, int n_units)
 {
-    (void)civ;
-    (void)unit_idx;
-    /* TODO: Orig Civ_ProcessUnitMoves @ 11f0:0000 order 0x66 case
-     * (jump tables 1420:43b8+0x8f x0x0e, +0x4b x0x11, 1420:435b+0x28
-     * x0x20). Wait-fortify?: set fortified flag on the 1420:62fc record
-     * so the unit holds; needs flag-bit decode + status redraw. */
-    return CIV_ERR_UNSUPPORTED;
+    /* Orig Civ_ProcessUnitMoves @ 11f0:0000 order 0x66 case (jump tables
+     * 1420:43b8+0x8f x0x0e, +0x4b x0x11, 1420:435b+0x28 x0x20):
+     * wait-fortify sets +11 flags busy (ORs 0x08, see game.h AJ3 block)
+     * + zeroes moves (+3) so the unit holds; combat-tail bonus not here.
+     * OS-free 1:1 on explicit base. No globals, no exit(). */
+    uint8_t *rec;
+
+    if (units == NULL)
+        return CIV_ERR_NOENT;
+    if (n_units <= 0)
+        return CIV_ERR_RANGE;
+    if (unit_idx < 0 || unit_idx >= n_units)
+        return CIV_ERR_RANGE;
+    rec = units + (size_t)unit_idx * (size_t)CIV_UNIT_REC_LEN;
+    rec[CIV_UNIT_OFF_MOVES] = 0;
+    rec[CIV_UNIT_OFF_FLAGS] |= (uint8_t)CIV_UNIT_FLAG_FORTIFIED;
+    return CIV_OK;
 }
 
-civ_error_t unit_do_sentry(int civ, int unit_idx)
+civ_error_t unit_do_sentry(uint8_t *units, int unit_idx, int n_units)
 {
-    (void)civ;
-    (void)unit_idx;
-    /* TODO: Orig Civ_ProcessUnitMoves @ 11f0:0000 order 0x68 case
-     * (jump tables 1420:43b8+0x8f x0x0e, +0x4b x0x11, 1420:435b+0x28
-     * x0x20). Sentry/1-move?: park until unit_update_visibility @
-     * 11c0:0395 contact or one move elapses; exact wake TBD. */
-    return CIV_ERR_UNSUPPORTED;
+    /* Orig Civ_ProcessUnitMoves @ 11f0:0000 order 0x68 case (same jump
+     * tables): sentry parks until unit_update_visibility @ 11c0:0395
+     * contact or one move elapses; Linux port ORs 0x09 (0x08 busy | 0x01
+     * sentry-wait, see game.h AJ3 block) on +11 + zeroes moves (+3).
+     * Exact wake predicate + 0x08 vs 0x09 split TBD. OS-free 1:1 on
+     * explicit base. No globals, no exit(). */
+    uint8_t *rec;
+
+    if (units == NULL)
+        return CIV_ERR_NOENT;
+    if (n_units <= 0)
+        return CIV_ERR_RANGE;
+    if (unit_idx < 0 || unit_idx >= n_units)
+        return CIV_ERR_RANGE;
+    rec = units + (size_t)unit_idx * (size_t)CIV_UNIT_REC_LEN;
+    rec[CIV_UNIT_OFF_MOVES] = 0;
+    rec[CIV_UNIT_OFF_FLAGS] |= (uint8_t)CIV_UNIT_FLAG_SENTRY;
+    return CIV_OK;
 }
 
 civ_error_t unit_do_move_attack(int civ, int unit_idx, int order)
@@ -535,12 +598,15 @@ civ_error_t unit_do_move_attack(int civ, int unit_idx, int order)
     (void)civ;
     (void)unit_idx;
     (void)order;
-    /* TODO: Orig Civ_ProcessUnitMoves @ 11f0:0000 orders
+    /* Kept stub (AJ3): Orig Civ_ProcessUnitMoves @ 11f0:0000 orders
      * 0x69/0x6d/0x6f/0x70/0x72/0x75 cases (opaque keys into the three
      * jump tables 1420:43b8+0x8f x0x0e, +0x4b x0x11, 1420:435b+0x28
      * x0x20; 0x6d road?, 0x70 pollution? per frontier). Steps via
      * unit_step_toward_goal @ 1128:0000, odds via Combat_ResolveAttack +
-     * 11c0:1bc3; needs map/combat state. */
+     * 11c0:1bc3; needs pathing/ZOC/occupancy full Sims (map_is_occupied
+     * @ 1110:18ce / map_is_city_blocked @ 1110:199b / map_check_zoc @
+     * 11c0:23fd + combat state).
+     * TODO Orig per-key handlers. */
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -579,6 +645,102 @@ civ_error_t unit_notify_wonder(int civ, int wonder)
      * via Game_PickWonderForAI @ 1170:3181 (game_pick_wonder_for_ai,
      * implemented, tech-table gated); needs city shields + Win16 dialog. */
     return CIV_ERR_UNSUPPORTED;
+}
+
+/* AI-C unit table: dump-confirmed subset only (see game.h). Index
+ * 0x00..0x1a; unlisted slots are NULL -> "?" (no fake names). 0xff
+ * ("empty") is handled in unit_type_name, not in this table. */
+static const char *const s_unit_type_names[CIV_UNIT_TYPE_MAX_CONFIRMED + 1] = {
+    [0x0e] = "Caravan?",
+    [0x19] = "Diplomat",
+    [0x1a] = "Settler",
+};
+
+const char *unit_type_name(int type)
+{
+    const char *s;
+
+    /* Orig unit record +2 type @ 1420:62ff: 0xff = empty slot. */
+    if (type == CIV_UNIT_TYPE_EMPTY)
+        return "empty";
+    if (type < 0 || type > CIV_UNIT_TYPE_MAX_CONFIRMED)
+        return "?";
+    s = s_unit_type_names[type];
+    /* 0x0f and every undecoded slot stay "?" (TODO vs dump). */
+    return s != NULL ? s : "?";
+}
+
+int unit_type_count(void)
+{
+    /* Max confirmed 0x1a + 1; 28th slot (0x1b) TBD vs dump (see game.h). */
+    return CIV_UNIT_TYPE_MAX_CONFIRMED + 1;
+}
+
+/* Shared city-field fetch: byte at base + idx*0x1c + off, -1 OOR. */
+static int city_get_field(const uint8_t *base, int idx, int n_cities,
+                          int off)
+{
+    if (base == NULL)
+        return -1;
+    if (n_cities <= 0)
+        return -1;
+    if (idx < 0 || idx >= n_cities)
+        return -1;
+    return base[(size_t)idx * CIV_CITY_REC_LEN + (size_t)off];
+}
+
+int city_get_x(const uint8_t *base, int idx, int n_cities)
+{
+    /* Orig +0x5500 x (record +0). */
+    return city_get_field(base, idx, n_cities, CIV_CITY_OFF_X);
+}
+
+int city_get_y(const uint8_t *base, int idx, int n_cities)
+{
+    /* Orig +0x5501 y (record +1). */
+    return city_get_field(base, idx, n_cities, CIV_CITY_OFF_Y);
+}
+
+int city_get_valid(const uint8_t *base, int idx, int n_cities)
+{
+    /* Orig +0x5502 valid (record +2). */
+    return city_get_field(base, idx, n_cities, CIV_CITY_OFF_VALID);
+}
+
+int city_get_size(const uint8_t *base, int idx, int n_cities)
+{
+    /* Orig +0x5503 size/def (record +3). */
+    return city_get_field(base, idx, n_cities, CIV_CITY_OFF_SIZE);
+}
+
+int city_get_owner(const uint8_t *base, int idx, int n_cities)
+{
+    /* Orig +0x5507 owner (record +7). */
+    return city_get_field(base, idx, n_cities, CIV_CITY_OFF_OWNER);
+}
+
+civ_error_t city_grow(uint8_t *cities, int city_idx, int n_cities)
+{
+    /* Orig city size+1 helper (1420:5500 0x1c stride, +3 size/def):
+     * byte at cities + city_idx*0x1c + 3. Bounds 1..0xff (see game.h
+     * AJ3 block: 0 = invalid/empty, 0xff full; gameplay cap TBD).
+     * OS-free 1:1 on explicit base via city_get_size. No globals,
+     * no exit(), no map/dialog I/O. */
+    uint8_t *rec;
+    int size;
+
+    if (cities == NULL)
+        return CIV_ERR_NOENT;
+    if (n_cities <= 0)
+        return CIV_ERR_RANGE;
+    if (city_idx < 0 || city_idx >= n_cities)
+        return CIV_ERR_RANGE;
+    size = city_get_size(cities, city_idx, n_cities);
+    if (size < CIV_CITY_SIZE_MIN || size >= CIV_CITY_SIZE_MAX)
+        return CIV_ERR_RANGE;
+    rec = cities + (size_t)city_idx * (size_t)CIV_CITY_REC_LEN;
+    rec[CIV_CITY_OFF_SIZE] = (uint8_t)(size + 1);
+    return CIV_OK;
 }
 
 void game_shutdown(civ_game_t *g)

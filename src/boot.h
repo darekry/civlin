@@ -193,6 +193,215 @@ void boot_shutdown(void);
  * video_shutdown_display for the REMOVEFONTRESOURCE tail). */
 civ_error_t font_enum_families_init(void);
 
+/* AF2: FON header (civfonts.fon 244224 B NE DLL/font container, ADDFONTRESOURCE
+ * @ 1420:00a4/00fe via Font_EnumFamiliesInit @ 1008:0e99; ENUMFONTFAMILIES
+ * family list bridge TBD, see video_shutdown_display in video.h for the
+ * REMOVEFONTRESOURCE tail). Unpacked dump-confirmed 2026-10-15 (read-only,
+ * never written; packed civ1win/CIVFONTS.FON is EDILZSS2 68797 B, unpacked/
+ * civfonts.fon is the 244224 B NE image parsed here):
+ *   MZ "MZ" (0x4D 0x5A) at +0x00, e_lfanew u32 LE at +0x3C = 0x250,
+ *   NE "NE" at 0x250 (linker 0x0A05, 1 segment, align shift 9),
+ *   resource table at NE+0x48: RT_FONTDIR 0x8007 x1 + RT_FONT 0x8008 x21
+ *   (fontdir at file 0x600, nfonts 0x15 = 21; resident names "FONTRES" +
+ *   "FONTRES 100,100,100 : Civilization Raster Fonts").
+ * OS-free header-only port (no SDL, no TTF raster, no globals, no exit()):
+ * validates MZ + NE + resource-table bounds on borrowed bytes (no copy,
+ * caller keeps ownership) and reports counts/offsets; face bitmap decode
+ * stays a TODO (see below). */
+#define CIV_FON_MAGIC_MZ0 0x4Du /* 'M' */
+#define CIV_FON_MAGIC_MZ1 0x5Au /* 'Z' */
+#define CIV_FON_MAGIC_NE0 0x4Eu /* 'N' */
+#define CIV_FON_MAGIC_NE1 0x45u /* 'E' */
+#define CIV_FON_RES_FONTDIR 0x8007u
+#define CIV_FON_RES_FONT 0x8008u
+#define CIV_FON_MIN_SIZE 0x40u /* MZ + e_lfanew */
+#define CIV_FON_NE_MIN_SIZE 64u
+
+typedef struct font_fon_info {
+    uint32_t ne_offset;    /* e_lfanew image (0x250 on disk) */
+    uint16_t align_shift;  /* NE resource align shift (9 on disk) */
+    uint16_t fontdir_count;/* RT_FONTDIR entries (1 on disk) */
+    uint16_t face_count;   /* RT_FONT entries = ENUMFONTFAMILIES faces (21) */
+} font_fon_info_t;
+
+/* Orig: Font_EnumFamiliesInit @ 1008:0e99 FON header side ->
+ * font_fon_parse. OS-free 1:1 header check on borrowed bytes (never writes
+ * civfonts.fon): MZ + e_lfanew + NE + resource-table walk to the
+ * RT_FONTDIR/RT_FONT counts. NULL data/out -> NOENT; too short for
+ * MZ/e_lfanew/NE/res header -> TRUNCATED; bad MZ/NE -> BAD_DATA.
+ * TODO: face bitmap decode (FONTDIR entry + per-face FNT headers, e.g.
+ * dfPixHeight/face names CIVBABYLON..CIVTIMES36 seen at file 0x600..) ->
+ * TTF/bitmap bridge TBD (no raster here). */
+civ_error_t font_fon_parse(const uint8_t *data, size_t len,
+                           font_fon_info_t *out);
+
+/* AF2: FON face list (count + names via ENUMFONTFAMILIES @ 1008:0e99).
+ * OS-free stubs over font_fon_info_t (no SDL, no globals, no exit(),
+ * read-only): count reports parsed RT_FONT faces (0 on NULL info);
+ * list maps index -> family name, NULL until the fontdir-string order is
+ * wired to the ENUMFONTFAMILIES enumeration order (expected 21 faces:
+ * CIVBABYLON/CIVZULU/CIVEGYPT/CIVENGLISH/CIVGREEK/CIVRUSSIAN/CIVGERMAN/
+ * CIVCHINESE/CIVFRENCH/CIVROMAN/CIVINDIAN/CIVAMERICAN/CIVAZTEC/CIVMONGOL/
+ * CIVTIMES10/12/14/18/24/30/36 seen in the 0x600 fontdir dump; do not
+ * hardcode here, ENUMFONTFAMILIES order TBD from Ghidra). */
+int font_face_count(const font_fon_info_t *info);
+const char *font_face_list(const font_fon_info_t *info, int index);
+
+/* AG2: FNT raster + menu strings (FON + menu strings only; video/dialog
+ * untouched). OS-free 1:1 ports on borrowed bytes / read-only tables; no
+ * SDL, no TTF raster, no globals mutated, no exit(). */
+#define CIV_FNT_VERSION_2 0x0200u
+#define CIV_FNT_VERSION_3 0x0300u
+#define CIV_FNT_MIN_SIZE 117u /* packed header through dfBitsOffset */
+#define CIV_FNT_COPYRIGHT_LEN 60u
+
+typedef struct font_fnt_info {
+    uint16_t dfVersion;      /* 0x0200 / 0x0300 */
+    uint32_t dfSize;         /* file-size image */
+    char dfCopyright[60];    /* raw 60 B, not necessarily NUL-terminated */
+    uint16_t dfType;
+    uint16_t dfPoints;
+    uint16_t dfVertRes;
+    uint16_t dfHorizRes;
+    uint16_t dfAscent;
+    uint16_t dfInternalLeading;
+    uint16_t dfExternalLeading;
+    uint8_t dfItalic;
+    uint8_t dfUnderline;
+    uint8_t dfStrikeOut;
+    uint16_t dfWeight;
+    uint8_t dfCharSet;
+    uint16_t dfPixWidth;
+    uint16_t dfPixHeight;
+    uint8_t dfPitchAndFamily; /* dfFamilyFace pitch+family byte */
+    uint16_t dfAvgWidth;
+    uint16_t dfMaxWidth;
+    uint8_t dfFirstChar;
+    uint8_t dfLastChar;
+    uint8_t dfDefaultChar;
+    uint8_t dfBreakChar;
+    uint16_t dfWidthBytes;
+    uint32_t dfDevice;      /* file-offset image */
+    uint32_t dfFace;        /* file-offset image of facename string */
+    uint32_t dfBitsPointer;
+    uint32_t dfBitsOffset;  /* bitmap bits file offset */
+    uint8_t dfReserved;     /* 0 when image holds only 117 B */
+} font_fnt_info_t;
+
+/* Orig Font_EnumFamiliesInit @ 1008:0e99 FNT header side -> font_fnt_parse.
+ * OS-free header-only 1:1 on borrowed bytes (caller-owned, no copy, never
+ * writes civfonts.fon): NULL data/out -> NOENT; len < CIV_FNT_MIN_SIZE ->
+ * TRUNCATED; dfVersion not 0x0200/0x0300, dfFirstChar > dfLastChar, or
+ * dfFace/dfBitsOffset pointing outside len -> BAD_DATA; dfSize claiming
+ * more than len -> TRUNCATED. TODO: face bitmap decode behind dfBitsOffset
+ * + dfCharTable (width/offset tables) -> SDL_ttf bridge TBD (see
+ * font_face_bitmap stub below, no raster here). */
+civ_error_t font_fnt_parse(const uint8_t *data, size_t len,
+                            font_fnt_info_t *out);
+
+/* Orig Font_EnumFamiliesInit @ 1008:0e99 FNT glyph side -> font_face_bitmap.
+ * FNT glyph row for char c: reports width/height + row bits on borrowed
+ * bytes (no copy, read-only). Bounds OS-free: NULL data/info/outs ->
+ * NOENT; len < CIV_FNT_MIN_SIZE -> TRUNCATED; c outside
+ * [dfFirstChar, dfLastChar] -> RANGE. Stub: TODO needs dfBitsOffset +
+ * dfCharTable (per-char width + offset tables) to locate the glyph bytes,
+ * so the raster tail stays CIV_ERR_UNSUPPORTED (outs untouched). */
+civ_error_t font_face_bitmap(const uint8_t *data, size_t len,
+                             const font_fnt_info_t *info, int c,
+                             int *w_out, int *h_out,
+                             const uint8_t **bits_out);
+
+/* Orig Font_EnumFamiliesInit @ 1008:0e99 FNT dfCharTable side ->
+ * font_fnt_char_entry (AH2). OS-free 1:1 header/entry-only port on borrowed
+ * bytes (caller-owned FNT resource image starting at dfVersion, e.g.
+ * unpacked/civfonts.fon faces at file 0x1400/0x3000/0x30e00; never writes
+ * civfonts.fon): entry idx = c - dfFirstChar at 0x76 + idx*4 (0x75 when
+ * len == 117, no dfReserved), each 4 B = u16 width + u16 offset-from-resource
+ * -start (v2 0x0200, dump-confirmed 182/224 +1 sentinel entries, e.g. off
+ * 0x352 == dfBitsOffset for c == dfFirstChar, stride 30 B = 2*15 for max 13,
+ * 190 B = 5*38 for max 37). NULL data/info/outs -> NOENT;
+ * len < CIV_FNT_MIN_SIZE -> TRUNCATED; dfFirst > dfLast or bad version or
+ * table overrun or offset outside len -> BAD_DATA; c outside
+ * [dfFirstChar, dfLastChar] -> RANGE. Width/offset via outs, height is
+ * info->dfPixHeight (same for all glyphs in the face). TODO: v3 0x0300
+ * 6-B entries (no v3 face in civfonts.fon, all 21 faces are 0x0200) ->
+ * UNSUPPORTED. No SDL, no globals, no exit(), read-only. */
+civ_error_t font_fnt_char_entry(const uint8_t *data, size_t len,
+                                const font_fnt_info_t *info, int c,
+                                int *width_out, uint32_t *offset_out);
+
+/* Orig Font_EnumFamiliesInit @ 1008:0e99 FNT glyph-bits side ->
+ * font_fnt_bits (AH2). OS-free 1:1 port on borrowed bytes (same image as
+ * font_fnt_char_entry, no copy, never writes civfonts.fon): locates the
+ * glyph via dfCharTable width/offset + sentinel next-offset for the byte
+ * length (glyph_len = next_off - off, e.g. 30 B for 15-px faces, 190 B for
+ * TIMES36), then returns borrowed bits = data + off (valid while the image
+ * lives) + width bits per row (only first `width` bits valid) + height rows
+ * = dfPixHeight, MSB-first, row stride = (dfMaxWidth+7)/8 (2 B for max 13,
+ * 5 B for max 37; dfWidthBytes stays 2 on disk, so stride comes from max,
+ * not from dfWidthBytes). Same bounds as char_entry plus pixHeight == 0,
+ * off < table-end / dfBitsOffset, or off+len outside len -> BAD_DATA;
+ * c OOR -> RANGE. TODO: v3 6-B entries -> UNSUPPORTED. No SDL, no globals,
+ * no exit(), read-only. */
+civ_error_t font_fnt_bits(const uint8_t *data, size_t len,
+                          const font_fnt_info_t *info, int c,
+                          const uint8_t **bits_out,
+                          int *width_out, int *height_out);
+
+/* AI-A: FNT glyph render + text metrics (Font_EnumFamiliesInit @ 1008:0e99
+ * family; video/dialog/game/map untouched, see scope in task).
+ *
+ * Orig Font_EnumFamiliesInit @ 1008:0e99 FNT glyph-bits side (dfBitsOffset
+ * + dfCharTable) -> font_render_glyph. OS-free 1:1 bit-copy port on
+ * borrowed bytes (same image as font_fnt_bits/font_fnt_char_entry, no
+ * copy, never writes civfonts.fon): locates the glyph via font_fnt_bits
+ * (width = per-char entry width, height = dfPixHeight; fixed-pitch faces
+ * report width == dfPixWidth), then repacks the first `width` bits of each
+ * row MSB-first into the caller-owned 1-bpp `dst` with tight stride
+ * (w+7)/8 (source stride is (dfMaxWidth+7)/8, see font_fnt_bits). Bounds:
+ * NULL data/info/dst/w_out/h_out -> NOENT; len < CIV_FNT_MIN_SIZE ->
+ * TRUNCATED; c OOR -> RANGE; v3/corrupt table -> UNSUPPORTED/BAD_DATA
+ * (propagated from font_fnt_bits); dst_cap < stride*h -> TRUNCATED
+ * (outs + dst untouched). No SDL, no globals, no exit(), read-only
+ * (writes only the caller-owned dst). */
+civ_error_t font_render_glyph(const uint8_t *data, size_t len,
+                              const font_fnt_info_t *info, int c,
+                              uint8_t *dst, size_t dst_cap,
+                              int *w_out, int *h_out);
+
+/* Orig status stride @ 1098:0dda (status_font_height, tmHeight line stride)
+ * + Text_DrawStatusRow @ 11f8:0278 row side -> font_text_width. OS-free 1:1
+ * port (sum of per-char widths via font_fnt_char_entry, no SDL): walks the
+ * NUL-terminated `s`, adds each char entry width, skips OOR/undecodable
+ * chars (0 for that char). NULL data/info/s -> 0; short/corrupt image ->
+ * 0 when the table is unreadable, else partial sum of decodable prefix.
+ * Tracking (inter-char extra pixels) is 0 here (GetTextExtent shape without
+ * tracking; TODO: wire when the 1098:0dda/11f8:0278 tracking byte lands).
+ * No globals, no exit(), read-only. */
+int font_text_width(const uint8_t *data, size_t len,
+                    const font_fnt_info_t *info, const char *s);
+
+/* Orig status stride @ 1098:0dda (GETTEXTMETRICS tmHeight) + FNT metrics
+ * (dfPixHeight + dfExternalLeading) -> font_text_height. OS-free 1:1 port
+ * (no SDL): returns (int)info->dfPixHeight (ascent+descent image; external
+ * leading stays separate per TEXTMETRIC, TODO when the 1098:0dda caller
+ * needs tmHeight+tmExternalLeading stride). NULL info -> -1 (same contract
+ * as status_font_height stub in game.h, see game.c). No globals, no
+ * exit(), read-only. */
+int font_text_height(const font_fnt_info_t *info);
+
+/* Orig Menu_InitMainBar @ 1048:0000 string side -> menu_strings.
+ * OS-free static const port (const char * array, no Win16 USER handles,
+ * read-only, never written): [0] 14b0:0010 "&Save Game\tCtrl+S",
+ * [1] 14b0:0092 "&Auto Save", [2] 14d0:0028 "Save First",
+ * [3] 1420:435b menu text (mirrors CIV_MAINMENU_TEXT, see mainmenu.h;
+ * canonical owner stays there, this entry is the menu-bar table copy).
+ * Count + bounded accessor below (OOB -> NULL, same contract as
+ * tribe_get_name_list / boot_video_caps_describe / font_face_list). */
+extern const char *const menu_strings[];
+int menu_strings_count(void);
+const char *menu_string_at(int index);
+
 /* Orig: FUN_1008_0b4a @ 1008:0b4a -> config_load_prefs (Config_LoadPrefs).
  * _LOPEN (OF_READ) + _LREAD of CIV_PREFS_FILE from the base path, then
  * option-struct fill with built-in defaults when missing/short. Prefs

@@ -31,6 +31,28 @@ static long hof_weighted_score(int score, int difficulty)
     return (long)score * (long)(difficulty + 1);
 }
 
+/* AG3 HoF difficulty names: OS-free static const 5-entry port of
+ * 1420:153e..1567 (Orig "Chieftan" typo kept verbatim) + label macros in
+ * halloffame.h (CIV_HOF_EMPTY_TEXT @ 1420:1502, CIV_HOF_RATING_LABEL @
+ * 1420:1572, CIV_HOF_TOP_FIVE_TITLE @ 1420:159c for HoF_Show @ 1080:0119
+ * + City_ShowTopFive @ 1080:099b). Other HoF impls untouched. No globals
+ * (function-local read-only view), no exit(), read-only. */
+const char *hof_diff_names(int difficulty)
+{
+    static const char *const names[CIV_HOF_DIFF_COUNT] = {
+        " Chieftan ",
+        " Warlord ",
+        " Prince ",
+        "King",
+        "Emperor"
+    };
+
+    if (difficulty < CIV_HOF_DIFFICULTY_MIN ||
+        difficulty > CIV_HOF_DIFFICULTY_MAX)
+        return NULL;
+    return names[difficulty];
+}
+
 /* Orig: FUN_1080_0000 @ 1080:0000 -> HoF_Clear.
  * OS-free 1:1: raw orig memsets DAT_1420_52a8 (6 slots x 0x27 words) to
  * 0xffff; decoded equivalent sets the Empty sentinel per slot. */

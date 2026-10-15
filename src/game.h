@@ -213,6 +213,13 @@ civ_error_t status_draw_tech_icons(int civ, int progress, int x, int y);
  * 5 callers (status panel, 1018:015d, 1138:0000, 11b0:0000, 11b8:14e5). */
 civ_error_t game_append_year_text(void);
 
+/* AG2: year suffix (1420:173c "BC" when year<0 / 1420:1740 "AD").
+ * OS-free 1:1 port (year<0 ? "BC" : "AD"); complements game_append_year_text
+ * @ 1088:1dd0 (abs via Util_IntToDec @ 1000:2928 + this suffix onto the
+ * 12d8:24fa line buffer). Returns a read-only literal, never writes
+ * assets; no globals, no exit(). */
+const char *year_suffix(int year);
+
 /* Orig: FUN_11a8_0cb1 @ 11a8:0cb1 -> Gfx_DrawTechIcon.
  * 9-icon blitter called from status_draw_tech_icons @ 1088:1a82
  * (src/game.h:92 frontier). Params: index 0..8 (tech-progress slot),
@@ -413,27 +420,66 @@ int unit_find_diplomat_target(int ux, int uy, const int *dx, const int *dy,
  * only (no Win16, no globals); Win16 map/city/dialog tails stay
  * CIV_ERR_UNSUPPORTED with TODO Orig refs. */
 
+/* --- AJ3 unit bodies: explicit record layout (no globals) ---
+ * Unit records (seg 1420): 0x80 units/civ, 0xc bytes each at
+ *   1420:62fc + civ*0x600 + idx*0xc (field labels see header top).
+ * Callers pass the per-civ slice (or global image slice) explicitly as
+ * `units` + `unit_idx` + `n_units`; civ is folded into the slice so no
+ * segment globals are touched. Moves (+3) zeroes the remaining moves;
+ * flags (+11) busy bits 0x08/0x09 per header top (0x04 ?, 0xc2
+ * visibility, 0x20 veteran): Linux port uses 0x08 = fortified/busy and
+ * 0x09 = 0x08|0x01 sentry-wait/busy; exact 0x08 vs 0x09 split TBD vs
+ * decompiler, but both test as busy (flag & 0x08). */
+#define CIV_UNITS_PER_CIV 0x80
+#define CIV_UNIT_REC_LEN 0x0c
+#define CIV_UNIT_OFF_X 0
+#define CIV_UNIT_OFF_Y 1
+#define CIV_UNIT_OFF_TYPE 2
+#define CIV_UNIT_OFF_MOVES 3
+#define CIV_UNIT_OFF_GOAL_X 5
+#define CIV_UNIT_OFF_GOAL_Y 6
+#define CIV_UNIT_OFF_HOME 10
+#define CIV_UNIT_OFF_FLAGS 11
+#define CIV_UNIT_TYPE_SETTLER 0x1a
+#define CIV_UNIT_FLAG_FORTIFIED 0x08
+#define CIV_UNIT_FLAG_SENTRY 0x09
+
 /* Orig Civ_ProcessUnitMoves @ 11f0:0000 order 0x62 case -> Unit_DoFoundCity
- * (unit_do_found_city). Found-city/irrigate?: type 0x1a settler founds via
- * Unit_FoundCityIfHome @ 11c0:16a4 (unit_found_city_if_home above) when
- * home (home-city field +10/6307); irrigate vs found disambiguation TBD
- * vs decompiler. Needs city records 0x1c bytes at 1420:5500 + map tile
- * claim + dialog pump; stub. */
-civ_error_t unit_do_found_city(int civ, int unit_idx);
+ * (unit_do_found_city). Found-city/irrigate: type 0x1a settler founds via
+ * Unit_FoundCityIfHome @ 11c0:16a4 (unit_found_city_if_home) when home
+ * (home-city field +10/6307 in the 1420:62fc record) matches city_idx.
+ * Join path (OS-free 1:1, implemented): units[unit_idx].type == 0x1a
+ * and home == city_idx -> consume settler (type -> 0xff empty, moves
+ * -> 0) + grow the city (size+1 via city_grow on the 1420:5500 0x1c
+ * records, +3 size/def; read via city_get_size). Irrigate vs found
+ * disambiguation TBD vs decompiler. New-city path (home != city_idx,
+ * e.g. 0xff none, or OOR city) needs map tile claim (map_get_tile /
+ * map_set_tile @ 11e8:0dcf/0e19, see map.h) + city-record alloc +
+ * dialog pump -> CIV_ERR_UNSUPPORTED (TODO Orig 11c0:16a4 tail +
+ * 1420:5500 alloc + map claim + Win16 dialog). Explicit bases, no
+ * globals, no exit(). Returns CIV_OK on join, UNSUPPORTED on new-city,
+ * NOENT on NULL, RANGE on bad idx/count/type/size. */
+civ_error_t unit_do_found_city(uint8_t *units, int unit_idx, int n_units,
+                               uint8_t *cities, int city_idx, int n_cities);
 
 /* Orig Civ_ProcessUnitMoves @ 11f0:0000 order 0x66 case -> Unit_DoFortify
- * (unit_do_fortify). Wait-fortify?: sets the fortified/wait flag on the
- * 1420:62fc record (exact flag bit TBD) so the unit skips moves until
- * contacted; ZOC/defense bonus applied by the combat tail. Needs unit
- * flag writes + status redraw; stub. */
-civ_error_t unit_do_fortify(int civ, int unit_idx);
+ * (unit_do_fortify). Wait-fortify: sets the fortified/wait flag on the
+ * 1420:62fc record +11 (ORs 0x08 busy, see AJ3 block above) and zeroes
+ * moves (+3) so the unit holds until contacted; ZOC/defense bonus is
+ * applied by the combat tail (not here). OS-free 1:1 port on explicit
+ * base (no globals, no exit(), no map/dialog I/O). Returns CIV_OK,
+ * CIV_ERR_NOENT on NULL, CIV_ERR_RANGE on n_units <= 0 or idx OOR. */
+civ_error_t unit_do_fortify(uint8_t *units, int unit_idx, int n_units);
 
 /* Orig Civ_ProcessUnitMoves @ 11f0:0000 order 0x68 case -> Unit_DoSentry
- * (unit_do_sentry). Sentry/1-move?: parks the unit until an enemy enters
+ * (unit_do_sentry). Sentry/1-move: parks the unit until an enemy enters
  * visibility (unit_update_visibility @ 11c0:0395 wakes it) or one move
- * elapses; exact wake predicate TBD. Needs seen-bits + turn-counter
- * state; stub. */
-civ_error_t unit_do_sentry(int civ, int unit_idx);
+ * elapses; Linux port ORs 0x09 (0x08 busy | 0x01 sentry-wait, see AJ3
+ * block above) on +11 and zeroes moves (+3). Exact wake predicate +
+ * 0x08 vs 0x09 split TBD vs decompiler. OS-free 1:1 port on explicit
+ * base, same contract as unit_do_fortify (OK/NOENT/RANGE, no globals,
+ * no exit()). */
+civ_error_t unit_do_sentry(uint8_t *units, int unit_idx, int n_units);
 
 /* Orig Civ_ProcessUnitMoves @ 11f0:0000 orders
  * 0x69/0x6d/0x6f/0x70/0x72/0x75 cases -> Unit_DoMoveAttack variants
@@ -443,7 +489,10 @@ civ_error_t unit_do_sentry(int civ, int unit_idx);
  * exact per-key semantics (road build vs goto vs attack-move) TBD.
  * Single dispatcher takes the order key explicitly; steps via
  * unit_step_toward_goal @ 1128:0000, odds via Combat_ResolveAttack +
- * 11c0:1bc3. Needs map occupancy/ZOC + combat state; stub. */
+ * 11c0:1bc3. Kept stub (AJ3): needs pathing/ZOC/occupancy full Sims
+ * (map_is_occupied @ 1110:18ce / map_is_city_blocked @ 1110:199b /
+ * map_check_zoc @ 11c0:23fd + combat state) -> CIV_ERR_UNSUPPORTED.
+ * TODO Orig per-key handlers. No globals, no exit(). */
 civ_error_t unit_do_move_attack(int civ, int unit_idx, int order);
 
 /* Orig Civ_ProcessUnitMoves @ 11f0:0000 order 0x00 -> unit_order_is_idle.
@@ -485,6 +534,73 @@ civ_error_t unit_notify_wonder(int civ, int wonder);
  * REMOVEFONTRESOURCE for CIV_FONT_FILE) lives in boot_shutdown (see
  * boot.h/boot.c), which delegates to video/map/dialog/audio shutdown.
  * NULL-safe, void, no globals, no exit(). */
+/* --- AI-C unit/city tables (2026-10-15) ---
+ * Unit records (seg 1420): 0x80 units/civ, 0xc bytes each at
+ *   1420:62fc + civ*0x600 + idx*0xc (field labels see header top).
+ * City records: 0x1c bytes at 1420:5500 + idx*0x1c (+0x5500 x,
+ *   +0x5501 y, +0x5502 valid, +0x5503 size/def, +0x5507 owner).
+ * OS-free static-const ports: no globals, no exit(), read-only, explicit
+ * base pointers (no seg globals). No new FUN_* claimed: type codes are
+ * dump-observed values seen around unit_choose_order @ 1078:1480
+ * (0x19/0x1a/0x0e/0x0f); undecoded slots stay "?" (TODO, no fake
+ * Militia/Phalanx/Legion names beyond confirmed). */
+#define CIV_UNIT_TYPE_MAX_CONFIRMED 0x1a
+#define CIV_UNIT_TYPE_EMPTY 0xff
+#define CIV_CITY_REC_LEN 0x1c
+#define CIV_CITY_OFF_X 0
+#define CIV_CITY_OFF_Y 1
+#define CIV_CITY_OFF_VALID 2
+#define CIV_CITY_OFF_SIZE 3
+#define CIV_CITY_OFF_OWNER 7
+
+/* Dump-observed unit type name (Orig unit record +2 type @ 1420:62ff;
+ * 0xff = empty slot). OS-free static const port (implemented): confirmed
+ * subset only -- 0x19 "Diplomat", 0x1a "Settler", 0x0e "Caravan?"
+ * (uncertain, ? suffix), 0x0f "?" (observed but unidentified), 0xff
+ * "empty"; every other code returns "?" (TODO, no fake beyond confirmed).
+ * Returns a read-only literal, never NULL. No globals, no exit(). */
+const char *unit_type_name(int type);
+
+/* Unit type count (Orig type range 0x00..0x1a?). OS-free (implemented):
+ * returns 0x1b (27) = max confirmed index 0x1a + 1. Civ1 is commonly
+ * cited as 28 types (0x00..0x1b); the 28th slot (0x1b) is TBD vs dump,
+ * see TODO on unit_type_name. No globals, no exit(). */
+int unit_type_count(void);
+
+/* City record accessors (Orig 0x1c-byte records at 1420:5500 +
+ * idx*0x1c). OS-free ports (implemented): explicit base ptr + idx, no
+ * globals, read-only. base points at the 1420:5500 image (n_cities
+ * records); idx is the 0-based city index. Returns the byte 0..255 at
+ * the field offset, -1 on NULL base, n_cities <= 0, or idx OOR. */
+/* +0x5500 x (record +0). */
+int city_get_x(const uint8_t *base, int idx, int n_cities);
+/* +0x5501 y (record +1). */
+int city_get_y(const uint8_t *base, int idx, int n_cities);
+/* +0x5502 valid (record +2). */
+int city_get_valid(const uint8_t *base, int idx, int n_cities);
+/* +0x5503 size/def (record +3). */
+int city_get_size(const uint8_t *base, int idx, int n_cities);
+/* +0x5507 owner (record +7). */
+int city_get_owner(const uint8_t *base, int idx, int n_cities);
+
+/* --- AJ3 city body: size bounds (no globals) ---
+ * City size lives at +3 size/def in the 0x1c records (1420:5500 +
+ * idx*0x1c). Byte-storable 0..255; 0 = invalid/empty slot, 255 cannot
+ * grow (overflow). Gameplay cap (aqueduct/sewer/food-box limit,
+ * commonly cited ~30) TBD vs decompiler -- Linux port enforces only
+ * byte bounds + minimum 1, never fabricates gameplay caps. */
+#define CIV_CITY_SIZE_MIN 1
+#define CIV_CITY_SIZE_MAX 0xff
+
+/* Orig city size+1 helper (1420:5500 0x1c stride, +3 size/def) ->
+ * city_grow. OS-free 1:1 port on explicit base (no globals, no exit(),
+ * no map/dialog I/O): increments the size byte at
+ * base + city_idx*0x1c + 3 (read via city_get_size). Bounds 1..255
+ * (see AJ3 block above); gameplay max TBD. Returns CIV_OK,
+ * CIV_ERR_NOENT on NULL, CIV_ERR_RANGE on n_cities <= 0, idx OOR,
+ * or size 0/0xff (invalid/full). */
+civ_error_t city_grow(uint8_t *cities, int city_idx, int n_cities);
+
 void game_shutdown(civ_game_t *g);
 
 #endif /* CIVLIN_GAME_H */

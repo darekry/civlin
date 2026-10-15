@@ -58,6 +58,25 @@
 #define CIV_HOF_DIFFICULTY_MIN 0
 #define CIV_HOF_DIFFICULTY_MAX 4
 
+/* AG3: HoF difficulty + label strings (OS-free static const port,
+ * 2026-10-15; other HoF impls untouched). Difficulty names @ 1420:153e..
+ * 1567 (5 entries, original "Chieftan" typo kept verbatim, never fixed):
+ * 0 " Chieftan ", 1 " Warlord ", 2 " Prince ", 3 "King", 4 "Emperor".
+ * Rating line @ 1420:1572 "CIVILIZATION RATING: " (trailing space kept) +
+ * 1420:159c "The Top Five Cities..." (City_ShowTopFive @ 1080:099b title) +
+ * 1420:1502 "Empty" (HoF_Clear 0xffff slot text in HoF_Show @ 1080:0119).
+ * No SDL, no globals, no exit(), read-only. */
+#define CIV_HOF_DIFF_COUNT 5
+#define CIV_HOF_EMPTY_TEXT "Empty"
+#define CIV_HOF_RATING_LABEL "CIVILIZATION RATING: "
+#define CIV_HOF_TOP_FIVE_TITLE "The Top Five Cities..."
+
+/* Difficulty index -> display name (0..4 via CIV_HOF_DIFFICULTY_MIN/MAX
+ * above; "Chieftan" typo kept verbatim). Returns NULL when difficulty is
+ * out of range. No globals (function-local read-only view), no exit(),
+ * read-only. */
+const char *hof_diff_names(int difficulty);
+
 typedef struct civ_hof_entry {
     int present;      /* 0 = "Empty" (1420:1502), 1 = filled */
     int score;        /* -1 == 0xffff Empty sentinel after HoF_Clear */

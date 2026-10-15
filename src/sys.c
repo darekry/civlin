@@ -248,3 +248,250 @@ size_t file_write_chunk(FILE *fp, const uint8_t *src, size_t len)
         return 0;
     return fwrite(src, 1, len, fp);
 }
+
+int ne_entry_count(const char *path)
+{
+    /* Orig NE entry table (MZ e_lfanew @ 0x3C + NE magic, entry table @
+     * NE+0x04/0x06, bundle walk) (AH2). OS-free file-scan read-only port
+     * (fopen "rb", LE reads, fseek/ftell bounds, no writes, never writes
+     * unpacked/civ.exe or civfonts.fon). No globals, no exit(), C17. */
+    FILE *fp;
+    long fsize;
+    uint8_t mz[64];
+    uint32_t ne_off;
+    uint8_t ne[64];
+    uint16_t ent_rel;
+    uint16_t ent_len;
+    long ent_start;
+    long ent_end;
+    long pos;
+    int total;
+
+    if (!path)
+        return -1;
+    fp = fopen(path, "rb");
+    if (!fp)
+        return -1;
+    if (fseek(fp, 0L, SEEK_END) != 0) {
+        fclose(fp);
+        return -1;
+    }
+    fsize = ftell(fp);
+    if (fsize < 0x40L) {
+        fclose(fp);
+        return -1;
+    }
+    if (fseek(fp, 0L, SEEK_SET) != 0) {
+        fclose(fp);
+        return -1;
+    }
+    if (fread(mz, 1, sizeof(mz), fp) != sizeof(mz)) {
+        fclose(fp);
+        return -1;
+    }
+    if (mz[0] != 0x4Du || mz[1] != 0x5Au) {
+        fclose(fp);
+        return -1;
+    }
+    ne_off = (uint32_t)mz[0x3Cu] | ((uint32_t)mz[0x3Du] << 8) |
+        ((uint32_t)mz[0x3Eu] << 16) | ((uint32_t)mz[0x3Fu] << 24);
+    if ((long)ne_off + 64L > fsize) {
+        fclose(fp);
+        return -1;
+    }
+    if (fseek(fp, (long)ne_off, SEEK_SET) != 0) {
+        fclose(fp);
+        return -1;
+    }
+    if (fread(ne, 1, sizeof(ne), fp) != sizeof(ne)) {
+        fclose(fp);
+        return -1;
+    }
+    if (ne[0] != 0x4Eu || ne[1] != 0x45u) {
+        fclose(fp);
+        return -1;
+    }
+    ent_rel = (uint16_t)((uint16_t)ne[0x04] | ((uint16_t)ne[0x05] << 8));
+    ent_len = (uint16_t)((uint16_t)ne[0x06] | ((uint16_t)ne[0x07] << 8));
+    ent_start = (long)ne_off + (long)ent_rel;
+    ent_end = ent_start + (long)ent_len;
+    if (ent_start > ent_end || ent_end > fsize) {
+        fclose(fp);
+        return -1;
+    }
+    total = 0;
+    pos = ent_start;
+    for (;;) {
+        uint8_t hdr[2];
+        uint8_t cnt;
+        uint8_t seg;
+        long esz;
+        long need;
+
+        if (pos + 2L > ent_end) {
+            fclose(fp);
+            return -1;
+        }
+        if (fseek(fp, pos, SEEK_SET) != 0) {
+            fclose(fp);
+            return -1;
+        }
+        if (fread(hdr, 1, sizeof(hdr), fp) != sizeof(hdr)) {
+            fclose(fp);
+            return -1;
+        }
+        cnt = hdr[0];
+        seg = hdr[1];
+        if (cnt == 0u)
+            break;
+        esz = (seg == 0xFFu) ? 6L : 3L;
+        need = 2L + (long)cnt * esz;
+        if (pos + need > ent_end) {
+            fclose(fp);
+            return -1;
+        }
+        if (total > 32767 - (int)cnt) {
+            fclose(fp);
+            return -1;
+        }
+        total += (int)cnt;
+        pos += need;
+    }
+    fclose(fp);
+    return total;
+}
+
+int ne_entry_addr(const char *path, int index,
+                  uint16_t *seg_out, uint16_t *off_out)
+{
+    /* Orig NE entry table (same MZ e_lfanew @ 0x3C / NE magic / bundle
+     * anchors as ne_entry_count) (AH2). OS-free file-scan read-only port
+     * (same fopen "rb" + LE reads, no writes). 0-based index -> seg:off;
+     * fixed seg = bundle seg, moveable 0xFF seg = byte 3. No globals,
+     * no exit(), C17, read-only; outs untouched on error/OOR. */
+    FILE *fp;
+    long fsize;
+    uint8_t mz[64];
+    uint32_t ne_off;
+    uint8_t ne[64];
+    uint16_t ent_rel;
+    uint16_t ent_len;
+    long ent_start;
+    long ent_end;
+    long pos;
+    int cur;
+
+    if (!path || !seg_out || !off_out || index < 0)
+        return -1;
+    fp = fopen(path, "rb");
+    if (!fp)
+        return -1;
+    if (fseek(fp, 0L, SEEK_END) != 0) {
+        fclose(fp);
+        return -1;
+    }
+    fsize = ftell(fp);
+    if (fsize < 0x40L) {
+        fclose(fp);
+        return -1;
+    }
+    if (fseek(fp, 0L, SEEK_SET) != 0) {
+        fclose(fp);
+        return -1;
+    }
+    if (fread(mz, 1, sizeof(mz), fp) != sizeof(mz)) {
+        fclose(fp);
+        return -1;
+    }
+    if (mz[0] != 0x4Du || mz[1] != 0x5Au) {
+        fclose(fp);
+        return -1;
+    }
+    ne_off = (uint32_t)mz[0x3Cu] | ((uint32_t)mz[0x3Du] << 8) |
+        ((uint32_t)mz[0x3Eu] << 16) | ((uint32_t)mz[0x3Fu] << 24);
+    if ((long)ne_off + 64L > fsize) {
+        fclose(fp);
+        return -1;
+    }
+    if (fseek(fp, (long)ne_off, SEEK_SET) != 0) {
+        fclose(fp);
+        return -1;
+    }
+    if (fread(ne, 1, sizeof(ne), fp) != sizeof(ne)) {
+        fclose(fp);
+        return -1;
+    }
+    if (ne[0] != 0x4Eu || ne[1] != 0x45u) {
+        fclose(fp);
+        return -1;
+    }
+    ent_rel = (uint16_t)((uint16_t)ne[0x04] | ((uint16_t)ne[0x05] << 8));
+    ent_len = (uint16_t)((uint16_t)ne[0x06] | ((uint16_t)ne[0x07] << 8));
+    ent_start = (long)ne_off + (long)ent_rel;
+    ent_end = ent_start + (long)ent_len;
+    if (ent_start > ent_end || ent_end > fsize) {
+        fclose(fp);
+        return -1;
+    }
+    cur = 0;
+    pos = ent_start;
+    for (;;) {
+        uint8_t hdr[2];
+        uint8_t cnt;
+        uint8_t seg;
+        long esz;
+        long need;
+
+        if (pos + 2L > ent_end) {
+            fclose(fp);
+            return -1;
+        }
+        if (fseek(fp, pos, SEEK_SET) != 0) {
+            fclose(fp);
+            return -1;
+        }
+        if (fread(hdr, 1, sizeof(hdr), fp) != sizeof(hdr)) {
+            fclose(fp);
+            return -1;
+        }
+        cnt = hdr[0];
+        seg = hdr[1];
+        if (cnt == 0u)
+            break;
+        esz = (seg == 0xFFu) ? 6L : 3L;
+        need = 2L + (long)cnt * esz;
+        if (pos + need > ent_end) {
+            fclose(fp);
+            return -1;
+        }
+        if (index < cur + (int)cnt) {
+            int ei = index - cur;
+            long epos = pos + 2L + (long)ei * esz;
+            uint8_t eb[6];
+
+            if (fseek(fp, epos, SEEK_SET) != 0) {
+                fclose(fp);
+                return -1;
+            }
+            if (fread(eb, 1, (size_t)esz, fp) != (size_t)esz) {
+                fclose(fp);
+                return -1;
+            }
+            if (seg == 0xFFu) {
+                *seg_out = (uint16_t)eb[3];
+                *off_out = (uint16_t)((uint16_t)eb[4] |
+                    ((uint16_t)eb[5] << 8));
+            } else {
+                *seg_out = (uint16_t)seg;
+                *off_out = (uint16_t)((uint16_t)eb[1] |
+                    ((uint16_t)eb[2] << 8));
+            }
+            fclose(fp);
+            return 0;
+        }
+        cur += (int)cnt;
+        pos += need;
+    }
+    fclose(fp);
+    return -1;
+}

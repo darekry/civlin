@@ -219,6 +219,61 @@ const char *sound_map_id_to_wav(int file_id)
     return NULL;
 }
 
+int audio_gap_is_silent(int file_id)
+{
+    /* AF2/AG3 doc: OS-free port of the Sound_MapIdToWav @ 1150:019e
+     * table-default @ 1150:025b branch (jump table @ 1150:0266, 41 entries
+     * 0x83..0xAB inclusive, 0xAB-0x83+1 = 41; names @ 1420:3080..315a).
+     * Silent gaps (no file, playback skipped): 0x84, 0x93..0xA1, 0xA4,
+     * 0xA9, plus any out-of-range file_id. No SDL (map check only), no
+     * globals, no exit(), read-only. Parity: delegates to
+     * sound_map_id_to_wav above so audio_play_id @ 1150:00c9 gate +
+     * sound_map_id_to_wav stay untouched (doc only, no impl change). */
+    return sound_map_id_to_wav(file_id) == NULL ? 1 : 0;
+}
+
+int audio_leader_count(void)
+{
+    /* AH3 count helper (see audio.h): leader slice of Sound_MapIdToWav @
+     * 1150:019e (jump table @ 1150:0266, names @ 1420:3080..315a):
+     * 14 entries for file IDs 0x85..0x92. No SDL, no globals, no exit(),
+     * read-only. Play impls untouched; gaps stay silent via
+     * audio_gap_is_silent above. */
+    return CIV_AUDIO_LEADER_COUNT;
+}
+
+const char *audio_leader_names(int index)
+{
+    /* AH3 at helper: OS-free static const 14-entry port of the leader
+     * slice (file_id 0x85 + index -> WAV name, exactly as in
+     * sound_map_id_to_wav above: 0 LINC.wav @ 0x85 .. 13 FRED.wav @
+     * 0x92; full-map context 0x83 OPENING + 0xA2 WINTUNE etc. lives in
+     * sound_map_id_to_wav). No globals (function-local read-only view),
+     * no exit(), read-only. Parity: delegates to nothing (table mirrors
+     * the map; audio_gap_is_silent + audio_play_id @ 1150:00c9 stay
+     * untouched, doc only). */
+    static const char *const names[CIV_AUDIO_LEADER_COUNT] = {
+        "LINC.wav",
+        "MONT.wav",
+        "RAMS.wav",
+        "SHAK.wav",
+        "NAPO.wav",
+        "CEAS.wav",
+        "STAL.wav",
+        "ALEX.wav",
+        "ELIZ.wav",
+        "HAMA.wav",
+        "MAO.wav",
+        "GENG.wav",
+        "GAND.wav",
+        "FRED.wav"
+    };
+
+    if (index < 0 || index >= CIV_AUDIO_LEADER_COUNT)
+        return NULL;
+    return names[index];
+}
+
 civ_error_t audio_play_id(int id)
 {
     const char *wav;

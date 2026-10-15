@@ -396,3 +396,27 @@ civ_error_t mainport_apply_palette(int first, int count)
     (void)count;
     return CIV_ERR_UNSUPPORTED;
 }
+
+/* AI-C tile table: dump-confirmed subset only (see map.h). Index
+ * 0..CIV_TILE_TYPE_MAX; unlisted slots are NULL -> "?" (no fake names).
+ * NOTE: ocean is decimal 10 (0x0A, see Map_IsSeaLand @ 1110:16c0); 0x10
+ * (16) is undecoded -> "?". */
+static const char *const s_tile_type_names[CIV_TILE_TYPE_MAX + 1] = {
+    [0] = "cleared",
+    [1] = "land",
+    [2] = "land",
+    [10] = "ocean",
+    [0x0b] = "land",
+    [0x0c] = "river seed",
+    [0x0f] = "border",
+};
+
+const char *tile_type_name(int tile)
+{
+    const char *s;
+
+    if (tile < 0 || tile > CIV_TILE_TYPE_MAX)
+        return "?";
+    s = s_tile_type_names[tile];
+    return s != NULL ? s : "?";
+}
