@@ -488,13 +488,17 @@ int anim_advance_frames(void)
      * with GfxPort_SetActive/PresentRect @ 10d0:0956/0854 + palette via
      * Palette_AnimateRange @ 1098:201d/1090:0376 + sound via
      * Sound_PlayId @ 1150:00c9 + frames via Art_LoadFrameData @
-     * 10b8:079d; per-tick ctx @ 1420:1f40 stays caller-side). Stub
-     * reports done so future wait-loops terminate. */
+     * 10b8:079d; per-tick ctx @ 1420:1f40 stays caller-side; cases
+     * 11/14 step on the (tick-start)%len == 0 gate via anim_tick_is_due,
+     * frame counters via anim_slot_frame_at/should_step/is_finished/
+     * play_frame + timeline count via anim_seq_count_frames/resolve_count
+     * wired above). Stub reports done so future wait-loops terminate. */
     static const int sample_ops[] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
         12, 13, 14 };
     size_t i;
 
-    /* Opcode-valid: full 1..0xe table valid, 0/0xf invalid. */
+    /* Opcode-valid: full 1..0xe table valid, 0/0xf invalid. 1:1 ref
+     * unpacked/civ.exe (NE LE, no copy): timed switch covers 1..0xe. */
     for (i = 0; i < sizeof(sample_ops) / sizeof(sample_ops[0]); i++) {
         if (anim_opcode_is_valid(sample_ops[i]) != 1)
             return 1;
@@ -580,6 +584,41 @@ int anim_advance_frames(void)
         return 1;
     if (anim_tick_is_due(0L, 0L, 8) != 1 || anim_tick_is_due(0L, 1L, 8) != 0)
         return 1;
+    /* Timed 11/14 gates: scroll 11 + rotate 14 step only when
+     * (tick-start)%len == 0 via anim_tick_is_due (mono caller-side). */
+    if (anim_opcode_is_scroll(11) != 1 || anim_opcode_is_scroll(7) != 0)
+        return 1;
+    if (anim_opcode_needs_animate(14) != 1)
+        return 1;
+    if (anim_tick_is_due(10L, 10L, 4) != 1 || anim_tick_is_due(10L, 11L, 4) != 0)
+        return 1;
+    if (anim_tick_is_due(10L, 14L, 4) != 1)
+        return 1;
+    /* Frame counters + resolve count (open-sequence halves, 1:1). */
+    {
+        static const int sample_timeline[] = { 11, 14, 7, 0 };
+        int counted = anim_seq_count_frames(sample_timeline, 4u);
+        int resolved;
+
+        if (counted != 3)
+            return 1;
+        resolved = anim_seq_resolve_count(0, counted);
+        if (resolved != counted)
+            return 1;
+        if (anim_seq_resolve_count(5, counted) != 5)
+            return 1;
+        if (anim_slot_frame_at(100L, 108L, 8) != 1L)
+            return 1;
+        if (anim_slot_should_step(100L, 8, 1, 108L) != 1 ||
+            anim_slot_should_step(100L, 8, 2, 108L) != 0)
+            return 1;
+        if (anim_slot_is_finished(5L, 4) != 1 ||
+            anim_slot_is_finished(4L, 4) != 0)
+            return 1;
+        if (anim_slot_play_frame(3, 2L, 4) != 2L ||
+            anim_slot_play_frame(4, 2L, 4) != 2L)
+            return 1;
+    }
     return 1;
 }
 
@@ -684,27 +723,62 @@ void anim_close_sequence(void)
 {
     /* Orig: FUN_10b0_0287 @ 10b0:0287 -> Anim_CloseSequence (decompiled
      * this pass: per-rec free of opcode 3/4 slots via Anim_FreeSlot @
-     * 10a8:00b4 + opcode 7 via GfxPort_Close + Mem_DisposePtr, then
+     * 10a8:00b4 + opcodes 12/13 via Anim_FreeDissolve @ 10b0:172d +
+     * opcode 7 via GfxPort_Close + Mem_DisposePtr, then
      * GfxPort_ClearActive/Close x2 at +0x24/+0x62 + GLOBALFREE palette
      * when DAT_12d8_28fc == 0 + Mem_DisposePtr ctx + DAT_1420_1f40 = 0;
      * callers Main_RunStartupSequence @ 11e0:0000 + MainMenu_WndProc @
-     * 11e0:0221). OS-free free-phase gates below are LIVE 1:1 probes
-     * (no Win16, no globals, read-only); the handle teardown tail stays
-     * STUB. Intentionally void (orig void).
+     * 11e0:0221). OS-free gates below are LIVE 1:1 probes (no Win16, no
+     * globals, read-only): GfxPort pair via anim_seq_port_count/off (x2
+     * at +9/+0x62 from Anim_OpenSequence @ 10b0:008a) + per-rec free via
+     * anim_slot_should_free (Anim_FreeSlot @ 10a8:00b4 FINISH-gate) +
+     * anim_dissolve_should_free (Anim_FreeDissolve @ 10b0:172d
+     * FINISH-gate); the handle teardown tail stays STUB. Intentionally
+     * void (orig void). Refs verified read-only: strings unpacked/civ.exe
+     * ("OPENING.wav", "RanDoMRadio"/"RanDoMStatic"/"RanDoMUser").
      * TODO: per-rec Anim_FreeSlot @ 10a8:00b4 (slots 3/4 via
-     * anim_slot_phase FINISH above) + dissolve free via Anim_FreeDissolve
-     * @ 10b0:172d (opcodes 12/13 via anim_dissolve_phase FINISH) +
-     * GfxPort_ClearActive/Close x2 + GLOBALFREE/Mem_DisposePtr +
-     * DAT_1420_1f40 = 0 -> SDL3 bridge TBD. */
+     * anim_slot_should_free FINISH above) + dissolve free via
+     * Anim_FreeDissolve @ 10b0:172d (opcodes 12/13 via
+     * anim_dissolve_should_free FINISH above) + GfxPort_ClearActive/Close
+     * x2 (pair slots anim_seq_port_off above) + GLOBALFREE/Mem_DisposePtr
+     * + DAT_1420_1f40 = 0 -> SDL3 bridge TBD (GfxPort_Create @ 10d0:0000
+     * owner in video.h). */
+    int ports;
+    int off0;
+    int off1;
+    int off_bad0;
+    int off_bad1;
+    int slot_ph;
+    int diz_ph;
     int slot_free;
+    int slot_busy;
     int diz_free;
+    int diz_step;
     anim_seq_phase_t closed;
 
-    slot_free = anim_slot_phase(0L, 1L, 1L, 1);
-    diz_free = anim_dissolve_phase(0L, 1L, 1L, 1);
+    ports = anim_seq_port_count();
+    off0 = anim_seq_port_off(0);
+    off1 = anim_seq_port_off(1);
+    off_bad0 = anim_seq_port_off(-1);
+    off_bad1 = anim_seq_port_off(2);
+    slot_ph = anim_slot_phase(0L, 1L, 1L, 1);
+    diz_ph = anim_dissolve_phase(0L, 1L, 1L, 1);
+    slot_free = anim_slot_should_free(0L, 1L, 1L, 1);
+    slot_busy = anim_slot_should_free(0L, 1L, 0L, 1);
+    diz_free = anim_dissolve_should_free(0L, 1L, 1L, 1);
+    diz_step = anim_dissolve_should_free(0L, 1L, 0L, 1);
     closed = anim_seq_phase_step(ANIM_SEQ_DONE, 0, 0, 0, 1);
+    (void)ports;
+    (void)off0;
+    (void)off1;
+    (void)off_bad0;
+    (void)off_bad1;
+    (void)slot_ph;
+    (void)diz_ph;
     (void)slot_free;
+    (void)slot_busy;
     (void)diz_free;
+    (void)diz_step;
     (void)closed;
 }
 
@@ -3002,6 +3076,21 @@ int anim_slot_phase(long start, long end, long cur, int has_slot)
     return ANIM_SLOTPH_NONE;
 }
 
+int anim_slot_should_free(long start, long end, long cur, int has_slot)
+{
+    /* Orig Anim_FreeSlot @ 10a8:00b4 free gate (slots 3/4 tail in
+     * Anim_CloseSequence @ 10b0:0287 + end-tick in Anim_AdvanceFrames @
+     * 10b0:0461 cases 3/4: GLOBALFREE + Mem_DisposePtr @ 1100:060b under
+     * the DAT_1420_17a6 gate, handle storage stays caller-side). OS-free
+     * 1:1: free exactly when anim_slot_phase above is FINISH (ALLOC wins
+     * ties, so start == end == cur with a slot still allocates first).
+     * Refs verified read-only: strings unpacked/civ.exe ("OPENING.wav",
+     * "RanDoMRadio"/"RanDoMStatic"/"RanDoMUser"). No Win16, no globals. */
+    return (anim_slot_phase(start, end, cur, has_slot) == ANIM_SLOTPH_FINISH)
+        ? 1
+        : 0;
+}
+
 int anim_caption_phase(long start, long end, long cur, int flags)
 {
     /* Orig Anim_AdvanceFrames @ 10b0:0461 case 7 (decompiled 2026-10-16:
@@ -3046,6 +3135,21 @@ int anim_dissolve_phase(long start, long end, long cur, int mono)
     if (end == cur)
         return ANIM_DIZPH_FINISH;
     return ANIM_DIZPH_STEP;
+}
+
+int anim_dissolve_should_free(long start, long end, long cur, int mono)
+{
+    /* Orig Anim_FreeDissolve @ 10b0:172d free gate (opcodes 12/13 tail in
+     * Anim_CloseSequence @ 10b0:0287 + end-tick in Anim_AdvanceFrames @
+     * 10b0:0461 cases 12/13: Mem_DisposePtr of the 0x79c ctx + zero
+     * [13]/[14], ctx storage stays caller-side). OS-free 1:1: free exactly
+     * when anim_dissolve_phase above is FINISH (SETUP wins ties, so
+     * start == end == cur in color mode still sets up first).
+     * Refs verified read-only: strings unpacked/civ.exe ("OPENING.wav",
+     * "RanDoMRadio"/"RanDoMStatic"/"RanDoMUser"). No Win16, no globals. */
+    return (anim_dissolve_phase(start, end, cur, mono) == ANIM_DIZPH_FINISH)
+        ? 1
+        : 0;
 }
 
 /* --- Chain 2026-10-16 (25): MenuZ modes + tracked IDs (goal 4). ---

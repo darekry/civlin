@@ -156,8 +156,18 @@ civ_error_t gfx_port_alloc_bitmap(SDL_Renderer *ren, int w, int h,
 civ_error_t gfx_port_create(SDL_Renderer *ren, int w, int h, gfx_port_t **out);
 
 /* Orig: FUN_10d0_0956 @ 10d0:0956 -> gfx_port_set_active (GfxPort_SetActive).
- * Selects the drawing port/DC for subsequent GDI calls; SDL3 equivalent is
- * an SDL render-target select. NULL port reports NOENT. */
+ * LIVE SDL render-target bridge (see video.c): Gfx_SetCurrentDC(port+0x16)
+ * + 17cc = port always + 17ae = port unless the 12d8:44ff+0x43 dialog port
+ * (slots caller-side via gfx_port_clear_active, LIVE) maps to
+ * SDL_SetRenderTarget(port ren, port tex) onto the INDEX8 TARGET backing
+ * store from gfx_port_alloc_bitmap @ 10d0:0cfa (same 0xcc0020 SRCCOPY family
+ * as PresentRect @ 10d0:0854 / Blit @ 10d0:08f1). gfx_port_create @
+ * 10d0:0000 wires ren/tex, so NULL ren/tex is a corrupt port (BAD_DATA,
+ * consistent with present_rect), not a stub. Backs the Anim_OpenSequence @
+ * 10b0:008a GfxPort x2 pair + WdwMap_Open @ 1208:0af1 / WdwSmMap_Open @
+ * 1210:025b / WdwStatus_Open @ 1218:0386 views in boot_open_windows.
+ * NULL port -> NOENT; SDL target-set fail -> IO. Ref unpacked/civ.exe
+ * read-only (anchor 10d0:0956). */
 civ_error_t gfx_port_set_active(gfx_port_t *port);
 
 /* Orig: FUN_10d0_0854 @ 10d0:0854 -> gfx_port_present_rect
@@ -189,7 +199,7 @@ civ_error_t gfx_port_present_rect(gfx_port_t *port, SDL_Renderer *ren,
                                   const SDL_Rect *rect);
 
 /* Orig: FUN_10d0_08f1 @ 10d0:08f1 -> gfx_port_blit (GfxPort_Blit).
- * Ported via SDL_SetRenderTarget round-trip on the minimal gfx_port_t
+ * LIVE via SDL_SetRenderTarget round-trip on the minimal gfx_port_t
  * (see video.c: tex/w/h + borrowed ren as the DC placeholder + clip +
  * palette placeholders covering the ~0x20-word Orig struct): save
  * SDL_GetRenderTarget, SDL_SetRenderTarget(dst tex),
@@ -198,13 +208,16 @@ civ_error_t gfx_port_present_rect(gfx_port_t *port, SDL_Renderer *ren,
  * VALIDATERECT is a no-op on SDL3. AD2 (doc only, no impl change):
  * blitted frames reach here only after the gfx_rle_expand_best
  * dispatcher (RLL/INV/LZSS/RAW0/2/4/8 + fail log via
- * gfx_rle_expand_best_ex, see gfx_indexed.h). Exact Orig field map still
- * TBD (src/dst HDC + HBITMAP via 10d0:0cfa + clip-region words), so ports
- * without a borrowed ren (both ren NULL: GfxPort_Create @ 10d0:0000 /
- * CreateCompatible still stubbed) report UNSUPPORTED. Error mapping:
- * NULL ports -> NOENT (NULL src_rect = whole source, kept); missing
- * backing tex -> BAD_DATA; src_rect w/h <= 0 -> RANGE; SDL target-set /
- * RenderTexture / target-restore fail -> IO. */
+ * gfx_rle_expand_best_ex, see gfx_indexed.h). gfx_port_create @ 10d0:0000 /
+ * gfx_port_create_compatible wire ren (GETDC/CREATECOMPATIBLEDC borrow) +
+ * tex via AllocBitmap @ 10d0:0cfa, so missing ren/tex is a corrupt port
+ * (BAD_DATA), not a stub — no fake renderer guessed. Backs the
+ * Anim_OpenSequence @ 10b0:008a GfxPort x2 pair + WdwMap_Open @ 1208:0af1 /
+ * WdwSmMap_Open @ 1210:025b / WdwStatus_Open @ 1218:0386 views in
+ * boot_open_windows. Error mapping: NULL ports -> NOENT (NULL src_rect =
+ * whole source, kept); missing backing tex/ren -> BAD_DATA; src_rect w/h
+ * <= 0 -> RANGE; SDL target-set / RenderTexture / target-restore fail ->
+ * IO. Ref unpacked/civ.exe read-only (anchor 10d0:08f1). */
 civ_error_t gfx_port_blit(gfx_port_t *dst, const gfx_port_t *src,
                           const SDL_Rect *src_rect, int dst_x, int dst_y);
 
@@ -395,8 +408,34 @@ int art_progress_fill_x(int bar_w, int done, int total);
  * (GLOBALALLOC/LOCK + ResMgr/palette/LZW decode + GfxPort_Create @
  * 10d0:0000 + BITBLT 0xcc0020 present). SDL3 indexed-texture bridge
  * TBD (see gfx_port_load_rsc_frame above + gfx_lzw_decode in
- * gfx_indexed.h for the LZW core). */
+ * gfx_indexed.h for the LZW core). Startup bridge (Main_RunStartupSequence
+ * @ 11e0:0000, see boot.h/boot.c): the 0x94 intro host backing store is the
+ * 0x200x0x140 preset (gfx_startup_port_size_ok below) for the GfxPort_Create
+ * @ 10d0:0000 x2 pair (anim_seq_port_count/off in dialog.h); the frame id
+ * gate is art_frame_id_ok below (exact intro frame id TBD from the dump).
+ * Ref unpacked/civ.exe (read-only): "RanDoMRadio"/"RanDoMStatic" host
+ * strings + "OPENING" sound reach this path. */
 civ_error_t art_load_frame(int frame_id, gfx_port_t **out);
+
+/* Orig Art_LoadFrameData @ 10b8:079d frame-id gate -> art_frame_id_ok.
+ * OS-free 1:1: 1 when frame_id >= 0 (disk via Art_LoadDiskFile @ 10b8:0aa8
+ * else RSC via Art_LoadResPaletted @ 10b8:11bc both take non-negative ids;
+ * negative ids fault in orig), 0 otherwise. Exact intro frame id for the
+ * Main_RunStartupSequence @ 11e0:0000 host TBD from the dump (bridge probe
+ * uses 0; EARTH preset 0x89 is the documented sibling, see worldgen.h), so
+ * this stays a range gate, never a table. No globals, no exit(). */
+int art_frame_id_ok(int frame_id);
+
+/* Orig GfxPort_Create @ 10d0:0000 x2 backing size for the 0x94 intro host
+ * (Main_RunStartupSequence @ 11e0:0000 via Anim_OpenSequence @ 10b8:008a
+ * ctx offs +9/+0x62, see anim_seq_port_count/off in dialog.h) ->
+ * gfx_startup_port_size_ok. OS-free 1:1: 1 when w == 0x200 && h == 0x140
+ * (the Dlg_CreateTracked @ 1098:124f preset = CIV_DLG_PRESET_W/H via
+ * dlg_preset_w/h in dialog.h; pitch ((w+1)/2*2) via gfx_port_bitmap_pitch
+ * stays 0x200), 0 otherwise. Actual SDL_Texture pair needs a borrowed
+ * renderer (see gfx_port_create / boot_open_windows) -> size gate only.
+ * No globals, no exit(). */
+int gfx_startup_port_size_ok(int w, int h);
 
 /* Orig: FUN_1008_0329 @ 1008:0329 WinMain_Shutdown video-only tail ->
  * video_shutdown_display. DESTROYWINDOW for the display ports/windows

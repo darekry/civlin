@@ -172,6 +172,17 @@ civ_error_t mainmenu_run(civ_mainmenu_choice_t *out)
     return CIV_ERR_UNSUPPORTED;
 }
 
+int mainmenu_choice_is_valid(int choice)
+{
+    /* Orig MainMenu_WndProc @ 11e0:0221 dispatch gate over the MenuZ
+     * items (CIV_MAINMENU_TEXT @ 1420:435b, ref unpacked/civ.exe file
+     * offset 0xbb35b, 6 items): 0..5 dispatch (0/2 NewGame_Wizard TBD,
+     * 1 save_prompt_open @ 1130:000e, 3 FUN_1108_0243 earth, 4 HoF,
+     * 5 WinMain_Shutdown @ 1008:0329); CIV_MENU_NONE (-1, cancel/back
+     * DAT_1418_0004) and OOR re-prompt via mainmenu_should_loop. */
+    return (choice >= 0 && choice <= 5) ? 1 : 0;
+}
+
 int mainmenu_item_count(void)
 {
     /* Orig packet-N split @ 11e0:0221 / 1420:435b (see mainmenu.h), same
@@ -179,10 +190,12 @@ int mainmenu_item_count(void)
      * (empty) title, each later '_'/'\0' closes one item. Shipped text
      * (verified at unpacked/civ.exe offset 0xbb35b) has 6 items, so
      * count = separators after the leading one + 1 (the '\0'-closed
-     * tail, e.g. Quit). */
+     * tail, e.g. Quit), capped at CIV_SPLIT_MAX 0x18 like
+     * dialog_split_menu_count (orig early return 0x18). */
     const char *t = CIV_MAINMENU_TEXT;
     int n = 0;
     int i = 0;
+    int total = 0;
 
     if (t[0] == '\0')
         return 0;
@@ -190,7 +203,10 @@ int mainmenu_item_count(void)
         if (t[i] == '_' && i > 0)
             n++;
     }
-    return n + 1;
+    total = n + 1;
+    if (total > CIV_SPLIT_MAX)
+        return CIV_SPLIT_MAX;
+    return total;
 }
 
 civ_error_t mainmenu_item_at(int index, char *out, size_t cap)
@@ -234,24 +250,32 @@ civ_error_t mainmenu_dispatch(civ_mainmenu_choice_t choice)
 {
     civ_save_dialog_t dlg;
 
+    /* OS-free 1:1 gate (LIVE): non-dispatchable values never reach the
+     * Win16 tails (orig re-prompts via the choice < 0 || choice > 3 loop
+     * + DAT_1418_0004 cancel/back; see mainmenu_should_loop). */
+    if (!mainmenu_choice_is_valid((int)choice))
+        return CIV_ERR_NOENT;
     switch (choice) {
     case CIV_MENU_LOAD:
-        /* TODO: save_prompt_open @ 1130:000e; -1 -> choice stays invalid. */
+        /* TODO: Orig save_prompt_open @ 1130:000e full modal (save_prompt
+         * SDL bridge TBD); -1 -> choice stays invalid. */
         return save_prompt_open(&dlg);
     case CIV_MENU_EARTH:
         /* Orig FUN_1108_0243 @ 1108:0243 -> worldgen_load_earth (see
          * worldgen.h WorldGen_LoadEarth); nonzero -> invalid choice. */
         return worldgen_load_earth();
     case CIV_MENU_HALL:
-        /* TODO: HoF_Load @ 1080:0023 + HoF_Show @ 1080:0119. */
+        /* TODO: Orig HoF_Load @ 1080:0023 + HoF_Show @ 1080:0119 SDL
+         * modal bridge TBD. */
         return CIV_ERR_UNSUPPORTED;
     case CIV_MENU_QUIT:
-        /* TODO: WinMain_Shutdown @ 1008:0329. Caller exits its loop. */
+        /* TODO: Orig WinMain_Shutdown @ 1008:0329. Caller exits its loop. */
         return CIV_ERR_UNSUPPORTED;
     default:
         break;
     }
-    /* TODO: choices 0/2 -> NewGame_Wizard paths. */
+    /* TODO: Orig NewGame_Wizard @ 10e8:0000 paths for choices 0/2 (SDL
+     * wizard bridge TBD, see newgame.h newgame_wizard_run). */
     return CIV_ERR_UNSUPPORTED;
 }
 

@@ -630,8 +630,8 @@ civ_error_t help_open_topic(const char *topic);
  *   (GR port layer, see video.h). Returns nonzero when the sequence is
  *   finished. Full script engine -> SDL TBD; PARTIAL dispatcher
  *   (OS-free opcode 1..0xe/tick/ret/slot/caption/dissolve/present/
- *   animate/sound gates wired, reports done until the Win16 ctx bridge
- *   lands).
+ *   animate/sound + 11/14 via tick_is_due + frame counters/resolve count
+ *   gates wired, reports done until the Win16 ctx bridge lands).
  * Orig: FUN_10b0_008a @ 10b0:008a -> Anim_OpenSequence. mem_alloc_lock
  *   0xa6 ctx + GETCLIENTRECT + Sys_GetTickScaled @ 1100:02e1 base +
  *   max-end scan + GfxPort_Create x2 (offs +9/+0x62) + FUN_1000_14f8 /
@@ -640,10 +640,13 @@ civ_error_t help_open_topic(const char *topic);
  *   period/pump/opcode-tails/slot/dissolve/rebase gates wired,
  *   alloc/port tails CIV_ERR_UNSUPPORTED; halves LIVE below).
  * Orig: FUN_10b0_0287 @ 10b0:0287 -> Anim_CloseSequence. Frees slots
- *   3/4 via Anim_FreeSlot @ 10a8:00b4 + slot 7 via GfxPort_Close +
- *   both ports + GLOBALFREE + Mem_DisposePtr + 1420:1f40 = 0. Win16 ->
- *   SDL TBD; void NOOP with LIVE free-phase probes (handle teardown
- *   TODO in dialog.c).
+ *   3/4 via Anim_FreeSlot @ 10a8:00b4 + dissolve 12/13 via
+ *   Anim_FreeDissolve @ 10b0:172d + slot 7 via GfxPort_Close + both
+ *   ports (GfxPort_Create x2 offs +9/+0x62 pair, see anim_seq_port_count/
+ *   off LIVE below) + GLOBALFREE + Mem_DisposePtr + 1420:1f40 = 0.
+ *   Win16 -> SDL TBD; void NOOP with LIVE port-pair + FINISH free-phase
+ *   probes (anim_slot_should_free / anim_dissolve_should_free); handle
+ *   teardown TODO in dialog.c.
  * Orig: FUN_10b0_0026 @ 10b0:0026 -> Anim_IsActive. Returns
  *   DAT_1420_1f40 (nonzero = sequence active, pumped by
  *   Anim_PumpIfActive). OS-free gate LIVE below. */
@@ -2008,6 +2011,13 @@ civ_error_t anim_pal_copy(uint8_t *dst, size_t dst_cap, int dst_off,
 #define ANIM_SLOTPH_FINISH 3
 int anim_slot_phase(long start, long end, long cur, int has_slot);
 
+/* Orig Anim_FreeSlot @ 10a8:00b4 free gate (slots 3/4 tail in
+ * Anim_CloseSequence @ 10b0:0287 + end-tick in Anim_AdvanceFrames @
+ * 10b0:0461 cases 3/4) -> anim_slot_should_free. 1:1 nonzero (1) when
+ * anim_slot_phase above is ANIM_SLOTPH_FINISH (end == cur && slot, with
+ * start == cur ALLOC winning ties), 0 otherwise. No Win16, no globals. */
+int anim_slot_should_free(long start, long end, long cur, int has_slot);
+
 /* Orig case 7 caption flag bits (0x100 = palette apply on start-tick,
  * 0x200 = alt-port palette path, 0x400 = force draw every tick, 0x800 =
  * alt-palette copy path). */
@@ -2044,6 +2054,14 @@ int anim_caption_is_custom(int is_magic);
 #define ANIM_DIZPH_SETUP 1
 #define ANIM_DIZPH_FINISH 2
 int anim_dissolve_phase(long start, long end, long cur, int mono);
+
+/* Orig Anim_FreeDissolve @ 10b0:172d free gate (opcodes 12/13 tail in
+ * Anim_CloseSequence @ 10b0:0287 + end-tick in Anim_AdvanceFrames @
+ * 10b0:0461 cases 12/13) -> anim_dissolve_should_free. 1:1 nonzero (1)
+ * when anim_dissolve_phase above is ANIM_DIZPH_FINISH (end == cur, with
+ * mono == 0 && start == cur SETUP winning ties), 0 otherwise. No Win16,
+ * no globals. */
+int anim_dissolve_should_free(long start, long end, long cur, int mono);
 
 /* --- Chain 2026-10-16 (25): MenuZ modes + tracked IDs (task goal 4) ---
  * Orig Dialog_MenuZ_Modal @ 1220:0156 (civ.exe, x86:LE:16:Protected Mode),

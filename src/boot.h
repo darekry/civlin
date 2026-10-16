@@ -741,8 +741,13 @@ civ_error_t art_maybe_convert_artwork(void);
  * 10b0:0461 loop over the 0x94 procedural host (preset 0x200x0x140, see
  * main_startup_intro_proc_w/h + procedural_ready below); OS-free
  * ID/count/tick halves are LIVE 1:1 (ref unpacked/civ.exe @ 11e0:0000).
- * SDL modal/event bridge TBD -> overall PARTIAL CIV_ERR_UNSUPPORTED,
- * never fake CIV_OK. No globals, no exit(), read-only. */
+ * Startup bridge (see boot.c): Dlg_CreateTracked @ 1098:124f (0x94,0x41) /
+ * Dlg_DestroyTracked @ 1098:1612 host + GfxPort_Create @ 10d0:0000 x2 pair
+ * geometry (anim_seq_port_count/off + gfx_startup_port_size_ok/pitch, see
+ * video.h) + Art_LoadFrameData @ 10b8:079d gate (art_frame_id_ok +
+ * art_load_frame probe, see video.h); device tails STUB. SDL modal/event
+ * bridge TBD -> overall PARTIAL CIV_ERR_UNSUPPORTED, never fake CIV_OK.
+ * No globals, no exit(), read-only. */
 civ_error_t main_run_startup_sequence(void);
 
 /* Config prefs defaults (civ.prf via Config_LoadPrefs @ 1008:0b4a /

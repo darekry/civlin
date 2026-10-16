@@ -323,12 +323,19 @@ civ_error_t title_play_intro_sdl(SDL_Window *win, SDL_Renderer *ren)
     /* U1: frame clock = oryginalne ticki gry (Sys_GetTickScaled @ 1100:02e1,
      * GETTICKCOUNT * 60 / 1000; ta sama jednostka co okresy opkodow Anim @
      * 10b0:0461 i seed Rng_Init @ 11c8:0000). Jeden tick = jedna klatka;
-     * wall-clock (SDL_GetTicks) zostaje tylko na koniec audio/limity. */
+     * wall-clock (SDL_GetTicks) zostaje tylko na koniec audio/limity.
+     * Tick-wait delegowany do sys_wait_next_tick (Sys_GetTickScaled @
+     * 1100:02e1 + Sys_Yield @ 1098:0157 bridge, ref unpacked/civ.exe
+     * Main_RunStartupSequence @ 11e0:0000 loop#1 pump; ten sam krok co
+     * petla main @ 1008:0304 w main.c (wlasciciel: main.c, tylko read) i
+     * timer-half anim_pump_if_active @ 10b0:0000 w dialog.c, nadal
+     * PARTIAL — ogony klatek/GfxPort tam, nie tu). */
     last_tick = sys_get_tick_scaled();
     for (;;) {
         Uint64 now = 0;
         unsigned elapsed = 0;
-        unsigned long now_tick = 0;
+        int advanced = 0;
+        civ_error_t wrc = CIV_OK;
         float cx = 0.0f;
         float cy = 0.0f;
         int tri = 0;
@@ -340,12 +347,11 @@ civ_error_t title_play_intro_sdl(SDL_Window *win, SDL_Renderer *ren)
             skipped = 1;
             break;
         }
-        now_tick = sys_get_tick_scaled();
-        if (now_tick == last_tick) {
-            SDL_Delay(1);
+        wrc = sys_wait_next_tick(&last_tick, &advanced);
+        if (wrc != CIV_OK)
+            return wrc;
+        if (!advanced)
             continue;
-        }
-        last_tick = now_tick;
         now = SDL_GetTicks();
         elapsed = (unsigned)(now - t0);
         if (audio_started) {

@@ -2322,7 +2322,10 @@ civ_error_t civ_unit_turn_step(int civ, int unit_idx, int order)
      * unit_wait_for_orders @ 11c0:0ec2 + city-entry @ 11c0:2c32 +
      * Unit_EnsureOnScreen @ 11c0:231d + Unit_PlayMoveAnimation @ 11c0:2c32).
      * PARTIAL: IDLE (0x00) is a no-op CIV_OK; every other order reaches a
-     * Win16/map/city/dialog tail. */
+     * Win16/map/city/dialog tail.
+     * TODO: Orig 11c0:0395/11c0:12c8/11f0:44d4/11c0:0ec2/11c0:231d/11c0:2c32 —
+     * order tails need visibility update + view centering + orders dialog +
+     * on-screen ensure + move animation bridges (SDL/map owners TBD). */
     if (civ < 0 || unit_idx < 0)
         return CIV_ERR_RANGE;
     if (unit_order_is_idle(order))

@@ -1113,31 +1113,105 @@ civ_error_t main_run_startup_sequence(void)
         return CIV_ERR_BAD_DATA;
     if (proc_ready != 1 || need_rsc != 1)
         return CIV_ERR_BAD_DATA;
-    /* P0 dispatcher: Anim_OpenSequence @ 10b0:008a + loop#1/loop#2
-     * Anim_AdvanceFrames @ 10b0:0461 over the 0x94 procedural host
-     * (Dlg_CreateTracked @ 1098:124f 0x94/0x41 preset 0x200x0x140, gates
-     * probed above; ref unpacked/civ.exe @ 11e0:0000 decompile). OS-free
-     * halves are LIVE in dialog.c (open count/resolve/ctx/max + advance
-     * opcode/tick/ret/slot/caption/dissolve probes); open returns
-     * UNSUPPORTED on its Win16 mem/GfxPort tail (expected, not a gate
-     * failure), advance reports done (1) so the wait-loop terminates.
-     * Close is the void Anim_CloseSequence @ 10b0:0287 NOOP. SDL
-     * modal/event bridge (Dialog_MenuZ_Modal @ 1220:0156 pump + host)
-     * stays below -> overall PARTIAL, never fake CIV_OK. */
+    /* P0 bridge: 0x94 host (Dlg_CreateTracked @ 1098:124f /
+     * Dlg_DestroyTracked @ 1098:1612) + GfxPort_Create @ 10d0:0000 x2 pair +
+     * Art_LoadFrameData @ 10b8:079d (ref unpacked/civ.exe @ 11e0:0000
+     * decompile; strings "RanDoMRadio"/"RanDoMStatic" reach the MenuZ host,
+     * "OPENING" reaches Sound_PlayId). Orig order: Create(0x94,0x41) +
+     * Gfx_StoreDC @ 1098:1104 + Anim_OpenSequence @ 10b0:008a + loop#1/loop#2
+     * Anim_AdvanceFrames @ 10b0:0461 + Anim_CloseSequence @ 10b0:0287 +
+     * DestroyTracked. OS-free halves LIVE 1:1: dialog gates probed above,
+     * x2 geometry via anim_seq_port_count/off (2 ports at +9/+0x62) +
+     * gfx_startup_port_size_ok (0x200x0x140 preset backing, see video.h) +
+     * even pitch via gfx_port_bitmap_pitch / art_port_padded_width /
+     * gfx_remap_stride (((w+1)/2)*2), art id via art_frame_id_ok (see
+     * video.h). Device tails STUB: dlg_create_tracked PARTIAL
+     * (CREATEDIALOG/MAKEPROCINSTANCE/palette tails), gfx_store_dc STUB
+     * (Gfx_StoreDC @ 1098:1104 -> Gfx_SetCurrentDC @ 1100:09a9), GfxPort
+     * textures need a borrowed renderer (see boot_open_windows /
+     * mainport_get_or_create), art_load_frame STUB (disk via
+     * Art_LoadDiskFile @ 10b8:0aa8 + save_unpack when DAT_1420_17a8 != 0
+     * else RSC via Art_LoadResPaletted @ 10b8:11bc + 0xec palette expand +
+     * Art_DecodeLZW @ 10b8:158c, SDL INDEX8 bridge TBD) -> overall PARTIAL,
+     * never fake CIV_OK.
+     * TODO: Orig FUN_11e0_0000 @ 11e0:0000 SDL modal/event bridge
+     * (Dialog_MenuZ_Modal @ 1220:0156 pump + 0x94 host) + GfxPort_Create x2
+     * SDL_Texture pair + Art_LoadFrameData RSC decode via rsc_get_indexed
+     * @ 1190:0a29. */
     {
-        civ_error_t open_rc = anim_open_sequence();
+        civ_error_t dlg_rc;
+        civ_error_t store_rc;
+        civ_error_t art_rc;
+        civ_error_t open_rc;
+        gfx_port_t *frame_port = NULL;
+        int ports;
+        int port_off0;
+        int port_off1;
 
-        if (open_rc != CIV_OK && open_rc != CIV_ERR_UNSUPPORTED)
+        /* 0x94 host create (PARTIAL dispatcher; UNSUPPORTED tail expected,
+         * any other non-OK is a gate failure). */
+        dlg_rc = dlg_create_tracked(dlg_id, (unsigned)dlg_flags);
+        if (dlg_rc != CIV_OK && dlg_rc != CIV_ERR_UNSUPPORTED)
+            return CIV_ERR_BAD_DATA;
+        /* DC save behind the host (STUB; UNSUPPORTED expected). */
+        store_rc = gfx_store_dc();
+        if (store_rc != CIV_OK && store_rc != CIV_ERR_UNSUPPORTED) {
+            dlg_destroy_tracked();
+            return CIV_ERR_BAD_DATA;
+        }
+        /* GfxPort x2 OS-free geometry (LIVE 1:1, no renderer needed). */
+        ports = anim_seq_port_count();
+        port_off0 = anim_seq_port_off(0);
+        port_off1 = anim_seq_port_off(1);
+        if (ports != 2 || port_off0 != 9 || port_off1 != 0x62) {
+            dlg_destroy_tracked();
+            return CIV_ERR_BAD_DATA;
+        }
+        if (gfx_startup_port_size_ok(proc_w, proc_h) != 1) {
+            dlg_destroy_tracked();
+            return CIV_ERR_BAD_DATA;
+        }
+        if (gfx_port_bitmap_pitch(proc_w) != 0x200 ||
+            art_port_padded_width(proc_w) != 0x200 ||
+            gfx_remap_stride(proc_w) != 0x200) {
+            dlg_destroy_tracked();
+            return CIV_ERR_BAD_DATA;
+        }
+        /* Art frame gate (LIVE) + load attempt (STUB; UNSUPPORTED expected
+         * until the RSC decode lands). Probe id 0: exact intro frame id TBD
+         * from the dump (EARTH sibling 0x89 documented in worldgen.h). */
+        if (art_frame_id_ok(0) != 1 || art_frame_id_ok(-1) != 0) {
+            dlg_destroy_tracked();
+            return CIV_ERR_BAD_DATA;
+        }
+        art_rc = art_load_frame(0, &frame_port);
+        if (art_rc == CIV_OK) {
+            gfx_port_destroy(frame_port);
+        } else if (art_rc != CIV_ERR_UNSUPPORTED) {
+            dlg_destroy_tracked();
+            return CIV_ERR_BAD_DATA;
+        }
+        /* Anim loops over the host (PARTIAL dispatcher; UNSUPPORTED open
+         * tail expected, advance reports done so the wait terminates). */
+        open_rc = anim_open_sequence();
+        if (open_rc != CIV_OK && open_rc != CIV_ERR_UNSUPPORTED) {
+            dlg_destroy_tracked();
             return open_rc;
+        }
         for (adv_loop = 0; adv_loop < loops; adv_loop++) {
             int done = anim_advance_frames();
 
-            if (done != 1)
+            if (done != 1) {
+                dlg_destroy_tracked();
                 return CIV_ERR_BAD_DATA;
-            if (main_startup_should_break(0) != 0)
+            }
+            if (main_startup_should_break(0) != 0) {
+                dlg_destroy_tracked();
                 return CIV_ERR_BAD_DATA;
+            }
         }
         anim_close_sequence();
+        dlg_destroy_tracked();
     }
     return CIV_ERR_UNSUPPORTED;
 }

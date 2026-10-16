@@ -292,15 +292,20 @@ civ_error_t gfx_port_set_active(gfx_port_t *port)
     /* Orig GfxPort_SetActive @ 10d0:0956 (see video.h P4 block):
      * Gfx_SetCurrentDC(port+0x16) + 17cc = port always + 17ae = port
      * unless the 12d8:44ff+0x43 dialog port (slots caller-side via
-     * gfx_port_clear_active). SDL3 equivalent is an SDL render-target
-     * select onto the port INDEX8 TARGET backing store. NULL port ->
-     * NOENT; unwired port (ren NULL from the pre-bridge Create, or tex
-     * NULL) -> TODO: Orig ~0x20-word field map still TBD, keep UNSUPPORTED
-     * (no fake target); SDL target-set fail -> IO. */
+     * gfx_port_clear_active, LIVE). SDL3 equivalent is an SDL
+     * render-target select onto the port INDEX8 TARGET backing store
+     * (rop 0xcc0020 SRCCOPY family, same as PresentRect @ 10d0:0854 /
+     * Blit @ 10d0:08f1). gfx_port_create @ 10d0:0000 wires ren/tex
+     * (GETDC/CREATECOMPATIBLEDC borrow + AllocBitmap @ 10d0:0cfa), so a
+     * NULL ren/tex here is a corrupt port, not an unimplemented Win16
+     * path: BAD_DATA (consistent with gfx_port_present_rect missing-tex
+     * guard). NULL port -> NOENT; SDL target-set fail -> IO. Ref
+     * unpacked/civ.exe read-only (NE Win3.x, 832512 B): anchor 10d0:0956
+     * + slot words 17cc/17ae caller-side; no handle guessed, no fake. */
     if (!port)
         return CIV_ERR_NOENT;
-    if (!port->ren || !port->tex)
-        return CIV_ERR_UNSUPPORTED;
+    if (!port->tex || !port->ren)
+        return CIV_ERR_BAD_DATA;
     if (!SDL_SetRenderTarget(port->ren, port->tex))
         return CIV_ERR_IO;
     return CIV_OK;
@@ -358,13 +363,15 @@ civ_error_t gfx_port_blit(gfx_port_t *dst, const gfx_port_t *src,
      * no-op on SDL3 (no dirty-region to validate). AD2 (doc only, no
      * impl change): blitted frames reach here only after the
      * gfx_rle_expand_best dispatcher (RLL/INV/LZSS/RAW0/2/4/8 + fail log
-     * via gfx_rle_expand_best_ex, see gfx_indexed.h). Error mapping
-     * (consistent with present_rect above): NULL -> NOENT, missing tex
-     * -> BAD_DATA, degenerate src_rect -> RANGE, SDL target/Render/
-     * restore fail -> IO. Ports without a borrowed ren (both NULL:
-     * GfxPort_Create @ 10d0:0000 / CreateCompatible still stubbed, so
-     * no DC wired yet) stay CIV_ERR_UNSUPPORTED with the exact missing
-     * field map in the TODO below. */
+     * via gfx_rle_expand_best_ex, see gfx_indexed.h). gfx_port_create @
+     * 10d0:0000 / gfx_port_create_compatible wire ren (GETDC/
+     * CREATECOMPATIBLEDC borrow) + tex via AllocBitmap @ 10d0:0cfa, so a
+     * missing ren/tex here is a corrupt port (BAD_DATA, consistent with
+     * present_rect above), not an unimplemented path: no fake renderer
+     * is guessed. Error mapping: NULL -> NOENT, missing tex/ren ->
+     * BAD_DATA, degenerate src_rect -> RANGE, SDL target/Render/
+     * restore fail -> IO. Ref unpacked/civ.exe read-only (NE Win3.x):
+     * anchor 10d0:08f1, same rop family as PresentRect @ 10d0:0854. */
     SDL_Renderer *ren;
     SDL_Texture *prev = NULL;
     SDL_FRect ssrc;
@@ -377,14 +384,9 @@ civ_error_t gfx_port_blit(gfx_port_t *dst, const gfx_port_t *src,
         return CIV_ERR_NOENT;
     if (!dst->tex || !src->tex)
         return CIV_ERR_BAD_DATA;
-    /* TODO: Orig ~0x20-word field map still TBD (src/dst HDC +
-     * HBITMAP via 10d0:0cfa + clip-region words). Until
-     * gfx_port_create / gfx_port_create_compatible wire ren from
-     * GETDC/CREATECOMPATIBLEDC, ports carry ren == NULL and this
-     * keeps UNSUPPORTED instead of guessing a renderer. */
     ren = dst->ren ? dst->ren : (SDL_Renderer *)src->ren;
     if (!ren)
-        return CIV_ERR_UNSUPPORTED;
+        return CIV_ERR_BAD_DATA;
     if (src_rect) {
         if (src_rect->w <= 0 || src_rect->h <= 0)
             return CIV_ERR_RANGE;
@@ -949,6 +951,22 @@ civ_error_t art_load_frame(int frame_id, gfx_port_t **out)
     if (!out)
         return CIV_ERR_NOENT;
     return CIV_ERR_UNSUPPORTED;
+}
+
+int art_frame_id_ok(int frame_id)
+{
+    /* Orig Art_LoadFrameData @ 10b8:079d frame-id gate (see video.h):
+     * non-negative ids reach the disk/RSC tails, negative fault in orig.
+     * OS-free 1:1, no Win16, no globals. */
+    return (frame_id >= 0) ? 1 : 0;
+}
+
+int gfx_startup_port_size_ok(int w, int h)
+{
+    /* Orig GfxPort_Create @ 10d0:0000 x2 backing for the 0x94 intro host
+     * (see video.h): 0x200x0x140 preset via dlg_preset_w/h (CIV_DLG_PRESET_W
+     * /H in dialog.h). OS-free 1:1, no Win16, no globals. */
+    return (w == 0x200 && h == 0x140) ? 1 : 0;
 }
 
 /* --- Chain 2026-10-16 (8): IntersectRect blits + present/alloc (goals 4/5) ---

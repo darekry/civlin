@@ -146,7 +146,27 @@ civ_error_t mainmenu_run(civ_mainmenu_choice_t *out);
  * no globals, no exit(), read-only. */
 int mainmenu_should_loop(int choice);
 
-/* Dispatches one choice to load/earth/hall/quit/new-game.
+/* Orig MainMenu_WndProc @ 11e0:0221 dispatch gate (choice range over
+ * CIV_MAINMENU_TEXT @ 1420:435b items, ref unpacked/civ.exe file offset
+ * 0xbb35b, 6 items; same '_' split as Dialog_SplitMenuText @ 1220:0000,
+ * cap CIV_SPLIT_MAX 0x18) -> mainmenu_choice_is_valid. 1:1 nonzero (1)
+ * for a dispatchable MenuZ choice 0..5 (0/2 = NewGame_Wizard paths TBD,
+ * 1 = Load, 3 = EARTH, 4 = Hall, 5 = Quit; see enum above), 0 for
+ * CIV_MENU_NONE (-1, cancel/back) and any OOR value the re-prompt gate
+ * (mainmenu_should_loop) would loop on. No Win16, no globals, no exit(). */
+int mainmenu_choice_is_valid(int choice);
+
+/* Dispatches one choice to load/earth/hall/quit/new-game. PARTIAL:
+ * OS-free choice gate (mainmenu_choice_is_valid above) is LIVE 1:1;
+ * modal/action tails stay CIV_ERR_UNSUPPORTED with TODO Orig below
+ * (MenuZ pump Dialog_MenuZ_Modal @ 1220:0156, never fake CIV_OK).
+ * Orig targets: 1 save_prompt_open @ 1130:000e, 3 FUN_1108_0243 @
+ * 1108:0243 (worldgen_load_earth), 4 HoF_Load @ 1080:0023 + HoF_Show @
+ * 1080:0119, 5 WinMain_Shutdown @ 1008:0329, 0/2 NewGame_Wizard @
+ * 10e8:0000; caller MainMenu_WndProc @ 11e0:0221.
+ * Invalid (non-dispatchable) choice -> CIV_ERR_NOENT (orig re-prompts,
+ * never dispatches); valid-but-unimplemented (0/2 new-game, 4 hall,
+ * 5 quit while their owners land) -> CIV_ERR_UNSUPPORTED.
  * CIV_MENU_EARTH (3) -> worldgen_load_earth (Orig FUN_1108_0243 @ 1108:0243,
  * see worldgen.h); nonzero result keeps the menu choice invalid. */
 civ_error_t mainmenu_dispatch(civ_mainmenu_choice_t choice);
