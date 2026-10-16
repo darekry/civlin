@@ -268,6 +268,48 @@ civ_error_t mem_alloc_with_hook(unsigned size)
     return CIV_ERR_UNSUPPORTED;
 }
 
+int gfx_scroll_copy_w(int dst_w, int src_w)
+{
+    /* Orig Gfx_ScrollPortCopy @ 10d0:03fa w-clip (see video.h):
+     * iVar1 = min(piVar7[2]-*param_4, *(port+0xc)-*param_4). */
+    int w = (dst_w < src_w) ? dst_w : src_w;
+
+    if (w < 0)
+        return 0;
+    return w;
+}
+
+int gfx_scroll_copy_h(int dst_h, int src_h)
+{
+    /* Orig same h-clip: min(piVar7[3]-piVar7[1], *(port+0xe)-piVar7[1]). */
+    int h = (dst_h < src_h) ? dst_h : src_h;
+
+    if (h < 0)
+        return 0;
+    return h;
+}
+
+int palette_snapshot_size(int count)
+{
+    /* Orig Palette_SnapshotAndAnimate @ 1098:25b9 alloc half (see
+     * video.h): GLOBALALLOC(count << 2) bytes. */
+    if (count < 0)
+        return -1;
+    return count * 4;
+}
+
+civ_error_t palette_animate_locked_range(int first, int count)
+{
+    /* Orig Palette_AnimateLockedRange @ 1098:0119 (see video.h;
+     * GLOBALLOCK + Palette_AnimateRange @ 1090:0376 + GLOBALUNLOCK).
+     * Selector lock has no Linux equivalent -> stub. Range itself is
+     * LIVE in palette_animate_clamp.
+     * TODO: Orig Palette_AnimateLockedRange @ 1090:0119 lock bridge. */
+    (void)first;
+    (void)count;
+    return CIV_ERR_UNSUPPORTED;
+}
+
 civ_error_t gfx_port_create(SDL_Renderer *ren, int w, int h, gfx_port_t **out)
 {
     /* Orig GfxPort_Create @ 10d0:0000 -> GR_PortOpen (see video.h P4

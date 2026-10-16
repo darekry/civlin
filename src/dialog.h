@@ -1985,6 +1985,63 @@ int anim_advance_ret(long cur, long end);
  * hard stop instead of the far-pointer fault). No globals. */
 int anim_slot_should_step(long start, int per, int cur, long now);
 
+/* Anim_AdvanceFrames @ 10b0:0461 opcode map (decompiled 2026-10-16, full
+ * switch 1..0xe over the seq records at seq+8, each gated by
+ * [start,end] local_c window; outer clock via anim_clamp_tick +
+ * rebase via anim_rebase_clock + ret via anim_advance_ret above):
+ *   1 palette fade-zero (GLOBALLOCK + zero RGB + Palette_AnimateRange),
+ *   2 palette table copy (0x81/0x82/0x85 -> blobs, see anim_pal_src_for),
+ *   3/4 slot A/B (Alloc on start, Step + Free on end),
+ *   5 text/font triple (StoreDC + SelectFont + Text_SyncFontTail @
+ *     1100:0a4a x3 + SetActive x2),
+ *   6 frame load (Close + Art_LoadFrameData @ 10b8:079d +
+ *     Art_PortDataToBitmap @ 10b8:0e36),
+ *   7 caption (ApplyPalette + Store/SetActive + Get/CopyRange +
+ *     ResMgr_GetString/PackPascal + DrawAligned, present on end),
+ *   8 fill (StoreDC + MakeBrush + SetBk/Color + FILLRECT x2 + DelObj),
+ *   9 port swap + present (memcpy swap + Palette_AnimateLockedRange @
+ *     1090:0119 on 0xb),
+ *   0xa callback (call seq+0x51),
+ *   0xb scroll (SetActive x2 + SnapshotAndAnimate @ 1098:25b9 on start
+ *     else Gfx_ScrollPortCopy @ 10d0:03fa + Anim_ScrollSyncTick @
+ *     1008:0df0),
+ *   0xc/0xd dissolve (Setup/Step/FreeDissolve + present),
+ *   0xe palette rotate (GLOBALLOCK rotate + AnimateRange).
+ * OS-free opcode predicates already LIVE (anim_opcode_is_* in dialog.c);
+ * bodies below are the small pure tails (no Win16). Device tails stay
+ * STUB in anim_advance_frames PARTIAL. Next: Art_LoadFrameData payload
+ * carve + shared Pic_PlayShared @ 1030:0000 (~31 KB, 16 callers). */
+
+/* Orig Anim_ScrollSyncTick @ 1008:0df0 (renamed 2026-10-16 from
+ * FUN_1008_0df0; callers Anim_AdvanceFrames @ 10b0:0461 opcode 0xb +
+ * FUN_11d8_0000). Returns 0 always (empty sync stub). OS-free 1:1. */
+int anim_scroll_sync_tick(void);
+
+/* Orig Text_SyncFontTail @ 1100:0a4a (renamed 2026-10-16 from
+ * FUN_1100_0a4a; called 3x in Anim opcode 5 text path). Thin wrapper
+ * over Font_EnumFamiliesCallbackTail @ 1008:09d3 (empty NOOP tail).
+ * NOOP void like the tail. */
+void text_sync_font_tail(void);
+
+/* Orig Dlg_CenterTrackedWindow @ 1098:0b33 (renamed 2026-10-16 from
+ * FUN_1098_0b33; flags&1 path of Dlg_CreateTracked @ 1098:124f).
+ * Centers via Dlg_CenterRect (LIVE as dlg_center_rect) + MOVEWINDOW +
+ * GETWINDOWRECT. Win16 MOVEWINDOW tail -> stub CIV_ERR_UNSUPPORTED. */
+civ_error_t dlg_center_tracked_window(void);
+
+/* Orig Dlg_InitPaletteWord @ 1098:1196 (renamed 2026-10-16 from
+ * FUN_1098_1196; tail of Dlg_CreateTracked @ 1098:124f palette copy).
+ * When color (DAT_12d8_28fc == 0) writes *(param+6) =
+ * Gfx_GetZeroPaletteWord @ 1098:1184 (= 0). OS-free gate 1:1 on the
+ * explicit flag: 1 when the write happens, 0 when headless. The word
+ * store itself stays caller-side. */
+int dlg_init_palette_word_writes(int headless_28fc);
+
+/* Orig Gfx_GetZeroPaletteWord @ 1098:1184 (renamed 2026-10-16 from
+ * FUN_1098_1184; sole writers via Dlg_InitPaletteWord above + two
+ * sibling 1098:11c8/11f0 paths). Returns 0 always. OS-free 1:1. */
+int gfx_get_zero_palette_word(void);
+
 /* --- Chain 2026-10-16 (33): Anim opcode bodies — palette/slot/caption/
  * dissolve phases (critical path, goal: engine 1..0xe) ---
  * Orig Anim_AdvanceFrames @ 10b0:0461 case bodies (civ.exe,

@@ -194,6 +194,34 @@ int gfx_stored_dc_uses_stored(int headless_28fc);
  * this) -> stub CIV_ERR_UNSUPPORTED. No globals, no exit(). */
 civ_error_t mem_alloc_with_hook(unsigned size);
 
+/* Anim opcode 0xb/9 tails (decompiled 2026-10-16, see dialog.h opcode
+ * map 1..0xe). OS-free kernels LIVE below (no Win16, no globals);
+ * BITBLT/HMEMCPY/GLOBALLOCK device tails stay STUB. */
+
+/* Orig Gfx_ScrollPortCopy @ 10d0:03fa (renamed 2026-10-16 from
+ * FUN_10d0_03fa; opcode 0xb scroll blit: Gfx_GetCurrentDC + BITBLT
+ * 0xcc0020 SRCCOPY + HMEMCPY row copy between ports + Gfx_SetCurrentDC).
+ * Clip extent is min(dst, src) per axis (orig piVar7/src width vs
+ * port+0xc width, same for height). OS-free 1:1 on explicit extents.
+ * Negative inputs clamp to 0 (orig far-ptr fault). */
+int gfx_scroll_copy_w(int dst_w, int src_w);
+int gfx_scroll_copy_h(int dst_h, int src_h);
+
+/* Orig Palette_SnapshotAndAnimate @ 1098:25b9 (renamed 2026-10-16 from
+ * FUN_1098_25b9; opcode 0xb start path when DAT_12d8_28fc == 0:
+ * GLOBALALLOC(count*4) + GLOBALLOCK x2 + flag-1 copy of count entries
+ * from (base+start) then Palette_AnimateLockedRange @ 1090:0119 +
+ * GLOBALFREE; headless skips all). Alloc-size half OS-free 1:1 below
+ * (bytes = count*4, -1 on count < 0); lock/animate tails stay STUB. */
+int palette_snapshot_size(int count);
+
+/* Orig Palette_AnimateLockedRange @ 1090:0119 (renamed 2026-10-16 from
+ * FUN_1090_0119; GLOBALLOCK + Palette_AnimateRange @ 1090:0376 +
+ * GLOBALUNLOCK wrapper; callers opcode 9/0xc + SnapshotAndAnimate).
+ * Needs the Win16 selector lock -> stub CIV_ERR_UNSUPPORTED. The range
+ * predicate itself stays LIVE in palette_animate_clamp. */
+civ_error_t palette_animate_locked_range(int first, int count);
+
 /* Palette_AnimateRange @ 1090:0376 (ported; range repaint via
  * SDL_SetPaletteColors staging on a temp 256-entry palette, no globals.
  * Orig copies RGB triples + flag byte then ANIMATEPALETTE; callers issue

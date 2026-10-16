@@ -806,6 +806,16 @@ int anim_advance_frames(void)
         return 1;
     if (anim_tick_is_due(10L, 14L, 4) != 1)
         return 1;
+    /* Opcode 5/0xb pure tails (1:1 ref unpacked/civ.exe, NE LE, no copy):
+     * opcode 5 text/font path runs Text_SyncFontTail @ 1100:0a4a x3 (empty
+     * NOOP tail, mirrors Font_EnumFamiliesCallbackTail @ 1008:09d3); opcode
+     * 0xb scroll path runs Anim_ScrollSyncTick @ 1008:0df0 (empty sync stub
+     * returning 0). Device bodies (StoreDC @ 1098:1104 + SelectFont @
+     * 1100:0a33 + SetActive x2 @ 10d0:0956 for 5; SetActive x2 + ScrollCopy
+     * @ 10d0:03fa for 0xb) stay in the TODO Orig 10b0:0461 tail below. */
+    text_sync_font_tail();
+    if (anim_scroll_sync_tick() != 0)
+        return 1;
     /* Frame counters + resolve count (open-sequence halves, 1:1). */
     {
         static const int sample_timeline[] = { 11, 14, 7, 0 };
@@ -3466,6 +3476,67 @@ int anim_slot_should_step(long start, int per, int cur, long now)
         return 0;
     want = start + (long)per * (long)cur;
     return (want <= now) ? 1 : 0;
+}
+
+int anim_scroll_sync_tick(void)
+{
+    /* Orig Anim_ScrollSyncTick @ 1008:0df0 (see dialog.h; callers opcode
+     * 0xb + FUN_11d8_0000). Empty stub returning 0. */
+    return 0;
+}
+
+void text_sync_font_tail(void)
+{
+    /* Orig Text_SyncFontTail @ 1100:0a4a (see dialog.h; 3x in opcode 5
+     * text/font path of Anim_AdvanceFrames @ 10b0:0461). Mirrors the empty
+     * Font_EnumFamiliesCallbackTail @ 1008:09d3 tail (see boot.h NOOP):
+     * same empty shape, kept local so dialog stays SDL-free (no boot.h
+     * pull; gfx_indexed HLP rule). NOOP. */
+}
+
+civ_error_t dlg_center_tracked_window(void)
+{
+    /* Orig Dlg_CenterTrackedWindow @ 1098:0b33 (see dialog.h; flags&1
+     * path of Dlg_CreateTracked @ 1098:124f via Dlg_CenterRect @ 11f8:0000
+     * + MOVEWINDOW + GETWINDOWRECT).
+     * PARTIAL dispatcher: OS-free center/inset probes below are LIVE 1:1
+     * (no Win16, no globals, read-only); the MOVEWINDOW/GETWINDOWRECT
+     * application tail stays STUB. Refs verified read-only 1:1 vs
+     * unpacked/civ.exe (NE LE, no copy). */
+    dlg_rect_t outer = { 0, 0, 640, 480 };
+    dlg_rect_t inner = { 0, 0, CIV_DLG_PRESET_W, CIV_DLG_PRESET_H };
+    dlg_rect_t out;
+    civ_error_t rc;
+    int inset;
+    int trim;
+
+    rc = dlg_center_rect(&outer, &inner, &out);
+    if (rc != CIV_OK)
+        return CIV_ERR_BAD_DATA;
+    if (out.right - out.left != CIV_DLG_PRESET_W ||
+        out.bottom - out.top != CIV_DLG_PRESET_H)
+        return CIV_ERR_BAD_DATA;
+    inset = dialog_frame3d_base_inset();
+    trim = dialog_frame3d_edge_trim();
+    if (inset != 3 || trim != 1)
+        return CIV_ERR_BAD_DATA;
+    /* TODO: Orig Dlg_CenterTrackedWindow @ 1098:0b33 SDL bridge
+     * (MOVEWINDOW + GETWINDOWRECT on the tracked HWND; SDL_SetWindowPosition
+     * owner TBD; centering math is LIVE in dlg_center_rect above). */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+int dlg_init_palette_word_writes(int headless_28fc)
+{
+    /* Orig Dlg_InitPaletteWord @ 1098:1196 (see dialog.h; color path
+     * writes *(param+6) = Gfx_GetZeroPaletteWord @ 1098:1184). */
+    return (headless_28fc == 0) ? 1 : 0;
+}
+
+int gfx_get_zero_palette_word(void)
+{
+    /* Orig Gfx_GetZeroPaletteWord @ 1098:1184 (see dialog.h). */
+    return 0;
 }
 
 /* --- Chain 2026-10-16 (33): Anim opcode bodies (see dialog.h chain-33).

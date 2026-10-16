@@ -199,6 +199,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `main_startup_intro_proc_h` | LIVE | 1098:124f |  |
 | `main_startup_procedural_ready` | LIVE | 1098:124f, 1190:0a29 |  |
 | `main_startup_needs_rsc_frame` | LIVE | 1190:0a29, 1190:0fda |  |
+| `main_startup_host_palette_ok` | LIVE | 1098:124f, 1098:201d, 10b0:0461, 11e0:0000 |  |
 | `main_startup_port_pair_ok` | LIVE | 1098:124f, 10b0:008a, 10d0:0000, 11e0:0000 |  |
 | `main_startup_modal_is_done` | LIVE | 10b0:0461, 11e0:0000, 11e0:0221 |  |
 | `main_startup_event_is_dismiss` | LIVE | 1220:0156 |  |
@@ -401,6 +402,11 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `anim_clamp_tick` | LIVE | 10b0:0461, 1100:02e1 |  |
 | `anim_advance_ret` | LIVE | 10b0:0461, 11e0:0000 |  |
 | `anim_slot_should_step` | LIVE | 10a8:00fc, 10a8:018e |  |
+| `anim_scroll_sync_tick` | LIVE | 1008:0df0, 10b0:0461 |  |
+| `text_sync_font_tail` | NOOP | 1008:09d3, 10b0:0461, 1100:0a4a |  |
+| `dlg_center_tracked_window` | PARTIAL | 1098:0b33, 1098:124f, 11f8:0000 | has TODO |
+| `dlg_init_palette_word_writes` | LIVE | 1098:1184, 1098:1196, 1098:124f |  |
+| `gfx_get_zero_palette_word` | LIVE | 1098:1184, 1098:11c8 |  |
 | `anim_pal_src_for` | LIVE | 10b0:0461 |  |
 | `anim_pal_fade_zero` | LIVE | 1090:0376, 10b0:0461 |  |
 | `anim_pal_copy` | LIVE | 10b0:0461 |  |
@@ -970,6 +976,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `mainmenu_procedural_rows` | LIVE | 1220:0000, 1220:0156, 1420:435b |  |
 | `mainmenu_widget_row_y` | LIVE | 1190:0a29, 1220:0156 |  |
 | `mainmenu_needs_rsc_frame` | LIVE | 1190:0a29, 1190:0fda |  |
+| `mainmenu_host_palette_ok` | LIVE | 1098:124f, 1098:201d, 10b0:0461, 11e0:0000 |  |
 | `mainmenu_event_is_dismiss` | LIVE | 11e0:0000, 1220:0156 |  |
 | `mainmenu_modal_is_done` | LIVE | 11e0:0000, 11e0:0221 |  |
 | `mainmenu_pump_events` | LIVE | 1098:124f, 1100:02e1, 1220:0156, 1220:0202 |  |
@@ -1486,6 +1493,10 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `mainport_palette_handle` | LIVE | 1098:1120, 1098:114a |  |
 | `gfx_stored_dc_uses_stored` | LIVE | 1030:0000, 1098:114a, 1098:2687, 10b0:008a, 10b0:0461 |  |
 | `mem_alloc_with_hook` | STUB | 1000:2826, 1000:3496, 1000:41e4, 1000:46f1 | has TODO |
+| `gfx_scroll_copy_w` | LIVE | 10d0:03fa |  |
+| `gfx_scroll_copy_h` | LIVE |  |  |
+| `palette_snapshot_size` | LIVE | 1090:0119, 1098:25b9 |  |
+| `palette_animate_locked_range` | STUB | 1090:0119, 1090:0376, 1098:0119 | has TODO |
 | `gfx_port_create` | LIVE | 10b0:008a, 10d0:0000, 10d0:0854, 10d0:08f1, 10d0:0cfa, 1208:0af1, 1210:025b, 1218:0386 |  |
 | `gfx_port_destroy` | LIVE | 10d0:0000, 10d0:0172 |  |
 | `gfx_port_alloc_bitmap` | LIVE | 10d0:0000, 10d0:08f1, 10d0:0cfa |  |

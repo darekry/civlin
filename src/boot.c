@@ -1108,6 +1108,8 @@ civ_error_t main_run_startup_sequence(void)
         return CIV_ERR_BAD_DATA;
     if (ctx != CIV_DLG_TRACKED_CTX_SIZE || pal != CIV_DLG_TRACKED_PAL_COUNT)
         return CIV_ERR_BAD_DATA;
+    if (main_startup_host_palette_ok() != 1)
+        return CIV_ERR_BAD_DATA;
     if (off != 0 || is_init == 0 || is_extra == 0)
         return CIV_ERR_BAD_DATA;
     /* OS-free 1:1 close/rebase audit (Dlg_DestroyTracked @ 1098:1612 pop @
@@ -1742,6 +1744,32 @@ int main_startup_needs_rsc_frame(void)
      * rsc_get_indexed @ 1190:0a29 (+ payload via rsc_load_to_mem @
      * 1190:0fda, see rsc_loader.h); procedural host (preset above) until
      * then. Always 1 while the decode is pending. */
+    return 1;
+}
+
+int main_startup_host_palette_ok(void)
+{
+    /* Orig Dlg_CreateTracked @ 1098:124f palette tail (see boot.h: 0xec
+     * entries via Palette_CopyRange @ 1098:201d for the 0x94/0x41 intro
+     * host; ref unpacked/civ.exe "RanDoMRadio" @ 0xb7ac6 / "RanDoMStatic"
+     * @ 0xb7ad2). Twin of mainmenu_host_palette_ok (same Orig, startup
+     * loop#1 scope). OS-free 1:1: count half via dlg_tracked_pal_count +
+     * copy-shape half via a 2-entry anim_pal_copy round-trip on stack
+     * locals (u32 entries, case 2 @ 10b0:0461). No Win16
+     * (SELECTPALETTE/REALIZEPALETTE tails stay STUB in dlg_create_tracked
+     * @ 1098:124f, TODO Orig there), no globals, no exit(), read-only
+     * except stack locals. */
+    uint8_t src[8] = { 1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u };
+    uint8_t dst[8] = { 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u };
+
+    if (dlg_tracked_pal_count() != CIV_DLG_TRACKED_PAL_COUNT)
+        return 0;
+    if (anim_pal_copy(dst, 2u, 0, src, 2u, 2) != CIV_OK)
+        return 0;
+    if (dst[0] != 1u || dst[1] != 2u || dst[2] != 3u || dst[3] != 4u)
+        return 0;
+    if (dst[4] != 5u || dst[5] != 6u || dst[6] != 7u || dst[7] != 8u)
+        return 0;
     return 1;
 }
 

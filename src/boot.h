@@ -1245,6 +1245,20 @@ int main_startup_procedural_ready(int dlg_id);
  * No globals. */
 int main_startup_needs_rsc_frame(void);
 
+/* Orig Dlg_CreateTracked @ 1098:124f palette tail (0xec entries via
+ * Palette_CopyRange @ 1098:201d, exercised through anim_pal_copy @
+ * 10b0:0461 case 2; host entry Dlg_CreateTracked(0x94,0x41) in
+ * Main_RunStartupSequence @ 11e0:0000, ref unpacked/civ.exe strings
+ * "RanDoMRadio" @ 0xb7ac6 / "RanDoMStatic" @ 0xb7ad2) ->
+ * main_startup_host_palette_ok. Twin of mainmenu_host_palette_ok (see
+ * mainmenu.h; same Orig, owned here per the startup loop#1 scope). 1:1 1
+ * when the tracked palette count is 0xec and a 2-entry anim_pal_copy
+ * self-test round-trips; 0 otherwise. OS-free, no Win16 (CREATEDIALOG +
+ * MAKEPROCINSTANCE + GETDC/SELECTPALETTE/REALIZEPALETTE tails stay STUB in
+ * dlg_create_tracked @ 1098:124f with TODO Orig there), no globals, no
+ * exit(), read-only except stack locals. */
+int main_startup_host_palette_ok(void);
+
 /* --- Chain 2026-10-16 (P2): startup SDL modal/event bridge (goal P2) ---
  * Orig Main_RunStartupSequence @ 11e0:0000 loop shape (civ.exe,
  * x86:LE:16:Protected Mode; ref unpacked/civ.exe): loop#1 intro =

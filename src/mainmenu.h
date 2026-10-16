@@ -287,6 +287,20 @@ int mainmenu_widget_row_y(int top, int row_h, int index);
  * No globals. */
 int mainmenu_needs_rsc_frame(void);
 
+/* Orig Dlg_CreateTracked @ 1098:124f palette tail (0xec entries via
+ * Palette_CopyRange @ 1098:201d, exercised through anim_pal_copy @
+ * 10b0:0461 case 2; host entry Dlg_CreateTracked(0x94,0x41) in
+ * Main_RunStartupSequence @ 11e0:0000, ref unpacked/civ.exe strings
+ * "RanDoMRadio" @ 0xb7ac6 / "RanDoMStatic" @ 0xb7ad2) ->
+ * mainmenu_host_palette_ok. 1:1 1 when the tracked palette count is 0xec
+ * (dlg_tracked_pal_count) and a 2-entry anim_pal_copy self-test round-trips
+ * (proves the u32-entry copy shape without touching video/GDI); 0
+ * otherwise. OS-free, no Win16 (CREATEDIALOG + MAKEPROCINSTANCE +
+ * GETDC/SELECTPALETTE/REALIZEPALETTE tails stay STUB in dlg_create_tracked
+ * @ 1098:124f with TODO Orig there), no globals, no exit(), read-only
+ * except stack locals. */
+int mainmenu_host_palette_ok(void);
+
 /* --- Chain 2026-10-16 (P1): MenuZ modal SDL bridge (goal P1) ---
  * Orig Dialog_MenuZ_Modal @ 1220:0156 modal pump (civ.exe, x86:LE:16:
  * Protected Mode; ref unpacked/civ.exe): SETTIMER(hwnd,2,0x64,NULL) @
