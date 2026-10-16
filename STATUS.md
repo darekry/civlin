@@ -936,6 +936,9 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `mainmenu_procedural_rows` | LIVE | 1220:0000, 1220:0156, 1420:435b |  |
 | `mainmenu_widget_row_y` | LIVE | 1190:0a29, 1220:0156 |  |
 | `mainmenu_needs_rsc_frame` | LIVE | 1190:0a29, 1190:0fda |  |
+| `mainmenu_event_is_dismiss` | LIVE | 11e0:0000, 1220:0156 |  |
+| `mainmenu_modal_is_done` | LIVE | 11e0:0000, 11e0:0221 |  |
+| `mainmenu_pump_events` | LIVE | 1100:02e1, 1220:0156, 1220:0202 |  |
 
 ### `src/map.c`
 
@@ -1415,7 +1418,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 |---|---|---|---|
 | `title_play_intro` | PARTIAL | 1098:1104, 1098:124f, 10b0:005b, 10b0:008a, 10b0:0287, 10b0:0461, 1150:00c9, 11e0:0000, 1220:0156, 1420:4a41 | has TODO |
 | `title_play_anim_loop` | PARTIAL | 1018:0be0, 1018:1d5b, 1018:208f, 1030:0000, 1030:79ce, 1038:0000, 1038:0d09, 1040:068e, 1040:1137, 1080:099b, 1098:1104, 1098:124f, 1098:1612, 10b0:005b, 10b0:008a, 10b0:0287, 10b0:0461, 10b8:079d, 1170:0000, 1170:05af, 1170:05ca, 1188:0db8, 1188:123a, 11b8:0f26, 11e0:0000 | has TODO |
-| `title_decode_frame` | STUB | 1018:015d, 1088:1dd0, 1138:0000, 11b0:0000, 11b8:14e5 | has TODO |
+| `title_decode_frame` | STUB | 1018:015d, 1088:1dd0, 1138:0000, 1190:0a29, 11b0:0000, 11b8:14e5 | has TODO |
 | `pic_decompress_chunk` | LIVE | 10f8:040a, 10f8:05da, 1420:23ce |  |
 | `pic_read_header` | STUB | 10d0:0956, 1140:019d, 1420:2300, 1420:2372 | has TODO |
 | `title_load_opening_frame` | STUB | 1030:0000, 10d0:0956, 1190:0000, 11e0:0000 | has TODO |

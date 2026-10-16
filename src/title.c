@@ -221,12 +221,27 @@ civ_error_t title_play_anim_loop(void)
 
 civ_error_t title_decode_frame(const uint8_t *src, size_t len)
 {
-    (void)src;
-    (void)len;
-    /* TODO: Orig FUN_1018:xxxx wildcard (Title_DecodeFrame): frame decoder
-     * candidate; exact offset TBD. Same 1018 segment as the 1018:015d
-     * caller of game_append_year_text @ 1088:1dd0 (see game.h chain).
-     * Win16/GDI path -> stub. */
+    /* TODO: Orig FUN_1018:xxxx wildcard (Title_DecodeFrame) + Orig
+     * FUN_1198_xxxx @ 1198:xxxx (Rsc_DecodeBitmap/CvPc frame decoder):
+     * frame decoder candidate; exact 1018 offset TBD (same 1018 segment
+     * as the 1018:015d caller of game_append_year_text @ 1088:1dd0, see
+     * game.h chain). Faithful path is via rsc_get_res_indexed @
+     * 1190:0a29 (Nth res in type list) + rsc_record_data slice
+     * (BE24 @ +5 / BE16 @ +10, file_off+len <= size, len 0 derives to
+     * next/EOF) + rsc_decode_bitmap @ 1198:xxxx strict gate (u16 w LE +
+     * u16 h LE + u8 bpp==8 + u8 pal 1..255 + RGB + indices, every pixel
+     * < pal; mirror in gfx_decode_raw / gfx_probe_rsc_image) + RLE expand
+     * via gfx_decode_rle (tag <0x80 repeat / >=0x80 literal, save_rll @
+     * 10f8:040a/05da). Ref unpacked/civ.exe + rsc_dump (read-only):
+     * dir 454/14/31/144/1 slices OK, images_strict=0 (no raw INDEX8 at
+     * slice start), CIVDATA1 CvPc rec[1] BB DF 06 45... len 86857 best
+     * NONE (RLL/INV/LZSS-EDI/1K/2K/BITS/GIF/RAW all miss), so no codec is
+     * proven without a Ghidra 1198 compare — no decode is faked here.
+     * Win16/GDI blit tail stays stub. */
+    if (!src)
+        return CIV_ERR_NOENT;
+    if (len == 0)
+        return CIV_ERR_TRUNCATED;
     return CIV_ERR_UNSUPPORTED;
 }
 

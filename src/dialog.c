@@ -259,6 +259,9 @@ civ_error_t dlg_create_tracked(int dlg_id, unsigned flags)
     int off;
     int is_init;
     int is_extra;
+    long rebase_base;
+    long rebase_stored;
+    civ_error_t rebase_rc;
 
     if (dlg_id <= 0)
         return CIV_ERR_RANGE;
@@ -284,6 +287,23 @@ civ_error_t dlg_create_tracked(int dlg_id, unsigned flags)
     is_init = dlg_ctl_is_tracked_init(CIV_DLG_TRACKED_CTL_FIRST);
     is_extra = dlg_ctl_is_earth_extra(0x323);
     if (is_init == 0 || is_extra == 0)
+        return CIV_ERR_BAD_DATA;
+    /* P0 bridge gates (0x94 host lifecycle, ref unpacked/civ.exe @ 11e0:0000):
+     * Gfx_StoreDC @ 1098:1104 direct (opcodes 5/7/8/9 via
+     * anim_opcode_needs_store; 1 is not a store case) + every-8th-tick
+     * frame-pump save (tick & 7) == 0 via anim_tick_needs_store + clock
+     * rebase Anim_RebaseClock @ 10b0:005b (loop#2 ticks 1000:
+     * base = now - param, stored = param, LIVE in anim_rebase_clock).
+     * SDL owners stay in video.c (gfx_store_dc) / title.c (frame
+     * present); here only the OS-free order probes. */
+    if (anim_opcode_needs_store(5) != 1 || anim_opcode_needs_store(1) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (anim_tick_needs_store(0L) != 1 || anim_tick_needs_store(1L) != 0)
+        return CIV_ERR_BAD_DATA;
+    rebase_base = 0L;
+    rebase_stored = 0L;
+    rebase_rc = anim_rebase_clock(1100L, 1000L, &rebase_base, &rebase_stored);
+    if (rebase_rc != CIV_OK || rebase_base != 100L || rebase_stored != 1000L)
         return CIV_ERR_BAD_DATA;
     (void)center;
     (void)show;

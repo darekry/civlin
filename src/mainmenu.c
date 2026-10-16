@@ -69,6 +69,11 @@ civ_error_t mainmenu_run(civ_mainmenu_choice_t *out)
     int rows;
     int ry0;
     int need_rsc;
+    int mz_idx;
+    int pump_break;
+    int pump_done;
+    civ_error_t mz_rc;
+    civ_error_t pump_rc;
 
     if (!out)
         return CIV_ERR_NOENT;
@@ -169,6 +174,42 @@ civ_error_t mainmenu_run(civ_mainmenu_choice_t *out)
     if (rows != n_items || ry0 != 0)
         return CIV_ERR_BAD_DATA;
     if (need_rsc != 1)
+        return CIV_ERR_BAD_DATA;
+    /* OS-free 1:1 P1 SDL modal bridge @ 1220:0156 (RanDoMRadio 500+i
+     * fan-out over CIV_MAINMENU_TEXT @ 1420:435b, ref unpacked/civ.exe file
+     * offset 0xbb35b, 6 items; 100 ms SETTIMER @ 1220:0202 via
+     * dialog_menuz_timer_ms / menuz_timer_interval_ms, fail = 'Can''t
+     * initialize timer in MenuZ' @ 1420:4a41 file offset 0xbba41):
+     * dialog_menuz PARTIAL dispatcher (UNSUPPORTED tail expected, *out
+     * preset to cancel -1) + live SDL_PollEvent drain (PEEKMESSAGE
+     * replacement: dismiss sets the DAT_12b0_00a0 / DAT_1418_0004 break
+     * image, noise dropped; 100 ms pacing via Sys_GetTickScaled TBD
+     * caller-side) + loop-done shape. Proves the modal wiring without
+     * pumping the Win16 pump or faking a choice. Read-only. */
+    mz_idx = CIV_DIALOG_MENUZ_CANCEL;
+    mz_rc = dialog_menuz("", CIV_MAINMENU_TEXT, -1, &mz_idx);
+    if (mz_rc != CIV_ERR_UNSUPPORTED)
+        return CIV_ERR_BAD_DATA;
+    if (mz_idx != CIV_DIALOG_MENUZ_CANCEL)
+        return CIV_ERR_BAD_DATA;
+    if (mainmenu_pump_events(NULL) != CIV_ERR_NOENT)
+        return CIV_ERR_BAD_DATA;
+    pump_break = 0;
+    pump_rc = mainmenu_pump_events(&pump_break);
+    if (pump_rc != CIV_OK)
+        return CIV_ERR_BAD_DATA;
+    if (mainmenu_event_is_dismiss((uint32_t)SDL_EVENT_QUIT) != 1)
+        return CIV_ERR_BAD_DATA;
+    if (mainmenu_event_is_dismiss((uint32_t)SDL_EVENT_KEY_DOWN) != 1)
+        return CIV_ERR_BAD_DATA;
+    if (mainmenu_event_is_dismiss((uint32_t)SDL_EVENT_MOUSE_BUTTON_DOWN) != 1)
+        return CIV_ERR_BAD_DATA;
+    if (mainmenu_event_is_dismiss((uint32_t)SDL_EVENT_MOUSE_MOTION) != 0)
+        return CIV_ERR_BAD_DATA;
+    pump_done = mainmenu_modal_is_done(pump_break);
+    if (pump_break != 0 && pump_done != 1)
+        return CIV_ERR_BAD_DATA;
+    if (mainmenu_modal_is_done(0) != 0 || mainmenu_modal_is_done(1) != 1)
         return CIV_ERR_BAD_DATA;
     *out = CIV_MENU_NONE;
     return CIV_ERR_UNSUPPORTED;
@@ -531,4 +572,63 @@ int mainmenu_needs_rsc_frame(void)
      * 1190:0fda, see rsc_loader.h); procedural boxes (rows above) until
      * then. Always 1 while the decode is pending. */
     return 1;
+}
+
+/* --- Chain 2026-10-16 (P1): MenuZ modal SDL bridge (goal P1) ---
+ * See mainmenu.h block. Predicates OS-free 1:1 (no Win16, no globals);
+ * the drain below is the LIVE PEEKMESSAGE replacement (borrowed SDL event
+ * queue, no window needed, safe pre-Init). */
+
+int mainmenu_event_is_dismiss(uint32_t sdl_type)
+{
+    /* Orig Dialog_MenuZ_Modal @ 1220:0156 dismiss shape (button/ESC/close
+     * ends the modal, motion/window/user noise does not; ref
+     * unpacked/civ.exe strings "RanDoMRadio"/"RanDoMStatic"). SDL mapping
+     * (same family as main_startup_event_is_dismiss @ 11e0:0000 in boot.h):
+     * QUIT (window X) + KEY_DOWN (any key incl. ESC, MenuZ has no per-key
+     * filter at this layer) + MOUSE_BUTTON_DOWN (MenuZ 500-based button
+     * click) dismiss; everything else is pump noise. Predicate only. */
+    if (sdl_type == (uint32_t)SDL_EVENT_QUIT)
+        return 1;
+    if (sdl_type == (uint32_t)SDL_EVENT_KEY_DOWN)
+        return 1;
+    if (sdl_type == (uint32_t)SDL_EVENT_MOUSE_BUTTON_DOWN)
+        return 1;
+    return 0;
+}
+
+int mainmenu_modal_is_done(int break_flag)
+{
+    /* Orig same loop-done shape: dismiss latches DAT_12b0_00a0 /
+     * DAT_1418_0004 (cancel/back -1, see dialog_menuz_cancel_code /
+     * dialog_menuz_is_cancel) and the caller re-prompts while
+     * mainmenu_should_loop @ 11e0:0221 == 1. MenuZ has no Anim advance
+     * twin (unlike main_startup_modal_is_done @ 11e0:0000 which also
+     * accepts adv_done). */
+    if (break_flag != 0)
+        return 1;
+    return 0;
+}
+
+civ_error_t mainmenu_pump_events(int *break_flag)
+{
+    /* Orig Dialog_MenuZ_Modal @ 1220:0156 modal pump +
+     * PEEKMESSAGE/ISDIALOGMESSAGE drain per 100 ms SETTIMER @ 1220:0202
+     * (via menuz_timer_interval_ms / dialog_menuz_timer_ms; pacing via
+     * Sys_GetTickScaled @ 1100:02e1 TBD caller-side). SDL3 drain bridge:
+     * SDL_PollEvent loop (borrowed queue, SDL headers via boot.h, no
+     * window owned here); dismiss events (see mainmenu_event_is_dismiss)
+     * set the DAT_12b0_00a0 / DAT_1418_0004 break image sticky.
+     * TODO: Orig Dialog_MenuZ_Modal @ 1220:0156 (100 ms MenuZ timer tick +
+     * tick-paced pump still goes through the dlg_create_tracked /
+     * gfx device tails, STUB in mainmenu_run above; never fake CIV_OK). */
+    SDL_Event ev;
+
+    if (!break_flag)
+        return CIV_ERR_NOENT;
+    while (SDL_PollEvent(&ev)) {
+        if (mainmenu_event_is_dismiss((uint32_t)ev.type) != 0)
+            *break_flag = 1;
+    }
+    return CIV_OK;
 }

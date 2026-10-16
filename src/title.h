@@ -83,7 +83,15 @@ civ_error_t title_play_anim_loop(void);
  * Same 1018 segment as the 1018:015d caller of game_append_year_text @
  * 1088:1dd0 (chain: status panel, 1018:015d, 1138:0000, 11b0:0000,
  * 11b8:14e5 -- see game.h); decode context to be confirmed against that
- * caller chain. Win16/GDI blit path -> stub CIV_ERR_UNSUPPORTED. */
+ * caller chain. Faithful bitmap path (STUB until the 1198 compare lands):
+ * rsc_get_res_indexed @ 1190:0a29 (Nth res) + rsc_record_data slice (BE) +
+ * rsc_decode_bitmap @ 1198:xxxx strict gate (w/h>0, bpp==8, pal 1..255,
+ * px<pal; mirror gfx_decode_raw/probe) + gfx_decode_rle expand. Ref
+ * unpacked/civ.exe + rsc_dump: dir 454/14/31/144/1 slices OK,
+ * images_strict=0, CIVDATA1 CvPc BB DF len 86857 best NONE — no codec
+ * proven, no fake decode. Win16/GDI blit path -> stub CIV_ERR_UNSUPPORTED,
+ * NOENT on NULL src, TRUNCATED on len==0. TODO: Orig FUN_1198_xxxx compare
+ * vs the 1198 RLE/tagged-frame decoder (ref unpacked/civ.exe). */
 civ_error_t title_decode_frame(const uint8_t *src, size_t len);
 
 /* Orig: FUN_1010_xxxx @ 1010:xxxx -> pic_decompress_chunk

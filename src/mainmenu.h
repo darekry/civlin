@@ -283,6 +283,52 @@ int mainmenu_widget_row_y(int top, int row_h, int index);
  * No globals. */
 int mainmenu_needs_rsc_frame(void);
 
+/* --- Chain 2026-10-16 (P1): MenuZ modal SDL bridge (goal P1) ---
+ * Orig Dialog_MenuZ_Modal @ 1220:0156 modal pump (civ.exe, x86:LE:16:
+ * Protected Mode; ref unpacked/civ.exe): SETTIMER(hwnd,2,0x64,NULL) @
+ * 1220:0202 (100 ms tick via dialog_menuz_timer_ms / menuz_timer_interval_ms;
+ * 0 = 'Can''t initialize timer in MenuZ' @ 1420:4a41, file offset 0xbba41,
+ * windows.c) + PEEKMESSAGE/ISDIALOGMESSAGE drain to cancel -1
+ * (DAT_12b0_00a0 / DAT_1418_0004 via dialog_menuz_cancel_code /
+ * dialog_menuz_is_cancel) over CIV_MAINMENU_TEXT @ 1420:435b (file offset
+ * 0xbb35b, 6 items, RanDoMRadio 500+i fan-out). SDL mapping (no Win16, no
+ * globals, read-only except the explicit break out): SDL_PollEvent drain
+ * replaces PEEKMESSAGE, dismiss events set the break image (loop re-prompt
+ * via mainmenu_should_loop / dialog_menuz_should_loop), 100 ms pacing via
+ * menuz_timer_interval_ms + Sys_GetTickScaled TBD caller-side. Helpers below
+ * are LIVE 1:1 on explicit params; the device tails (CREATEDIALOG/palette/
+ * RSC decode via rsc_get_indexed @ 1190:0a29) stay STUB in mainmenu_run
+ * above with TODO Orig 1220:0156, never fake CIV_OK. No exit(), C17. */
+
+/* Orig same dismiss shape (button/ESC/close vs motion/window noise) ->
+ * mainmenu_event_is_dismiss. 1:1 1 for the SDL dismiss family
+ * (SDL_EVENT_QUIT close + SDL_EVENT_KEY_DOWN key incl. ESC +
+ * SDL_EVENT_MOUSE_BUTTON_DOWN click = MenuZ button/close), 0 for
+ * everything else (motion/window/user-noise = keep pumping, like
+ * ISDIALOGMESSAGE-non-dialog msgs). Takes the SDL event type explicitly
+ * (Uint32 image, no SDL init needed for the predicate). No globals. */
+int mainmenu_event_is_dismiss(uint32_t sdl_type);
+
+/* Orig same loop-done shape (dismiss sets DAT_12b0_00a0 / DAT_1418_0004,
+ * caller re-prompts while mainmenu_should_loop == 1) ->
+ * mainmenu_modal_is_done. 1:1 1 when break_flag != 0 (dismiss latched),
+ * 0 while busy (no dismiss = keep pumping; MenuZ has no Anim advance
+ * twin, unlike main_startup_modal_is_done @ 11e0:0000). No globals. */
+int mainmenu_modal_is_done(int break_flag);
+
+/* Orig same modal pump (PEEKMESSAGE/ISDIALOGMESSAGE drain per 100 ms tick)
+ * -> mainmenu_pump_events. SDL3 drain bridge LIVE (no Win16, no globals,
+ * read-only except the explicit out): SDL_PollEvent loop, any dismiss
+ * event (see mainmenu_event_is_dismiss) sets *break_flag = 1 (sticky:
+ * already-1 stays 1; DAT_12b0_00a0 / DAT_1418_0004 image). Noise events
+ * are dropped like ISDIALOGMESSAGE-non-dialog msgs. NULL break_flag ->
+ * NOENT (untouched); else CIV_OK after draining (0 events is still OK,
+ * caller keeps pumping while mainmenu_modal_is_done == 0). Safe before
+ * SDL_Init (SDL_PollEvent reports none). TODO: Orig Dialog_MenuZ_Modal @
+ * 1220:0156 (100 ms MenuZ timer tick via menuz_timer_interval_ms +
+ * Sys_GetTickScaled pacing TBD caller-side). */
+civ_error_t mainmenu_pump_events(int *break_flag);
+
 /* Orig CX = 0x44: liczba wpisow (68). */
 int menu_dispatch_count(void);
 /* Orig scan 1:1: indeks wpisu o danym id, -1 przy pudle. */
