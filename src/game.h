@@ -2948,4 +2948,144 @@ int pedia_terrain_find_index(const int *table, int n, int id);
  * 1:1 gov != 0 (3b77+0x13+civ*2). */
 int gov_announce_needed(int gov);
 
+/* --- Chain 2026-10-16 (p5): ConquestTech transfer + EliminatedFlags ---
+ * Orig Tech_GrantConquestTech @ 1038:09bc (civ.exe, x86:LE:16:Protected
+ * Mode), decompiled this pass (body 09bc-0bb9; signature
+ * (winner, loser); gate winner != 0 && loser != 0):
+ *   scan tech 0x47..0 step -1: !Tech_HasTech(winner,t) &&
+ *     Tech_HasTech(loser,t) -> lista local_9c[n] (cap 72 = 0x48 wpisow,
+ *     tech_conquest_list_cap), koszt via Tech_CalcCost @ 1170:31ec
+ *     (base0[+0x90] + base1[+0x91] * 1ca4[可能是winner]; zob. tech_calc_cost)
+ *     + track max (local_8 = -1 init, local_a = tech przy cost > best).
+ *   Ile techow? WSZYSTKIE ofiary, ktorych zdobywca nie ma (pelna lista do
+ *     wyboru, nie 1; cap tylko rozmiarem tablicy 72). Ktore? te z listy
+ *     (victim-exclusive). Cap kosztu? BRAK capu — max bierze najdroższy
+ *     (CalcCost), nie najtańszy.
+ *   Dialog: player == winner -> petla wyboru az local_c != -1
+ *     (Dialog_ShowMessage @ 1220:00d2 gdy DAT_1358_0008 == -1, inaczej
+ *     Diplo_RunContactMenu @ 1160:328e) + Tech_GrantTech(winner,
+ *     lista[wybor], loser); player == loser -> komunikat z najdroższym
+ *     (local_a) + Tech_GrantTech(winner, local_a, loser); AI vs AI ->
+ *     po cichu Tech_GrantTech(winner, local_a, loser) +
+ *     City_NotifyCivCities(winner, 0xffff) (was FUN_1078_4ca5, renamed this
+ *     pass: broadcast po wszystkich miastach civ; callee tez Tech_
+ *     ChooseResearch @ 1170:21b3 + FUN_1078_0000).
+ *   Callerzy (verified this pass): Unit_DoMove @ 1038:0000 (tail po
+ *     Map_SetTileOwner: GrantConquestTech(winner,lastOwner) przy zdobyciu
+ *     miasta) + Diplo_OpenContactDialog @ 1160:0000 x2 (sciezki
+ *     trybutu/darowizny: CalcCost x2 + GrantTech x3 + GrantConquestTech).
+ *   Zwiazek z Diplo_ExchangeTechs @ 1168:1220 (JEDEN call site w
+ *     Diplo_PostContact @ 1168:0a07, "x2" = DWIE strony wymiany: GrantTech
+ *     w obie strony gdy uVar3 == 3, tj. A-exclusive && B-exclusive wsrod
+ *     0..0x48 via Tech_HasTech; gates: obie AI, (a+b+turn)&3 == 0 lub
+ *     first-contact, brak 0x08, ShouldMakePeace + wonder-7/count; zob.
+ *     diplo_should_exchange w dialog.h): Exchange = SYMETRYCZNA wymiana
+ *     1-za-1 (ostatnie exclusive z kazdej strony), Conquest = ASYMETRYCZNY
+ *     transfer (calosc victim-exclusive, wybor gracza lub max-cost).
+ *   Zwiazek z Tech_ChooseResearch @ 1170:21b3 (callerzy verified this
+ *     pass: NewGame_RateStartPositions @ 10e8:1d48 rating-loop,
+ *     Game_DoPollutionAndWonderRace @ 1088:1e32, Pic_PlayShared @
+ *     1030:0000): ChooseResearch WYBIERA nastepny research (MAX-roll
+ *     koszt<<2, zob. tech_cost_roll_bound), Conquest PRZENOSI gotowe techy
+ *     po zdobyciu (bez rolla; roll tylko w wyborze gracza via dialog).
+ *   Zwiazek z Unit_DoMove @ 1038:082c (site INSIDE Unit_DoMove @
+ *     1038:0000 body 0000-083c, nie osobna funkcja): tail po zdobyciu —
+ *     Game_EliminateCiv(lastOwner, winner) przy pustym miescie
+ *     (city-size 0) + GrantConquestTech + Map_SetTileOwner; ClearEliminated
+ *     ponizej wywolywane z Unit_DoMove gdy 54fc&1 (flaga miasta) oraz z
+ *     Game_EliminateCiv @ 10e8:1b97.
+ * OS-free reguly ponizej LIVE 1:1 (no Win16, no globals, read-only);
+ * dialog/GrantTech ogony STUB z TODO Orig. No exit(), C17. */
+
+/* Orig gate (param_1 != 0 && param_2 != 0) -> tech_conquest_gate.
+ * 1:1 1 gdy transfer (oba civ != 0; 0 = barbarians/brak). */
+int tech_conquest_gate(int winner, int loser);
+
+/* Orig Tech_GrantConquestTech @ 1038:09bc lista local_9c cap (0x48 techow)
+ * -> tech_conquest_list_cap. 1:1 72. */
+int tech_conquest_list_cap(void);
+
+/* Orig Tech_GrantConquestTech @ 1038:09bc eligible (!HasTech(w) && HasTech(l))
+ * -> tech_conquest_eligible. 1:1 winner_lacks != 0 && loser_has != 0. */
+int tech_conquest_eligible(int winner_lacks, int loser_has);
+
+/* Orig Tech_GrantConquestTech @ 1038:09bc max-track (local_8 < cost) ->
+ * tech_conquest_cost_is_better. 1:1 cost > best (init best =
+ * tech_conquest_initial_best() = -1). */
+int tech_conquest_cost_is_better(int cost, int best);
+
+/* Orig Tech_GrantConquestTech @ 1038:09bc init local_8 = -1 ->
+ * tech_conquest_initial_best. 1:1 -1. */
+int tech_conquest_initial_best(void);
+
+/* Orig Tech_GrantConquestTech @ 1038:09bc "czy sa techy" (local_6 != 0) ->
+ * tech_conquest_has_any. 1:1 count != 0. */
+int tech_conquest_has_any(int count);
+
+/* Orig Tech_GrantConquestTech @ 1038:09bc player == winner (dialog wyboru)
+ * -> tech_conquest_player_picks. 1:1 player_civ == winner. */
+int tech_conquest_player_picks(int player_civ, int winner);
+
+/* Orig Tech_GrantConquestTech @ 1038:09bc player == loser (komunikat ofiary)
+ * -> tech_conquest_player_loses. 1:1 player_civ == loser. */
+int tech_conquest_player_loses(int player_civ, int loser);
+
+/* --- Orig Game_ClearEliminatedCivFlags @ 1038:083d (was FUN_1038_083d) ---
+ * Decompiled this pass (body 083d-08ff; callee Game_EliminateCiv @
+ * 10e8:1b97 + Unit_DoMove @ 1038:0000 site 54fc&1):
+ *   msg: tribe (loser*0x20+0x3da) + 0x746 " spaceship " + wariant:
+ *     high-bit (1 << (civ+8)) SET? nie: brak msg, tylko clear.
+ *     high SET + low (1 << civ) CLEAR -> 0x764 "construction cancelled.";
+ *     high SET + low SET -> 0x752 "returns to Earth."; potem
+ *     Dialog_ShowMessage(0x24fa, 100, 0x50).
+ *   clear: DAT_12d0_00b6 &= ~(1 << civ) & ~(1 << (civ+8)) + NewGame_
+ *     ResetCivData(civ) (was FUN_10e8_3368, renamed this pass: slot
+ *     *(civ*2+0x752) = 0xffff + 0xf x 0xc bajtow 0xff od civ*0xb4+0x1b2;
+ *     caller tez NewGame_Wizard @ 10e8:0000).
+ * Ktore flagi (alive? kontakt? wojna?): ANI alive (to 12d8:42f8, zob.
+ *   game_eliminate_alive_clear) ANI kontakt/wojna/pokoj (to 12d8:3a0a
+ *   0x01/0x02/0x40, zob. diplo_* w dialog.h) — to PARA BITOW slowa
+ *   12d0:00b6 (statek kosmiczny): low 1<<civ (status statku: SET =
+ *   "returns", CLEAR = "cancelled") + high 1<<(civ+8) (pending-msg?:
+ *   SET = pokaz msg). Dokladna semantyka TBD vs decompiler (TODO), ale
+ *   mechanika bitow + wariant msg LIVE 1:1 ponizej.
+ * Callee Game_EliminateCiv @ 10e8:1b97 (decompiled this pass): gate
+ *   civ != 0 && != player + miasta? early-return; msg " civilization
+ *   destroyed by " @ 1420:2b05 + "!" @ 0x2b21 + ClearEliminated + Replay
+ *   0xd,2 + FoundCityIfHome-resettle + seen 0x50x0x32 &= ~(1<<civ) +
+ *   NewGame_InitCivState; callerzy: Pic_PlayShared, FUN_1078_0000,
+ *   Unit_DoMove @ 1038:082c-tail, Civ_ProcessUnitMoves @ 11f0:27b1. */
+
+/* Orig Game_ClearEliminatedCivFlags @ 1038:083d maska 1 << civ ->
+ * game_elimflag_low_mask. 1:1; civ < 0 -> -1. */
+int game_elimflag_low_mask(int civ);
+/* Orig Game_ClearEliminatedCivFlags @ 1038:083d maska 1 << (civ+8) ->
+ * game_elimflag_high_mask. 1:1; civ < 0 -> -1. */
+int game_elimflag_high_mask(int civ);
+
+/* Orig Game_ClearEliminatedCivFlags @ 1038:083d msg-gate (00b6 & high) != 0
+ * -> game_elimflag_msg_needed. 1:1. */
+int game_elimflag_msg_needed(int flags_00b6, int civ);
+
+/* Orig Game_ClearEliminatedCivFlags @ 1038:083d wariant
+ * ((00b6 & low) == 0 ? 0x764 : 0x752) -> game_elimflag_msg_id. 1:1 0x764
+ * (cancelled) gdy low CLEAR, 0x752 (returns) gdy low SET; -1 gdy civ < 0.
+ * Tresci: 0x746 " spaceship ", 0x752 "returns to Earth.",
+ * 0x764 "construction cancelled." (1420:0746/0752/0764, dump-verified
+ * this pass). */
+int game_elimflag_msg_id(int flags_00b6, int civ);
+
+/* Orig Game_ClearEliminatedCivFlags @ 1038:083d clear (& ~low & ~high) ->
+ * game_elimflag_clear. 1:1; civ < 0 -> -1. */
+int game_elimflag_clear(int flags_00b6, int civ);
+
+/* Orig City_CalcPlunderValue @ 1038:0901 (was FUN_1038_0901, renamed this
+ * pass; callee Unit_DoMove @ 1038:0000): overflow-guard 32000/size:
+ *   treasury < 32000/size ? (treasury*size)/(div+1)
+ *                         : (treasury/(div+1))*size
+ * (treasury = 43b8+0x8c[owner], size = 5503[city] char, div =
+ * *(owner*2+0x3ebe)). OS-free 1:1 na jawnych parametrach; size <= 0 lub
+ * div < 0 -> -1. No globals. */
+int city_plunder_value(int treasury, int city_size, int divisor);
+
 #endif /* CIVLIN_GAME_H */

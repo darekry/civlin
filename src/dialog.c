@@ -1515,6 +1515,12 @@ int diplo_should_exchange(int a_exclusive, int b_exclusive)
     return (a_exclusive != 0 && b_exclusive != 0) ? 1 : 0;
 }
 
+int diplo_exchange_grant_count(void)
+{
+    /* Orig same: GrantTech(A,B) + GrantTech(B,A) na jedno wywolanie. */
+    return 2;
+}
+
 /* --- Chain 2026-10-16 (6): diplo turn tick + government rules (task goals 1/2).
  * Caller/callee: Game_TurnLoopTick @ 1088:0000 -> Diplo_ProcessTurn @ 1168:0000
  * (per-civ turn) -> Diplo_ChangeGovernment @ 1168:06c1 + Diplo_SetPeace/SetWar
@@ -2847,4 +2853,33 @@ int quiz_pair_first_mode(void)
 {
     /* Orig Quiz_RunQuizPair @ 1178:0000: pierwszy Quiz(1). */
     return 1;
+}
+
+/* --- Chain 2026-10-16 (p5): Pedia dispatcher shape (goal 3) ---
+ * See dialog.h block. OS-free 1:1 LIVE (no Win16, no globals, no exit()). */
+
+int pedia_selector_valid(int sel)
+{
+    /* Orig Pedia_ShowByCategory @ 1020:0000 switch: case 0..4. */
+    return (sel >= 0 && sel <= 4) ? 1 : 0;
+}
+
+int pedia_kind_from_selector(int sel)
+{
+    /* Orig same: kind (Pedia_ShowEntry switch 1..5) = sel + 1. */
+    if (sel < 0 || sel > 4)
+        return -1;
+    return sel + 1;
+}
+
+int pedia_dlg_id(void)
+{
+    /* Orig same: Dlg_CreateTracked(0x82, 0x61). */
+    return 0x82;
+}
+
+int pedia_dlg_flags(void)
+{
+    /* Orig same: Dlg_CreateTracked(0x82, 0x61). */
+    return 0x61;
 }

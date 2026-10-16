@@ -4187,3 +4187,121 @@ int gov_announce_needed(int gov)
     /* Orig Gov_AnnounceChange @ 10e8:32c1: gov(3b77+0x13) != 0. */
     return (gov != 0) ? 1 : 0;
 }
+
+/* --- Chain 2026-10-16 (p5): ConquestTech transfer + EliminatedFlags ---
+ * See game.h block. OS-free 1:1 LIVE (no Win16, no globals, no exit()). */
+
+int tech_conquest_gate(int winner, int loser)
+{
+    /* Orig Tech_GrantConquestTech @ 1038:09bc: param_1 != 0 && param_2 != 0. */
+    if (winner == 0)
+        return 0;
+    if (loser == 0)
+        return 0;
+    return 1;
+}
+
+int tech_conquest_list_cap(void)
+{
+    /* Orig same: local_9c[72] dla techow 0..0x47. */
+    return 0x48;
+}
+
+int tech_conquest_eligible(int winner_lacks, int loser_has)
+{
+    /* Orig same scan: HasTech(w,t) == 0 && HasTech(l,t) != 0. */
+    if (!winner_lacks)
+        return 0;
+    if (!loser_has)
+        return 0;
+    return 1;
+}
+
+int tech_conquest_cost_is_better(int cost, int best)
+{
+    /* Orig same max-track: local_8 < Tech_CalcCost(...) -> update. */
+    return (cost > best) ? 1 : 0;
+}
+
+int tech_conquest_initial_best(void)
+{
+    /* Orig same: local_8 = -1 przed scanem. */
+    return -1;
+}
+
+int tech_conquest_has_any(int count)
+{
+    /* Orig same: local_6 != 0 -> dialog/grant; 0 = nic do transferu. */
+    return (count != 0) ? 1 : 0;
+}
+
+int tech_conquest_player_picks(int player_civ, int winner)
+{
+    /* Orig same: g_nPlayerCiv == param_1 -> petla wyboru z listy. */
+    return (player_civ == winner) ? 1 : 0;
+}
+
+int tech_conquest_player_loses(int player_civ, int loser)
+{
+    /* Orig same: g_nPlayerCiv == param_2 -> komunikat ofiary z max-tech. */
+    return (player_civ == loser) ? 1 : 0;
+}
+
+int game_elimflag_low_mask(int civ)
+{
+    /* Orig Game_ClearEliminatedCivFlags @ 1038:083d: 1 << (civ & 0x1f). */
+    if (civ < 0)
+        return -1;
+    return 1 << (civ & 0x1f);
+}
+
+int game_elimflag_high_mask(int civ)
+{
+    /* Orig same: 1 << ((civ + 8) & 0x1f). */
+    if (civ < 0)
+        return -1;
+    return 1 << ((civ + 8) & 0x1f);
+}
+
+int game_elimflag_msg_needed(int flags_00b6, int civ)
+{
+    /* Orig same: (DAT_12d0_00b6 & high) != 0 -> ShowMessage. */
+    int high = game_elimflag_high_mask(civ);
+
+    if (high < 0)
+        return 0;
+    return ((flags_00b6 & high) != 0) ? 1 : 0;
+}
+
+int game_elimflag_msg_id(int flags_00b6, int civ)
+{
+    /* Orig same: low CLEAR -> 0x764 cancelled, low SET -> 0x752 returns. */
+    int low = game_elimflag_low_mask(civ);
+
+    if (low < 0)
+        return -1;
+    return ((flags_00b6 & low) == 0) ? 0x764 : 0x752;
+}
+
+int game_elimflag_clear(int flags_00b6, int civ)
+{
+    /* Orig same: 00b6 & ~low & ~high (+ NewGame_ResetCivData caller-side). */
+    int low = game_elimflag_low_mask(civ);
+    int high = game_elimflag_high_mask(civ);
+
+    if (low < 0 || high < 0)
+        return -1;
+    return flags_00b6 & ~low & ~high;
+}
+
+int city_plunder_value(int treasury, int city_size, int divisor)
+{
+    /* Orig City_CalcPlunderValue @ 1038:0901 overflow-guard 32000/size. */
+    if (city_size <= 0)
+        return -1;
+    if (divisor < 0)
+        return -1;
+    if (treasury < 32000 / city_size)
+        return (treasury * city_size) / (divisor + 1);
+    return (treasury / (divisor + 1)) * city_size;
+}

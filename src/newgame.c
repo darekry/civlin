@@ -457,3 +457,24 @@ int newgame_start_should_pick(int score, int best, int is_first, int is_isolated
         return 1;
     return (is_isolated != 0) ? 1 : 0;
 }
+
+/* --- Chain 2026-10-16 (p5): CivNote res ids + tresc (goal 4) ---
+ * See newgame.h block. OS-free 1:1 LIVE (no Win16, no globals, no exit()). */
+
+int newgame_civ_note_early_res(void)
+{
+    /* Orig NewGame_ShowCivNoteEarly @ 10e0:077f HelpDialog id. */
+    return CIV_HELP_NOTE_EARLY;
+}
+
+int newgame_civ_note_player_res(void)
+{
+    /* Orig NewGame_ShowCivNoteForPlayer @ 10e0:07e8 HelpDialog id. */
+    return CIV_HELP_NOTE_PLAYER;
+}
+
+const char *newgame_civ_note_title(void)
+{
+    /* Orig tytuly @ 1420:29cd/1420:29e9 (oba "** Civilization Note **"). */
+    return "** Civilization Note **";
+}

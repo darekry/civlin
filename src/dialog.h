@@ -740,6 +740,19 @@ int diplo_tribute_amount(int gold);
  * flags explicitly (caller scans via tech_has_tech in game.h). No globals. */
 int diplo_should_exchange(int a_exclusive, int b_exclusive);
 
+/* Chain 2026-10-16 (p5), goal 5: Diplo_ExchangeTechs @ 1168:1220 "x2".
+ * Verified this pass: JEDEN call site (Diplo_PostContact @ 1168:0a07), a
+ * "x2" to DWIE strony wymiany — GrantTech(param_1, local_6, param_2) +
+ * GrantTech(param_2, local_8, param_1) (ostatnie exclusive z kazdej strony
+ * wsrod 0..0x48; co wymieniaja: 1 tech za 1 tech, tylko gdy OBA kierunki
+ * maja exclusive (uVar3 == 3); gate'y: obie AI (zadna != player), kontakt
+ * (civA+civB+turn)&3 == 0 lub first-contact bez 0x01, brak 0x08 z obu
+ * stron, ShouldMakePeace + wonder-7/count z obu stron). Helper ponizej. */
+
+/* Orig Diplo_ExchangeTechs @ 1168:1220 grant pair -> diplo_exchange_grant_count.
+ * 1:1 2 (dwa GrantTech w przeciwnych kierunkach na jedno wywolanie). */
+int diplo_exchange_grant_count(void);
+
 /* Orig: FUN_10d8_00e0 @ 10d8:00e0 -> UI_DrawEndTurnPrompt.
  * Draws "End of Turn / Press Return" (alternates with the unit sprite blink
  * via 1110:0448/0dba + 1210:07ae in unit_wait_for_orders @ 11c0:0ec2 on the
@@ -2259,5 +2272,43 @@ int quiz_needs_resettle(int mode, int correct);
 /* Orig Quiz_RunQuizPair @ 1178:0000 pierwszy tryb -> quiz_pair_first_mode.
  * 1:1 1 (retry 0 w quiz_should_retry). */
 int quiz_pair_first_mode(void);
+
+/* --- Chain 2026-10-16 (p5): Pedia dispatcher shape (goal 3) ---
+ * Orig Pedia_ShowByCategory @ 1020:0000 (civ.exe, x86:LE:16:Protected Mode),
+ * decompiled this pass (body 0000-014e; Dlg_CreateTracked(0x82, 0x61) +
+ * FRAMERECT + switch sel 0..4 -> Res 0x82..0x86 tytul + PascalToCStr +
+ * Pedia_ShowEntry + Dlg_DestroyTracked):
+ *   sel 0 -> Res 0x82 (tech; entry kind 1: +0x44c, Requires/Allows/units).
+ *   sel 1 -> Res 0x83 (improvements/wonders; kind 2: param+1 < 0x19 ? 2 : 3,
+ *     0xd07/0xd08 via Tech_HasTech(0x25)).
+ *   sel 2 -> Res 0x84 (units/produce; kind 3: +0x4b0, Cost/Attack/Defense).
+ *   sel 3 -> Res 0x85 (terrain, 12 wpisow 1..0xc; kind 4: index via
+ *     Pedia_FindTerrainIndex @ 1020:011b scan 0..0xb, 0xffff gdy brak;
+ *     +0x3f5/6, food/prod/trade + movement + defense%).
+ *   sel 4 -> Res 0x86 (governments; kind 5: pusty, local_8 = 0).
+ * Kategorie: tech / buildings+wonders / units / terrain / governments.
+ * Zwiazek z Pedia_ShowEntry @ 1068:06af switch 1..5 (kind = sel + 1):
+ *   tytul Res (0x82+sel) + tresc kind (pedia_entry_kind_valid w game.h).
+ *   Res-stringi via Dialog_InitResStringTables @ 1068:0295 +
+ *   Text_FillResStringList @ 1098:1f4f (0x82 tech 1..0x43 / 0x83 build
+ *   2..999 / 0x84 produce 1..999 / 0x85 1..0xc / 0x86 1..999).
+ * Zwiazek z Tech_GrantTech @ 1170:2aaa (player-tech -> Pedia_ShowByCategory
+ *   (tech, 0) civilopedia-popup po odkryciu).
+ * OS-free ksztalt ponizej LIVE 1:1 (no Win16, no globals, read-only);
+ * Dlg_CreateTracked/GDI ogon STUB z TODO Orig. No exit(), C17. */
+
+/* Orig sel 0..4 gate -> pedia_selector_valid. 1:1. */
+int pedia_selector_valid(int sel);
+
+/* Orig Pedia_ShowByCategory @ 1020:0000 kind = sel + 1 (switch 1..5) ->
+ * pedia_kind_from_selector. 1:1 sel 0..4 -> 1..5, else -1. */
+int pedia_kind_from_selector(int sel);
+
+/* Orig Dlg_CreateTracked @ 1020:0000 (0x82, 0x61) -> pedia_dlg_id.
+ * 1:1 0x82. */
+int pedia_dlg_id(void);
+/* Orig Dlg_CreateTracked @ 1020:0000 (0x82, 0x61) -> pedia_dlg_flags.
+ * 1:1 0x61. */
+int pedia_dlg_flags(void);
 
 #endif /* CIVLIN_DIALOG_H */

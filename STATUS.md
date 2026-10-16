@@ -296,6 +296,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `diplo_apply_war` | LIVE | 1168:0e8e |  |
 | `diplo_tribute_amount` | LIVE | 1160:328e, 1168:0000, 11c8:0063 |  |
 | `diplo_should_exchange` | LIVE | 1168:1220, 1170:2aaa, 1170:3181 |  |
+| `diplo_exchange_grant_count` | LIVE | 1168:1220 |  |
 | `diplo_government_tick` | LIVE | 1168:0000, 1168:06c1 |  |
 | `diplo_spy_decay_step` | LIVE | 1168:0000, 11c8:003d |  |
 | `diplo_war_end_tick` | LIVE | 1168:0000 |  |
@@ -400,6 +401,10 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `quiz_reward_flags` | LIVE | 1178:0022 |  |
 | `quiz_needs_resettle` | LIVE | 1178:0022 |  |
 | `quiz_pair_first_mode` | LIVE | 1178:0000 |  |
+| `pedia_selector_valid` | LIVE | 1020:0000 |  |
+| `pedia_kind_from_selector` | LIVE | 1020:0000 |  |
+| `pedia_dlg_id` | LIVE | 1020:0000 |  |
+| `pedia_dlg_flags` | LIVE | 1020:0000 |  |
 
 ### `src/game.c`
 
@@ -696,6 +701,20 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `pedia_build_variant` | LIVE | 1068:06af |  |
 | `pedia_terrain_find_index` | LIVE | 1020:011b |  |
 | `gov_announce_needed` | LIVE | 10e8:32c1 |  |
+| `tech_conquest_gate` | LIVE | 1038:09bc |  |
+| `tech_conquest_list_cap` | LIVE | 1038:09bc |  |
+| `tech_conquest_eligible` | LIVE | 1038:09bc |  |
+| `tech_conquest_cost_is_better` | LIVE | 1038:09bc |  |
+| `tech_conquest_initial_best` | LIVE | 1038:09bc |  |
+| `tech_conquest_has_any` | LIVE | 1038:09bc |  |
+| `tech_conquest_player_picks` | LIVE | 1038:09bc |  |
+| `tech_conquest_player_loses` | LIVE | 1038:09bc |  |
+| `game_elimflag_low_mask` | LIVE | 1038:083d |  |
+| `game_elimflag_high_mask` | LIVE | 1038:083d |  |
+| `game_elimflag_msg_needed` | LIVE | 1038:083d |  |
+| `game_elimflag_msg_id` | LIVE | 1038:083d, 1420:0746 |  |
+| `game_elimflag_clear` | LIVE | 1038:083d |  |
+| `city_plunder_value` | LIVE | 1038:0000, 1038:0901 |  |
 
 ### `src/gfx_indexed.c`
 
@@ -959,6 +978,9 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `newgame_start_continent_bonus` | LIVE | 10e8:212a |  |
 | `newgame_start_needs_extra_settler` | LIVE | 10e8:1d48 |  |
 | `newgame_start_should_pick` | LIVE | 10e8:1d48 |  |
+| `newgame_civ_note_early_res` | LIVE | 10e0:077f |  |
+| `newgame_civ_note_player_res` | LIVE | 10e0:07e8 |  |
+| `newgame_civ_note_title` | LIVE | 1420:29cd, 1420:29e9 |  |
 
 ### `src/rsc_loader.c`
 

@@ -448,4 +448,39 @@ int newgame_start_needs_extra_settler(int best, int score);
  * newgame_start_should_pick. 1:1. */
 int newgame_start_should_pick(int score, int best, int is_first, int is_isolated);
 
+/* --- Chain 2026-10-16 (p5): CivNote res ids + tresc (goal 4) ---
+ * Orig NewGame_ShowCivNoteEarly @ 10e0:077f + NewGame_ShowCivNoteForPlayer @
+ * 10e0:07e8 (civ.exe, x86:LE:16:Protected Mode), decompiled this pass
+ * (gates juz LIVE: newgame_civ_note_early_needed/_player_needed):
+ *   Early: gate (g_nOptionFlags & 1) != 0 && g_nYear < 0 ->
+ *     NewGame_CustomHelpDialog @ 10e0:03a2 (0x29c9, "___Civilization
+ *     Note___" @ 1420:29cd, colors 0xd8/0xe + DAT_12d8_45fb/45fd/45fd).
+ *   ForPlayer: gate DAT_13f0_000c == g_nPlayerCiv ->
+ *     CustomHelpDialog(0x29e5, "___Civilization Note___" @ 1420:29e9,
+ *     colors 0xd8/0xe + 45fb/45fd/45f1).
+ * Kiedy notki (start gry? pierwsze tury? konkretny gracz?):
+ *   Early = DOWOLNY civ z wlaczona opcja podpowiedzi (opt&1, tj. "instant
+ *     advice"?) DOPOKI rok ujemny (era BC: g_nYear < 0, start 0xF060 =
+ *     -4000 = 4000 BC) — czyli wczesna faza gry, nie tylko tura 0; wywolanie
+ *     z Diplo_OpenContactDialog @ 1160:0000 (Monarchy 0x3757 site, zob.
+ *     Tech_GrantTech @ 1170:2aaa tail: tech 5 + player -> ShowCivNoteEarly)
+ *     + Tech_GrantTech monarchy-path. ForPlayer = tylko gdy znacznik
+ *     DAT_13f0_000c == g_nPlayerCiv (konkretny gracz, nie kazdy).
+ * Tresc (Res 0x29c9/0x29e5?): ciala Res 0x29c9 (early) / 0x29e5 (player);
+ *   tytuly OBA "** Civilization Note **" (@ 1420:29cd / 1420:29e9,
+ *   dump-verified this pass). Pelne ciala wymagaja ResMgr-dumpu 0x29c9/
+ *   0x29e5 (TODO, nie dumpowane — poza zakresem; gate + id LIVE).
+ *   Dialog 0x87 via NewGame_CustomHelpDialog @ 10e0:03a2 (STUB).
+ * OS-free id/tytul ponizej LIVE 1:1 (no Win16, no globals, read-only). */
+
+/* Orig Early HelpDialog id -> newgame_civ_note_early_res. 1:1 0x29c9. */
+int newgame_civ_note_early_res(void);
+
+/* Orig ForPlayer HelpDialog id -> newgame_civ_note_player_res. 1:1 0x29e5. */
+int newgame_civ_note_player_res(void);
+
+/* Orig tytuly 1420:29cd/29e9 -> newgame_civ_note_title.
+ * 1:1 "** Civilization Note **" (oba). Read-only literal. */
+const char *newgame_civ_note_title(void);
+
 #endif /* CIVLIN_NEWGAME_H */
