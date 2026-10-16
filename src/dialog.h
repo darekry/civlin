@@ -1801,6 +1801,20 @@ civ_error_t anim_rebase_clock(long now_tick, long param, long *out_base,
  * Rename galezi: Dialog_SplitMenuText @ 1220:0000 (split), art-mode via
  *   dialog_menuz_art_mode, msg-id via dialog_show_message_id, loop-gate via
  *   dialog_menuz_should_loop, cancel-gate via dialog_menuz_is_cancel.
+ *   Wewnatrz korpusu Dialog_MenuZ_Modal @ 1220:0156 (body ..0d37, verified
+ *   disasm this pass): +0b88 = CALLF Text_GetFontHeight @ 1098:0dda (repaint
+ *   font-height measure w PEEKMESSAGE/ISDIALOGMESSAGE pump), +0889 = CALLF
+ *   Text_SetColor @ 1098:0e0b (menu color setup przed CREATEWINDOW static
+ *   0x4a6e; siostrzane +10c6/+118e to TEXTOUT menu items, patrz
+ *   text_draw_aligned). Sygnatura dekompilera: int __cdecl16far
+ *   Dialog_MenuZ_Modal(char*,u2,u2,u2,u2,u2,char,u4) -> int index
+ *   (DAT_12b0_009c); petla modalna: PEEKMESSAGE + ISDIALOGMESSAGE az
+ *   DAT_12b0_00a0 != 0; mapowanie id<->index: RanDoMRadio 500+i <->
+ *   zero-based index (dialog_menuz_id_to_index/index_to_id, base 500).
+ *   Sasiedzi w zakresie: Dialog_ShowMessage @ 1220:00d2 (caller MenuZ),
+ *   Dialog_DrawFrame3D @ 1220:0d38 (caller MenuZ gdy DAT_1418_000c),
+ *   Dialog_RefreshViews @ 1220:0eb8 (ogon ShowMessage, SENDMESSAGE 0xf),
+ *   GfxPort_SelectForCoords @ 1220:0f2f (port-select, wlasnosc video.h).
  * OS-free dispatch ponizej LIVE 1:1 (no Win16, no globals); pump/Win16 tails
  * STUB. No exit(), C17. */
 

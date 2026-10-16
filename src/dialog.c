@@ -52,7 +52,13 @@ civ_error_t dialog_menuz(const char *title, const char *items_text,
         *out_index = -1;
     if (!title || !items_text || !out_index)
         return CIV_ERR_NOENT;
-    /* TODO: Dialog_MenuZ_Modal @ 1220:0156 (SDL3 modal + radio buttons). */
+    /* TODO: Orig Dialog_MenuZ_Modal @ 1220:0156 (body ..0d37): int
+     * __cdecl16far (char*,u2,u2,u2,u2,u2,char,u4) -> index DAT_12b0_009c;
+     * '_' split via Dialog_SplitMenuText @ 1220:0000, radio 500+i
+     * (dialog_menuz_id_to_index/index_to_id), PEEKMESSAGE/ISDIALOGMESSAGE
+     * pump do DAT_12b0_00a0, inner +0889 Text_SetColor / +0b88
+     * Text_GetFontHeight, frame via Dialog_DrawFrame3D @ 1220:0d38.
+     * Win16 USER-menu pump -> SDL3 modal TBD (WONTFIX do mostka SDL). */
     return CIV_ERR_UNSUPPORTED;
 }
 
