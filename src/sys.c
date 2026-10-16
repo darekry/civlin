@@ -450,7 +450,9 @@ civ_error_t sys_check_runtime_memory(void)
     /* TODO: Sys_CheckRuntimeMemory @ 11e8:0075 (GETFREESPACE <1000000 /
      * <300000 + GETFREESYSTEMRESOURCES <10/<8 -> MESSAGEBOX 1420:4473 /
      * 1420:44ff, once each via 1420:43b4/43b6). Needs a parent window +
-     * SDL_GetSystemRAM mapping. */
+     * SDL_GetSystemRAM mapping. Triggers/content LIVE in sys_runtime_*
+     * below + boot_runtime_needs_* (boot.h); per-civ call site is
+     * Game_TurnLoopTick @ 1088:0000 (check-then-move order). */
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -1824,11 +1826,62 @@ int sys_pump_mode_select(int flag_1d4c, int flag_1d50)
 
 int sys_pump_scale_coord(int v)
 {
-    /* Orig Sys_PumpMessages @ 1108:0000 popup branch:
-     * DAT_1328_0010 = (DAT_1420_1d44 * 10) / 0x10 (LOWORD) i tak samo
-     * HIWORD -> 000e; warunek *DAT_1420_9948 == DAT_1420_1d48. Ta sama
-     * skala co sys_wait_scale_coord @ 1038:0c1d (v*10>>4). */
+    /* Orig Sys_PumpMessages @ 1108:0000 popup branch (v*10>>4) + LIVE above. */
     if (v < 0)
         return -1;
     return (v * 10) >> 4;
+}
+
+/* --- Chain 2026-10-16 (28): runtime-warning triggers/content (goal 3).
+ * See sys.h block. OS-free 1:1 LIVE (no Win16, no globals, no exit()). */
+
+int sys_runtime_warn_style_first(void)
+{
+    /* Orig Sys_CheckRuntimeMemory @ 11e8:0075 branch 1 MESSAGEBOX style
+     * 0x30 (MB_ICONEXCLAMATION: "WARNING" @ 1420:44f7). */
+    return 0x30;
+}
+
+int sys_runtime_warn_style_final(void)
+{
+    /* Orig same branch 2 MESSAGEBOX style 0x10 (MB_ICONHAND: "FINAL
+     * WARNING" @ 1420:4578). */
+    return 0x10;
+}
+
+const char *sys_runtime_warn_title_first(void)
+{
+    /* Orig title @ 1420:44f7. */
+    return "WARNING";
+}
+
+const char *sys_runtime_warn_body_first(void)
+{
+    /* Orig body @ 1420:4473: getting-low text (exact newlines TBD vs dump;
+     * semantic 1:1). */
+    return "Your memory resources are getting low. Try saving the game, "
+           "closing other applications and restarting windows to recover "
+           "memory.";
+}
+
+const char *sys_runtime_warn_title_final(void)
+{
+    /* Orig title @ 1420:4578. */
+    return "FINAL WARNING";
+}
+
+const char *sys_runtime_warn_body_final(void)
+{
+    /* Orig body @ 1420:44ff: dangerously-low text (exact newlines TBD;
+     * semantic 1:1). */
+    return "Your memory resources are now dangerously low. Save the game "
+           "and restart windows to prevent loss of the current game.";
+}
+
+int sys_runtime_check_order(void)
+{
+    /* Orig Game_TurnLoopTick @ 1088:0000 per-civ tail: Sys_CheckRuntimeMemory
+     * (); then Civ_ProcessUnitMoves(civ) (return on nonzero for UI pump).
+     * 1 = check runs BEFORE the unit-move pump. */
+    return 1;
 }

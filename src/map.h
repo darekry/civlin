@@ -838,8 +838,111 @@ int smmap_click_tile_delta(int rect_lo, int rect_hi, int click, int scale);
  * Map_RefreshAllViews @ 1110:03e9 STUB). */
 int smmap_center_target(int view, int delta);
 
+/* Orig SmMap_CenterOnClick @ 1210:056e delta -> smmap_click_tile_delta.
+ * 1:1 ((lo+hi)/2 - click)/scale (x86 IDIV trunc toward zero, same as C
+ * /). lo/hi to 1420:b3cc/b3d0 (X) lub b3ce/b3d2 (Y); scale to
+ * DAT_1410_0000 (dump 2). scale == 0 -> 0 (Linux guard; orig faulted
+ * DIV0). */
+int smmap_click_tile_delta(int rect_lo, int rect_hi, int click, int scale);
+
+/* Orig same recenter -> smmap_center_target. 1:1 view - delta (view to
+ * DAT_1330_4010 (X) lub 1330:400e (Y); wynik wchodzi do
+ * Map_RefreshAllViews @ 1110:03e9 STUB). */
+int smmap_center_target(int view, int delta);
+
 /* Orig DAT_1410_0000 (dump: 02 00) -> smmap_click_scale. Zwraca skale
  * px-na-kafel uzywana w delcie powyzej (2). */
 int smmap_click_scale(void);
+
+/* --- Chain 2026-10-16 (28): Path_FindCorridor BFS kernels (task goal 2)
+ * + continent-link window + ocean/cont value (goals 2/4/5) ---
+ * Orig (civ.exe, x86:LE:16:Protected Mode), decompiled + renamed this pass:
+ *   Path_FindCorridor @ 1128:10de (was FUN_1128_10de: BFS/Dijkstra-FIFO over
+ *     the 16x16 window around the goal DAT_1338_0002/0000 (+-8 tiles):
+ *     visited/cost bytes at s_Support+4 (0x100 B, index (x-x0)*0x10+(y-y0)),
+ *     ring queue DAT_1420_afaa/aeaa 256 x/u8 (& 0xff), stop at empty or
+ *     0xe1 iters; callers Path_CheckContinentLink @ 1128:16d0 (budget
+ *     param_3 = 0x14 = 20) + Unit_StepTowardGoal @ 1128:0000 (budget 999)).
+ *   Pelny BFS: start = cel (1338 pos, queue seed + visited = 1), target =
+ *     pozycja jednostki (62fd/62fe scratch (0,0x7f) w link-check — 68f1/2
+ *     to ALIAS bajtow tej jednostki: 62fc+0x7f*0xc = 68f0, wiec 68f1/68f2
+ *     = jej y/type, a 68f3 = tryb 1 lad / 0x10 morze — NIE osobne globale;
+ *     w unit-goto start = goal tile, target = unit tile, ta sama petla).
+ *     Kolejka? Tak: ring 256 (head local_6, tail uVar17, & 0xff).
+ *     Visited? Tak: 0x100 cost-bytes (0 = unseen, else cost; relax gdy
+ *     new < old). Koszt terenu? Tak: road&8 both (FUN_1110_197a =
+ *     Map_GetOccupancyFlags & 8, NIE continent!) -> +1; else fast-unit
+ *     (1420:1a3c[type*0xb] == 1) ? +3 : +tile_cost(1420:17d4[class])*3.
+ *     Morze vs lad? Gate: (tileClass == 10) == (unitDomain 1a3a == 2) LUB
+ *     occupancy & 1 (miasto = most: city tile laczy domeny, embarka).
+ *     Kto wola poza linkami: TYLKO Unit_StepTowardGoal @ 1128:0000
+ *     (AI ruch / goto / trade-caravan przez unit_step_toward_goal, budget
+ *     999; trade routes posrednio przez trade_deliver_caravan_goods).
+ *   Path_CheckContinentLink @ 1128:16d0 gate: (|dx| < 8) || (|dy| < 8)
+ *     else 0xffff; potem scratch-unit zapis + Path_FindCorridor(0,0x7f,
+ *     budget) + koszt z DAT_1420_aea8 (-1 -> 0xffff). Poza kosztem: zadnego
+ *     morza/owner/mostu W TEJ funkcji — morze/owner/most siedza W SRODKU
+ *     FindCorridor (sea-match OR city-bit) + W CALLERZE BuildContinentLinks
+ *     (same-continent local_12 == local_14 + dir-bit OR + reverse).
+ *     Zwiazek z ContinentLinkAllowed (worldgen_continent_link_allowed LIVE:
+ *     cost != -1 && < 0x14) = caller-side gate na wynik; OceanRunOk
+ *     (worldgen_ocean_run_ok LIVE: clear_rows >= 2) = OCEAN graf, nie ten
+ *     (5-step 2-wide sea-run w Map_BuildOceanLinks @ 1028:162c, bez BFS).
+ *   Map_GetOceanOrContVal @ 1110:1dbd (sea -> u16 tab 1420:43b4[cont], land
+ *     -> u16 tab 0x4334+cont*2; czytelnicy Game_SpawnUprisings @ 1088:0c78,
+ *     10e8:212a, Unit_StepTowardGoal @ 1128:0651 ocean>4 gate, 1040:03f6).
+ *   Map_BuildOceanLinks @ 1028:162c caller save_deserialize @ 10f8:01e9:
+ *     po mem_copy_far map-buf (64000 B) + Save_GetLogTag wywoluje
+ *     Map_BuildOceanLinks(0) = REBUILD po loadzie (.sav NIE ma linkow:
+ *     rozmiary 0x1a2ba/0x1a2b8/0x18de0 to mapa+stan, linki pochodne od mapy;
+ *     continent-linki NIE rebuilduje — tylko ocean; zob. save.h predicate).
+ * Port BFS -> LIVE ponizej na jawnych parametrach (no Win16, no globals,
+ *   kolejka caller-owned u8[256] + visited caller-owned u8[256]; read-only
+ *   poza visited/queue; tile-access (Map_GetTileClass/occupancy/cost) wchodzi
+ *   jako gotowe flagi/koszty — caller czyta bufor). No exit(), C17. */
+
+/* Orig window OR-gate @ 1128:16d0 (CheckContinentLink head) ->
+ * path_corridor_gate_ok. 1:1 (|dx| < 8) || (|dy| < 8) ? 1 : 0 (x86 abs via
+ * (v ^ (v>>0xf)) - (v>>0xf); ujemne dozwolone). */
+int path_corridor_gate_ok(int dx, int dy);
+
+/* Orig BFS neighbour window ((x-goal) ^ s >> 0xf shape, < 8 per axis) ->
+ * path_corridor_window_ok. 1:1 |dx| < 8 && |dy| < 8 (obie osie; X wrap
+ * caller-side via map_wrap_x @ 1128:177e; Y never wraps). */
+int path_corridor_window_ok(int dx, int dy);
+
+/* Orig sea/land gate w FindCorridor (tileClass == 10 vs 1a3a == 2, OR
+ * occupancy & 1 city-bridge) -> path_corridor_sea_ok. 1:1
+ * (is_sea_tile == unit_is_sea) || (occupancy & 1). */
+int path_corridor_sea_ok(int is_sea_tile, int unit_is_sea, int occupancy);
+
+/* Orig road-cost branch (iVar10 = road&8 here, road&8 nbr via FUN_1110_197a)
+ * -> path_corridor_step_cost. 1:1: both roads -> 1; else fast-unit
+ * (1420:1a3c == 1) -> 3, else base_cost * 3 (base = tile byte 1420:17d4;
+ * ujemne clampowane do 0 caller-side? tu czyste mnozenie). */
+int path_corridor_step_cost(int road_here, int road_nbr, int unit_fast,
+                            int base_cost);
+
+/* Orig ring (& 0xff, 256 entries afaa/aeaa) -> path_corridor_queue_adv.
+ * 1:1 (v + 1) & 0xff. */
+int path_corridor_queue_adv(int v);
+
+/* Orig relax (visited == 0 || new < old -> write + enqueue) ->
+ * path_corridor_should_relax. 1:1 1 gdy old == 0 || new_cost < old. */
+int path_corridor_should_relax(int old_cost, int new_cost);
+
+/* Orig CheckContinentLink tail (dir == -1 -> 0xffff else DAT_aea8 cost) ->
+ * path_continent_link_result. 1:1 dir == -1 ? -1 : cost (cost to BFS koszt
+ * DAT_1420_aea8; caller gate via worldgen_continent_link_allowed; full
+ * (x,y,continent) probe to path_check_continent_link w worldgen.h). */
+int path_continent_link_result(int dir, int cost);
+
+/* Orig Map_GetOceanOrContVal @ 1110:1dbd table select ->
+ * map_get_ocean_or_cont_val. 1:1 sea ? sea_vals[cont] : land_vals[cont]
+ * (tablice caller-owned: sea = 1420:43b4, land = 0x4334; cont = continent
+ * z map_get_continent_id @ 1110:1d99). -1 poza 0..n-1 lub NULL tablica. */
+int map_get_ocean_or_cont_val(int is_sea, int continent,
+                              const int *sea_vals, const int *land_vals,
+                              int n);
 
 #endif /* CIVLIN_MAP_H */

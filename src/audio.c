@@ -232,6 +232,32 @@ int audio_gap_is_silent(int file_id)
     return sound_map_id_to_wav(file_id) == NULL ? 1 : 0;
 }
 
+/* --- Chain 2026-10-16 (25): Sound 3/1 + ID map (goal 3). ---
+ * See audio.h block. OS-free 1:1 LIVE (no SDL, no globals, no exit()). */
+
+int sound_is_stop(int id)
+{
+    /* Orig Sound_PlayId @ 1150:00c9 head: if ((param_1 == 0) || (param_1 ==
+     * 1)) SNDPLAYSOUND(0) STOP (drugi parametr na stosie ignorowany —
+     * caller-side Anim slot/flag, see audio.h). */
+    return (id == CIV_SOUND_STOP || id == CIV_SOUND_STOP1) ? 1 : 0;
+}
+
+int sound_file_id_for(int id)
+{
+    /* Orig same + normalize @ 1150:014f..016d (sound_normalize_id LIVE) +
+     * AX = SI+0x80 -> Sound_MapIdToWav @ 1150:019e. */
+    return sound_normalize_id(id) + 0x80;
+}
+
+int sound_is_opening(int id)
+{
+    /* Orig same: 3 -> 0x83 OPENING.wav; 4 normalizes to 3 (alias). Intro
+     * (Main_RunStartupSequence @ 11e0:0000 loop#1 + title OPENING.wav @
+     * 1420:3114) + Map_GenerateRandomOrLoad @ 1028:0000 start (PlayId(4)). */
+    return (id == CIV_SOUND_OPENING || id == CIV_SOUND_OPENING_ALIAS) ? 1 : 0;
+}
+
 int audio_leader_count(void)
 {
     /* AH3 count helper (see audio.h): leader slice of Sound_MapIdToWav @

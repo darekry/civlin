@@ -675,4 +675,23 @@ civ_error_t replay_open_or_play(void);
  * tail -> STUB. Param civ is the destroyed civ index. */
 civ_error_t replay_show_civ_destroyed(int civ);
 
+/* --- Chain 2026-10-16 (28): ocean-link rebuild after load (goal 5) ---
+ * Orig save_deserialize @ 10f8:0000 tail (decompiled this pass):
+ *   mem_copy_far(wire+0x93e0/0xa8ba -> g_segMapBuf:g_offMapBuf, 64000 B) +
+ *   Save_GetLogTag + Map_BuildOceanLinks(0) @ 1028:162c + DAT_1310_0002 = 2
+ *   + DAT_1420_14e6 = 0xfffd. Po co linki z save: .sav NIE ma linkow —
+ *   rozmiary 0x1a2ba/0x1a2b8/0x18de0 to mapa (64000 B) + stan, a linki
+ *   (0x104 B ocean w 1248:0108 + 0x104 B continent w 1248:0004) sa POCHODNE
+ *   mapy (ten sam grid 0x14 x 0x0d co worldgen_build_*), wiec po loadzie
+ *   ocean REBUILD (continent NIE — zostaje z worldgenu? orig wola tylko
+ *   OceanLinks; continent links w save-sciezce nie odbudowane, TBD czy
+ *   sa w .sav czy po prostu nieuzywane po loadzie). Predykat ponizej LIVE
+ *   1:1 (no Win16, no globals); sama odbudowa (worldgen_build_ocean_links
+ *   STUB + map scatter) caller-side. No exit(), C17. */
+
+/* Orig save_deserialize @ 10f8:0000 rebuild half ->
+ * save_needs_ocean_rebuild. 1:1 1 = zawsze rebuilduj ocean-linki po loadzie
+ * (orig wola bezwarunkowo po mem_copy_far; brak gate na rozmiar/typ). */
+int save_needs_ocean_rebuild(void);
+
 #endif /* CIVLIN_SAVE_H */

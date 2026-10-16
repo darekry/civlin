@@ -76,6 +76,9 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `sound_normalize_id` | LIVE | 1150:014f |  |
 | `sound_map_id_to_wav` | LIVE | 1150:019e, 1150:025b, 1420:3080 |  |
 | `audio_gap_is_silent` | LIVE | 1150:00c9, 1150:019e, 1150:025b, 1150:0266, 1420:3080 |  |
+| `sound_is_stop` | LIVE | 1150:00c9 |  |
+| `sound_file_id_for` | LIVE | 1150:014f, 1150:019e |  |
+| `sound_is_opening` | LIVE | 1028:0000, 11e0:0000, 1420:3114 |  |
 | `audio_leader_count` | LIVE | 1150:019e, 1150:0266, 1420:3080 |  |
 | `audio_leader_names` | LIVE |  |  |
 | `audio_play_id` | LIVE | 1000:1184, 1150:00c9, 12d0:0064 |  |
@@ -132,7 +135,7 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `boot_run` | PARTIAL | 1000:11bb, 1000:2826, 1008:0000, 1008:059a, 1008:0b4a, 1008:0d68, 1008:0e99, 1088:0000, 1090:0488, 1098:06f8, 1098:096c, 10b8:0000, 10e8:2d46, 1190:0000, 11e8:0000, 11e8:0337 |  |
 | `boot_shutdown` | LIVE | 1008:0000, 1008:0329, 1008:0d68, 1208:0af1 |  |
 | `art_maybe_convert_artwork` | LIVE | 1090:0488, 10b8:0000, 10b8:04df, 10b8:062d, 10b8:06a0, 10b8:076a, 10b8:079d, 10b8:0aa8, 10b8:0c1c, 10b8:0ded, 10b8:0e36, 10b8:11bc, 10b8:158c, 10d0:0cfa, 1420:20a9 |  |
-| `main_run_startup_sequence` | STUB | 1008:0329, 10e8:0000, 1108:0243, 1130:000e, 11e0:0000, 11e0:0221, 1420:435b |  |
+| `main_run_startup_sequence` | STUB | 1008:0329, 1090:0376, 1098:096c, 1098:1104, 1098:124f, 10b0:008a, 10b0:0461, 10e8:0000, 1108:0243, 1130:000e, 1150:00c9, 11e0:0000, 11e0:0221, 1420:435b |  |
 | `config_prefs_defaults` | LIVE | 1008:0b4a, 1008:0bbf, 1150:00c9, 12d0:0064 |  |
 | `config_prefs_sounds_on` | LIVE |  |  |
 | `boot_video_caps_count` | LIVE | 1008:059a, 1420:0af4 |  |
@@ -157,6 +160,10 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `main_startup_anim_loops` | LIVE | 10b0:008a, 10b0:0461, 10e8:0000, 1108:01bc, 11e0:0000 |  |
 | `main_startup_intro_sound` | LIVE | 1420:3114 |  |
 | `main_startup_stop_sound` | LIVE |  |  |
+| `main_startup_should_run_wizard` | LIVE | 1098:1612, 10e8:0000, 1108:01bc, 11e0:0000 |  |
+| `boot_free_memory_is_low` | LIVE | 11e8:0000 |  |
+| `boot_runtime_needs_first_warning` | LIVE | 1088:0000, 11e8:0075 |  |
+| `boot_runtime_needs_final_warning` | LIVE |  |  |
 
 ### `src/civ_common.c`
 
@@ -204,7 +211,7 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `dialog_ctrl_region_proc` | LIVE | 1058:09f6 |  |
 | `dlg_create_tracked` | STUB | 1098:124f, 1098:1612, 1420:1ea0, 1420:1ec8 | has TODO |
 | `dlg_destroy_tracked` | NOOP | 1098:1612, 1420:1ea0 |  |
-| `anim_pump_if_active` | STUB | 1098:0157, 10b0:0000, 10b0:0461, 1150:00c9, 1420:1f40 | has TODO |
+| `anim_pump_if_active` | STUB | 1098:0157, 10a8:0000, 10a8:00b4, 10a8:00fc, 10a8:0228, 10b0:0000, 10b0:0461, 10b0:151b, 1150:00c9, 1420:1f40 | has TODO |
 | `anim_advance_frames` | STUB | 10b0:0461, 1150:00c9 | has TODO |
 | `dlg_center_window` | PARTIAL | 1218:0956 | has TODO |
 | `dialog_open_help` | STUB |  | has TODO |
@@ -314,6 +321,35 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `anim_opcode_is_anim` | LIVE |  |  |
 | `anim_tick_needs_store` | LIVE | 1000:137f, 1098:1104 |  |
 | `anim_seq_is_finished` | LIVE |  |  |
+| `anim_slot_init` | LIVE | 10a8:0000 |  |
+| `anim_slot_frame_at` | LIVE | 10a8:00fc |  |
+| `anim_slot_is_finished` | LIVE |  |  |
+| `anim_slot_blend` | LIVE | 10a8:0228 |  |
+| `anim_slot_play_frame` | LIVE |  |  |
+| `anim_seq_phase_step` | LIVE | 10b0:0000, 10b0:008a, 10b0:0287, 10b0:0461, 10b8:079d |  |
+| `anim_dissolve_rand_index` | LIVE | 1000:1729, 10b0:151b, 1100:03ea, 11c8:003d |  |
+| `anim_dissolve_perm_init` | LIVE |  |  |
+| `anim_dissolve_swap` | LIVE |  |  |
+| `anim_dissolve_col` | LIVE | 10b0:17e5 |  |
+| `anim_rebase_clock` | LIVE | 10b0:005b, 10b0:008a, 1100:02e1, 11e0:0000, 11e0:0221 |  |
+| `dialog_menuz_art_mode` | LIVE | 1220:0156 |  |
+| `dialog_show_message_id` | LIVE | 1220:00d2, 1220:0eb8 |  |
+| `dialog_menuz_should_loop` | LIVE | 11e0:0221, 12d8:44e2 |  |
+| `dialog_menuz_is_cancel` | LIVE |  |  |
+| `dlg_id_needs_preset_size` | LIVE | 1098:124f |  |
+| `dialog_split_is_sep` | LIVE | 1220:0000 |  |
+| `dialog_split_menu_count` | LIVE |  |  |
+| `dialog_split_menu_copy` | LIVE |  |  |
+| `dialog_split_menu_text` | PARTIAL | 1100:00ea, 1220:0000 | has TODO |
+| `dialog_menu_track_max` | LIVE | 1100:00ea, 1220:0000 |  |
+| `dialog_menu_title_base` | LIVE |  |  |
+| `text_aligned_list_x` | LIVE | 1068:258f, 1098:0ed1 |  |
+| `text_aligned_list_row_y` | LIVE | 1068:2072, 1068:258f |  |
+| `text_aligned_list_should_stop` | LIVE | 1068:2072, 1068:258f |  |
+| `text_aligned_list_needs_unlock` | LIVE | 1068:255a |  |
+| `text_wrapped_list_cap` | LIVE | 1068:2072 |  |
+| `text_draw_aligned_list` | STUB | 1068:258f, 1100:00ea, 1608:01cc | has TODO |
+| `text_draw_aligned_list_free` | STUB | 1068:255a | has TODO |
 
 ### `src/game.c`
 
@@ -766,6 +802,15 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `smmap_click_tile_delta` | LIVE | 1210:056e, 1420:b3cc |  |
 | `smmap_center_target` | LIVE | 1110:03e9, 1330:400e, 1330:4010 |  |
 | `smmap_click_scale` | LIVE |  |  |
+| `corridor_abs` | LIVE |  |  |
+| `path_corridor_gate_ok` | LIVE | 1128:16d0 |  |
+| `path_corridor_window_ok` | LIVE | 1128:10de, 1128:177e |  |
+| `path_corridor_sea_ok` | LIVE | 1028:12c6, 1128:10de |  |
+| `path_corridor_step_cost` | LIVE | 1420:17d4, 1420:1a3c |  |
+| `path_corridor_queue_adv` | LIVE | 1128:10de |  |
+| `path_corridor_should_relax` | LIVE | 1128:10de |  |
+| `path_continent_link_result` | LIVE | 1128:16d0 |  |
+| `map_get_ocean_or_cont_val` | LIVE | 1110:16c0, 1110:1d99, 1110:1dbd, 1420:43b4 |  |
 
 ### `src/newgame.c`
 
@@ -784,7 +829,22 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `menu_prompt_nation_count` | LIVE | 11f8:0080, 12d8:03da |  |
 | `menu_prompt_nation_avail_mask` | LIVE |  |  |
 | `menu_prompt_nation_choice_valid` | LIVE | 1220:00d2 |  |
+| `newgame_difficulty_from_index` | LIVE | 10e8:0000, 12d8:42f6, 1420:2a5a |  |
+| `newgame_competition_resolve` | LIVE | 11c8:0063, 12d8:3b9a, 1420:2aa9 |  |
+| `newgame_player_civ_resolve` | LIVE | 11c8:003d, 11f8:0080 |  |
+| `newgame_start_year_raw` | LIVE | 1000:2928, 1088:1dd0, 12d8:42fa |  |
+| `newgame_start_year_signed` | LIVE |  |  |
 | `newgame_wizard_run` | PARTIAL | 10e8:0000, 11e0:0000 |  |
+| `newgame_custom_result_is_back` | LIVE | 10e8:0000, 1220:16fd |  |
+| `newgame_wizard_step_back` | LIVE |  |  |
+| `newgame_custom_settings_valid` | LIVE | 1108:0243 |  |
+| `newgame_custom_help_for_row` | LIVE | 10e0:0000, 1108:0243, 1420:2e28, 1420:2e34 |  |
+| `newgame_show_custom_help_param` | LIVE | 10e0:0000 |  |
+| `newgame_show_custom_help_next` | LIVE |  |  |
+| `newgame_civ_note_early_needed` | LIVE | 10e0:077f |  |
+| `newgame_civ_note_player_needed` | LIVE | 10e0:07e8 |  |
+| `newgame_show_custom_help` | STUB | 10e0:0000, 10e0:03a2 | has TODO |
+| `newgame_custom_help_dialog` | STUB | 1098:124f, 10e0:03a2, 1100:03ff | has TODO |
 
 ### `src/rsc_loader.c`
 
@@ -941,6 +1001,7 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `replay_show_entry` | STUB | 1098:0e0b, 1180:0e78 | has TODO |
 | `replay_open_or_play` | STUB | 1098:26d4, 1140:0139, 1180:0000, 1180:017a, 1180:0297, 1180:02d3 | has TODO |
 | `replay_show_civ_destroyed` | STUB | 10d8:046e, 1150:00c9, 1180:17e9, 11a8:0cb1 | has TODO |
+| `save_needs_ocean_rebuild` | LIVE | 1028:162c, 10f8:0000 |  |
 
 ### `src/sys.c`
 
@@ -985,7 +1046,7 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `main_key_to_res_char` | LIVE | 1098:02d1, 1208:0000, 1420:1400, 1420:142c |  |
 | `sys_get_client_rect` | STUB | 1000:137f, 1218:0956, 1218:0a06 | has TODO |
 | `status_measure_row` | STUB | 1088:1460, 1098:0dda, 1138:0269, 11f0:4754, 1220:0b88 | has TODO |
-| `sys_check_runtime_memory` | STUB | 11e8:0075, 1420:43b4, 1420:4473, 1420:44ff | has TODO |
+| `sys_check_runtime_memory` | STUB | 1088:0000, 11e8:0075, 1420:43b4, 1420:4473, 1420:44ff | has TODO |
 | `sys_check_free_memory` | STUB | 11e8:0000, 1420:43b8 |  |
 | `file_write_chunk` | LIVE | 1000:272a |  |
 | `ne_entry_count` | LIVE |  |  |
@@ -1047,6 +1108,13 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `file_build_temp_path` | LIVE | 1000:1210, 1000:157a, 1000:1648, 1000:16a5, 1000:363e |  |
 | `sys_pump_mode_select` | LIVE | 1108:0000 |  |
 | `sys_pump_scale_coord` | LIVE | 1038:0c1d, 1108:0000 |  |
+| `sys_runtime_warn_style_first` | LIVE | 11e8:0075, 1420:44f7 |  |
+| `sys_runtime_warn_style_final` | LIVE | 1420:4578 |  |
+| `sys_runtime_warn_title_first` | LIVE | 1420:44f7, 1420:4578 |  |
+| `sys_runtime_warn_body_first` | LIVE | 1420:4473 |  |
+| `sys_runtime_warn_title_final` | LIVE | 1420:4578 |  |
+| `sys_runtime_warn_body_final` | LIVE | 1420:44ff |  |
+| `sys_runtime_check_order` | LIVE | 1088:0000 |  |
 
 ### `src/title.c`
 
@@ -1175,7 +1243,11 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `worldgen_load_earth` | STUB | 1028:0a93, 1028:1d15, 10b8:079d, 10b8:0e00, 10e0:0000, 1100:03ff, 1108:0243, 11e0:0221, 1420:2e28, 1420:2e34 | has TODO |
 | `worldgen_dialog_id_to_cell` | LIVE | 10e0:0000, 1108:0243, 1420:2e28, 1420:2e34 |  |
 | `worldgen_custom_apply` | LIVE | 10e0:0000, 1100:03ff, 1108:0243, 1420:2e28, 1420:2e34 |  |
-| `worldgen_prepare_earth` | STUB | 1108:01bc, 1108:0243 | has TODO |
+| `worldgen_prepare_earth` | STUB | 1028:0000, 10b8:079d, 10e8:0000, 1108:01bc, 1108:0243, 1150:00c9, 11e0:0000, 12d8:44e2 | has TODO |
+| `worldgen_prepare_mode` | LIVE | 1028:0000, 1108:01bc, 12d8:44e2 |  |
+| `worldgen_is_preset` | LIVE | 1028:0000 |  |
+| `worldgen_earth_frame` | LIVE | 1028:0000, 10b8:0aa8, 10b8:11bc |  |
+| `worldgen_earth_preset_bytes` | LIVE | 10b8:079d |  |
 | `worldgen_copy_preset` | LIVE | 1028:0000, 10b8:0000, 10b8:079d, 1420:20a9 |  |
 | `worldgen_customize` | STUB |  | has TODO |
 | `worldgen_customize_dialog` | STUB | 1058:06ab, 1058:081a, 1058:0921, 1058:09f6, 1058:0b4d, 1098:124f, 1098:1612 | has TODO |
@@ -1189,3 +1261,38 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `worldgen_build_ocean_links` | STUB | 1000:29ea, 1028:0f01, 1028:162c, 10f8:01e9 | has TODO |
 | `worldgen_copy_rect` | LIVE | 1028:06c1, 1028:1d15, 1028:1dbd, 1028:1dfb |  |
 | `path_check_continent_link` | LIVE | 1028:12c6, 1128:16d0 |  |
+| `worldgen_island_target` | LIVE | 1028:0000 |  |
+| `worldgen_island_done` | LIVE | 1028:0945 |  |
+| `worldgen_blob_in_bounds` | LIVE | 1028:09ef |  |
+| `worldgen_river_commit_len` | LIVE | 1028:066a, 1028:1dfb |  |
+| `worldgen_river_target` | LIVE |  |  |
+| `worldgen_pollution_should_paint` | LIVE | 1028:1afd |  |
+| `worldgen_score_clamp` | LIVE | 1028:0fb4, 11c8:0063 |  |
+| `worldgen_score_layer` | LIVE |  |  |
+| `worldgen_earth_frame_w` | LIVE |  |  |
+| `worldgen_earth_frame_h` | LIVE |  |  |
+| `worldgen_continent_rank_cmp` | LIVE | 1028:0a93 |  |
+| `worldgen_score_weight` | LIVE | 1028:0fb4, 1420:17d6 |  |
+| `worldgen_score_water_bonus` | LIVE |  |  |
+| `worldgen_score_dither` | LIVE |  |  |
+| `worldgen_score_accum` | LIVE |  |  |
+| `worldgen_link_grid_w` | LIVE | 1028:12c6, 1028:162c, 1248:0004, 1248:0108 |  |
+| `worldgen_link_grid_h` | LIVE |  |  |
+| `worldgen_link_idx` | LIVE |  |  |
+| `worldgen_link_bit` | LIVE |  |  |
+| `worldgen_link_rev_bit` | LIVE |  |  |
+| `worldgen_continent_link_allowed` | LIVE | 1028:12c6, 1128:16d0 |  |
+| `worldgen_ocean_run_ok` | LIVE | 1028:162c |  |
+| `worldgen_label_is_land_pass` | LIVE | 1028:0a93 |  |
+| `worldgen_probe_font_height` | LIVE | 1060:0000, 1060:01c1 |  |
+| `worldgen_probe_font_weight` | LIVE |  |  |
+| `worldgen_probe_custom_font` | STUB | 1060:0000, 1060:01c1, 1098:124f | has TODO |
+| `worldgen_scatter_count` | LIVE | 1028:0000 |  |
+| `worldgen_scatter_is_resample` | LIVE |  |  |
+| `worldgen_scatter_tile_action` | LIVE | 1028:05e7, 11e8:0dcf |  |
+| `worldgen_seed_origin_x` | LIVE | 1028:0945 |  |
+| `worldgen_seed_origin_y` | LIVE |  |  |
+| `worldgen_video_caps_query_count` | LIVE | 1060:01c1 |  |
+| `worldgen_video_caps_query_at` | LIVE |  |  |
+| `worldgen_video_caps_needs_raster_ext` | LIVE |  |  |
+| `worldgen_show_video_caps_dialog` | STUB | 1060:0000, 1060:005b, 1060:01c1, 1098:0e0b, 1098:124f, 11e8:0b40 | has TODO |

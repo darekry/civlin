@@ -1549,3 +1549,14 @@ civ_error_t replay_show_civ_destroyed(int civ)
      * tail -> SDL bridge TBD. */
     return CIV_ERR_UNSUPPORTED;
 }
+
+/* --- Chain 2026-10-16 (28): ocean-link rebuild after load (goal 5). ---
+ * See save.h block. OS-free 1:1 LIVE (no Win16, no globals, no exit()). */
+
+int save_needs_ocean_rebuild(void)
+{
+    /* Orig save_deserialize @ 10f8:0000: po mem_copy_far map-buf + log-tag
+     * bezwarunkowo Map_BuildOceanLinks(0) @ 1028:162c (format .sav nie ma
+     * linkow; continent-linki nie odbudowane w tej sciezce). */
+    return 1;
+}

@@ -957,14 +957,21 @@ civ_error_t art_maybe_convert_artwork(void)
 
 civ_error_t main_run_startup_sequence(void)
 {
-    /* Orig: FUN_11e0_0000 @ 11e0:0000 -> Main_RunStartupSequence.
-     * Dispatcher for the MainMenu_WndProc @ 11e0:0221 choices over
-     * CIV_MAINMENU_TEXT @ 1420:435b (see mainmenu.h): new-game paths ->
-     * NewGame_Wizard @ 10e8:0000 via newgame_wizard_run (see newgame.h),
-     * Load -> save_prompt_open @ 1130:000e, EARTH -> WorldGen_LoadEarth @
-     * 1108:0243 (see worldgen.h), Hall -> HoF, Quit -> WinMain_Shutdown
-     * @ 1008:0329 (boot_shutdown above). SDL modal/event bridge TBD ->
-     * stub CIV_ERR_UNSUPPORTED. No globals, no exit(), read-only. */
+    /* Orig: FUN_11e0_0000 @ 11e0:0000 -> Main_RunStartupSequence (full order
+     * 2026-10-16: Dlg_CreateTracked @ 1098:124f (0x94,0x41) + Gfx_StoreDC @
+     * 1098:1104 + Palette_AnimateRange @ 1090:0376 + Anim_OpenSequence @
+     * 10b0:008a + DAT_13e0_001e = 0 + Sound_PlayId @ 1150:00c9 (3,0) +
+     * FILLRECT + Cursor_Set @ 1098:096c + loop#1 Anim_AdvanceFrames @
+     * 10b0:0461 + Anim_CloseSequence @ 10b0:0287 + Sound (1,0) +
+     * [main_startup_should_run_wizard above, g_nMenuChoice @ 12d8:44e2:]
+     * Sys_DrainInput @ 11f0:4ea0 + Anim_OpenSequence (0x91e) +
+     * Anim_RebaseClock @ 10b0:005b (1000) + WorldGen_PrepareEarth @
+     * 1108:01bc + loop#2 Advance + Close + Sound (1,0) +
+     * Dlg_DestroyTracked @ 1098:1612 + NewGame_Wizard @ 10e8:0000; else
+     * DestroyTracked only. Dispatcher for MainMenu_WndProc @ 11e0:0221
+     * choices over CIV_MAINMENU_TEXT @ 1420:435b (see mainmenu.h).
+     * SDL modal/event bridge TBD -> stub CIV_ERR_UNSUPPORTED. No globals,
+     * no exit(), read-only. */
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -1249,4 +1256,71 @@ int main_startup_stop_sound(void)
 {
     /* Orig same: Sound_PlayId(1,0) po każdej pętli (STOP). */
     return 1;
+}
+
+int main_startup_should_run_wizard(int menu_choice)
+{
+    /* Orig Main_RunStartupSequence @ 11e0:0000 gate: ((choice == 0) ||
+     * (choice == 2) || (choice == 3)) -> drain + open 0x91e + rebase +
+     * WorldGen_PrepareEarth @ 1108:01bc + loop#2 + NewGame_Wizard @
+     * 10e8:0000; else sam Dlg_DestroyTracked @ 1098:1612. */
+    if (menu_choice == 0 || menu_choice == 2 || menu_choice == 3)
+        return 1;
+    return 0;
+}
+
+/* --- Chain 2026-10-16 (27): memory thresholds (goals 3/5). See boot.h.
+ * OS-free 1:1 LIVE (no Win16, no globals, no exit()); MESSAGEBOX/exit tails
+ * stay in sys_check_free/runtime_memory STUBs. */
+
+int boot_free_memory_is_low(long free_bytes, int res1, int res0)
+{
+    /* Orig Sys_CheckFreeMemory @ 11e8:0000: if ((b390 < 2500000) ||
+     * (b38e < 0x23) || (b38a < 0x23)) warn+exit. */
+    if (free_bytes < CIV_BOOT_FREE_BYTES_MIN)
+        return 1;
+    if (res1 < CIV_BOOT_FREE_RES_MIN)
+        return 1;
+    if (res0 < CIV_BOOT_FREE_RES_MIN)
+        return 1;
+    return 0;
+}
+
+int boot_runtime_needs_first_warning(long free_bytes, int res1, int res0,
+                                     int already_warned)
+{
+    /* Orig Sys_CheckRuntimeMemory @ 11e8:0075 first branch (caller
+     * Game_TurnLoopTick @ 1088:0000): ((free < 1000000 || r1 < 10 || r0 < 10)
+     * && 43b4 == 0) -> MESSAGEBOX 4473 once. */
+    int low = 0;
+
+    if (free_bytes < CIV_RUN_FREE_BYTES_WARN)
+        low = 1;
+    if (res1 < CIV_RUN_FREE_RES_WARN)
+        low = 1;
+    if (res0 < CIV_RUN_FREE_RES_WARN)
+        low = 1;
+    if (low == 0)
+        return 0;
+    return (already_warned == 0) ? 1 : 0;
+}
+
+int boot_runtime_needs_final_warning(long free_bytes, int res1, int res0,
+                                      int warned_once, int warned_final)
+{
+    /* Orig same second branch: ((free < 300000 || r1 < 8 || r0 < 8) &&
+     * 43b4 != 0 && 43b6 == 0) -> MESSAGEBOX 44ff once. */
+    int low = 0;
+
+    if (free_bytes < CIV_RUN_FREE_BYTES_FINAL)
+        low = 1;
+    if (res1 < CIV_RUN_FREE_RES_FINAL)
+        low = 1;
+    if (res0 < CIV_RUN_FREE_RES_FINAL)
+        low = 1;
+    if (low == 0)
+        return 0;
+    if (warned_once == 0)
+        return 0;
+    return (warned_final == 0) ? 1 : 0;
 }

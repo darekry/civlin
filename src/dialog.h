@@ -1667,4 +1667,337 @@ typedef enum anim_seq_phase {
 anim_seq_phase_t anim_seq_phase_step(anim_seq_phase_t phase, int opened,
                                      int pumped, int finished, int closed);
 
+/* --- Chain 2026-10-16 (24): dissolve 12/13 + clock rebase (task goals 1/2) ---
+ * Anchors (civ.exe, x86:LE:16:Protected Mode), decompiled this pass:
+ *   Anim_SetupDissolve @ 10b0:151b (mem_alloc_lock 0x79c scatter ctx; header
+ *     words: [0]=opcode 12/13, [1]=param_2 byte, [2..3]=start long, [4..5]=
+ *     span long (param_5-param_4), [6..]=rect copy, [7]/[9]=rect y0/y1,
+ *     [8]/[6]=rect x0/x1 words, [10..13]=port far ptrs; then identity
+ *     pu[i+0x1ed]=i-1 for i=w..1, per-row pu[row+0xd]=rand()%w for
+ *     row=h..1, then w random swaps pu[a+0x1ee]<->pu[b+0x1ee] with
+ *     a,b=rand()%w; rand via Rng_NextRaw thunk FUN_1100_03ea @ 1100:03ea
+ *     (Rng_NextRaw @ 1000:1729: LCG via FUN_1000_16fe mul, & 0x7fff)
+ *     modulo-shaped (raw&0x7fff)%n — NIE skala Rng_Range @ 11c8:003d
+ *     (raw*n>>15); callee of Anim_AdvanceFrames @ 10b0:0461 case 12/13
+ *     entry (DAT_12d8_28fc == 0 + start-tick gate)).
+ *   Anim_StepDissolve @ 10b0:17e5 (per-tick: col=(start+perm[(elapsed+row)%w])
+ *     %w over rows h..1, GfxPort_SetActive x2 + GLOBALLOCK bitmaps +
+ *     Art_PortDataToBitmap @ 10b8:0e36 + ClearActive x2; 12 = palette-gated
+ *     0xc branch (copy src->dst skipping bVar1, bVar1==0 reads dst pixel),
+ *     else fill branch (dst < bVar1 -> bVar2); row stride advance via the
+ *     0xf-shift carry shape).
+ *   Anim_FreeDissolve @ 10b0:172d (Mem_DisposePtr of the 0x79c ctx + zero
+ *     [13]/[14]; tail of case 12/13 end-tick in AdvanceFrames + CloseSequence
+ *     @ 10b0:0287).
+ * Rozmiar planszy (0x79c = 1948 B = ?chroni? ile pikseli?): header 0x1ee
+ *   words (494 w = 988 B) + permutacja szerokosci w slow + tablica startow
+ *   wierszy h slow; pojemnosc = 0x79c/2 - 0x1ee = 480 wpisow (typowo w <=
+ *   320 przy dissolve prostokata + h wierszy, np. 320+200 = 520 > 480?
+ *   orig liczy w = ctx[4] low-word span (NIE pelna 320) i h = ctx[9]-ctx[7]
+ *   wiec w+h <= 480; pelny 320x200 blit idzie pasami wierszy, nie jednym
+ *   ctx na caly ekran — stad staly 0x79c wystarcza).
+ * Permutacja (Fisher-Yates? LCG? seed?): NIE czysty Fisher-Yates (ten
+ *   zyje w map.c shuffle via rng_range): identity + w losowych transpozycji
+ *   (a,b = modulo-draws, swap) + per-row starty modulo-draws; LCG to
+ *   Rng_NextRaw @ 1000:1729 (seed DAT_1420_4ee0/4ee2, Rng_Init @ 11c8:0000
+ *   seed = Sys_GetTickScaled & 0x7fff, forced nonzero; Rng_Seed @
+ *   1000:1716 setter); seed dissolve = biezacy stan RNG (brak wlasnego
+ *   seeda w ctx).
+ * Zwiazek z opkodami 12/13 w AdvanceFrames: 12/13 to para dissolve
+ *   (setup przy start-tick, step per-tick, free przy end-tick; 12 robi
+ *   dodatkowo palette pre-copy 0xc branch + AnimateRange, 13 nie).
+ *   GDI/bitblt ogony zostaja STUB (art_port_data_to_bitmap w video.h);
+ *   permutacja/krok ponizej sa LIVE 1:1 na jawnych parametrach (bez GDI,
+ *   bez globali, bez exit(), C17).
+ *   Anim_RebaseClock @ 10b0:005b (seq+0x1a = now-param, seq+0x16 = param;
+ *     now = Sys_GetTickScaled @ 1100:02e1 = GETTICKCOUNT*0x3c/1000; OpenSequence
+ *     @ 10b0:008a init zeruje +0x16 i stawia +0x1a = now). Po co rebase
+ *     (pauza? seek? loop?): SEEK/skok logicznego zegara (frame = now -
+ *     base): Startup loop#2 w Main_RunStartupSequence @ 11e0:0000 rebase
+ *     1000 (przeskocz pierwsze 1000 tickow intro-nakladki / czasu map-gen),
+ *     MainMenu_WndProc @ 11e0:0221 rebase 100000 (menu idle) + rebase 0x48c
+ *     (1164, re-sync petli menu gdy 0x8c < tick < 0x48c); NIE pauza ani
+ *     loop-wrap (petla kreci AdvanceFrames, nie rebase). Kto wola poza
+ *     startup: MainMenu_WndProc @ 11e0:0884 (100000) + @ 11e0:090d (0x48c);
+ *     PumpIfActive @ 10b0:0000 / CloseSequence @ 10b0:0287 NIE rebase'uja
+ *     (pump tylko AdvanceFrames gdy 1420:1f40 != 0, close tylko free).
+ *     Port ponizej LIVE (anim_rebase_clock). */
+#define ANIM_DISSOLVE_CTX_SIZE 0x79cu
+#define ANIM_DISSOLVE_HDR_WORDS 0x1eeu
+#define ANIM_DISSOLVE_MAX_ENTRIES 480u
+
+/* Orig Anim_SetupDissolve @ 10b0:151b rand half -> anim_dissolve_rand_index.
+ * 1:1 (raw & 0x7fff) % n (modulo-draw, NIE skala rng_range @ 11c8:003d).
+ * n <= 0 -> -1. No globals. */
+int anim_dissolve_rand_index(unsigned raw, int n);
+
+/* Orig same identity half (pu[i+0x1ed]=i-1, i=w..1) -> anim_dissolve_perm_init.
+ * 1:1 perm[i]=i for 0..n-1 (shifted base, ta sama permutacja). NULL perm ->
+ * NOENT; n <= 0 lub n > ANIM_DISSOLVE_MAX_ENTRIES -> RANGE; else CIV_OK. */
+civ_error_t anim_dissolve_perm_init(int *perm, size_t n);
+
+/* Orig same swap half (a,b=rand()%w, swap pu[a+0x1ee]<->pu[b+0x1ee]) ->
+ * anim_dissolve_swap. 1:1 jedna transpozycja perm[r1%n]<->perm[r2%n].
+ * NULL perm -> NOENT; n <= 0 -> RANGE (r1/r2 dowolne unsigned). */
+civ_error_t anim_dissolve_swap(int *perm, size_t n, unsigned r1, unsigned r2);
+
+/* Orig Anim_StepDissolve @ 10b0:17e5 col half ->
+ * anim_dissolve_col. 1:1 (start_col + perm_val) % w (w = ctx[4] low word;
+ * caller liczy idx=(elapsed+row)%w, tu czysta kolumna). w <= 0 -> -1. */
+int anim_dissolve_col(int start_col, int perm_val, int w);
+
+/* Orig Anim_RebaseClock @ 10b0:005b -> anim_rebase_clock.
+ * 1:1 *out_base = now_tick - param, *out_stored = param (seq+0x1a/+0x16).
+ * NULL out -> NOENT (drugi out moze byc NULL = skip). No globals. */
+civ_error_t anim_rebase_clock(long now_tick, long param, long *out_base,
+                              long *out_stored);
+
+/* --- Chain 2026-10-16 (25): MenuZ modes + tracked IDs (task goal 4) ---
+ * Orig Dialog_MenuZ_Modal @ 1220:0156 (civ.exe, x86:LE:16:Protected Mode),
+ * decompiled this pass (shared modal MainMenu + kazdy NewGame_Wizard step):
+ *   Debug_LogTrace MenuZ/windows.c + DAT_1420_b3e2 = param_8 + SELECTOBJECT +
+ *   GETTEXTMETRICS + MAKEPROCINSTANCE + SETWINDOWLONG hook + SETTIMER 100
+ *   (0 = 'Can't initialize timer in MenuZ' @ 1420:4a41 via FUN_1098_28e4) +
+ *   0x18 slots clear + Sys_DrainInput + Cursor_Set(0x81) + DAT_1418_0006 art
+ *   branch: -1 = plain (iVar8 = 0, iVar9 = 0); < 3 = small pic (0x51/0x74 +
+ *   SETRECT + local 0x92fc art); else = GfxPort_Create + SetActive +
+ *   Census_DrawTechBadge (0x3b/0x66 + SETRECT) + Util_StrCopy menu text +
+ *   Dialog_GetItemRect 0x68 + Dialog_SplitMenuText @ 1220:0000 (was
+ *   FUN_1220_0000, renamed this pass: '_' split do bufora 0x12d8:0x24fa) +
+ *   FUN_1068_1f7e layout + Dialog_GetItemRect 0x67 + OFFSETRECT + SHOWWINDOW
+ *   + Gfx_StoreDC + Dialog_DrawFrame3D @ 1220:0d38 (gdy DAT_1418_000c) +
+ *   CREATEWINDOW RanDoMStatic 0x4a6e + RanDoMRadio 500+i (DISABLE gdy
+ *   DAT_12d8_24da bit; preselect DAT_1418_0002, skip disabled via local_44+1)
+ *   + Ctrl_RadioGroupSetSel @ 1058:0e7f (500..0x208) + PEEKMESSAGE/
+ *   ISDIALOGMESSAGE pump az DAT_12b0_00a0 != 0; exit: SETWINDOWLONG restore +
+ *   FREEPROCINSTANCE + DAT_1418_0004 = (DAT_1418_0008 >= 1 && 00a0 == -1) +
+ *   reset DAT_1418_0006 = -1 / 0002 = -1 / 000c = 0 / 0008 = 0 / 24dc = 0 /
+ *   24da = 0 / 24e0 = 0 / 000a = 1 / 000e = 0x96 / 0000 = 0xd8 + KILLTIMER +
+ *   GLOBALFREE + SELECTOBJECT restore; returns DAT_12b0_009c (index).
+ * Jakie tryby (modal? jakie ID dialogow? 0x94? 0x91e?):
+ *   modal TAK (blokuje PEEKMESSAGE/ISDIALOGMESSAGE az wybor; DAT_1418_0004 =
+ *   back/cancel jak w wizardzie). DAT_1418_0006 art-mode: -1 plain menu
+ *   (MainMenu_WndProc @ 11e0:0221: tekst @ 1420:435b '_Start a New Game_Load
+ *   a Saved Game_Play on EARTH_Customize World_View Hall of Fame_Quit' +
+ *   g_nMenuChoice @ 12d8:44e2; petla while choice < 0 || > 3 + dispatch
+ *   1 = Save_LoadDialog @ 1130:000e, 3 = WorldGen_LoadEarth @ 1108:0243
+ *   (dialog 0x8f, != 0 -> re-prompt -1), 4 = HoF_Load + HoF_Show, 5 =
+ *   WinMain_Shutdown; Sound_PlayId() click po wyborze), 0..2 small-pic,
+ *   >= 3 tech-badge (Census_DrawTechBadge; DAT_1418_000a cols). ID dialogow:
+ *   0x94 intro/PIC host (Main_RunStartupSequence @ 11e0:0000 loop#1 +
+ *   Pic_PlayShared @ 1030:0000 0x94 0x41), 0x8b mainmenu (WndProc), 0x90
+ *   wizard frame (art 0x8d), 0x8f earth-custom (WorldGen_LoadEarth), 0x97
+ *   wizard finalize, 0x88 vs 0x91 message (Dialog_ShowMessage @ 1220:00d2
+ *   via DAT_1418_0008: 0 -> 0x88 else 0x91), 0x91e to NIE dialog tylko Anim
+ *   sequence id loop#2 (Anim_OpenSequence param 0x91e). 0x94 w nazwie
+ *   (Dlg_CreateTracked(0x94...)) to dialog; 0x91e to sequence.
+ * Zwiazek z Dlg_CreateTracked @ 1098:124f i Dialog_MenuZ_Modal: ShowMessage
+ *   = Dlg_CreateTracked(0x88/0x91) + Dialog_MenuZ_Modal + Dlg_DestroyTracked
+ *   + Dialog_RefreshViews @ 1220:0eb8 (SENDMESSAGE 0xf do okien); MenuZ to
+ *   srodek, Tracked to host (palette copy + stack @ 1420:1ea0/1ec8, 30+
+ *   callerow). dialog_menuz (STUB) + dlg_create_tracked (STUB) + helpers
+ *   id<->index (LIVE) zostaja; ponizszy dispatch to PARTIAL (OS-free galezie
+ *   LIVE, Win16 pump STUB).
+ * Rename galezi: Dialog_SplitMenuText @ 1220:0000 (split), art-mode via
+ *   dialog_menuz_art_mode, msg-id via dialog_show_message_id, loop-gate via
+ *   dialog_menuz_should_loop, cancel-gate via dialog_menuz_is_cancel.
+ * OS-free dispatch ponizej LIVE 1:1 (no Win16, no globals); pump/Win16 tails
+ * STUB. No exit(), C17. */
+
+/* Orig DAT_1418_0006 art branch -> dialog_menuz_art_mode. 1:1 -1 -> 0
+ * (plain), 0..2 -> 1 (small pic), >= 3 -> 2 (tech badge). */
+int dialog_menuz_art_mode(int opt_0006);
+
+/* Orig Dialog_ShowMessage @ 1220:00d2 id choice (DAT_1418_0008 == 0 ? 0x88
+ * : 0x91) -> dialog_show_message_id. 1:1. */
+int dialog_show_message_id(int flag_0008);
+
+/* Orig MainMenu_WndProc @ 11e0:0221 re-prompt gate (choice < 0 || > 3) ->
+ * dialog_menuz_should_loop. 1:1 nonzero (1) gdy re-prompt, 0 gdy accept
+ * (g_nMenuChoice @ 12d8:44e2 0..3 wchodzi w Startup loop#2; 1/3/4/5 dispatch
+ * caller-side; 4/5 nigdy w PrepareEarth — 'inne -> return 1 bez mapy'). */
+int dialog_menuz_should_loop(int choice);
+
+/* Orig MenuZ exit (DAT_1418_0008 >= 1 && DAT_12b0_00a0 == -1 -> 0004 = 1) ->
+ * dialog_menuz_is_cancel. 1:1 nonzero (1) gdy cancel/back, 0 gdy pick. */
+int dialog_menuz_is_cancel(int flag_0008, int done_00a0);
+
+/* Orig Dlg_CreateTracked @ 1098:124f dialog-id preset-size branch
+ * (param_1 == 0x94 || == 0x8f -> DAT_12d8_0026 = 1 + 002e = 0x200 + 002c =
+ * 0x140) -> dlg_id_needs_preset_size. 1:1 nonzero (1) dla 0x94/0x8f. */
+int dlg_id_needs_preset_size(int dlg_id);
+
+/* --- Chain 2026-10-16 (26): Dialog_SplitMenuText '_' split (task goal 3) ---
+ * Orig Dialog_SplitMenuText @ 1220:0000 (civ.exe, x86:LE:16:Protected Mode),
+ * decompiled this pass (sole caller Dialog_MenuZ_Modal @ 1220:0156 after
+ * Util_StrCopy into the 0x12d8:0x24fa buffer; callees Text_MeasureMenuWidth
+ * @ 1100:00ea (was FUN_1100_00ea: SELECTOBJECT + Util_StrLen +
+ * GETTEXTEXTENT width) per item):
+ *   bVar3 = first-token flag; walk chars: '_' or '\0' ends a token (write
+ *   '\0' over the separator in the caller's 24fa buffer). First token =
+ *   title: when non-empty sets *max_w = DAT_1418_000e (default 0x96 via
+ *   MenuZ exit reset; exact title-width semantics TBD vs GETTEXTEXTENT —
+ *   title is NOT measured, items are). Later tokens = radio items: store
+ *   far ptr (seg:off pair) into the param_2 ptr array (*out += 4 per item),
+ *   measure via Text_MeasureMenuWidth, *max_w = max(*max_w, w), count++.
+ *   Cap 0x18 items (return 0x18 early); '\0' ends with count return.
+ * Format tekstow menu: '_' separator (title '_' item1 '_' item2 ...;
+ *   puste tokeny dozwolone? orig nie filtruje pustych itemow — pusty item
+ *   tez dostaje slot + width 0; cap 0x18 tnie ogon). Pozycje: title na gorze
+ *   (RanDoMStatic 0x4a6e), items jako RanDoMRadio 500+i wierszami/kolumnami
+ *   (DAT_1418_000a cols; OFFSETRECT per item w MenuZ). Hotkeye: BRAK
+ *   dedykowanego '&' w tym splicie (menu strings 14b0 "&Save Game" uzywaja
+ *   '&' w statycznych tekstach, nie '_' split; '_' to separator, nie hotkey).
+ * Kto wola: TYLKO Dialog_MenuZ_Modal @ 1220:0156 (MainMenu_WndProc @
+ *   11e0:0221 tekst 1420:435b '_Start a New Game_...' + kazdy
+ *   NewGame_Wizard @ 10e8:0000 step (0x2a5a/0x2aa9/0x2ad2) + CustomWorldModal
+ *   @ 1220:16fd lista + Dialog_ShowMessage @ 1220:00d2 modal). Zwiazek z
+ *   Text_FillResStringList @ 1098:1f4f (sole caller Dialog_InitResStringTables
+ *   @ 1068:0295; Res 0x82..0x86 pack z LSTRLEN empty-stop) i SplitMenu:
+ *   FillResStringList buduje tabele res-string na init (ResMgr blobs),
+ *   SplitMenuText tnie '_' tekst modalny na zywo (MenuZ buffer 24fa);
+ *   wizard list plemion buduje recznie StrCopy/Append (NIE Fill), MenuZ tnie.
+ * OS-free split ponizej LIVE 1:1 na jawnych buforach (no Win16, no globals,
+ * read-only poza dst); GETTEXTEXTENT width + DAT_1418_000e/max tail zostaje
+ * caller-side (Text_MeasureMenuWidth @ 1100:00ea GDI). No exit(), C17. */
+#define CIV_SPLIT_MAX 0x18
+#define CIV_SPLIT_DEFAULT_W 0x96
+
+/* Orig separator test ('_' or '\0') -> dialog_split_is_sep. 1:1. */
+int dialog_split_is_sep(int c);
+
+/* Orig item count (tokens after the first/title, cap 0x18) ->
+ * dialog_split_menu_count. 1:1 count of '_' after the title segment
+ * (title = up to first '_' or '\0'; each later '_' or '\0' closes one item;
+ * trailing '\0' always closes the last item, even empty). NULL -> -1.
+ * No globals. */
+int dialog_split_menu_count(const char *s);
+
+/* Orig '_' -> '\0' copy + ptr pack -> dialog_split_menu_copy. 1:1 copies
+ * src (incl. NUL) into dst (cap bytes), replacing each '_' with '\0';
+ * fills entries[0..cap_entries) with pointers into dst for the item tokens
+ * (tokens after the first/title; title stays dst[0] but is NOT listed).
+ * *count_out = item count (same as dialog_split_menu_count, capped by
+ * cap_entries). NULL src/dst/entries/count_out -> NOENT (count 0 when
+ * count_out non-NULL); cap == 0 or cap_entries == 0 -> TRUNCATED; src NUL
+ * beyond cap -> TRUNCATED (dst NUL-terminated, no fake tail); else CIV_OK.
+ * Empty items listed (width 0 caller-side). No globals, no exit(). */
+civ_error_t dialog_split_menu_copy(const char *src, char *dst, size_t cap,
+                                   const char **entries, size_t cap_entries,
+                                   size_t *count_out);
+
+/* Orig Dialog_SplitMenuText @ 1220:0000 full (ptr pack + width max via
+ * Text_MeasureMenuWidth @ 1100:00ea + DAT_1418_000e title default) ->
+ * dialog_split_menu_text. Width/GDI tail -> SDL TBD; stub
+ * CIV_ERR_UNSUPPORTED (outs zeroed when non-NULL). Pure split lives in
+ * dialog_split_menu_copy above (LIVE). No globals, no exit(). */
+civ_error_t dialog_split_menu_text(const char *src, int *count_out,
+                                   int *max_w_out);
+
+/* --- Chain 2026-10-16 (27): MenuWidth measure without GDI (task goal 4) ---
+ * Orig (civ.exe, x86:LE:16:Protected Mode), decompiled this pass:
+ *   Text_MeasureMenuWidth @ 1100:00ea (was FUN_1100_00ea: SELECTOBJECT font
+ *     + Util_StrLen @ 1000:3722 + GETTEXTEXTENT @ 1608:0220 width + SELECT
+ *     restore; callee: none beyond GDI (SplitMenuText w opisie mylnie jako
+ *     callee — SplitMenuText @ 1220:0000 jest CALLEREM, nie callee)).
+ *   Kto mierzy szerokosc menu: Dialog_SplitMenuText @ 1220:0000 per item
+ *     (max via ponizszy track-max; sole caller Dialog_MenuZ_Modal @
+ *     1220:0156 dla MainMenu_WndProc @ 11e0:0221 tekst 1420:435b + kazdy
+ *     NewGame_Wizard @ 10e8:0000 step + CustomWorldModal @ 1220:16fd + Show
+ *     Message @ 1220:00d2) + Text_DrawAlignedList @ 1068:258f (was
+ *     FUN_1068_258f, renamed this pass: SELECTOBJECT slot DAT_12d8_0024 +
+ *     SETBKMODE(1) + GLOBALLOCK param_1 + per-row MeasureMenuWidth +
+ *     align (1 = center, 2 = left, 3 = right, same as text_align_x) +
+ *     TEXTOUT; callers Dialog_MenuZ_Modal @ 1220:0156 + Text_DrawAlignedList
+ *     Free @ 1068:255a (was FUN_1068_255a, renamed: trace + List + GLOBALFREE)).
+ *   Zwiazek z text_measure_* (LIVE): Text_MeasureWidth @ 10d8:05b8 =
+ *     PackPascal @ 1100:0000 + MeasurePascal @ 1100:00a1 (GETTEXTEXTENT na
+ *     buf[0]/buf+1) + (w*10)/0x10 via text_measure_scaled; MeasureMenuWidth
+ *     to ten sam GETTEXTEXTENT bez pakowania (C string + StrLen).
+ *     Pomiar bez GDI: font_text_width (boot.h, suma dfCharTable-widths,
+ *     tracking 0) daje te sama sume advance bez DC; bounding = max + title
+ *     default 0x96 (DAT_1418_000e) + cap 0x18 (CIV_SPLIT_MAX). GDI ogon
+ *     (SELECTOBJECT/TEXTOUT) zostaje STUB; matematyka max/align ponizej LIVE
+ *     1:1 (no Win16, no globals, read-only poza out). No exit(), C17. */
+
+/* Orig SplitMenuText max half (*max_w = max(*max_w, w)) ->
+ * dialog_menu_track_max. 1:1 max(cur, w) (ujemne dozwolone, orig nie
+ * clampuje; MeasureMenuWidth >= 0 w praktyce). */
+int dialog_menu_track_max(int cur_max, int w);
+
+/* Orig SplitMenuText title half (non-empty title -> *max_w = DAT_1418_000e) ->
+ * dialog_menu_title_base. 1:1 title_nonempty ? 0x96 (CIV_SPLIT_DEFAULT_W) :
+ * cur_max (pusty tytul zostawia max bez zmian). */
+int dialog_menu_title_base(int title_nonempty, int cur_max);
+
+/* Orig Text_DrawAlignedList @ 1068:258f align half (1/2/3) ->
+ * text_aligned_list_x. 1:1 jak text_align_x @ 1098:0ed1: 1 = center
+ * (left+(w-text_w)/2), 2 = left, 3 = right (right-text_w), inne -> -1. */
+int text_aligned_list_x(int left, int right, int text_w, int mode);
+
+/* --- Chain 2026-10-16 (28): Text_DrawAlignedList layout (task goal 1) ---
+ * Orig (civ.exe, x86:LE:16:Protected Mode), decompiled + renamed this pass:
+ *   Text_DrawAlignedList @ 1068:258f (was FUN_1068_258f: SELECTOBJECT slot
+ *     DAT_12d8_0024 + SETBKMODE(1) + GLOBALLOCK param_1 + per-row
+ *     Text_MeasureMenuWidth @ 1100:00ea + align 1/2/3 (same as text_align_x
+ *     @ 1098:0ed1) + TEXTOUT @ 1608:01cc; callers Dialog_MenuZ_Modal @
+ *     1220:0156 WM_PAINT redraw (DAT_1420_54e8 == 0xf, handle local_38,
+ *     mode 2 = left) + Text_DrawAlignedListFree @ 1068:255a).
+ *   Text_DrawAlignedListFree @ 1068:255a (was FUN_1068_255a: Debug_LogTrace
+ *     "TextBoxDrawAndClose ... dialogs" + List(param_1, param_2) +
+ *     GLOBALFREE param_1 when != 0).
+ *   Text_BuildWrappedList @ 1068:2072 (was FUN_1068_2072: word-wrap builder
+ *     of the SAME handle the List draws: GLOBALALLOC 0x51a + GLOBALLOCK +
+ *     GETTEXTMETRICS row_h at +0x10 + wrap on spaces/\r via GETTEXTEXTENT vs
+ *     width + rows: count at +0x18, len[i] at +0x1a (i*2), off[i] at +0x9a,
+ *     text base at +0x11a; returns handle; MenuZ local_38 source).
+ * Jakie listy: DWA rozlaczne systemy w MenuZ, oba rysowane tym samym List:
+ *   (a) SplitMenuText @ 1220:0000 '_' items (title + radio entries, ptr pack
+ *     local_2da, buttons 500+, measure via dialog_menu_track_max/title_base
+ *     LIVE) — to sa RADIO buttons, NIE ten handle;
+ *   (b) word-wrap handle z Text_BuildWrappedList (tytul/akapit, mode 2 =
+ *     left w MenuZ redraw; help/census akapity tym samym formatem).
+ * Format wierszy handle: row i: off = u16 at +0x9a + i*2 (offset into text
+ *   at +0x11a), len = u16 at +0x1a + i*2; Util_MemMove len bytes into 256 B
+ *   stack buf local_11c + buf[len] = 0; w = MeasureMenuWidth(buf); x via
+ *   text_aligned_list_x (1 center / 2 left / 3 right); y = top + i * row_h
+ *   (row_h = u16 at +0x10, GETTEXTMETRICS tmHeight); TEXTOUT(x, y).
+ * Zwiazek z dialog_menu_track_max/title_base (LIVE): tamte licza max width
+ *   SplitMenuText items (radio buttons); ten List mierzy SZEROKOSC
+ *   word-wrap wierszy tym samym MeasureMenuWidth, ale max NIE wraca do
+ *   SplitMenuText (wrap width byl wejsciem buildera, nie wyjsciem List).
+ * Port layoutu -> LIVE ponizej (no Win16, no globals, read-only poza out);
+ *   SELECTOBJECT/SETBKMODE/GLOBALLOCK/TEXTOUT/GLOBALFREE ogony zostaja
+ *   caller-side STUB (text_draw_aligned_list*). No exit(), C17. */
+
+/* Orig List row-y half (local_18 = local_e + i * *(int *)(base+0x10)) ->
+ * text_aligned_list_row_y. 1:1 top + i * row_h. No globals. */
+int text_aligned_list_row_y(int top, int row_h, int i);
+
+/* Orig List loop gate (*(int *)(base+0x18) <= i -> break) ->
+ * text_aligned_list_should_stop. 1:1 nonzero (1) when i >= count (stop),
+ * 0 otherwise. count <= 0 stops immediately (orig breaks at i = 0). */
+int text_aligned_list_should_stop(int i, int count);
+
+/* Orig List/Free handle gate (param_1 != 0 -> GLOBALUNLOCK/GLOBALFREE) ->
+ * text_aligned_list_needs_unlock. 1:1 nonzero (1) when handle != 0. */
+int text_aligned_list_needs_unlock(int handle);
+
+/* Orig Text_BuildWrappedList @ 1068:2072 row-cap half (0x51a handle:
+ * len u16 table at +0x1a..+0x99 = 0x80 B = 64 rows before the off table at
+ * +0x9a; text tail +0x11a..0x519 = 0x400 chars bounds chars, not rows) ->
+ * text_wrapped_list_cap. 1:1 64. */
+int text_wrapped_list_cap(void);
+
+/* Orig Text_DrawAlignedList @ 1068:258f GDI tail (SELECTOBJECT slot +
+ * SETBKMODE(1) + GLOBALLOCK + per-row Measure + TEXTOUT + UNLOCK/SELECT
+ * restore). SDL_ttf bridge TBD; stub CIV_ERR_UNSUPPORTED. Layout lives in
+ * text_aligned_list_* above (LIVE). No globals, no exit(). */
+civ_error_t text_draw_aligned_list(int handle, int mode);
+
+/* Orig Text_DrawAlignedListFree @ 1068:255a (trace + List + GLOBALFREE).
+ * Same GDI tail + trace; stub CIV_ERR_UNSUPPORTED. Free gate lives in
+ * text_aligned_list_needs_unlock above (LIVE). */
+civ_error_t text_draw_aligned_list_free(int handle, int mode);
+
 #endif /* CIVLIN_DIALOG_H */

@@ -1199,3 +1199,116 @@ int smmap_click_scale(void)
     /* Orig DAT_1410_0000 image (inspect 2 B: 02 00). */
     return 2;
 }
+
+/* --- Chain 2026-10-16 (28): Path_FindCorridor BFS kernels (goal 2) ---
+ * See map.h block. OS-free 1:1 LIVE (no Win16, no globals, no exit()).
+ * Caller owns queue u8[256] + visited u8[256]; tile reads (class/road/
+ * occupancy/cost/continent) wchodza jako gotowe flagi. */
+
+static int corridor_abs(int v)
+{
+    /* Orig x86 abs shape (v ^ (v >> 0xf)) - (v >> 0xf) dla 16-bit far int. */
+    return v < 0 ? -v : v;
+}
+
+int path_corridor_gate_ok(int dx, int dy)
+{
+    /* Orig Path_CheckContinentLink @ 1128:16d0 head: if ((|dx| < 8) ||
+     * (|dy| < 8)) proceed (68f1/2 scratch + FindCorridor), else 0xffff. */
+    if (corridor_abs(dx) < 8)
+        return 1;
+    if (corridor_abs(dy) < 8)
+        return 1;
+    return 0;
+}
+
+int path_corridor_window_ok(int dx, int dy)
+{
+    /* Orig Path_FindCorridor @ 1128:10de neighbour filter: per-axis
+     * (d ^ (d >> 0xf)) - (d >> 0xf) < 8 (X wrap via Map_WrapX @ 1128:177e
+     * caller-side, Y never wraps). */
+    if (corridor_abs(dx) >= 8)
+        return 0;
+    if (corridor_abs(dy) >= 8)
+        return 0;
+    return 1;
+}
+
+int path_corridor_sea_ok(int is_sea_tile, int unit_is_sea, int occupancy)
+{
+    /* Orig Path_FindCorridor @ 1128:10de expander: (tileClass == 10) ==
+     * (1a3a == 2) || occ & 1 (city tile = most laczacy domeny; FUN_1110_197a
+     * to road&8, nie continent — continent gate siedzi w callerze
+     * BuildContinentLinks @ 1028:12c6). */
+    int tile_sea = (is_sea_tile != 0) ? 1 : 0;
+    int unit_sea = (unit_is_sea != 0) ? 1 : 0;
+
+    if (tile_sea == unit_sea)
+        return 1;
+    if ((occupancy & 1) != 0)
+        return 1;
+    return 0;
+}
+
+int path_corridor_step_cost(int road_here, int road_nbr, int unit_fast,
+                            int base_cost)
+{
+    /* Orig: iVar10 = road&8 here (FUN_1110_197a = Map_GetOccupancyFlags &
+     * 8); if ((iVar10 == 0) || (nbr_road == 0)) fast ? +3 : +base*3
+     * (base = sbyte 1420:17d4[class]) else +1 (road-to-road). */
+    int here = (road_here != 0) ? 1 : 0;
+    int nbr = (road_nbr != 0) ? 1 : 0;
+
+    if (here != 0 && nbr != 0)
+        return 1;
+    if (unit_fast != 0)
+        return 3;
+    return base_cost * 3;
+}
+
+int path_corridor_queue_adv(int v)
+{
+    /* Orig Path_FindCorridor @ 1128:10de ring DAT_1420_afaa/aeaa:
+     * local_6 = (local_6+1) & 0xff (256 entries, head + tail, stop at
+     * empty or 0xe1 iters). */
+    return (v + 1) & 0xff;
+}
+
+int path_corridor_should_relax(int old_cost, int new_cost)
+{
+    /* Orig Path_FindCorridor @ 1128:10de relax: if ((visited == 0) ||
+     * (new < visited)) { visited = new; enqueue; } (visited 0 = unseen;
+     * cost bytes, budget = param_3). */
+    if (old_cost == 0)
+        return 1;
+    return (new_cost < old_cost) ? 1 : 0;
+}
+
+int path_continent_link_result(int dir, int cost)
+{
+    /* Orig Path_CheckContinentLink @ 1128:16d0 tail: iVar2 =
+     * Path_FindCorridor(0, 0x7f, budget) (scratch unit alias 68f1/2);
+     * DAT_68f3 = 0xff; cost = DAT_1420_aea8; if (dir == -1) cost = 0xffff.
+     * Caller gate: worldgen_continent_link_allowed (cost != -1 && < 0x14).
+     * Pelny probe (x, y, continent) to path_check_continent_link w
+     * worldgen.h (STUB 0x14); to jest czysty ogon dir/cost. */
+    if (dir == -1)
+        return -1;
+    return cost;
+}
+
+int map_get_ocean_or_cont_val(int is_sea, int continent,
+                              const int *sea_vals, const int *land_vals,
+                              int n)
+{
+    /* Orig Map_GetOceanOrContVal @ 1110:1dbd: class = Map_GetTileClass @
+     * 1110:16c0; sea (== 10) -> u16 1420:43b4[cont] (cont = Map_GetContinentId
+     * @ 1110:1d99), land -> u16 0x4334 + cont*2. OOR/NULL -> -1. */
+    if (!sea_vals || !land_vals)
+        return -1;
+    if (continent < 0 || continent >= n)
+        return -1;
+    if (is_sea != 0)
+        return sea_vals[continent];
+    return land_vals[continent];
+}

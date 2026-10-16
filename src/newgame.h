@@ -185,6 +185,85 @@ int menu_prompt_nation_avail_mask(int flags_00b6);
  * menu_prompt_nation_choice_valid. 1:1: ret_plus1 > 0. */
 int menu_prompt_nation_choice_valid(int ret_plus1);
 
+/* --- Chain 2026-10-16 (24): wizard steps 0-5 + year (task goal 3) ---
+ * Orig NewGame_Wizard @ 10e8:0000 (civ.exe, x86:LE:16:Protected Mode),
+ * decompiled this pass (caller Main_RunStartupSequence @ 11e0:0000):
+ *   init Init_UnitFontTables @ 10e8:2d46 + g_nDifficulty=0 + g_nCivCount=6 +
+ *   dialog 0x90 (frame 0x8d) + state iVar8=0..5 loop (Dialog_MenuZ_Modal @
+ *   1220:0156 for steps 0..2, NewGame_CustomWorldModal @ 1220:16fd — was
+ *   FUN_1220_16fd, renamed this pass — for steps 3/4; DAT_1418_0004 =
+ *   back/cancel, iVar8+1 forward, iVar8-1 back, 3->2 collapse):
+ *   0 difficulty: text 1420:2a5a ("Difficulty Level..._Chieftain (easiest)_
+ *     Warlord_Prince_King_Emperor (toughest)") + preselect g_nDifficulty ->
+ *     g_nDifficulty = modal_idx (0=Chieftain..4=Emperor, 12d8:42f6;
+ *     newgame_pick_difficulty STUB, math in newgame_difficulty_from_index).
+ *   1 competition: text 1420:2aa9 ("Level of Competition...") + per-count
+ *     "7..3" + 1420:2ac1 "_" + dec + 1420:2ac3 " Civilizations" + preselect
+ *     6-count -> g_nCivCount = Util_Clamp(6-idx,2,6) @ 11c8:0063 (2..6,
+ *     12d8:3b9a) + g_nCivAliveMask = 0xff >> (6-count) (12d8:42f8; helpers
+ *     newgame_civ_count_from_index/newgame_alive_mask LIVE +
+ *     newgame_competition_resolve clamp below).
+ *   2 tribe: text 1420:2ad2 ("Pick your tribe...") + 1420:2ae5 "_Custom."
+ *     (pick 0) + two Res_GetStringCopy @ 11f8:0080 (was mislabeled
+ *     Tribe_GetNameList: NIE osobna funkcja, to Res blob 0x94 entry group:
+ *     Res_GetStringCopy(0x94,i)/Res_GetStringCopy(0x94,i+8) two-column list
+ *     for i=1..count+1 over 0x2aee/0x2af0 separators; see rsc_loader.h
+ *     RES_BLOB_TRIBE) -> g_nPlayerCiv (12d8:4300) via
+ *     newgame_player_civ_resolve below (pick 0 = roll Rng_Range(count)+1,
+ *     else wrap when count < pick-1: pick=(pick-1-count)+8, civ=pick&7,
+ *     slot= civ(+8 when pick>7) at 43b8+0x9c; tribe strings via Res blob
+ *     0x94 + Res 0x8c leader names + 0x95 title; tribe_get_name_list stays
+ *     STUB — no static tribe table dumped yet) + Text_FillResStringList @
+ *     1098:1f4f (NIE uzywany do listy plemion: to ogolny builder tabel
+ *     0x82..0x86 w Dialog_InitResStringTables @ 1068:0295; wizard buduje
+ *     liste recznie StrCopy/StrAppend petla, nie Fill; por. dialog.h).
+ *   3 custom-a: Dialog_GetItemRect @ 1100:03ff (0x67 + offsets 0x32/0x50) +
+ *     ResMgr_GetString/PascalToCStr/StrCopy + NewGame_CustomWorldModal list
+ *     (first custom screen; newgame_customize_world STUB).
+ *   4 custom-b: same shape as 3 (second custom screen, offsets identical;
+ *     back from 4 collapses 3->2); WorldGen_CustomizeDialog @ 1060:xxxx
+ *     host (see worldgen.h).
+ *   5 finalize (iVar8 > 4 tail): tribe-name trims (12d8:02da -s, 03da),
+ *     g_nYear = 0xF060 (CIV_NEWGAME_START_YEAR; int16 -4000 = 4000 BC, see
+ *     newgame_start_year_* below), unit/city/map clear (0x50x0x32 zero,
+ *     0x80 unit slots 0xff, replay/tech/wonder tables), Rng_Range(0x32)
+ *     drift, per-civ FUN_10e8_12b5 + Tech_HasTech @ 1170:3181 list,
+ *     Sound_PlayId @ 1150:00c9 (leader wav) + Sys_WaitForInput +
+ *     Sound_PlayId(1,1) STOP, then Map_GenerateRandomOrLoad @ 1028:0000
+ *     next (see worldgen.h); newgame_finalize stays PARTIAL (mask/year
+ *     LIVE, dialog/sound/map tails STUB).
+ * OS-free step math below is LIVE 1:1 on explicit params (no Win16, no
+ * globals, read-only except outs); dialog/ResMgr/RNG-handle tails stay STUB
+ * with TODO Orig. No exit(), C17. */
+
+/* Orig step 0 (g_nDifficulty = modal_idx) -> newgame_difficulty_from_index.
+ * 1:1 idx 0..4 -> idx (Chieftain..Emperor), else -1. No globals. */
+int newgame_difficulty_from_index(int modal_index);
+
+/* Orig step 1 (g_nCivCount = Util_Clamp(6-idx,2,6)) ->
+ * newgame_competition_resolve. 1:1 clamp(6-idx,2,6) (Util_Clamp @
+ * 11c8:0063 inlined lo 2 hi 6; sibling newgame_civ_count_from_index above
+ * keeps the strict -1 form). No globals. */
+int newgame_competition_resolve(int modal_index);
+
+/* Orig step 2 (g_nPlayerCiv/slot @ 43b8+0x9c) -> newgame_player_civ_resolve.
+ * 1:1 on explicit params (rng_draw = Rng_Range @ 11c8:003d draw 0..count-1
+ * for the pick==0 roll; Res blob 0x94 strings + 0x8c/0x95 names stay
+ * caller-side STUB): pick == 0 -> player = rng_draw+1, slot = player;
+ * else { p = pick; if (count < pick-1) p = (pick-1-count)+8; player = p&7;
+ * slot = player + (p > 7 ? 8 : 0); }. Returns player civ 0..7, -1 on
+ * count OOR 2..6 / pick < 0 / rng_draw OOR for the roll / NULL out_slot
+ * (out_slot may be NULL = skip; returns player anyway). No globals. */
+int newgame_player_civ_resolve(int pick, int civ_count, int rng_draw,
+                               int *out_slot);
+
+/* Orig finalize (g_nYear @ 12d8:42fa = 0xF060) -> year helpers. 1:1:
+ * raw u16 0xF060; signed int16 -4000 (= 4000 BC: ujemne = BC, dodatnie = AD
+ * via Util_IntToDec @ 1000:2928 + BC/AD w game_append_year_text @
+ * 1088:1dd0, see game.h). No globals. */
+unsigned newgame_start_year_raw(void);
+int newgame_start_year_signed(void);
+
 /* Orig: NewGame_Wizard @ 10e8:0000 step 5 (finalize tail) -> newgame_finalize.
  * Writes g_nDifficulty @ 12d8:42f6, g_nCivCount @ 12d8:3b9a,
  * g_nCivAliveMask @ 12d8:42f8 (= 0xff >> (6 - count), see
@@ -196,5 +275,130 @@ int menu_prompt_nation_choice_valid(int ret_plus1);
  * the function still returns CIV_ERR_UNSUPPORTED on valid input (NULL
  * settings -> CIV_ERR_NOENT). No globals, no exit(), read-only. */
 civ_error_t newgame_finalize(const civ_newgame_settings_t *settings);
+
+/* --- Chain 2026-10-16 (25): CustomWorldModal validation (task goal 1) ---
+ * Orig NewGame_CustomWorldModal @ 1220:16fd (civ.exe, x86:LE:16:Protected
+ * Mode), decompiled this pass (steps 3/4 host in NewGame_Wizard @ 10e8:0000):
+ *   MAKEPROCINSTANCE + SETWINDOWLONG hook + 0x18 radio slots clear +
+ *   optional RanDoMStatic CREATEWINDOW (param_2 != 0) + GETCLIENTRECT +
+ *   GETWINDOWTEXT + CREATEWINDOW 0x1c2 list + SETFOCUS + FUN_1100_0913 fill
+ *   0x1c2 0..999 + SENDMESSAGE 0x30 + INVALIDATERECT + PEEKMESSAGE pump until
+ *   DAT_12b0_00a0 != 0; exit restores SETWINDOWLONG + FREEPROCINSTANCE;
+ *   DAT_12b0_00a0 == 1 copies the picked string (Util_StrCopy 0x30).
+ *   Wizard wrapper (NewGame_Wizard steps 3/4): local_c = NewGame_CustomWorldModal;
+ *   local_c == 0xffff -> DAT_1418_0004 = 1 (back/cancel) else 0 (forward);
+ *   then the shared stepper: DAT_1418_0004 == 0 -> iVar8+1 else { if 0 < iVar8
+ *   iVar8-1; if iVar8 == 3 iVar8 = 2 } (3->2 collapse: back from custom-a
+ *   returns to tribe, back from custom-b returns to tribe too via 3->2).
+ * Jakie ustawienia (temperatura/klimat z dialogu 0x8f/0x323?):
+ *   NIE ten modal — temperatura/klimat (Temperature @ 1420:2e28 / Climate @
+ *   1420:2e34 / 0x2e23 / 0x2e3c) zyja w WorldGen_LoadEarth @ 1108:0243
+ *   (dialog 0x8f, IDs from 0x323: row = (id-0x323)/4, col = (id-0x323)%4;
+ *   col < 3 picks, col == 3 opens help via NewGame_ShowCustomHelp @
+ *   10e0:0000 -> NewGame_CustomHelpDialog @ 10e0:03a2; see
+ *   worldgen_dialog_id_to_cell / worldgen_custom_apply LIVE in worldgen.h).
+ *   Ten modal (1220:16fd) to lista custom-world krokow 3/4 (Ctrl_* @ 1058
+ *   buttons: RANDOMRADIOPROC @ 1058:06ab, RANDOMSTATICPROC @ 1058:081a,
+ *   RANDOMUSERPROC @ 1058:0921, REGIONPROC @ 1058:09f6) + WorldGen probe
+ *   WorldGen_ProbeCustomFont @ 1060:0000 (was FUN_1060_0000, renamed this
+ *   pass: CREATEFONT + SELECTOBJECT + DELETEOBJECT font probe, caller
+ *   FUN_1060_01c1) + Dialog_SplitMenuText @ 1220:0000 (was FUN_1220_0000,
+ *   renamed this pass: '_' split into the 0x24fa MenuZ buffer, callee of
+ *   Dialog_MenuZ_Modal @ 1220:0156).
+ * Zwiazek z worldgen_custom_apply (LIVE): ten modal ZWRACA wybor (0xffff =
+ *   back), a worldgen_custom_apply ZAPISUJE wybor dialogu 0x8f (settings[row]
+ *   = col); oba dziela back/front semantike (newgame_custom_result_is_back +
+ *   newgame_wizard_step_back ponizej) + walidacje ponizej.
+ * OS-free validation below is LIVE 1:1 on explicit params (no Win16, no
+ * globals, read-only); the CREATEWINDOW/PEEKMESSAGE pump stays STUB in
+ * newgame_custom_world_modal above. No exit(), C17. */
+
+/* Orig wizard wrapper (local_c == 0xffff -> back) -> newgame_custom_result_is_back.
+ * 1:1 nonzero (1) when modal_ret == 0xffff (DAT_1418_0004 = 1 path), else 0. */
+int newgame_custom_result_is_back(int modal_ret);
+
+/* Orig shared stepper (DAT_1418_0004 gate + 3->2 collapse) ->
+ * newgame_wizard_step_back. 1:1: back == 0 -> step+1; else { if 0 < step
+ * step-1; if step == 3 step = 2 }. step 0..5, back 0/1; OOR step -> -1. */
+int newgame_wizard_step_back(int step, int back);
+
+/* Orig custom-world settings shape (4 entries, preset 1 via
+ * WorldGen_LoadEarth @ 1108:0243) -> newgame_custom_settings_valid.
+ * 1:1 each settings[i] in 0..2 (choice cols; help col 3 never stored, see
+ * worldgen_custom_apply). NULL -> NOENT; OOR entry -> RANGE; else CIV_OK. */
+civ_error_t newgame_custom_settings_valid(const int *settings, int n);
+
+/* --- Chain 2026-10-16 (26): custom help texts + font probe (task goal 4) ---
+ * Orig (civ.exe, x86:LE:16:Protected Mode), decompiled this pass:
+ *   NewGame_ShowCustomHelp @ 10e0:0000 (thin help-col wrapper: calls
+ *     NewGame_CustomHelpDialog(0x2994, buf+10, param_1, param_2, param_1,
+ *     param_2, 0xd8, 0xe, DAT_12d8_45c0, DAT_12d8_45be, DAT_12d8_45cd, ...)
+ *     then DAT_1418_0004 = 0 (forward); sole caller WorldGen_LoadEarth @
+ *     1108:0243 col == 3 branch).
+ *   NewGame_CustomHelpDialog @ 10e0:03a2 (help body: Dlg_CreateTracked @
+ *     1098:124f 0x87 + FUN_11d0_00e4/022d + FUN_10e0_06fd + Dialog_GetItemRect
+ *     @ 1100:03ff 0x66/0x67 + Gfx + Text + PEEKMESSAGE until DAT_12d8_0030;
+ *     params: res 0x99-ish id, colors 0xd8/0xe + DAT_12d8_45fb/45fd/45f1).
+ *     Callers: ShowCustomHelp above + NewGame_ShowCivNoteEarly @ 10e0:077f
+ *     (was FUN_10e0_077f, renamed this pass: gate (g_nOptionFlags & 1) != 0
+ *     && g_nYear < 0 -> HelpDialog(0x29c9, "___Civilization Note___" @
+ *     1420:29cd)) + NewGame_ShowCivNoteForPlayer @ 10e0:07e8 (was
+ *     FUN_10e0_07e8: gate DAT_13f0_000c == g_nPlayerCiv -> HelpDialog(0x29e5,
+ *     @ 1420:29e9)).
+ *   WorldGen_ProbeCustomFont @ 1060:0000 (CREATEFONT h 0x12 weight 400 +
+ *     SELECTOBJECT + DELETEOBJECT probe; sole caller
+ *     WorldGen_ShowVideoCapsDialog @ 1060:01c1 (was FUN_1060_01c1: GETDEVICECAPS
+ *     x16 dump + Dlg_CreateTracked 0x94 0x41 + ProbeCustomFont(0x12) +
+ *     Util_IntToDec/StrCopy/Append display + Sys_WaitForInput); see
+ *     worldgen_probe_font_* LIVE + worldgen_probe_custom_font STUB in
+ *     worldgen.h).
+ * Kiedy help: WorldGen_LoadEarth dialog 0x8f help col (col == 3, IDs from
+ *   0x323: row = (id-0x323)/4): row 0 -> 0x2e23, 1 -> Temperature @
+ *   1420:2e28, 2 -> Climate @ 1420:2e34, 3 -> 0x2e3c (switch w LoadEarth);
+ *   + wczesna notka CivNoteEarly (opt&1 + year<0, F1/'?' TBD) + notka gracza
+ *   CivNoteForPlayer (DAT_13f0_000c == player). Tresc: temperatura/klimat
+ *   opisy via ShowCustomHelp param (0x2e23/2e28/2e34/2e3c string ids) +
+ *   Civilization Note 0x29c9/0x29e5 bodies. Zwiazek z CustomWorldModal @
+ *   1220:16fd (steps 3/4 lista custom-world via Ctrl_* @ 1058 + WorldGen
+ *   customize host; help modal to osobny Dialog 0x87, nie 16fd).
+ * OS-free row->help + gate math below LIVE 1:1 (no Win16, no globals);
+ * Dlg_CreateTracked/PEEKMESSAGE tails stay STUB. No exit(), C17. */
+#define CIV_HELP_ROW_LANDMASS 0x2e23
+#define CIV_HELP_ROW_TEMPERATURE 0x2e28
+#define CIV_HELP_ROW_CLIMATE 0x2e34
+#define CIV_HELP_ROW_AGE 0x2e3c
+#define CIV_HELP_DLG_ID 0x87
+#define CIV_HELP_SHOW_PARAM 0x2994
+#define CIV_HELP_NOTE_EARLY 0x29c9
+#define CIV_HELP_NOTE_PLAYER 0x29e5
+
+/* Orig LoadEarth help switch (row -> help id) -> newgame_custom_help_for_row.
+ * 1:1 0 -> 0x2e23, 1 -> 0x2e28, 2 -> 0x2e34, 3 -> 0x2e3c, else -1. */
+int newgame_custom_help_for_row(int row);
+
+/* Orig ShowCustomHelp fixed param (0x2994) -> newgame_show_custom_help_param.
+ * 1:1 0x2994. No globals. */
+int newgame_show_custom_help_param(void);
+
+/* Orig ShowCustomHelp tail (DAT_1418_0004 = 0) -> newgame_show_custom_help_next.
+ * 1:1 0 (forward; wizard stepper newgame_wizard_step_back handles back). */
+int newgame_show_custom_help_next(void);
+
+/* Orig CivNoteEarly gate ((opt & 1) != 0 && year < 0) ->
+ * newgame_civ_note_early_needed. 1:1 1 gdy pokazac, 0 gdy nie. */
+int newgame_civ_note_early_needed(int opt_flags, int year);
+
+/* Orig CivNoteForPlayer gate (DAT_13f0_000c == g_nPlayerCiv) ->
+ * newgame_civ_note_player_needed. 1:1 (a == b) ? 1 : 0. */
+int newgame_civ_note_player_needed(int tag_13f0_000c, int player_civ);
+
+/* Orig NewGame_ShowCustomHelp @ 10e0:0000 -> newgame_show_custom_help.
+ * Help-col wrapper (row validated via for_row above + CustomHelpDialog
+ * Win16 tail). STUB CIV_ERR_UNSUPPORTED (RANGE on row OOR). */
+civ_error_t newgame_show_custom_help(int row);
+
+/* Orig NewGame_CustomHelpDialog @ 10e0:03a2 -> newgame_custom_help_dialog.
+ * Help body (Dlg 0x87 + layout + PEEKMESSAGE). Win16 -> SDL TBD; stub. */
+civ_error_t newgame_custom_help_dialog(int help_id);
 
 #endif /* CIVLIN_NEWGAME_H */

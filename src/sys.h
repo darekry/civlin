@@ -308,7 +308,8 @@ civ_error_t sys_get_client_rect(int *w_out, int *h_out);
  * SDL_GetText stub). Returns CIV_OK + *h_out on success. */
 civ_error_t status_measure_row(int *h_out);
 /* Sys_CheckRuntimeMemory @ 11e8:0075. UNSUPPORTED (needs window + RAM
- * thresholds; SDL_GetSystemRAM equivalent TBD). */
+ * thresholds; SDL_GetSystemRAM equivalent TBD). Trigger/content kernels
+ * live in sys_runtime_* below (LIVE); the MESSAGEBOX tail stays here. */
 civ_error_t sys_check_runtime_memory(void);
 /* Orig: FUN_11e8_0000 @ 11e8:0000 -> Sys_CheckFreeMemory.
  * Boot-time free-memory check (GETFREESPACE against the required floor,
@@ -993,5 +994,51 @@ int sys_pump_mode_select(int flag_1d4c, int flag_1d50);
  * symbol dla sciezki pompy). Guard v < 0 -> -1 (Linux-side, orig
  * unsigned wrap na pixel coord). No globals. */
 int sys_pump_scale_coord(int v);
+
+/* --- Chain 2026-10-16 (28): runtime-warning triggers/content (goal 3) ---
+ * Orig (civ.exe, x86:LE:16:Protected Mode), decompiled this pass:
+ *   Sys_CheckRuntimeMemory @ 11e8:0075 (sole caller Game_TurnLoopTick @
+ *     1088:0000, per-civ w petli tur: po Diplo_ProcessTurn @ 1168:0000 +
+ *     FUN_1078_0000/448f, PRZED Civ_ProcessUnitMoves; NIE co tick timera:
+ *     raz na civ na ture): GETFREESPACE + GETFREESYSTEMRESOURCES(1) +
+ *     GETFREESYSTEMRESOURCES(0); branch 1: (free < 1000000 || r1 < 10 ||
+ *     r0 < 10) && 43b4 == 0 -> MESSAGEBOX style 0x30 title "WARNING" @
+ *     1420:44f7 body 1420:4473 ("... getting low. Try saving the game,
+ *     closing other applications and restarting windows to recover
+ *     memory.") + 43b4 = 1 (once); branch 2 (else-if): (free < 300000 ||
+ *     r1 < 8 || r0 < 8) && 43b4 != 0 && 43b6 == 0 -> MESSAGEBOX style 0x10
+ *     title "FINAL WARNING" @ 1420:4578 body 1420:44ff ("... dangerously
+ *     low. Save the game and restart windows to prevent loss of the
+ *     current game.") + 43b6 = 1 (once).
+ *   Zwiazek z Sys_CheckFreeMemory @ 11e8:0000 (boot, NIE per-tura: progi
+ *     < 2500000 / < 0x23 (35) res, MESSAGEBOX title "WARNING" @ 1420:446b
+ *     body 1420:43b8 ("... too low to run Civilization successfully...") +
+ *     Sys_ExitFallback(1); predicate LIVE boot_free_memory_is_low boot.h).
+ *   Progi runtime LIVE w boot.h (boot_runtime_needs_first/final_warning);
+ *   ponizej LIVE tresc (stringi) + kolejnosc wywolan dla sys.c/game.c.
+ *   MESSAGEBOX/GETFREESPACE ogony zostaja w sys_check_runtime_memory STUB.
+ *   No Win16, no globals, no exit(), C17. */
+
+/* Orig MESSAGEBOX style @ 11e8:0075 branch 1 (0x30 = exclamation) ->
+ * sys_runtime_warn_style_first. 1:1 0x30. */
+int sys_runtime_warn_style_first(void);
+
+/* Orig same branch 2 (0x10 = hand/stop) -> sys_runtime_warn_style_final.
+ * 1:1 0x10. */
+int sys_runtime_warn_style_final(void);
+
+/* Orig title/body stringi 1420:44f7/4473 + 1420:4578/44ff ->
+ * sys_runtime_warn_title_first/body_first/title_final/body_final.
+ * 1:1 read-only literaly (never NULL). */
+const char *sys_runtime_warn_title_first(void);
+const char *sys_runtime_warn_body_first(void);
+const char *sys_runtime_warn_title_final(void);
+const char *sys_runtime_warn_body_final(void);
+
+/* Orig kolejnosc w Game_TurnLoopTick (per-civ pozycja CheckRuntimeMemory:
+ * po Diplo/AI, przed Civ_ProcessUnitMoves) -> sys_runtime_check_order.
+ * 1:1 1 = check-then-move (orig exact: Sys_CheckRuntimeMemory() przed
+ * Civ_ProcessUnitMoves(local_6); return gdy move != 0). */
+int sys_runtime_check_order(void);
 
 #endif /* CIVLIN_SYS_H */

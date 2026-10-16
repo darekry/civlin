@@ -1078,4 +1078,52 @@ int main_startup_stop_sound(void);
  * 0 wpp (1 = load, 4/5/HoF/quit/out-of-range -> sam DestroyTracked). */
 int main_startup_should_run_wizard(int menu_choice);
 
+/* --- Chain 2026-10-16 (27): memory thresholds + VideoCaps reading (goals 3/5) ---
+ * Orig (civ.exe, x86:LE:16:Protected Mode), decompiled this pass:
+ *   Sys_CheckFreeMemory @ 11e8:0000 (boot; GETFREESPACE -> 1420:b390 +
+ *     GETFREESYSTEMRESOURCES(1/0/2) -> b38e/b38a/b38c; if (free < 2500000 ||
+ *     r1 < 0x23 || r0 < 0x23): MESSAGEBOX 1420:43b8 + Sys_ExitFallback(1);
+ *     sole caller WinMain @ 1008:0000 memory step via boot_check_memory).
+ *   Sys_CheckRuntimeMemory @ 11e8:0075 (caller Game_TurnLoopTick @ 1088:0000
+ *     per-civ: GETFREESPACE + resources(1/0); if ((free < 1000000 || r1 < 10
+ *     || r0 < 10) && 43b4 == 0): MESSAGEBOX 1420:4473 once (43b4 = 1); else
+ *     if ((free < 300000 || r1 < 8 || r0 < 8) && 43b4 != 0 && 43b6 == 0):
+ *     MESSAGEBOX 1420:44ff once (43b6 = 1)).
+ *   WorldGen_ShowVideoCapsDialog @ 1060:01c1: GETDC + GETDEVICECAPS x13
+ *     (8,10,0xc,0xe,0x16,0x18,0x22,0x24,0x26,0x28,0x2a,0x58,0x5a + war. 0x68/
+ *     0x6a gdy 0x26&0x100) + Dlg_CreateTracked(0x94,0x41) +
+ *     WorldGen_ProbeCustomFont(0x12) (h 0x12 weight 400) + rows via
+ *     WorldGen_DrawVideoCapsRow @ 1060:005b / WorldGen_DrawVideoCapsFlag @
+ *     1060:00d1 (renamed this pass) + Sys_WaitForInput modal. Po co: debug/
+ *     requirements dump (odczyt caps, brak SET trybu); kiedy: BRAK callerow
+ *     (martwy/debug, nie boot/F-key/blad — zaden kod go nie wola).
+ *     Zwiazek z boot_video_caps (checklist 1420:0af4 dla Video_CheckDriverCaps
+ *     @ 1008:059a; count/describe = 0/NULL do dumpu) i memory STUBami
+ *     (sys_check_free/runtime_memory): caps to ODCZYT urzadzenia, memory to
+ *     PROGI ilosciowe. Dialog GDI -> STUB (worldgen_show_video_caps_dialog
+ *     w worldgen.h); logika progow ponizej LIVE 1:1 (no Win16, no globals).
+ * No exit(), C17. */
+#define CIV_BOOT_FREE_BYTES_MIN 2500000L
+#define CIV_BOOT_FREE_RES_MIN 0x23
+#define CIV_RUN_FREE_BYTES_WARN 1000000L
+#define CIV_RUN_FREE_RES_WARN 10
+#define CIV_RUN_FREE_BYTES_FINAL 300000L
+#define CIV_RUN_FREE_RES_FINAL 8
+
+/* Orig Sys_CheckFreeMemory @ 11e8:0000 gate -> boot_free_memory_is_low.
+ * 1:1 1 gdy free_bytes < 2500000 || res1 < 0x23 || res0 < 0x23. */
+int boot_free_memory_is_low(long free_bytes, int res1, int res0);
+
+/* Orig Sys_CheckRuntimeMemory @ 11e8:0075 first gate (+ 43b4 == 0) ->
+ * boot_runtime_needs_first_warning. 1:1 (free < 1000000 || r1 < 10 ||
+ * r0 < 10) && already_warned == 0. */
+int boot_runtime_needs_first_warning(long free_bytes, int res1, int res0,
+                                     int already_warned);
+
+/* Orig same second gate (43b4 != 0 && 43b6 == 0) ->
+ * boot_runtime_needs_final_warning. 1:1 (free < 300000 || r1 < 8 ||
+ * r0 < 8) && warned_once != 0 && warned_final == 0. */
+int boot_runtime_needs_final_warning(long free_bytes, int res1, int res0,
+                                      int warned_once, int warned_final);
+
 #endif /* CIVLIN_BOOT_H */

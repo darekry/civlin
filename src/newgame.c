@@ -177,6 +177,77 @@ int menu_prompt_nation_choice_valid(int ret_plus1)
     return (ret_plus1 > 0) ? 1 : 0;
 }
 
+/* --- Chain 2026-10-16 (24): wizard steps 0-5 + year (goal 3). ---
+ * See newgame.h block. OS-free 1:1 LIVE (no Win16, no globals, no exit()).
+ * Dialog/ResMgr/RNG-handle tails stay in the pick/customize STUBs. */
+
+int newgame_difficulty_from_index(int modal_index)
+{
+    /* Orig NewGame_Wizard @ 10e8:0000 step 0 -> case 1: g_nDifficulty @
+     * 12d8:42f6 = local_c (modal 0..4 Chieftain..Emperor, text 1420:2a5a). */
+    if (modal_index < 0 || modal_index > 4)
+        return -1;
+    return modal_index;
+}
+
+int newgame_competition_resolve(int modal_index)
+{
+    /* Orig step 1 -> case 2: g_nCivCount @ 12d8:3b9a = Util_Clamp @ 11c8:0063
+     * (6 - local_c, 2, 6); texts 1420:2aa9/2ac1/2ac3. Clamp, never -1. */
+    int v = CIV_NEWGAME_MAX_CIVS - modal_index;
+
+    if (v < CIV_NEWGAME_MIN_CIVS)
+        v = CIV_NEWGAME_MIN_CIVS;
+    if (v > CIV_NEWGAME_MAX_CIVS)
+        v = CIV_NEWGAME_MAX_CIVS;
+    return v;
+}
+
+int newgame_player_civ_resolve(int pick, int civ_count, int rng_draw,
+                               int *out_slot)
+{
+    /* Orig step 2 -> case 3: local_c == 0 (Custom) rolls Rng_Range @ 11c8:003d
+     * (g_nCivCount) + 1; else direct pick with the count wrap + slot at
+     * 43b8+0x9c (Res_GetStringCopy @ 11f8:0080 blob 0x94 tribe strings +
+     * 0x8c leader / 0x95 title stay caller-side). */
+    int p;
+    int player;
+    int slot;
+
+    if (civ_count < CIV_NEWGAME_MIN_CIVS ||
+        civ_count > CIV_NEWGAME_MAX_CIVS)
+        return -1;
+    if (pick < 0)
+        return -1;
+    if (pick == 0) {
+        if (rng_draw < 0 || rng_draw >= civ_count)
+            return -1;
+        player = rng_draw + 1;
+        slot = player;
+    } else {
+        p = pick;
+        if (civ_count < pick - 1)
+            p = (pick - 1 - civ_count) + 8;
+        player = p & 7;
+        slot = player + ((p > 7) ? 8 : 0);
+    }
+    if (out_slot)
+        *out_slot = slot;
+    return player;
+}
+
+unsigned newgame_start_year_raw(void)
+{
+    /* Orig finalize: g_nYear @ 12d8:42fa = 0xF060. */
+    return CIV_NEWGAME_START_YEAR;
+}
+
+int newgame_start_year_signed(void)
+{
+    /* Orig same word as int16: 0xF060 = -4000 = 4000 BC. */
+    return (int)(int16_t)CIV_NEWGAME_START_YEAR;
+}
+
 civ_error_t newgame_wizard_run(civ_newgame_settings_t *out)
 {
     civ_error_t err;
@@ -200,4 +271,128 @@ civ_error_t newgame_wizard_run(civ_newgame_settings_t *out)
     if (err != CIV_OK)
         return err;
     return newgame_finalize(out);
+}
+
+/* --- Chain 2026-10-16 (25): CustomWorldModal validation (goal 1). ---
+ * See newgame.h block. OS-free 1:1 LIVE (no Win16, no globals, no exit()).
+ * CREATEWINDOW/PEEKMESSAGE pump stays in newgame_custom_world_modal STUB. */
+
+int newgame_custom_result_is_back(int modal_ret)
+{
+    /* Orig NewGame_Wizard @ 10e8:0000 steps 3/4 wrapper: local_c =
+     * NewGame_CustomWorldModal @ 1220:16fd (...); if (local_c == 0xffff)
+     * DAT_1418_0004 = 1 else 0. */
+    return (modal_ret == 0xffff) ? 1 : 0;
+}
+
+int newgame_wizard_step_back(int step, int back)
+{
+    /* Orig shared stepper: if (DAT_1418_0004 == 0) iVar8+1 else { if 0 <
+     * iVar8 iVar8-1; if iVar8 == 3 iVar8 = 2 } (3->2 collapse). */
+    if (step < 0 || step > 5)
+        return -1;
+    if (back != 0 && back != 1)
+        return -1;
+    if (back == 0)
+        return step + 1;
+    if (step > 0)
+        step--;
+    if (step == 3)
+        step = 2;
+    return step;
+}
+
+civ_error_t newgame_custom_settings_valid(const int *settings, int n)
+{
+    /* Orig WorldGen_LoadEarth @ 1108:0243 shape: 4 entries (landmass Mass?
+     * /temperature/climate/age hypothesis) preset to 1, each choice col
+     * 0..2 (help col 3 never stored, see worldgen_custom_apply LIVE). */
+    int i;
+
+    if (!settings)
+        return CIV_ERR_NOENT;
+    if (n != 4)
+        return CIV_ERR_RANGE;
+    for (i = 0; i < n; i++) {
+        if (settings[i] < 0 || settings[i] > 2)
+            return CIV_ERR_RANGE;
+    }
+    return CIV_OK;
+}
+
+/* --- Chain 2026-10-16 (26): custom help texts + font probe (goal 4). ---
+ * See newgame.h block. OS-free 1:1 LIVE (no Win16, no globals, no exit()).
+ * Dlg_CreateTracked/PEEKMESSAGE tails stay STUB below. */
+
+int newgame_custom_help_for_row(int row)
+{
+    /* Orig WorldGen_LoadEarth @ 1108:0243 help switch: case 0 -> 0x2e23,
+     * case 1 -> Temperature @ 1420:2e28, case 2 -> Climate @ 1420:2e34,
+     * case 3 -> 0x2e3c (col == 3 help via NewGame_ShowCustomHelp @
+     * 10e0:0000). */
+    switch (row) {
+    case 0:
+        return CIV_HELP_ROW_LANDMASS;
+    case 1:
+        return CIV_HELP_ROW_TEMPERATURE;
+    case 2:
+        return CIV_HELP_ROW_CLIMATE;
+    case 3:
+        return CIV_HELP_ROW_AGE;
+    default:
+        return -1;
+    }
+}
+
+int newgame_show_custom_help_param(void)
+{
+    /* Orig NewGame_ShowCustomHelp @ 10e0:0000 head: NewGame_CustomHelpDialog
+     * (0x2994, ...) first param. */
+    return CIV_HELP_SHOW_PARAM;
+}
+
+int newgame_show_custom_help_next(void)
+{
+    /* Orig same tail: DAT_1418_0004 = 0 (forward; back handled by
+     * newgame_custom_result_is_back / newgame_wizard_step_back). */
+    return 0;
+}
+
+int newgame_civ_note_early_needed(int opt_flags, int year)
+{
+    /* Orig NewGame_ShowCivNoteEarly @ 10e0:077f: if (((g_nOptionFlags & 1)
+     * != 0) && (g_nYear < 0)) HelpDialog(0x29c9, 0x29cd note). */
+    if (((opt_flags & 1) != 0) && (year < 0))
+        return 1;
+    return 0;
+}
+
+int newgame_civ_note_player_needed(int tag_13f0_000c, int player_civ)
+{
+    /* Orig NewGame_ShowCivNoteForPlayer @ 10e0:07e8: if (DAT_13f0_000c ==
+     * g_nPlayerCiv) HelpDialog(0x29e5, 0x29e9 note). */
+    return (tag_13f0_000c == player_civ) ? 1 : 0;
+}
+
+civ_error_t newgame_show_custom_help(int row)
+{
+    /* Orig NewGame_ShowCustomHelp @ 10e0:0000 wrapper validated here; body
+     * needs NewGame_CustomHelpDialog @ 10e0:03a2 Win16 below. */
+    if (newgame_custom_help_for_row(row) < 0)
+        return CIV_ERR_RANGE;
+    /* TODO: NewGame_CustomHelpDialog(0x2994, buf, help row string @
+     * 0x2e23/2e28/2e34/2e3c, colors 0xd8/0xe + DAT_12d8_45c0/45be/45cd) +
+     * DAT_1418_0004 = 0 via Dlg_CreateTracked @ 1098:124f 0x87. Win16 -> SDL. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t newgame_custom_help_dialog(int help_id)
+{
+    (void)help_id;
+    /* TODO: Orig NewGame_CustomHelpDialog @ 10e0:03a2 body: Dlg_CreateTracked
+     * @ 1098:124f (0x87) + FUN_11d0_00e4/022d + FUN_10e0_06fd +
+     * Dialog_GetItemRect @ 1100:03ff (0x66/0x67) + Gfx/Text layout +
+     * PEEKMESSAGE until DAT_12d8_0030 (+ CivNoteEarly 0x29c9 / CivNotePlayer
+     * 0x29e5 callers). Win16 USER/GDI -> SDL3 TBD. */
+    return CIV_ERR_UNSUPPORTED;
 }
