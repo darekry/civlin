@@ -47,8 +47,8 @@
 civ_error_t title_play_intro(void);
 
 /* Orig: FUN_1030_0000 @ 1030:0000 -> Pic_PlayShared (NOT Title_PlayAnimLoop).
- * MAP CORRECTION (verified: size 0x79cd ~31 KB, 13 callers incl.
- * City_ShowTopFive @ 1080:099b, Unit_DoMove @ 1030:0000? no — @ 1038:0000,
+ * MAP CORRECTION (verified: size 0x79cd ~31 KB, 16 wolajacych per task;
+ * 13 verified incl. City_ShowTopFive @ 1080:099b, Unit_DoMove @ 1038:0000,
  * City_ProcessDisaster @ 1040:068e, Game score @ 1040:1137 tails,
  * 1170/1188/11b8 families): 1030:0000 is the shared PIC/modal player
  * (Dlg_CreateTracked @ 1098:124f + FILLRECT/FRAMERECT + internal

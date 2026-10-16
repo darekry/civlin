@@ -1240,9 +1240,18 @@ civ_error_t city_do_revolt(int city_idx, int new_owner);
 /* Orig Pic_PlayShared @ 1030:0000 -> pic_play_shared.
  * Shared city modal/sim player (mode 1 = modal view via
  * Dlg_CreateTracked @ 1098:124f + tile helpers 1030:79ce/7c28/...;
- * mode 0 = background sim tick incl. caravan prod 0x1b). Needs city
- * records + GDI modal + tile helpers -> STUB. See title.h: this is NOT
- * the intro loop (title_play_anim_loop stays a separate intro stub). */
+ * mode 0 = background sim tick incl. caravan 0x1b). Triage FUN_1030_0000
+ * (~31 KB, size 0x79cd, 16 wolajacych per task; 13 verified: City_DoRevolt
+ * @ 11b8:0f26, City_ProcessDisaster @ 1040:068e, City_ShowCensusReport @
+ * 1018:1d5b, City_ShowTopFive @ 1080:099b, Demo_ShowDemographics @
+ * 1188:123a, 1018:0be0, 1018:208f, 1040:1137, 1170:0000, 1170:05af,
+ * 1170:05ca, 1188:0db8, Unit_DoMove @ 1038:0000; ref unpacked/civ.exe
+ * read-only): OS-free gates LIVE 1:1 in pic_mode_is_modal/pic_mode_is_sim
+ * + city/tech/prod kernels below; GDI blit/modal tails (Dlg_CreateTracked
+ * + FILLRECT/FRAMERECT + 1030:79ce/7c28/7e57/7ece/7f65/7fc1/900d/94d2/96ad/
+ * 982f/9aed helpers + PEEKMESSAGE pump) stay STUB with TODO Orig in
+ * game.c. See title.h: this is NOT the intro loop (title_play_anim_loop
+ * stays a separate intro stub). */
 civ_error_t pic_play_shared(int city_idx, int mode);
 
 /* --- Chain 2026-10-16: Pic modes + 0x1b caravan + unit loop + tech ---

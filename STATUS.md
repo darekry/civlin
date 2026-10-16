@@ -579,7 +579,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `diplomat_city_action` | STUB | 11b8:0000, 12d8:3a0a | has TODO |
 | `diplomat_bribe_unit` | STUB | 1088:13d5, 1110:03ae, 11b8:07c2, 11c0:12c8, 11c0:16a4, 11c0:1bc3 | has TODO |
 | `city_do_revolt` | STUB | 1038:0000, 1110:171f, 11b8:0f26, 11c0:12c8, 1220:00d2, 1420:4168 | has TODO |
-| `pic_play_shared` | STUB | 1030:0000, 1030:79ce, 1030:7c28, 1030:7e57, 1030:7ece, 1030:7f65, 1030:7fc1, 1098:124f | has TODO |
+| `pic_play_shared` | STUB | 1018:0be0, 1018:1d5b, 1018:208f, 1030:0000, 1030:79ce, 1030:7c28, 1030:7e57, 1030:7ece, 1030:7f65, 1038:0000, 1040:068e, 1040:1137, 1080:099b, 1098:124f, 1170:0000, 1170:05af, 1170:05ca, 1188:0db8, 1188:123a, 11b8:0f26 | has TODO |
 | `tech_has_tech` | LIVE | 1170:3181 |  |
 | `pic_mode_is_modal` | LIVE | 1030:0000, 1098:124f, 1170:05ca |  |
 | `pic_mode_is_sim` | LIVE | 1030:0000 |  |

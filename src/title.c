@@ -193,9 +193,10 @@ civ_error_t title_play_intro(void)
 
 civ_error_t title_play_anim_loop(void)
 {
-    /* Orig FUN_1030_0000 @ 1030:0000 = Pic_PlayShared (shared PIC/modal
-     * player, NOT the intro loop — see title.h map correction; Linux owner
-     * pic_play_shared in game.h/game.c with the LIVE mode split in
+    /* Orig FUN_1030_0000 @ 1030:0000 = Pic_PlayShared (~31 KB, size 0x79cd,
+     * 16 wolajacych per task; shared PIC/modal player, NOT the intro loop
+     * — see title.h map correction; Linux owner pic_play_shared in
+     * game.h/game.c with the LIVE mode split in
      * pic_mode_is_modal/pic_mode_is_sim). PARTIAL: OS-free intro gates
      * below are LIVE 1:1 (ref unpacked/civ.exe Main_RunStartupSequence @
      * 11e0:0000 + Anim_OpenSequence @ 10b0:008a / Anim_AdvanceFrames @

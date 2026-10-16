@@ -1829,17 +1829,21 @@ civ_error_t city_do_revolt(int city_idx, int new_owner)
 
 civ_error_t pic_play_shared(int city_idx, int mode)
 {
-    (void)city_idx;
-    (void)mode;
-    /* TODO: Orig Pic_PlayShared @ 1030:0000 (mode 1 modal via
-     * Dlg_CreateTracked @ 1098:124f + tile helpers City_RenderWorkedTile
+    /* TODO: Orig Pic_PlayShared @ 1030:0000 (~31 KB, size 0x79cd, 16
+     * wolajacych per task; ref unpacked/civ.exe read-only): mode 1 modal
+     * via Dlg_CreateTracked @ 1098:124f + tile helpers City_RenderWorkedTile
      * @ 1030:79ce / City_TileYield @ 1030:7c28 / City_IsWonderOpen @
      * 1030:7e57 / Tech_FindFirstOwner @ 1030:7ece / City_SetSpecialist
-     * @ 1030:7f65 / City_GetSpecialist @ 1030:7fc1; mode 0 background
-     * sim tick incl. caravan 0x1b via Trade_DeliverCaravanGoods @
-     * 1038:0d09; NOT the intro loop, see title.h). Needs city records
-     * + GDI modal. Mode split itself is LIVE in pic_mode_is_modal /
-     * pic_mode_is_sim below. */
+     * @ 1030:7f65 / City_GetSpecialist @ 1030:7fc1 + Pic_PresentOnPaint @
+     * 1030:900d / Pic_FinishPaint @ 1030:94d2 / 96ad / 982f / PumpMenuCommand
+     * @ 1030:9aed; mode 0 background sim tick incl. caravan 0x1b via
+     * Trade_DeliverCaravanGoods @ 1038:0d09; NOT the intro loop, see
+     * title.h. OS-free mode split below is LIVE 1:1 (pic_mode_is_modal /
+     * pic_mode_is_sim); city records + GDI modal + PEEKMESSAGE pump need
+     * Win16 -> CIV_ERR_UNSUPPORTED. */
+    (void)city_idx;
+    (void)pic_mode_is_modal(mode);
+    (void)pic_mode_is_sim(mode);
     return CIV_ERR_UNSUPPORTED;
 }
 
