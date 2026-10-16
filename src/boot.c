@@ -1278,6 +1278,15 @@ int main_startup_should_run_wizard(int menu_choice)
     return 0;
 }
 
+int main_startup_should_break(int flag_1e)
+{
+    /* Orig Main_RunStartupSequence @ 11e0:0000 loop#2 break (decompiled
+     * 2026-10-16: do { if (DAT_13e0_001e != 0) break; c =
+     * Anim_AdvanceFrames @ 10b0:0461 } while (c == 0); flag set by
+     * MainMenu_WndProc @ 11e0:0221 idle/timer branch). */
+    return (flag_1e != 0) ? 1 : 0;
+}
+
 /* --- Chain 2026-10-16 (27): memory thresholds (goals 3/5). See boot.h.
  * OS-free 1:1 LIVE (no Win16, no globals, no exit()); MESSAGEBOX/exit tails
  * stay in sys_check_free/runtime_memory STUBs. */

@@ -1921,6 +1921,28 @@ int anim_dissolve_col(int start_col, int perm_val, int w);
 civ_error_t anim_rebase_clock(long now_tick, long param, long *out_base,
                               long *out_stored);
 
+/* Orig Anim_AdvanceFrames @ 10b0:0461 head (decompiled 2026-10-16:
+ * local_10 = Sys_GetTickScaled @ 1100:02e1 - *(seq+0xd); if (end <=
+ * local_10) local_10 = end; while (cur < local_10) pump frame recs) ->
+ * anim_clamp_tick. 1:1 min(now - base, end) (elapsed clamp, caller feeds
+ * now = sys_tick_scaled_from(tick)). No globals. */
+long anim_clamp_tick(long now, long base, long end);
+
+/* Orig Anim_AdvanceFrames @ 10b0:0461 tail (decompiled 2026-10-16: cur <
+ * end -> busy (cur>>8)<<8, else done ((cur>>8)<<8)|1; low byte is the
+ * while(c == 0) gate in Main_RunStartupSequence @ 11e0:0000 loop#1/loop#2)
+ * -> anim_advance_ret. 1:1 exact int shape (boolean half stays in
+ * anim_seq_is_finished). No globals. */
+int anim_advance_ret(long cur, long end);
+
+/* Orig Anim_StepSlotA/B @ 10a8:00fc/018e step gate (decompiled 2026-10-16:
+ * pc = per * cur; if (start + pc <= now) frame = (now - start) / per, else
+ * hold; A blends frame forward, B blends max - frame) ->
+ * anim_slot_should_step. 1:1 nonzero (1) when start + per*cur <= now.
+ * per <= 0 -> 0 (orig would divide by zero once the gate passes; here a
+ * hard stop instead of the far-pointer fault). No globals. */
+int anim_slot_should_step(long start, int per, int cur, long now);
+
 /* --- Chain 2026-10-16 (25): MenuZ modes + tracked IDs (task goal 4) ---
  * Orig Dialog_MenuZ_Modal @ 1220:0156 (civ.exe, x86:LE:16:Protected Mode),
  * decompiled this pass (shared modal MainMenu + kazdy NewGame_Wizard step):

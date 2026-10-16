@@ -90,6 +90,12 @@ typedef enum civ_mainmenu_choice {
  * Port identyfikatorow widokow LIVE 1:1 (no Win16, no globals); SHOWWINDOW
  * + Menu_InitMainBar ogony STUB. No exit(). */
 
+/* Orig MainMenu_WndProc @ 11e0:0221 MenuZ y-offset (decompiled 2026-10-16:
+ * DAT_12d8_28fc == 0 ? iVar4 = 0xb4 : 10, dodane do local_12 dla
+ * Dialog_MenuZ_Modal; mono/VGA branch jak w opcode 8 AdvanceFrames) ->
+ * mainmenu_dialog_y_offset. 1:1 0xb4 gdy color (flag == 0), 10 gdy mono. */
+int mainmenu_dialog_y_offset(int flag_28fc);
+
 /* Orig Menu_ToggleView1210/1218 +0x2c shape -> menu_toggle_show_cmd.
  * 1:1: hidden_flag == 0 -> 5 (SW_SHOW), inaczej 0 (SW_HIDE). */
 int menu_toggle_show_cmd(int hidden_flag);

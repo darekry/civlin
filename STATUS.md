@@ -182,6 +182,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `main_startup_intro_sound` | LIVE | 1420:3114 |  |
 | `main_startup_stop_sound` | LIVE |  |  |
 | `main_startup_should_run_wizard` | LIVE | 1098:1612, 10e8:0000, 1108:01bc, 11e0:0000 |  |
+| `main_startup_should_break` | LIVE | 10b0:0461, 11e0:0000, 11e0:0221 |  |
 | `boot_free_memory_is_low` | LIVE | 11e8:0000 |  |
 | `boot_runtime_needs_first_warning` | LIVE | 1088:0000, 11e8:0075 |  |
 | `boot_runtime_needs_final_warning` | LIVE |  |  |
@@ -375,6 +376,9 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `anim_dissolve_swap` | LIVE |  |  |
 | `anim_dissolve_col` | LIVE | 10b0:17e5 |  |
 | `anim_rebase_clock` | LIVE | 10b0:005b, 10b0:008a, 1100:02e1, 11e0:0000, 11e0:0221 |  |
+| `anim_clamp_tick` | LIVE | 10b0:0461, 1100:02e1 |  |
+| `anim_advance_ret` | LIVE | 10b0:0461, 11e0:0000 |  |
+| `anim_slot_should_step` | LIVE | 10a8:00fc, 10a8:018e |  |
 | `dialog_menuz_art_mode` | LIVE | 1220:0156 |  |
 | `dialog_show_message_id` | LIVE | 1220:00d2, 1220:0eb8 |  |
 | `dialog_menuz_should_loop` | LIVE | 11e0:0221, 12d8:44e2 |  |
@@ -850,6 +854,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `menu_dispatch_target_at` | LIVE |  |  |
 | `menu_command_group` | LIVE |  |  |
 | `menu_dispatch_command` | STUB | 1048:01cd |  |
+| `mainmenu_dialog_y_offset` | LIVE | 10b0:0461, 11e0:0221, 1220:0156 |  |
 | `menu_toggle_show_cmd` | LIVE | 1210:1134, 1218:077d |  |
 | `menu_toggle_view_window` | LIVE | 1048:02af, 1208:0af1, 1210:025b, 1218:0386, 12b0:0004, 12b0:001c, 12b0:0034 |  |
 
@@ -1217,6 +1222,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `dos_get_current_drive` | LIVE | 1000:1252 |  |
 | `dos_get_current_drive_index` | LIVE | 1000:13e6 |  |
 | `dos_get_current_dir` | LIVE | 1000:139c |  |
+| `sys_tick_scaled_from` | LIVE | 10b0:005b, 10b0:008a, 10b0:0461, 1100:02e1 |  |
 | `sys_get_tick_scaled` | LIVE | 1100:02e1 |  |
 | `sys_build_current_dir_path` | LIVE | 1000:2826 |  |
 | `sys_init_paths` | LIVE | 1228:0002, 1228:0004 |  |

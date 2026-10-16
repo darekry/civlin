@@ -155,6 +155,15 @@ civ_error_t menu_dispatch_command(int cmd)
 /* --- Chain 2026-10-16 (19): view toggles (goals 3+5) ---
  * See mainmenu.h block. OS-free 1:1 (no Win16, no globals, no exit()). */
 
+int mainmenu_dialog_y_offset(int flag_28fc)
+{
+    /* Orig MainMenu_WndProc @ 11e0:0221 MenuZ y-offset (decompiled
+     * 2026-10-16: if (DAT_12d8_28fc == 0) iVar4 = 0xb4 else 10, added to
+     * local_12 for Dialog_MenuZ_Modal @ 1220:0156; mono/VGA branch like
+     * opcode 8 in Anim_AdvanceFrames @ 10b0:0461). */
+    return (flag_28fc == 0) ? 0xb4 : 10;
+}
+
 int menu_toggle_show_cmd(int hidden_flag)
 {
     /* Orig Menu_ToggleView1210 @ 1210:1134 / Menu_ToggleView1218 @

@@ -1078,6 +1078,12 @@ int main_startup_stop_sound(void);
  * 0 wpp (1 = load, 4/5/HoF/quit/out-of-range -> sam DestroyTracked). */
 int main_startup_should_run_wizard(int menu_choice);
 
+/* Orig Main_RunStartupSequence @ 11e0:0000 loop#2 break (decompiled
+ * 2026-10-16: do { if (DAT_13e0_001e != 0) break; AdvanceFrames } while;
+ * flag stawiany przez MainMenu_WndProc @ 11e0:0221 idle/timer branch) ->
+ * main_startup_should_break. 1:1 nonzero (1) gdy flag != 0. */
+int main_startup_should_break(int flag_1e);
+
 /* --- Chain 2026-10-16 (27): memory thresholds + VideoCaps reading (goals 3/5) ---
  * Orig (civ.exe, x86:LE:16:Protected Mode), decompiled this pass:
  *   Sys_CheckFreeMemory @ 11e8:0000 (boot; GETFREESPACE -> 1420:b390 +

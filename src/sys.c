@@ -376,10 +376,17 @@ int dos_get_current_dir(int drive, char *buf, size_t cap)
     return 0;
 }
 
+unsigned long sys_tick_scaled_from(unsigned long tick)
+{
+    /* Orig Sys_GetTickScaled @ 1100:02e1 pure half (GETTICKCOUNT * 0x3c /
+     * 1000, decompiled this pass). 1:1 on the explicit tick. */
+    return tick * 60u / 1000u;
+}
+
 unsigned long sys_get_tick_scaled(void)
 {
     /* Sys_GetTickScaled @ 1100:02e1: GETTICKCOUNT() * 0x3C / 1000. */
-    return (unsigned long)SDL_GetTicks() * 60u / 1000u;
+    return sys_tick_scaled_from((unsigned long)SDL_GetTicks());
 }
 
 char *sys_build_current_dir_path(char *dst, size_t cap)

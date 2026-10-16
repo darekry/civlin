@@ -260,6 +260,11 @@ civ_error_t dos_ioctl(int fd, int func);
 
 /* Sys_GetTickScaled @ 1100:02e1. SDL_GetTicks() * 60 / 1000. */
 unsigned long sys_get_tick_scaled(void);
+/* Orig Sys_GetTickScaled @ 1100:02e1 pure half (GETTICKCOUNT * 0x3c / 1000,
+ * decompiled this pass; callers Anim_OpenSequence @ 10b0:008a tick-base,
+ * Anim_AdvanceFrames @ 10b0:0461 frame clock, Anim_RebaseClock @ 10b0:005b).
+ * 1:1 tick * 60 / 1000 on an explicit tick (no SDL, no globals). */
+unsigned long sys_tick_scaled_from(unsigned long tick);
 /* Sys_BuildCurrentDirPath @ 1000:2826. getcwd() into dst (cap-checked).
  * Returns dst on success, NULL on failure. */
 char *sys_build_current_dir_path(char *dst, size_t cap);

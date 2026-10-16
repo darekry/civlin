@@ -2509,6 +2509,47 @@ civ_error_t anim_rebase_clock(long now_tick, long param, long *out_base,
     return CIV_OK;
 }
 
+long anim_clamp_tick(long now, long base, long end)
+{
+    /* Orig Anim_AdvanceFrames @ 10b0:0461 head (decompiled 2026-10-16:
+     * local_10 = now - *(seq+0xd); if (end <= local_10) local_10 = end).
+     * 1:1 min(now - base, end). */
+    long elapsed = now - base;
+
+    if (elapsed >= end)
+        return end;
+    return elapsed;
+}
+
+int anim_advance_ret(long cur, long end)
+{
+    /* Orig Anim_AdvanceFrames @ 10b0:0461 tail (decompiled 2026-10-16:
+     * cur < end -> (cur>>8)<<8 (busy, low byte 0), else ((cur>>8)<<8)|1
+     * (done, low byte 1); the Main_RunStartupSequence @ 11e0:0000 loop
+     * gates on the low byte (while (c == 0))). Boolean half stays in
+     * anim_seq_is_finished. */
+    long masked = (cur >> 8) << 8;
+
+    if (cur < end)
+        return (int)masked;
+    return (int)(masked | 1L);
+}
+
+int anim_slot_should_step(long start, int per, int cur, long now)
+{
+    /* Orig Anim_StepSlotA @ 10a8:00fc / StepSlotB @ 10a8:018e gate
+     * (decompiled 2026-10-16: pc = per * cur; if (start + pc <= now)
+     * frame = (now - start) / per (see anim_slot_frame_at), else hold;
+     * A blends frame forward, B blends max - frame (see
+     * anim_slot_play_frame / anim_slot_blend)). */
+    long want;
+
+    if (per <= 0)
+        return 0;
+    want = start + (long)per * (long)cur;
+    return (want <= now) ? 1 : 0;
+}
+
 /* --- Chain 2026-10-16 (25): MenuZ modes + tracked IDs (goal 4). ---
  * See dialog.h block. OS-free 1:1 LIVE (no Win16, no globals, no exit()).
  * PEEKMESSAGE/ISDIALOGMESSAGE pump + CREATEWINDOW radio fan-out stay STUB
