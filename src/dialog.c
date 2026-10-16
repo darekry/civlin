@@ -685,115 +685,182 @@ civ_error_t anim_open_sequence(void)
 {
     /* Orig: FUN_10b0_008a @ 10b0:008a -> Anim_OpenSequence dispatcher
      * (tick @ 1100:02e1, ports +9/+0x62, flag @ 1420:1f40).
-     * PARTIAL: OS-free count/resolve/ctx/max/timed gates below are LIVE
-     * 1:1 (no Win16, no globals, read-only); the mem/GfxPort/tick tails
-     * stay STUB. Decompiled shape: mem_alloc_lock 0xa6 ctx [0xfff4 on
-     * NULL] + opcode-0 count when param_3 == 0 + GETCLIENTRECT + *ctx =
-     * param_1 + ctx[4] = timeline + ctx[5] = count + Sys_GetTickScaled
-     * base at +0x1a minus param_2 + +0x16 = 0 + max-end scan over rec[7]
-     * longs + 1 + per-rec [13]/[14] = 0 + GfxPort_Create x2 with
-     * FUN_1000_14f8/FUN_1100_0876 setup + DAT_1420_1f40 = ctx; callers
-     * Main_RunStartupSequence @ 11e0:0000 + MainMenu_WndProc @ 11e0:0221
-     * sequence 0x91e path. Refs verified read-only: strings
-     * unpacked/civ.exe ("OPENING.wav").
-     * TODO: Orig Anim_OpenSequence @ 10b0:008a mem_alloc_lock 0xa6 +
-     * GETCLIENTRECT rect + GfxPort_Create x2 + Sys_GetTickScaled @
-     * 1100:02e1 tick-base wiring + DAT_1420_1f40 store -> SDL3 bridge TBD
-     * (ctx size/count/max math is LIVE in anim_seq_count_frames /
-     * anim_seq_resolve_count / anim_seq_ctx_size / anim_seq_max_end +
-     * GfxPort x2 pair in anim_seq_port_count/off below;
-     * frames via Art_LoadFrameData @ 10b8:079d land with the GfxPort
-     * bridge; timed tails stay PARTIAL in anim_advance_frames @
-     * 10b0:0461 / anim_pump_if_active @ 10b0:0000). */
+     * PARTIAL: OS-free count/resolve/ctx/max/phase/port/tick/opcode/slot/
+     * dissolve gates below are LIVE 1:1 (no Win16, no globals, read-only);
+     * the mem_alloc_lock 0xa6 + GETCLIENTRECT + GfxPort_Create x2 +
+     * Sys_GetTickScaled @ 1100:02e1 + DAT_1420_1f40 device tails stay
+     * CIV_ERR_UNSUPPORTED (never fake CIV_OK). Decompiled shape:
+     * mem_alloc_lock 0xa6 ctx [0xfff4 on NULL] + opcode-0 count when
+     * param_3 == 0 + GETCLIENTRECT + *ctx = param_1 + ctx[4] = timeline +
+     * ctx[5] = count + Sys_GetTickScaled base at +0x1a minus param_2 +
+     * +0x16 = 0 + max-end scan over rec[7] longs + 1 + per-rec [13]/[14]
+     * = 0 + GfxPort_Create x2 with FUN_1000_14f8/FUN_1100_0876 setup +
+     * DAT_1420_1f40 = ctx; callers Main_RunStartupSequence @ 11e0:0000 +
+     * MainMenu_WndProc @ 11e0:0221 sequence 0x91e path. Refs verified
+     * read-only 1:1 vs unpacked/civ.exe (NE LE, no copy): "OPENING.wav"
+     * + "RanDoMRadio"/"RanDoMStatic"/"RanDoMUser"; opcode switch 1..0xe
+     * (see anim_advance_frames @ 10b0:0461), 0xf-word timeline recs,
+     * GfxPort pair offs +9/+0x62.
+     * TODO: Orig Anim_OpenSequence @ 10b0:008a device tail -> SDL3 bridge
+     * TBD: mem_alloc_lock 0xa6 ctx store + GETCLIENTRECT rect + GfxPort_
+     * Create x2 (offs +9/+0x62, LIVE pair math in anim_seq_port_count/off
+     * below; owner in video.h gfx_port_create) + FUN_1000_14f8/
+     * FUN_1100_0876 setup + Sys_GetTickScaled @ 1100:02e1 tick-base wiring
+     * (LIVE math in anim_rebase_clock/anim_clamp_tick below) +
+     * DAT_1420_1f40 = ctx (LIVE gate in anim_seq_is_active); frames via
+     * Art_LoadFrameData @ 10b8:079d land with the GfxPort bridge; timed
+     * tails stay PARTIAL in anim_advance_frames @ 10b0:0461 /
+     * anim_pump_if_active @ 10b0:0000 (never faked here). */
     static const int sample_opcodes[] = { 1, 7, 0 };
     static const long sample_ends[] = { 10L, 20L };
+    static const int valid_ops[] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
+        12, 13, 14 };
     int counted;
     int resolved;
     int ctx;
     long max_end;
     anim_slot_t slot;
     int perm[4];
+    uint8_t pal[8];
+    uint8_t psrc[8];
+    uint8_t pdst[8];
     civ_error_t rc;
+    size_t i;
 
+    /* count half (param_3 == 0 -> scan to opcode 0, stride 0xf words). */
     counted = anim_seq_count_frames(sample_opcodes, 3u);
     if (counted != 2)
         return CIV_ERR_BAD_DATA;
+    if (anim_seq_count_frames(NULL, 3u) != -1)
+        return CIV_ERR_BAD_DATA;
+    /* resolve half (param_3 != 0 wins, else the scan above). */
     resolved = anim_seq_resolve_count(0, counted);
     if (resolved != counted)
         return CIV_ERR_BAD_DATA;
     if (anim_seq_resolve_count(5, counted) != 5)
         return CIV_ERR_BAD_DATA;
+    if (anim_seq_resolve_count(-1, counted) != -1)
+        return CIV_ERR_BAD_DATA;
+    /* ctx half (mem_alloc_lock 0xa6 size, storage stays device-side). */
     ctx = anim_seq_ctx_size();
     if (ctx != CIV_ANIM_SEQ_CTX_SIZE)
         return CIV_ERR_BAD_DATA;
+    /* max half (max of rec[7] longs + 1; empty -> 1). */
     max_end = anim_seq_max_end(sample_ends, 2u);
     if (max_end != 21L)
         return CIV_ERR_BAD_DATA;
+    if (anim_seq_max_end(NULL, 0u) != 1L)
+        return CIV_ERR_BAD_DATA;
+    /* tick half (Sys_GetTickScaled @ 1100:02e1 elapsed + rebase + due). */
     if (anim_clamp_tick(110L, 100L, 50L) != 10L)
+        return CIV_ERR_BAD_DATA;
+    if (anim_clamp_tick(200L, 100L, 50L) != 50L)
         return CIV_ERR_BAD_DATA;
     {
         long base = 0L;
+        long stored = 0L;
 
-        if (anim_rebase_clock(1100L, 1000L, &base, NULL) != CIV_OK ||
-            base != 100L)
+        if (anim_rebase_clock(1100L, 1000L, &base, &stored) != CIV_OK ||
+            base != 100L || stored != 1000L)
             return CIV_ERR_BAD_DATA;
     }
-    /* Tail-exit P0: extra OS-free timed gates declared at open so the
-     * dispatcher covers the frame/GfxPort checklist 1:1 (storage still
-     * STUB above). */
+    if (anim_seq_is_finished(0L, 1L) != 0 ||
+        anim_seq_is_finished(1L, 1L) != 1)
+        return CIV_ERR_BAD_DATA;
+    if (anim_advance_ret(0L, 1L) != 0 || anim_advance_ret(1L, 1L) != 1)
+        return CIV_ERR_BAD_DATA;
+    if (anim_tick_is_due(0L, 0L, 8) != 1 || anim_tick_is_due(0L, 1L, 8) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (anim_tick_is_due(0L, 0L, 0) != -1)
+        return CIV_ERR_BAD_DATA;
+    if (anim_tick_needs_store(0L) != 1 || anim_tick_needs_store(8L) != 1 ||
+        anim_tick_needs_store(1L) != 0)
+        return CIV_ERR_BAD_DATA;
+    /* phase half (CLOSED -> OPEN -> PLAYING -> DONE -> CLOSED lifecycle). */
+    if (anim_seq_is_active(1L) != 1 || anim_seq_is_active(0L) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (anim_seq_phase_step(ANIM_SEQ_CLOSED, 1, 0, 0, 0) != ANIM_SEQ_OPEN)
+        return CIV_ERR_BAD_DATA;
+    if (anim_seq_phase_step(ANIM_SEQ_OPEN, 0, 1, 0, 0) != ANIM_SEQ_PLAYING)
+        return CIV_ERR_BAD_DATA;
+    if (anim_seq_phase_step(ANIM_SEQ_PLAYING, 0, 1, 1, 0) != ANIM_SEQ_DONE)
+        return CIV_ERR_BAD_DATA;
+    if (anim_seq_phase_step(ANIM_SEQ_DONE, 0, 0, 0, 1) != ANIM_SEQ_CLOSED)
+        return CIV_ERR_BAD_DATA;
+    /* port half (GfxPort_Create x2 offs +9/+0x62; handles device-side). */
     if (anim_seq_port_count() != 2)
         return CIV_ERR_BAD_DATA;
     if (anim_seq_port_off(0) != ANIM_SEQ_PORT_OFF_0 ||
         anim_seq_port_off(1) != ANIM_SEQ_PORT_OFF_1 ||
         anim_seq_port_off(-1) != -1 || anim_seq_port_off(2) != -1)
         return CIV_ERR_BAD_DATA;
-    if (anim_opcode_needs_store(5) != 1 || anim_opcode_needs_store(1) != 0)
+    /* opcode half (timed switch 1..0xe, 1:1 ref unpacked/civ.exe). */
+    for (i = 0; i < sizeof(valid_ops) / sizeof(valid_ops[0]); i++) {
+        if (anim_opcode_is_valid(valid_ops[i]) != 1)
+            return CIV_ERR_BAD_DATA;
+    }
+    if (anim_opcode_is_valid(0) != 0 || anim_opcode_is_valid(0x0f) != 0)
         return CIV_ERR_BAD_DATA;
-    if (anim_seq_is_active(1L) != 1 || anim_seq_is_active(0L) != 0)
+    if (anim_opcode_is_palette(1) != 1 || anim_opcode_is_palette(2) != 1 ||
+        anim_opcode_is_palette(0x0e) != 1 || anim_opcode_is_palette(7) != 0)
         return CIV_ERR_BAD_DATA;
-    if (anim_seq_phase_step(ANIM_SEQ_CLOSED, 1, 0, 0, 0) != ANIM_SEQ_OPEN)
+    if (anim_opcode_is_slot(3) != 1 || anim_opcode_is_slot(4) != 1 ||
+        anim_opcode_is_slot(7) != 0)
         return CIV_ERR_BAD_DATA;
-    if (anim_tick_is_due(0L, 0L, 8) != 1 || anim_tick_is_due(0L, 1L, 8) != 0)
+    if (anim_opcode_needs_store(5) != 1 || anim_opcode_needs_store(7) != 1 ||
+        anim_opcode_needs_store(8) != 1 || anim_opcode_needs_store(9) != 1 ||
+        anim_opcode_needs_store(1) != 0)
         return CIV_ERR_BAD_DATA;
-    if (anim_tick_needs_store(0L) != 1 || anim_tick_needs_store(1L) != 0)
+    if (anim_opcode_is_callback(10) != 1 || anim_opcode_is_callback(7) != 0)
         return CIV_ERR_BAD_DATA;
-    if (anim_opcode_is_valid(0x0e) != 1 || anim_opcode_is_valid(0) != 0)
+    if (anim_opcode_is_anim(12) != 1 || anim_opcode_is_anim(13) != 1 ||
+        anim_opcode_is_anim(7) != 0)
         return CIV_ERR_BAD_DATA;
-    if (anim_opcode_needs_present(9) != 1 || anim_opcode_needs_present(5) != 0)
+    if (anim_opcode_is_frame_load(6) != 1 || anim_opcode_is_frame_load(7) != 0)
         return CIV_ERR_BAD_DATA;
-    if (anim_opcode_needs_animate(1) != 1 || anim_opcode_needs_animate(2) != 0)
-        return CIV_ERR_BAD_DATA;
-    if (anim_opcode_needs_sound(12) != 0)
-        return CIV_ERR_BAD_DATA;
-    rc = anim_slot_init(&slot, 0, 0, 0, 0, 4, 8, 0L);
-    if (rc != CIV_OK)
-        return CIV_ERR_BAD_DATA;
-    if (anim_slot_should_step(0L, 8, 0, 0L) != 1)
-        return CIV_ERR_BAD_DATA;
-    if (anim_slot_phase(0L, 1L, 0L, 0) != ANIM_SLOTPH_ALLOC ||
-        anim_slot_phase(0L, 1L, 1L, 1) != ANIM_SLOTPH_FINISH)
-        return CIV_ERR_BAD_DATA;
-    if (anim_caption_phase(0L, 1L, 0L, 0) != ANIM_CAPPH_DRAW ||
-        anim_caption_phase(0L, 1L, 1L, 0) != ANIM_CAPPH_UNDRAW)
-        return CIV_ERR_BAD_DATA;
-    if (anim_dissolve_phase(0L, 1L, 0L, 0) != ANIM_DIZPH_SETUP ||
-        anim_dissolve_phase(0L, 1L, 1L, 0) != ANIM_DIZPH_FINISH)
-        return CIV_ERR_BAD_DATA;
-    /* Timed 11/14 gates (fala 13 parity with anim_advance_frames @
-     * 10b0:0461): scroll 11 + rotate 14 step only when (tick-start)%len
-     * == 0 via anim_tick_is_due (mono caller-side). 1:1 ref
-     * unpacked/civ.exe (NE LE, no copy): timed switch covers 1..0xe. */
     if (anim_opcode_is_scroll(11) != 1 || anim_opcode_is_scroll(7) != 0)
         return CIV_ERR_BAD_DATA;
-    if (anim_opcode_needs_animate(14) != 1)
+    if (anim_opcode_is_text(7) != 1 || anim_opcode_is_text(8) != 0)
+        return CIV_ERR_BAD_DATA;
+    /* Timed 11/14 gates: scroll 11 + rotate 14 step only when
+     * (tick-start)%len == 0 via anim_tick_is_due (mono caller-side). */
+    if (anim_opcode_needs_present(7) != 1 || anim_opcode_needs_present(9) != 1 ||
+        anim_opcode_needs_present(11) != 1 ||
+        anim_opcode_needs_present(12) != 1 ||
+        anim_opcode_needs_present(13) != 1 ||
+        anim_opcode_needs_present(5) != 0 || anim_opcode_needs_present(1) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (anim_opcode_needs_animate(1) != 1 ||
+        anim_opcode_needs_animate(12) != 1 ||
+        anim_opcode_needs_animate(14) != 1 ||
+        anim_opcode_needs_animate(2) != 0 || anim_opcode_needs_animate(7) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (anim_opcode_needs_sound(3) != 0 || anim_opcode_needs_sound(7) != 0 ||
+        anim_opcode_needs_sound(12) != 0)
         return CIV_ERR_BAD_DATA;
     if (anim_tick_is_due(10L, 10L, 4) != 1 || anim_tick_is_due(10L, 11L, 4) != 0)
         return CIV_ERR_BAD_DATA;
     if (anim_tick_is_due(10L, 14L, 4) != 1)
         return CIV_ERR_BAD_DATA;
-    /* Frame counters (slot licznik klatki + tempo, 1:1): frame_at/
-     * should_step/is_finished/play_frame on the 11/14 timeline. */
+    /* palette bodies (case 1 fade-zero + case 2 copy/select, stack only). */
+    if (anim_pal_src_for(0x81) != 0 || anim_pal_src_for(0x82) != 1 ||
+        anim_pal_src_for(0x85) != 2 || anim_pal_src_for(0) != -1)
+        return CIV_ERR_BAD_DATA;
+    for (i = 0; i < sizeof(psrc); i++)
+        psrc[i] = (uint8_t)(i + 1u);
+    rc = anim_pal_copy(pdst, 2u, 0, psrc, sizeof(psrc), 2);
+    if (rc != CIV_OK || pdst[0] != psrc[0] || pdst[7] != psrc[7])
+        return CIV_ERR_BAD_DATA;
+    rc = anim_pal_fade_zero(pal, 2u, 0, 2);
+    if (rc != CIV_OK || pal[0] != 0u || pal[3] != 1u)
+        return CIV_ERR_BAD_DATA;
+    /* slot half (0x14 ctx: licznik klatki + tempo; storage device-side). */
+    rc = anim_slot_init(&slot, 0, 0, 0, 0, 4, 8, 0L);
+    if (rc != CIV_OK)
+        return CIV_ERR_BAD_DATA;
     if (anim_slot_frame_at(100L, 108L, 8) != 1L)
+        return CIV_ERR_BAD_DATA;
+    if (anim_slot_should_step(0L, 8, 0, 0L) != 1)
         return CIV_ERR_BAD_DATA;
     if (anim_slot_should_step(100L, 8, 1, 108L) != 1 ||
         anim_slot_should_step(100L, 8, 2, 108L) != 0)
@@ -804,11 +871,46 @@ civ_error_t anim_open_sequence(void)
     if (anim_slot_play_frame(3, 2L, 4) != 2L ||
         anim_slot_play_frame(4, 2L, 4) != 2L)
         return CIV_ERR_BAD_DATA;
+    if (anim_slot_blend(200, 1L, 4) != 50)
+        return CIV_ERR_BAD_DATA;
+    if (anim_slot_phase(0L, 1L, 0L, 0) != ANIM_SLOTPH_ALLOC ||
+        anim_slot_phase(0L, 1L, 1L, 1) != ANIM_SLOTPH_FINISH ||
+        anim_slot_phase(0L, 2L, 1L, 1) != ANIM_SLOTPH_STEP ||
+        anim_slot_phase(0L, 2L, 1L, 0) != ANIM_SLOTPH_NONE)
+        return CIV_ERR_BAD_DATA;
+    if (anim_slot_should_free(0L, 1L, 1L, 1) != 1 ||
+        anim_slot_should_free(0L, 1L, 0L, 1) != 0)
+        return CIV_ERR_BAD_DATA;
+    /* caption half (case 7 draw/undraw + palette/custom gates). */
+    if (anim_caption_phase(0L, 1L, 0L, 0) != ANIM_CAPPH_DRAW ||
+        anim_caption_phase(0L, 1L, 1L, 0) != ANIM_CAPPH_UNDRAW ||
+        anim_caption_phase(0L, 2L, 1L, 0) != ANIM_CAPPH_NONE)
+        return CIV_ERR_BAD_DATA;
+    if (anim_caption_needs_palette(0L, 0L, ANIM_CAPF_PALETTE_APPLY) != 1 ||
+        anim_caption_needs_palette(0L, 1L, ANIM_CAPF_PALETTE_APPLY) != 0 ||
+        anim_caption_is_custom(1) != 1 || anim_caption_is_custom(0) != 0)
+        return CIV_ERR_BAD_DATA;
+    /* dissolve half (cases 12/13 setup/step/free + permutacja 0x79c). */
+    if (anim_dissolve_phase(0L, 1L, 0L, 0) != ANIM_DIZPH_SETUP ||
+        anim_dissolve_phase(0L, 1L, 1L, 0) != ANIM_DIZPH_FINISH ||
+        anim_dissolve_phase(0L, 2L, 1L, 0) != ANIM_DIZPH_STEP)
+        return CIV_ERR_BAD_DATA;
+    if (anim_dissolve_should_free(0L, 1L, 1L, 1) != 1 ||
+        anim_dissolve_should_free(0L, 1L, 0L, 1) != 0)
+        return CIV_ERR_BAD_DATA;
     rc = anim_dissolve_perm_init(perm, 4u);
     if (rc != CIV_OK)
         return CIV_ERR_BAD_DATA;
+    rc = anim_dissolve_swap(perm, 4u, 0u, 1u);
+    if (rc != CIV_OK)
+        return CIV_ERR_BAD_DATA;
+    if (anim_dissolve_rand_index(0x7fffu, 4) != 3)
+        return CIV_ERR_BAD_DATA;
     if (anim_dissolve_col(0, perm[0], 4) < 0)
         return CIV_ERR_BAD_DATA;
+    /* Device tail stays PARTIAL: mem_alloc_lock 0xa6 + GETCLIENTRECT +
+     * GfxPort_Create x2 + Sys_GetTickScaled + DAT_1420_1f40 -> SDL3 TBD
+     * (see TODO above; never CIV_OK here, no fake ctx). */
     return CIV_ERR_UNSUPPORTED;
 }
 

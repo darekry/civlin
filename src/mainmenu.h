@@ -133,7 +133,11 @@ int menu_toggle_view_window(int cmd);
  * over CIV_MAINMENU_TEXT @ 1420:435b, ref unpacked/civ.exe file offset
  * 0xbb35b) + y-offset (mainmenu_dialog_y_offset) + MenuZ id/gates
  * (dialog_menuz_* @ 1220:0156, timer 100, cancel -1) + tracked host gates
- * (dlg_create_* @ 1098:124f for the 0x94/0x41 intro host) + dispatch-row
+ * (dlg_create_* @ 1098:124f for the 0x94/0x41 intro host: preset
+ * 0x200x0x140 + 0x18 ctx + ctl 0x65-0x6e, ref unpacked/civ.exe
+ * "RanDoMRadio" @ 0xb7ac6 / "RanDoMStatic" @ 0xb7ad2; close pop(1) = 0 via
+ * dlg_tracked_pop_count @ 1098:1612 + rebase 1100 - 1000 = 100 via
+ * anim_rebase_clock @ 10b0:005b) + dispatch-row
  * probe (menu_dispatch_* @ 1048:01cd) are wired read-only; the SDL3 modal
  * pump (Dlg_CreateTracked host + PEEKMESSAGE/ISDIALOGMESSAGE loop +
  * RanDoMRadio 500+i fan-out) stays CIV_ERR_UNSUPPORTED, never fake CIV_OK.

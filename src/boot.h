@@ -740,7 +740,10 @@ civ_error_t art_maybe_convert_artwork(void);
  * above). Drives Anim_OpenSequence @ 10b0:008a + the Anim_AdvanceFrames @
  * 10b0:0461 loop over the 0x94 procedural host (preset 0x200x0x140, see
  * main_startup_intro_proc_w/h + procedural_ready below); OS-free
- * ID/count/tick halves are LIVE 1:1 (ref unpacked/civ.exe @ 11e0:0000).
+ * ID/count/tick halves are LIVE 1:1 (ref unpacked/civ.exe @ 11e0:0000:
+ * tracked preset 0x200x0x140 + 0x18 ctx + ctl 0x65-0x6e via dlg_create_*
+ * @ 1098:124f, close pop(1) = 0 via dlg_tracked_pop_count @ 1098:1612,
+ * rebase 1100 - 1000 = 100 via anim_rebase_clock @ 10b0:005b).
  * Startup bridge (see boot.c): Dlg_CreateTracked @ 1098:124f (0x94,0x41) /
  * Dlg_DestroyTracked @ 1098:1612 host + GfxPort_Create @ 10d0:0000 x2 pair
  * geometry (main_startup_port_pair_ok: anim_seq_port_count/off +

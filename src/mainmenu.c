@@ -57,6 +57,10 @@ civ_error_t mainmenu_run(civ_mainmenu_choice_t *out)
     int ctx;
     int pal;
     int off;
+    int pop;
+    long rb_base;
+    long rb_stored;
+    civ_error_t rb_rc;
     int is_init;
     int is_extra;
     int row;
@@ -131,7 +135,8 @@ civ_error_t mainmenu_run(civ_mainmenu_choice_t *out)
      * CIVDIALOGPROC @ 1098:1838) + GETDC/SELECTPALETTE/REALIZEPALETTE +
      * 0xec palette copy via Palette_CopyRange @ 1098:201d + tracked-stack
      * storage @ 1420:1ea0/1ec8 stay STUB in dlg_create_tracked @ 1098:124f,
-     * see dialog.h, per AGENTS.md Win16 triage). */
+     * see dialog.h, per AGENTS.md Win16 triage. Ref unpacked/civ.exe
+     * strings "RanDoMRadio" @ 0xb7ac6 / "RanDoMStatic" @ 0xb7ad2.) */
     intro_id = main_startup_intro_dialog_id();
     intro_flags = main_startup_intro_dialog_flags();
     center = dlg_create_should_center((unsigned)intro_flags);
@@ -153,6 +158,26 @@ civ_error_t mainmenu_run(civ_mainmenu_choice_t *out)
     if (ctx != CIV_DLG_TRACKED_CTX_SIZE || pal != CIV_DLG_TRACKED_PAL_COUNT)
         return CIV_ERR_BAD_DATA;
     if (off != 0 || is_init == 0 || is_extra == 0)
+        return CIV_ERR_BAD_DATA;
+    /* OS-free 1:1 close/rebase audit (Dlg_DestroyTracked @ 1098:1612 pop @
+     * 1420:1ea0/1ec8 + Anim_RebaseClock @ 10b0:005b base = now - param,
+     * stored = param; same probe shape as dlg_create_tracked @ 1098:124f
+     * P0 bridge gates in dialog.c: loop#2 1000-tick rebase 1100 - 1000 =
+     * 100; pop(1) = 0 single-host unwind. Menu-idle 100000 / 0x48c shapes
+     * stay in mainmenu_idle/resync_rebase_ticks below. Read-only; Win16
+     * DESTROYWINDOW/FREEPROCINSTANCE/GLOBALFREE + tracked-stack storage
+     * tails stay STUB in dlg_destroy_tracked @ 1098:1612, see dialog.h,
+     * per AGENTS.md Win16 triage. TODO: Orig Dlg_DestroyTracked @
+     * 1098:1612 SDL3 bridge TBD (DESTROYWINDOW + FREEPROCINSTANCE +
+     * GLOBALFREE ctx + tracked-stack pop + Mem_DisposePtr @ 1100:060b +
+     * refresh via FUN_1208_14d5). */
+    pop = dlg_tracked_pop_count(1);
+    rb_base = 0L;
+    rb_stored = 0L;
+    rb_rc = anim_rebase_clock(1100L, 1000L, &rb_base, &rb_stored);
+    if (pop != 0)
+        return CIV_ERR_BAD_DATA;
+    if (rb_rc != CIV_OK || rb_base != 100L || rb_stored != 1000L)
         return CIV_ERR_BAD_DATA;
     /* OS-free 1:1 dispatch-row probe @ 1048:01cd (ref unpacked/civ.exe seg
      * 1048 table @ CS:0x3d8 + handler offsets @ CS:0x460, CX = 0x44): first

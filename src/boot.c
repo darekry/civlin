@@ -1023,6 +1023,10 @@ civ_error_t main_run_startup_sequence(void)
     int proc_ready;
     int need_rsc;
     int adv_loop;
+    int pop;
+    long rb_base;
+    long rb_stored;
+    civ_error_t rb_rc;
 
     /* OS-free 1:1 order probe (ref unpacked/civ.exe @ 11e0:0000 decompile):
      * intro dialog 0x94/0x41 + 2 anim loops (intro + earth-prepare 0x91e) +
@@ -1051,7 +1055,9 @@ civ_error_t main_run_startup_sequence(void)
         return CIV_ERR_UNSUPPORTED;
     /* OS-free 1:1 tracked-host gates @ 1098:124f for the 0x94/0x41 intro
      * host (center + show + 0x200x0x140 preset + 0x18 ctx + 0xec palette +
-     * push slot + ctl 0x65-0x6e init + 0x323 earth-extra shape). */
+     * push slot + ctl 0x65-0x6e init + 0x323 earth-extra shape; OS-free
+     * halves only, per AGENTS.md Win16 triage. Ref unpacked/civ.exe
+     * strings "RanDoMRadio" @ 0xb7ac6 / "RanDoMStatic" @ 0xb7ad2.) */
     center = dlg_create_should_center((unsigned)dlg_flags);
     show = dlg_create_should_show((unsigned)dlg_flags);
     need_preset = dlg_id_needs_preset_size(dlg_id);
@@ -1069,6 +1075,27 @@ civ_error_t main_run_startup_sequence(void)
     if (ctx != CIV_DLG_TRACKED_CTX_SIZE || pal != CIV_DLG_TRACKED_PAL_COUNT)
         return CIV_ERR_BAD_DATA;
     if (off != 0 || is_init == 0 || is_extra == 0)
+        return CIV_ERR_BAD_DATA;
+    /* OS-free 1:1 close/rebase audit (Dlg_DestroyTracked @ 1098:1612 pop @
+     * 1420:1ea0/1ec8 + Anim_RebaseClock @ 10b0:005b base = now - param,
+     * stored = param; same probe shape as dlg_create_tracked @ 1098:124f
+     * P0 bridge gates in dialog.c: loop#2 1000-tick rebase 1100 - 1000 =
+     * 100 covers the WorldGen_PrepareEarth @ 1108:01bc skip; pop(1) = 0
+     * covers the single-host Dlg_DestroyTracked unwind before
+     * NewGame_Wizard @ 10e8:0000. Read-only; Win16 DESTROYWINDOW/
+     * FREEPROCINSTANCE/GLOBALFREE + tracked-stack storage tails stay STUB
+     * in dlg_destroy_tracked @ 1098:1612, see dialog.h, per AGENTS.md
+     * Win16 triage. TODO: Orig Dlg_DestroyTracked @ 1098:1612 SDL3
+     * bridge TBD (DESTROYWINDOW + FREEPROCINSTANCE + GLOBALFREE ctx +
+     * tracked-stack pop + Mem_DisposePtr @ 1100:060b + refresh via
+     * FUN_1208_14d5). */
+    pop = dlg_tracked_pop_count(1);
+    rb_base = 0L;
+    rb_stored = 0L;
+    rb_rc = anim_rebase_clock(1100L, 1000L, &rb_base, &rb_stored);
+    if (pop != 0)
+        return CIV_ERR_BAD_DATA;
+    if (rb_rc != CIV_OK || rb_base != 100L || rb_stored != 1000L)
         return CIV_ERR_BAD_DATA;
     /* OS-free 1:1 MenuZ gates @ 1220:0156 the wizard steps reuse after the
      * intro (500+i fan-out + -1 preselect = none + mask 0 = nothing

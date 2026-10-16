@@ -636,9 +636,15 @@ civ_error_t help_open_topic(const char *topic);
  *   0xa6 ctx + GETCLIENTRECT + Sys_GetTickScaled @ 1100:02e1 base +
  *   max-end scan + GfxPort_Create x2 (offs +9/+0x62) + FUN_1000_14f8 /
  *   FUN_1100_0876 setup + DAT_1420_1f40 = ctx. Win16/GfxPort -> SDL TBD;
- *   PARTIAL dispatcher (OS-free count/resolve/ctx/max + active/phase/
- *   period/pump/opcode-tails/slot/dissolve/rebase gates wired,
- *   alloc/port tails CIV_ERR_UNSUPPORTED; halves LIVE below).
+ *   PARTIAL dispatcher (OS-free count/resolve/ctx/max + active/full
+ *   phase lifecycle + tick (clamp/rebase/due/store/finish/ret) + full
+ *   opcode 1..0xe families (palette/slot/store/callback/anim/frame/
+ *   scroll/text/present/animate/sound + 11/14 period) + palette bodies
+ *   (src/copy/fade) + slot (init/frame/step/finish/play/blend/phase/
+ *   free) + caption (phase/palette/custom) + dissolve (phase/free/perm/
+ *   swap/rand/col) gates wired; mem_alloc_lock/GETCLIENTRECT/GfxPort/
+ *   tick-store/DAT_1420_1f40 device tails CIV_ERR_UNSUPPORTED, never
+ *   faked; halves LIVE below).
  * Orig: FUN_10b0_0287 @ 10b0:0287 -> Anim_CloseSequence. Frees slots
  *   3/4 via Anim_FreeSlot @ 10a8:00b4 + dissolve 12/13 via
  *   Anim_FreeDissolve @ 10b0:172d + slot 7 via GfxPort_Close + both
