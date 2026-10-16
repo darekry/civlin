@@ -322,6 +322,31 @@ int sys_current_drive(void);
 const char *sys_base_path(void);
 /* Sys_Yield @ 1098:0157. Pumps the OS message queue (SDL_PumpEvents). */
 void sys_yield(void);
+/* Orig: none (Linux-port helper; 1 ms cooperative backoff behind the
+ * Sys_GetTickScaled @ 1100:02e1 poll loops in title.c / main.c and the
+ * future Anim_PumpIfActive @ 10b0:0000 SDL-timer tail). Thin SDL_Delay
+ * delegate (does exactly the delay, never fakes); the end-to-end Anim
+ * pump stays PARTIAL in dialog.c (frames/GfxPort tails + active flag @
+ * 1420:1f40 caller-side, untouched here). No globals, no exit().
+ * TODO: Orig Sys_Yield @ 1098:0157 / TIMERPROC @ 1008:0d68 exact yield
+ * quantum vs SDL_Delay(1) (Win16 timeslice TBD from dump). */
+void sys_delay_ms(unsigned ms);
+/* Orig Sys_Yield @ 1098:0157 + Sys_GetTickScaled @ 1100:02e1 combined
+ * poll step (P0a SDL-timer bridge for Anim_PumpIfActive @ 10b0:0000):
+ * now = sys_get_tick_scaled(); same tick -> sys_delay_ms(1) + sys_yield
+ * cooperative wait (*advanced_out = 0, caller re-polls); advanced tick ->
+ * *last_tick = now + sys_yield (*advanced_out = 1, caller runs one
+ * frame). 1:1 with the title.c / main.c poll loops (no busy spin).
+ * Timer/pump half LIVE (only the timer half is claimed, never faked);
+ * frames, GfxPort present/palette/sound tails and the active-flag
+ * storage @ 1420:1f40 stay caller-side (dialog.c anim_pump_if_active,
+ * still PARTIAL). No Win16, no globals (flag untouched), no exit().
+ * NULL either out -> NOENT (orig faulted on a bad far pointer).
+ * TODO: Orig Anim_PumpIfActive @ 10b0:0000 frame tails
+ * (Anim_AdvanceFrames @ 10b0:0461 + GfxPort_SetActive/PresentRect @
+ * 10d0:0956/0854 + Palette_AnimateRange @ 1090:0376 + Sound_PlayId @
+ * 1150:00c9) -> SDL bridge TBD caller-side (see dialog.h). */
+civ_error_t sys_wait_next_tick(unsigned long *last_tick, int *advanced_out);
 /* Orig: FUN_1108_0000 @ 1108:0000 -> Sys_PumpMessages.
  * Win16 PEEKMESSAGE pump called from unit_wait_for_orders @ 11c0:0ec2
  * (blink-and-pump modal until 11e8:02fb input or 1328:0012 mode change)

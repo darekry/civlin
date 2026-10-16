@@ -98,7 +98,7 @@ int mainmenu_dialog_y_offset(int flag_28fc);
 
 /* Orig MainMenu_WndProc @ 11e0:0221 packet-N text split (Util_StrCopy @
  * 1000:36b2 over CIV_MAINMENU_TEXT @ 1420:435b, verified in unpacked/civ.exe
- * at file offset 0xbb35c: "_Start a New Game_..._Quit") feeding
+ * at file offset 0xbb35b: "_Start a New Game_..._Quit") feeding
  * Dialog_MenuZ_Modal @ 1220:0156 -> mainmenu_item_count / mainmenu_item_at.
  * OS-free 1:1 '_' split, same shape as Dialog_SplitMenuText @ 1220:0000
  * (leading '_' ends the empty title; each later '_'/'\0' closes one item;

@@ -177,7 +177,7 @@ int mainmenu_item_count(void)
     /* Orig packet-N split @ 11e0:0221 / 1420:435b (see mainmenu.h), same
      * shape as Dialog_SplitMenuText @ 1220:0000: leading '_' ends the
      * (empty) title, each later '_'/'\0' closes one item. Shipped text
-     * (verified at unpacked/civ.exe offset 0xbb35c) has 6 items, so
+     * (verified at unpacked/civ.exe offset 0xbb35b) has 6 items, so
      * count = separators after the leading one + 1 (the '\0'-closed
      * tail, e.g. Quit). */
     const char *t = CIV_MAINMENU_TEXT;

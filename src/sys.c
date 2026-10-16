@@ -523,6 +523,41 @@ void sys_yield(void)
     SDL_PumpEvents();
 }
 
+void sys_delay_ms(unsigned ms)
+{
+    /* Linux-port helper (see sys.h): thin SDL_Delay delegate behind the
+     * Sys_GetTickScaled @ 1100:02e1 poll loops (title.c / main.c) and the
+     * future Anim_PumpIfActive @ 10b0:0000 SDL-timer tail. Exact Win16
+     * Sleep quantum TBD (TODO Orig Sys_Yield @ 1098:0157 / TIMERPROC @
+     * 1008:0d68); the 1 ms cooperative backoff matches the polled loops
+     * 1:1 (no busy spin). No flag touch (1420:1f40 stays caller-side). */
+    SDL_Delay((Uint32)ms);
+}
+
+civ_error_t sys_wait_next_tick(unsigned long *last_tick, int *advanced_out)
+{
+    /* P0a SDL-timer bridge for Anim_PumpIfActive @ 10b0:0000 (see sys.h):
+     * combined Sys_GetTickScaled @ 1100:02e1 + Sys_Yield @ 1098:0157 poll
+     * step over explicit outs (no flag storage here: 1420:1f40 stays
+     * caller-side). Frame/GfxPort tails TBD caller-side (TODO Orig @
+     * 10b0:0461 / 10d0:0956 / 10d0:0854 / 1090:0376 / 1150:00c9). */
+    unsigned long now;
+
+    if (!last_tick || !advanced_out)
+        return CIV_ERR_NOENT;
+    now = sys_get_tick_scaled();
+    if (now == *last_tick) {
+        sys_delay_ms(1u);
+        sys_yield();
+        *advanced_out = 0;
+        return CIV_OK;
+    }
+    *last_tick = now;
+    sys_yield();
+    *advanced_out = 1;
+    return CIV_OK;
+}
+
 int sys_pump_messages(void)
 {
     /* Sys_PumpMessages @ 1108:0000: Win16 PEEKMESSAGE loop (pumped in

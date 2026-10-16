@@ -452,6 +452,8 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `dlg_preset_h` | LIVE |  |  |
 | `anim_seq_resolve_count` | LIVE | 10b0:008a |  |
 | `anim_seq_ctx_size` | LIVE | 10b0:008a |  |
+| `anim_seq_port_count` | LIVE | 10b0:008a, 10b0:0287, 10d0:0000 |  |
+| `anim_seq_port_off` | LIVE | 10b0:008a, 10d0:0000 |  |
 | `anim_tick_is_due` | LIVE | 10b0:0461 |  |
 | `diplo_contact_stamp_due` | LIVE | 1168:0a07, 1168:0f47 |  |
 | `dialog_menuz_item_disabled` | LIVE | 1220:0156 |  |
@@ -1316,6 +1318,8 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `sys_current_drive` | LIVE | 1228:0002 |  |
 | `sys_base_path` | LIVE | 1228:0004 |  |
 | `sys_yield` | LIVE | 1098:0157, 10b0:0000 |  |
+| `sys_delay_ms` | LIVE | 1008:0d68, 1098:0157, 10b0:0000, 1100:02e1, 1420:1f40 |  |
+| `sys_wait_next_tick` | LIVE | 1090:0376, 1098:0157, 10b0:0000, 10b0:0461, 10d0:0854, 10d0:0956, 1100:02e1, 1150:00c9, 1420:1f40 |  |
 | `sys_pump_messages` | LIVE | 10b0:0000, 1108:0000, 11c0:0ec2, 11e8:02fb, 1328:0012 |  |
 | `sys_event_requests_quit` | LIVE |  |  |
 | `sys_poll_quit` | LIVE | 1008:0304, 1088:0000, 1098:062f, 1220:0156, 12d8:24ee |  |

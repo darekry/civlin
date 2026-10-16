@@ -2627,6 +2627,18 @@ int anim_seq_resolve_count(int param_3, int counted);
  * 0x14 + ANIM_DISSOLVE_CTX_SIZE 0x79c above). No globals. */
 int anim_seq_ctx_size(void);
 
+/* Orig Anim_OpenSequence @ 10b0:008a GfxPort pair (GfxPort_Create x2 at
+ * ctx offs +9/+0x62; see anim_open_sequence PARTIAL dispatcher) ->
+ * anim_seq_port_count / anim_seq_port_off. 1:1 two ports; slot 0 -> 9,
+ * slot 1 -> 0x62, else -1 (close frees the same x2 pair at +0x24/+0x62
+ * per the anim_close_sequence comment; exact slot unit TBD vs dump).
+ * No Win16 (handles stay in the GfxPort_Create @ 10d0:0000 SDL bridge,
+ * see video.h), no globals. */
+#define ANIM_SEQ_PORT_OFF_0 9
+#define ANIM_SEQ_PORT_OFF_1 0x62
+int anim_seq_port_count(void);
+int anim_seq_port_off(int slot);
+
 /* Orig Anim_AdvanceFrames @ 10b0:0461 timed cases 11 (scroll-blit) / 14
  * (palette-rotate): (tick - start) % len == 0 gate (SetActive/CopyRange
  * tails stay in the anim_advance_frames PARTIAL dispatcher above) ->

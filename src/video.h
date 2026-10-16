@@ -148,7 +148,7 @@ civ_error_t gfx_port_alloc_bitmap(SDL_Renderer *ren, int w, int h,
  * Blit @ 10d0:08f1 / PresentRect @ 10d0:0854 render-target path) + borrowed
  * ren/w/h wiring (GETDC/CREATECOMPATIBLEDC borrow the caller renderer,
  * never owned/freed here). Backs the Anim_OpenSequence @ 10b0:008a GfxPort
- * x2 pair + the WdwMap_Open @ 1208:0af1 / WdwSmMap_Open @ 1210:025b /
+ * x2 pair (ctx offs +9/+0x62) + the WdwMap_Open @ 1208:0af1 / WdwSmMap_Open @ 1210:025b /
  * WdwStatus_Open @ 1218:0386 views in boot_open_windows (ports are
  * textures, window/renderer stay caller-owned). NULL out/ren reports
  * NOENT (*out NULL when present); w/h <= 0 reports RANGE; malloc fail

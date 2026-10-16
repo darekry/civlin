@@ -417,6 +417,8 @@ civ_error_t anim_pump_if_active(void)
      * tails still STUB below). */
     if (anim_tick_needs_store(0L) != 1 || anim_tick_needs_store(1L) != 0)
         return CIV_ERR_BAD_DATA;
+    if (anim_opcode_needs_store(5) != 1 || anim_opcode_needs_store(1) != 0)
+        return CIV_ERR_BAD_DATA;
     if (anim_advance_ret(0L, 1L) != 0 || anim_advance_ret(1L, 1L) != 1)
         return CIV_ERR_BAD_DATA;
     if (anim_slot_should_step(0L, 8, 0, 0L) != 1 ||
@@ -451,7 +453,8 @@ civ_error_t anim_pump_if_active(void)
      * run Anim_AdvanceFrames @ 10b0:0461 per Sys_GetTickScaled @
      * 1100:02e1 tick via Sys_Yield @ 1098:0157; per-tick elapsed via
      * anim_clamp_tick + 11/0xe period via anim_tick_is_due + every-8th
-     * StoreDC via anim_tick_needs_store + ret via anim_advance_ret +
+     * StoreDC via anim_tick_needs_store + direct opcodes via
+     * anim_opcode_needs_store + ret via anim_advance_ret +
      * slot/caption/dissolve phases + Present/Animate/Sound tails above)
      * -> SDL timer + GfxPort_SetActive @ 10d0:0956 / PresentRect @
      * 10d0:0854 + Palette_AnimateRange @ 1090:0376 bridge TBD (active-flag
@@ -480,7 +483,8 @@ int anim_advance_frames(void)
      * 1070:0327), nie klatki Anim; klatki intro/PIC ida tędy
      * (Pic_PlayShared @ 1030:0000 caller Gfx_StoreDC @ 1098:1104 jak
      * tutejszy frame-pump co 8. tick).
-     * TODO: full script engine -> SDL TBD (timed opcode switch 1..0xe
+     * TODO: Orig Anim_AdvanceFrames @ 10b0:0461 full script engine -> SDL TBD
+     * (timed opcode switch 1..0xe
      * with GfxPort_SetActive/PresentRect @ 10d0:0956/0854 + palette via
      * Palette_AnimateRange @ 1098:201d/1090:0376 + sound via
      * Sound_PlayId @ 1150:00c9 + frames via Art_LoadFrameData @
@@ -598,7 +602,8 @@ civ_error_t anim_open_sequence(void)
      * GETCLIENTRECT rect + GfxPort_Create x2 + Sys_GetTickScaled @
      * 1100:02e1 tick-base wiring + DAT_1420_1f40 store -> SDL3 bridge TBD
      * (ctx size/count/max math is LIVE in anim_seq_count_frames /
-     * anim_seq_resolve_count / anim_seq_ctx_size / anim_seq_max_end below;
+     * anim_seq_resolve_count / anim_seq_ctx_size / anim_seq_max_end +
+     * GfxPort x2 pair in anim_seq_port_count/off below;
      * frames via Art_LoadFrameData @ 10b8:079d land with the GfxPort
      * bridge; timed tails stay PARTIAL in anim_advance_frames @
      * 10b0:0461 / anim_pump_if_active @ 10b0:0000). */
@@ -638,6 +643,14 @@ civ_error_t anim_open_sequence(void)
     /* Tail-exit P0: extra OS-free timed gates declared at open so the
      * dispatcher covers the frame/GfxPort checklist 1:1 (storage still
      * STUB above). */
+    if (anim_seq_port_count() != 2)
+        return CIV_ERR_BAD_DATA;
+    if (anim_seq_port_off(0) != ANIM_SEQ_PORT_OFF_0 ||
+        anim_seq_port_off(1) != ANIM_SEQ_PORT_OFF_1 ||
+        anim_seq_port_off(-1) != -1 || anim_seq_port_off(2) != -1)
+        return CIV_ERR_BAD_DATA;
+    if (anim_opcode_needs_store(5) != 1 || anim_opcode_needs_store(1) != 0)
+        return CIV_ERR_BAD_DATA;
     if (anim_seq_is_active(1L) != 1 || anim_seq_is_active(0L) != 0)
         return CIV_ERR_BAD_DATA;
     if (anim_seq_phase_step(ANIM_SEQ_CLOSED, 1, 0, 0, 0) != ANIM_SEQ_OPEN)
@@ -3637,6 +3650,25 @@ int anim_seq_ctx_size(void)
 {
     /* Orig Anim_OpenSequence @ 10b0:008a: mem_alloc_lock 0xa6 ctx. */
     return CIV_ANIM_SEQ_CTX_SIZE;
+}
+
+int anim_seq_port_count(void)
+{
+    /* Orig Anim_OpenSequence @ 10b0:008a: GfxPort_Create x2 (offs
+     * +9/+0x62); freed as a pair by Anim_CloseSequence @ 10b0:0287. */
+    return 2;
+}
+
+int anim_seq_port_off(int slot)
+{
+    /* Orig Anim_OpenSequence @ 10b0:008a pair slots: 0 -> +9, 1 -> +0x62
+     * (see anim_seq_port_count; handles stay in the GfxPort_Create @
+     * 10d0:0000 bridge, video.h). */
+    if (slot == 0)
+        return ANIM_SEQ_PORT_OFF_0;
+    if (slot == 1)
+        return ANIM_SEQ_PORT_OFF_1;
+    return -1;
 }
 
 int anim_tick_is_due(long start, long tick, int len)
