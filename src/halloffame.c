@@ -585,3 +585,66 @@ civ_error_t city_show_top_five(void)
 {
     return City_ShowTopFive();
 }
+
+/* --- Chain 2026-10-16 (11): HoF score/tech icons @ 1040:1b51/1030:84be.
+ * OS-free 1:1 LIVE + blit STUBs. No globals, no exit(), C17. See header. */
+
+int hof_tech_icon_skipped(int tech)
+{
+    /* Orig Hof_DrawTechIcon @ 1030:84be: if ((param<0x16)||(0x18<param))
+     * draw else return (skip 22..24). */
+    return (tech >= 0x16 && tech <= 0x18) ? 1 : 0;
+}
+
+int hof_tech_icon_index(int tech)
+{
+    /* Orig same: iVar3 = param-1; if (0x17 < iVar3) iVar3 = param-4. */
+    if (tech <= 0)
+        return -1;
+    if (tech <= 0x18)
+        return tech - 1;
+    return tech - 4;
+}
+
+int hof_score_icon_index(int phase, int toggle, int specialist)
+{
+    /* Orig Hof_CalcFinalScore @ 1040:1137 loops: (t&1), (t&1)+2, (t&1)+4,
+     * City_GetSpecialist+5 (DAT_1420_95d0[idx] via Gfx_DrawIconClipped). */
+    int t = toggle & 1;
+
+    switch (phase) {
+    case 0:
+        return t;
+    case 1:
+        return t + 2;
+    case 2:
+        return t + 4;
+    case 3:
+        if (specialist < 0)
+            return -1;
+        return specialist + 5;
+    default:
+        return -1;
+    }
+}
+
+civ_error_t hof_draw_score_icon_step(int icon)
+{
+    (void)icon;
+    /* TODO: Orig Hof_DrawScoreIconStep @ 1040:1b51 blit tail
+     * (Gfx_DrawIconClipped @ 11e8:0674 z DAT_1420_95d0[icon]; krok
+     * x/y LIVE w hof_score_icon_advance) -> SDL TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t hof_draw_tech_icon(int tech, int x, int y)
+{
+    (void)tech;
+    (void)x;
+    (void)y;
+    /* TODO: Orig Hof_DrawTechIcon @ 1030:84be blit tail (Gfx_ScaleIconX/Y @
+     * 11e8:0d81/0da8 + Gfx_DrawTechIcon @ 11a8:0cb1 + Res_GetStringCopy +
+     * Text_DrawClipped @ 10d8:01b0 etykieta) -> SDL TBD. Indeks/gap LIVE
+     * w hof_tech_icon_index/skipped powyzej. */
+    return CIV_ERR_UNSUPPORTED;
+}

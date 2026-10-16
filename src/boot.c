@@ -648,6 +648,24 @@ int font_text_height(const font_fnt_info_t *info)
     return (int)info->dfPixHeight;
 }
 
+int font_fnt_stride(int max_width)
+{
+    /* Orig FNT row stride in font_fnt_bits/font_render_glyph @ 1008:0e99
+     * (source stride (dfMaxWidth+7)/8, MSB-first rows). */
+    if (max_width < 0)
+        return -1;
+    return (max_width + 7) / 8;
+}
+
+int font_fnt_glyph_len(int off, int next_off)
+{
+    /* Orig FNT glyph span in font_fnt_bits @ 1008:0e99 (sentinel
+     * next_off - off; BAD_DATA when next <= off). */
+    if (next_off <= off)
+        return -1;
+    return next_off - off;
+}
+
 /* Orig Menu_InitMainBar @ 1048:0000 string side. OS-free static const port
  * (read-only, no Win16, never written); entry [3] mirrors
  * CIV_MAINMENU_TEXT @ 1420:435b (canonical owner see mainmenu.h). */

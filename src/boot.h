@@ -390,6 +390,47 @@ int font_text_width(const uint8_t *data, size_t len,
  * exit(), read-only. */
 int font_text_height(const font_fnt_info_t *info);
 
+/* --- Chain 2026-10-16 (12): FNT stride + glyph span (goal 2) ---
+ * Anchors (civ.exe, x86:LE:16:Protected Mode):
+ *   Font_EnumFamiliesInit @ 1008:0e99 (GETDC + GETDEVICECAPS x4 +
+ *     MAKEPROCINSTANCE 0xe12 + ENUMFONTFAMILIES + FREEPROCINSTANCE +
+ *     RELEASEDC; sole caller WinMain @ 1008:0000; neighbours
+ *     Text_FontPreApply @ 1098:0186 + Text_FontPostApply @ 1098:0194 are
+ *     the dispatch-tail hooks, see dialog.h; 1008:0d4c/0d5a/0df0/0e02 are
+ *     empty neighbouring stubs with no xrefs, left unnamed).
+ *   NE + FONTDIR/RT_FONT header LIVE via font_fon_parse (MZ + e_lfanew
+ *     0x250 + NE + align 9 + fontdir x1 + faces x21) + font_face_count.
+ *   Raster FNT PARTIAL: header LIVE via font_fnt_parse (v2 0x0200 / v3
+ *     0x0300 through dfBitsOffset) + per-char entry LIVE for v2 via
+ *     font_fnt_char_entry (width + file offset) + borrowed bits LIVE via
+ *     font_fnt_bits (MSB-first, stride (max+7)/8, height pixHeight) +
+ *     tight repack LIVE via font_render_glyph + width/height metrics LIVE
+ *     via font_text_width/height; face-bitmap lookup PARTIAL via
+ *     font_face_bitmap (bounds only, needs the table below).
+ *   Co dokładnie brakuje do pełnego ładowania civfonts.fon (FNT raster
+ *     PARTIAL -> co?): metryki są LIVE (dfPixHeight/dfWidth/char widths),
+ *     bitmapy glifów są połowicznie LIVE (font_fnt_bits/render_glyph dają
+ *     surowe/te same bity; font_face_bitmap nie lokuje wiersza bo nie
+ *     dekoduje dfCharTable do w/h + bits — TODO tam) + brak: (a) kolejność
+ *     ENUMFONTFAMILIES vs fontdir strings (font_face_list STUB, 21 nazw
+ *     CIVBABYLON..CIVTIMES36 wisi w 0x600), (b) mostek TTF/SDL_ttf
+ *     (ADDFONTRESOURCE/ENUMFONTFAMILIES + Text_SelectFont @ 1100:0a33 /
+ *     DispatchFontHandler @ 11e8:0b40 slot install, STUB), (c) v3 6-B
+ *     wpisy dfCharTable (wszystkie 21 twarzy to v2, więc STUB zamiast
+ *     złego parsowania). Bez (a)-(c) pełny viewer SDL_ttf jest STUB.
+ * OS-free stride/span poniżej jest LIVE 1:1 (no Win16, no globals). */
+
+/* Orig FNT row stride (dfMaxWidth side in font_fnt_bits/render_glyph) ->
+ * font_fnt_stride. 1:1 (max_width+7)/8 (2 B dla max 13, 5 B dla max 37;
+ * dfWidthBytes na dysku stale 2, więc stride idzie z max, nie z pola).
+ * -1 gdy max_width < 0. No globals. */
+int font_fnt_stride(int max_width);
+
+/* Orig FNT glyph span (sentinel next_off - off in font_fnt_bits) ->
+ * font_fnt_glyph_len. 1:1 next_off - off (np. 30 B dla twarzy 15-px,
+ * 190 B dla TIMES36). -1 gdy next_off <= off. No globals. */
+int font_fnt_glyph_len(int off, int next_off);
+
 /* Orig Menu_InitMainBar @ 1048:0000 string side -> menu_strings.
  * OS-free static const port (const char * array, no Win16 USER handles,
  * read-only, never written): [0] 14b0:0010 "&Save Game\tCtrl+S",

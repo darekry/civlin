@@ -866,4 +866,126 @@ int palette_copy_enabled(int mono, int count);
  * 0). 0xec = palette entries (godpal 0x00..0xeb, see gfx_indexed.h). */
 int palette_copy_range_len(int src_off, int dst_off, int count);
 
+/* --- Chain 2026-10-16 (11): icon scale/buffer @ 11a8 ---
+ * Anchors (civ.exe, x86:LE:16:Protected Mode), renamed this pass:
+ *   Gfx_SetIconScale @ 11a8:002c (DAT_13a0_0000/0002 = num/den para).
+ *   Gfx_GetIconScale @ 11a8:0000 (czyta parę do callerów).
+ *   Gfx_AllocIconBuffer @ 11a8:0054 (GLOBALALLOC w*h+6 + w/h w buforze;
+ *     callers City_DrawTileView @ 1110:04d0, Gfx_BlitTechIcon @ 11a8:0f56,
+ *     Unit_DrawStatusBadge @ 1110:0ff6, Game_InitGlobalTables @ 11e8:0337
+ *     (0x20x0x20), Gfx_AllocIconBuffer @ 11a8:05c7).
+ *   Gfx_CopyIconBits @ 11a8:13c0 (transparent/skala w BlitTechIcon:
+ *     param_3 == 0 ? res bg; fast memcpy gdy transparent == -1 && scale ==
+ *     0 && pad == 0; else transparent loop; else scaled loop z
+ *     Gfx_GetIconScale; callers Gfx_BlitIconToPort @ 11a8:0aa8 +
+ *     Gfx_BlitTechIcon).
+ *   Gfx_CopyIconBuffer @ 11a8:0328 (was FUN_11a8_0328: same-size HMEMCPY
+ *     vs per-row min(w) HMEMCPY).
+ *   Gfx_FreeIconBuffer @ 11a8:00d1 (was FUN_11a8_00d1: GLOBALFREE + trace).
+ *   Gfx_BlitIconScaled @ 11a8:0450 (was FUN_11a8_0450: BITBLT direct gdy
+ *     skala 1:1, else port + GETBITMAPBITS + scaled blit).
+ *   Gfx_BlitIconToPort @ 11a8:0aa8 (was FUN_11a8_0aa8: port clip SETRECT +
+ *     CopyIconBits + HMEMCPY rows).
+ * Kiedy skala != 1 (nie mipmapy ani zoom minimapy — fixed 0x20 px tiles):
+ *   Hof_CalcFinalScore @ 1040:1137 dopasowuje wiersze techów: DAT_1420_07dc
+ *   < 0xb -> SetIconScale(3,4), < 9 -> (1,2), na końcu zawsze (1,1); poza
+ *   tym BlitTechIcon skaluje gdy Get != siebie (a != b). Rozmiary buforów:
+ *   Alloc = w*h+6 (2x u16 w/h + piksele; even pitch ((w+1)/2)*2 gdy mono,
+ *   zob. gfx_port_bitmap_pitch/art_port_padded_width). Port reguł poniżej
+ *   jest LIVE 1:1 (no Win16, no globals); GLOBALALLOC/BITBLT ogony STUB. */
+
+/* Orig Gfx_AllocIconBuffer @ 11a8:0054 rozmiar -> gfx_icon_buffer_size.
+ * 1:1 w*h+6 (nagłówek w/h + piksele). -1 gdy w/h <= 0. No globals. */
+int gfx_icon_buffer_size(int w, int h);
+
+/* Orig Gfx_CopyIconBits @ 11a8:13c0 + Gfx_ScaleIconX/Y @ 11e8:0d81/0da8
+ * skalowany wymiar -> gfx_icon_scaled_dim. 1:1 (v*num)/den (Gfx_ScaleIcon
+ * to (v*0xa0)/100). den <= 0 -> v. No globals. */
+int gfx_icon_scaled_dim(int v, int num, int den);
+
+/* Orig sama skala 1:1 -> gfx_icon_scale_is_unit. 1:1 num == den (para
+ * 13a0:0000/0002 z Gfx_SetIconScale; Hof wraca do (1,1)). No globals. */
+int gfx_icon_scale_is_unit(int num, int den);
+
+/* Orig Gfx_CopyIconBits @ 11a8:13c0 fast gate -> gfx_icon_copy_is_fast.
+ * 1:1 transparent == -1 && scaled == 0 && pad == 0 (memcpy połówek +
+ * nieparzysty ogon). No globals. */
+int gfx_icon_copy_is_fast(int transparent, int scaled, int pad);
+
+/* Orig ten sam pad wiersza -> gfx_icon_row_pad. 1:1 need_align != 0 ?
+ * ((w+1)/2*2-w) : 0 (even pitch, ten sam co gfx_port_bitmap_pitch).
+ * -1 gdy w < 0. No globals. */
+int gfx_icon_row_pad(int w, int need_align);
+
+/* Orig Gfx_AllocIconBuffer/GlobalFree BITBLT ogony -> STUBs. */
+civ_error_t gfx_alloc_icon_buffer(int w, int h, int *size_out);
+civ_error_t gfx_copy_icon_bits(int transparent, int scaled);
+
+/* --- Chain 2026-10-16 (12): icon blit geometry @ 11a8 (goals 3/5) ---
+ * Anchors (civ.exe, x86:LE:16:Protected Mode), renamed this pass:
+ *   Gfx_BlitIconToPort @ 11a8:0aa8 (port clip SETRECT + scaled dims via
+ *     Gfx_GetIconScale @ 11a8:0000 ((w*num)/den) + Gfx_ExtractClippedIcon
+ *     @ 11a8:05c7 (clip extract to a fresh icon buffer) +
+ *     Gfx_CopyIconBits @ 11a8:13c0 + HMEMCPY rows clipped vs port w/h at
+ *     +0x0c/+0x0e; empty port (+0x12 == 0) -> FUN_1098_28e4 error).
+ *   Gfx_CopyIconBuffer @ 11a8:0328 (same-size single HMEMCPY vs per-row
+ *     min(w) HMEMCPY over min(h) rows; HMEMCPY shape = Util_MemCopyFar @
+ *     1000:137f, see civ_common.h util_mem_copy_far for the memcpy core).
+ *   Gfx_DrawIconClipped @ 11e8:0674 (Gfx_DrawTechIcon @ 11a8:0cb1 blit +
+ *     Gfx_IntersectRect @ 1100:0685 clip (video_clip_rect LIVE) +
+ *     GfxPort_PresentRect @ 10d0:0854 BITBLT 0xcc0020 when DAT_12b0_009a;
+ *     cell box LIVE as gfx_icon_cell_box).
+ *   Gfx_BlitIconScaled @ 11a8:0450 (BITBLT direct when GetIconScale 1:1,
+ *     else port + GETBITMAPBITS + scaled resample via Gfx_CopyIconBits:
+ *     nearest-neighbour (point) resample, NOT bilinear — the scaled loop
+ *     accumulates (err += num; while err >= den: emit, err -= den) with a
+ *     half-step bias (err starts at num>>1), replicating/skipping source
+ *     bytes without interpolation; see gfx_nearest_src below).
+ *   Gfx_FreeIconBuffer @ 11a8:00d1 (GLOBALFREE + Debug_LogTrace @
+ *     1148:003c "TileDispose()  :  shape.c" trace; free tail stays STUB
+ *     in gfx_alloc_icon_buffer above, trace needs no port).
+ *   Helpers renamed this pass: Gfx_ExtractClippedIcon @ 11a8:05c7 (clip
+ *     extract), Gfx_DrawTechIconDefault @ 11a8:0c89 (0xff wrapper),
+ *     Gfx_BlitIconWithBg @ 11a8:0a76 / Gfx_BlitIconDefault @ 11a8:0a4e
+ *     (0x14-bg wrappers), Gfx_CreateIconMaskBitmap @ 11a8:0cfd +
+ *     Gfx_BuildIconMask @ 11a8:0d6e (1-bpp mask + CREATEBITMAP),
+ *     Gfx_CopyIconClipped @ 11a8:076f (transparent + offset clip),
+ *     Gfx_GetIconContentBounds @ 11a8:00fe (non-bg bbox),
+ *     Gfx_ReplaceIconColor @ 11a8:022f, Gfx_FillIconRect @ 11a8:02ad.
+ * Dims/clip/palette split: scaled dims + clip spans + palette pick below
+ * are LIVE 1:1 (no Win16, no globals, read-only); HMEMCPY rows map to
+ * memcpy (see util_mem_copy_far) and GDI BITBLT/GLOBALLOCK tails stay
+ * STUB. Palette: icon bytes are indices into the 0xec godpal run
+ * (gfx_godpal_get, see gfx_indexed.h; mono branch in Gfx_MakeBrush @
+ * 1098:00b5 via gfx_brush_is_solid LIVE); this blit never remaps indices
+ * (remap lives in GfxPort_ChangeColor @ 10d0:09ee via gfx_remap_index). */
+
+/* Orig Gfx_BlitIconToPort @ 11a8:0aa8 clip half -> gfx_blit_clip_len.
+ * 1:1 clipped span at pos against the port extent: 0 when scaled <= 0
+ * or pos >= port_len or port_len <= 0, else min(scaled, port_len - pos)
+ * (orig pair: w vs +0x0c, h vs +0x0e). Negative pos is caller-side
+ * (orig ports never pass it; returns scaled here, no clamp). */
+int gfx_blit_clip_len(int pos, int scaled, int port_len);
+
+/* Orig Gfx_CopyIconBuffer @ 11a8:0328 span half -> gfx_copy_span. 1:1
+ * rows = min(h1, h2), cols = min(w1, w2) (same-size HMEMCPY is the
+ * rows*h1 == rows*h2 && cols == w1 == w2 fast case, caller-side).
+ * NULL outs -> NOENT; w/h <= 0 -> RANGE. Else CIV_OK. No globals. */
+civ_error_t gfx_copy_span(int w1, int h1, int w2, int h2,
+                          int *rows_out, int *cols_out);
+
+/* Orig Gfx_BlitIconScaled @ 11a8:0450 direct gate ->
+ * gfx_blit_scaled_is_direct. 1:1 num == den (GetIconScale pair from
+ * Gfx_SetIconScale @ 11a8:002c; Hof_CalcFinalScore @ 1040:1137 restores
+ * (1,1)) takes the BITBLT-direct path, else the nearest resample path
+ * (see gfx_nearest_src). No globals. */
+int gfx_blit_scaled_is_direct(int num, int den);
+
+/* Orig Gfx_CopyIconBits @ 11a8:13c0 scaled loop (nearest DDA with the
+ * half-step bias err0 = num>>1) -> gfx_nearest_src. 1:1 floor map
+ * (dst*den)/num for output pixel dst (orig bias shifts ties by half a
+ * step; ties still land on the same neighbour here, no interpolation
+ * ever). -1 on num <= 0 or dst < 0. No globals. */
+int gfx_nearest_src(int dst, int num, int den);
+
 #endif /* CIVLIN_VIDEO_H */

@@ -296,4 +296,49 @@ civ_error_t hof_victory_ceremony(int level, int score);
  * Top Five @ 1420:159c). */
 civ_error_t city_show_top_five(void);
 
+/* --- Chain 2026-10-16 (11): HoF score/tech icons @ 1040:1b51/1030:84be ---
+ * Anchors (civ.exe, x86:LE:16:Protected Mode):
+ *   Hof_DrawScoreIconStep @ 1040:1b51 (x+=8, wrap > 0x124 -> y+=scale
+ *     DAT_1420_07dc, x=(y>>1&4)+0x10, rysuj gdy y < 0xa1 via
+ *     Gfx_DrawIconClipped @ 11e8:0674 z DAT_1420_95d0[param]; sole caller
+ *     Hof_CalcFinalScore @ 1040:1137; krok LIVE jako hof_score_icon_advance).
+ *   Hof_DrawTechIcon @ 1030:84be (wrapper Gfx_DrawTechIcon @ 11a8:0cb1:
+ *     skip gdy 0x16 <= tech <= 0x18, else idx = tech-1 (tech <= 0x18) albo
+ *     tech-4 + Gfx_ScaleIconX/Y @ 11e8:0d81/0da8 (v*0xa0)/100 +
+ *     Res_GetStringCopy etykieta via Text_DrawClipped @ 10d8:01b0 w
+ *     Hof_CalcFinalScore).
+ * Jakie ikony (kroki wyniku): NIE medale ani techy — pipsy populacji wg
+ *   Hof_CalcFinalScore pętli miejskiej: faza 0: DAT_1260_00de razy
+ *   Hof_DrawScoreIconStep(toggle&1) -> idx 0/1; faza 1:
+ *   (size-00de-00e0-00d4) razy +2 -> idx 2/3; faza 2: 00e0 razy +4 ->
+ *   idx 4/5; faza 3: 00d4 razy City_GetSpecialist+5 -> idx 5+spec
+ *   (DAT_1420_95d0 handle table; Gfx_DrawIconClipped blit). Techy to osobna
+ *   lista: Hof_DrawTechIcon(tech+0x18) per owned tech (0x14 każdy w
+ *   DAT_1420_516c) z SetIconScale(3,4)/(1,2)/(1,1) wg DAT_1420_07dc.
+ * Związek z Hof_CalcFinalScore PARTIAL (Hof_CalcFinalScore @ 1040:1137:
+ *   layout-fit/score/bar LIVE via hof_score_layout_value/fit +
+ *   hof_final_accum/cap + hof_score_bar_width
+ *   + icon advance LIVE; census-view/dialog/GDI tails STUB). Kroki ponizej
+ *   sa LIVE 1:1 (no Win16, no globals); blit tails STUB. */
+
+/* Orig Hof_DrawTechIcon @ 1030:84be gap -> hof_tech_icon_skipped. 1:1
+ * 0x16 <= tech <= 0x18 (22..24) -> 1 (skip, orig zwraca bez blita).
+ * No globals. */
+int hof_tech_icon_skipped(int tech);
+
+/* Orig ten sam indeks -> hof_tech_icon_index. 1:1 tech <= 0x18 ?
+ * tech-1 : tech-4 (iVar3 = param-1, > 0x17 -> param-4). -1 gdy tech <= 0.
+ * No globals. */
+int hof_tech_icon_index(int tech);
+
+/* Orig Hof_CalcFinalScore fazy ScoreIconStep -> hof_score_icon_index.
+ * 1:1 faza 0: toggle&1 (0/1), 1: +2 (2/3), 2: +4 (4/5), 3: specialist+5.
+ * -1 gdy faza OOR lub specialist < 0 w fazie 3. No globals. */
+int hof_score_icon_index(int phase, int toggle, int specialist);
+
+/* Orig Hof_DrawScoreIconStep/TechIcon blit tails -> STUBs (Gfx_DrawTechIcon
+ * @ 11a8:0cb1 + Gfx_DrawIconClipped @ 11e8:0674 -> SDL TBD). */
+civ_error_t hof_draw_score_icon_step(int icon);
+civ_error_t hof_draw_tech_icon(int tech, int x, int y);
+
 #endif /* CIVLIN_HALLOFFAME_H */

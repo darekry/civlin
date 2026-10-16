@@ -1138,4 +1138,208 @@ civ_error_t dialog_frame3d_layer(const dlg_rect_t *rc, int layer,
  * MOVETO/LINETO per layer + DELETEOBJECT -> SDL_RenderDrawLines TBD. */
 civ_error_t dialog_draw_frame3d(const dlg_rect_t *rc);
 
+/* --- Chain 2026-10-16 (11): Text_Draw* @ 10d8 + font dispatch @ 11e8:0b40 ---
+ * Anchors (civ.exe, x86:LE:16:Protected Mode), renamed this pass:
+ *   Text_DrawShadowed @ 10d8:02df (cień + TEXTOUT x2: GfxPort_SelectForCoords
+ *     @ 1220:0f2f gate + Text_DispatchFontHandler @ 11e8:0b40 on
+ *     *(DAT_1420_2990+0x10) + SELECTOBJECT font + GETTEXTMETRICS +
+ *     Util_StrCopy + SETBKMODE(1) + Text_SetColor @ 1098:0e0b shadow/main +
+ *     TEXTOUT shadow at (x+dx,y+1) then main at (x,y); dx = 0 when tmHeight
+ *     < 0x12 else 1; mono DAT_12d8_28fc skips the shadow pass).
+ *   Text_DrawAt @ 10d8:01fa (cień 0: thin wrapper Text_DrawShadowed(...,0)).
+ *   Text_DrawClipped @ 10d8:01b0 (SelectForCoords + font + Text_DrawDirect @
+ *     10d8:00e0).
+ *   Text_DrawDirect @ 10d8:00e0 (MOVETO + emit: Text_SetColor + SELECTOBJECT
+ *     + MOVETO + Util_StrCopy + Text_PackPascal @ 1100:0000 +
+ *     Text_DrawPascalAtOrigin @ 1100:017b).
+ *   Text_DrawCentered @ 10d8:0528 (pomiar Text_MeasureWidth @ 10d8:05b8 +
+ *     x-w/2 + Text_DrawClipped).
+ *   Text_DrawHeaderCentered @ 10d8:046e (tytuł 0xa0,2: wrapper
+ *     Text_DrawShadowedCentered @ 10d8:0495(...,0)).
+ *   Text_DrawShadowedCentered @ 10d8:0495 (was FUN_10d8_0495: DispatchFont +
+ *     MeasureWidth + x-w/2 + DrawShadowed).
+ *   Text_MeasureWidth @ 10d8:05b8 (was FUN_10d8_05b8: Util_StrCopy +
+ *     Text_PackPascal + Text_MeasurePascal @ 1100:00a1 + (w*10)/0x10).
+ *   Text_PackPascal @ 1100:0000 (was FUN_1100_0000: C->Pascal pack: len =
+ *     Util_StrLen, shift right by 1, buf[0] = len).
+ *   Text_MeasurePascal @ 1100:00a1 (was FUN_1100_00a1: GETTEXTEXTENT on the
+ *     Pascal buffer: len = buf[0], chars = buf+1).
+ *   Text_DrawPascalAtOrigin @ 1100:017b (was FUN_1100_017b: SETBKMODE(1) +
+ *     SETTEXTALIGN(1) + Util_PascalToCStr + TEXTOUT at 0,0 + restore).
+ *   Text_SelectFont @ 1100:0a33 (was FUN_1100_0a33: thin wrapper
+ *     Text_DispatchFontHandler(id)).
+ * Kto woła które (callers this pass):
+ *   DrawAt: Census_ShowCityProduction @ 1018:0be0, Demo_RankRow @ 1188:220a,
+ *     Demo_ShowDemographics @ 1188:123a, Hof_CalcFinalScore @ 1040:1137 x4,
+ *     Unit_DrawStatusBadge @ 1110:0ff6 + FUN_1018_1221/17db/1158_0000.
+ *   DrawClipped: 21 wołających — census (ShowCityProduction/Status @
+ *     1018:0be0/208f, TechBars @ 1018:03f0, UnitList @ 1018:067b,
+ *     TerrainCounts @ 1018:09cc, CensusReport @ 1018:1d5b), Demo_RankRow/
+ *     ShowDemographics, HoF tech labels in Hof_CalcFinalScore, Pic_PlayShared
+ *     @ 1030:0000, Replay_ShowEntry @ 1180:0e78 + Text_DrawCentered.
+ *   DrawCentered: City_DrawCensusHeader @ 1018:015d, City_ShowInfoDialog @
+ *     1030:8b39, City_ShowTopFive @ 1080:099b, Demo_ShowDemographics,
+ *     HoF_VictoryCeremony @ 1080:06ff, NewGame_Wizard @ 10e8:0000,
+ *     Pic_PlayShared + FUN_1030_8c11/1070_0327/1138_0000/1178_0022/1188_0b3e.
+ *   HeaderCentered: Census_ShowTechBars, City_DrawCensusHeader,
+ *     City_ShowTopFive, Replay_ShowCivDestroyed @ 1180:17e9,
+ *     Replay_ShowConqueror @ 1180:152f + FUN_1158_0000/1188_07ad/11b0_0000.
+ * Związek z Text_DrawAligned @ 1098:0ed1 (text_align_x/text_center_y LIVE +
+ *   text_draw_aligned STUB: ten sam cień Text_SetColor @ 1098:0e0b x3 TEXTOUT
+ *   + SETBKMODE/SETTEXTALIGN; 10d8 to dialog-census/HoF warstwa, 1098 to
+ *   generyczny modal/Anim @ 10b0:0461/HoF_Show @ 1080:0119) i Text_SetColor
+ *   @ 1098:0e0b / Text_SetBkColor @ 1098:2144 (Gfx_LookupColor +
+ *   SETTEXTCOLOR/CREATEPEN/Gfx_MakeBrush vs SETBKCOLOR; mono DAT_12d8_28fc
+ *   gate w obu).
+ * Font dispatch @ 11e8:0b40 (jump-table po *(DAT_1420_2990+0x10), 25 wpisów
+ *   @ 11e8:0d1d: id 1..8,200..215,333=0x014d; handler ustawia slot
+ *   DAT_12d8_0024 + SI = wysokość LOGFONT, potem wspólny ogon 11e8:0cb0:
+ *   1098:0186/0194 + DAT_1420_9960/+0x12/+0x28 + 1098:0194(0x45cb); aliasy
+ *   2->1, 3->0x11, 7->slot 0x10, 207/213->slot 0x10; zob. labele
+ *   Text_FontHandler_* w Ghidrze). Handlery to ROZMIARY/STYLE (slot =
+ *   rodzina: 0xf h12 nagłówek, 0x13 h30 największy, 0x12 h24, 0x11 h18,
+ *   0x10 h14 body, 0..0xd h14 serie 200.., 0x14 h36 tytuł 333), nie
+ *   bold/italic (te w dfItalic/dfWeight FNT, zob. boot.h font_fnt_parse).
+ *   Związek z civfonts.fon (Font_EnumFamiliesInit @ 1008:0e99 STUB:
+ *   ENUMFONTFAMILIES + ADDFONTRESOURCE; granica formatu FON: nagłówek NE +
+ *   FONTDIR/RT_FONT x21 LIVE via font_fon_parse/face_count, raster FNT
+ *   PARTIAL via font_fnt_bits/render_glyph, TTF bridge STUB) i
+ *   Text_GetFontHeight @ 1098:0dda (GETTEXTMETRICS tmHeight; FNT-strona to
+ *   font_text_height = dfPixHeight, zob. boot.h).
+ * Kto wybiera font (callerzy dispatch, 27): Text_* wrappery (Shadowed,
+ *   Clipped, Centered, ShadowedCentered, SelectFont) + City_ChooseProduction
+ *   @ 1170:05ca, City_DrawTileView @ 1110:04d0, Diplo_PromptContact @
+ *   1160:20c0, Diplo_RunContactMenu @ 1160:328e, Game_UpdateStatusPanel @
+ *   1088:13d5, HoF_Show @ 1080:0119, MainMenu_WndProc @ 11e0:0221,
+ *   Map_DrawCityLabels @ 1208:1f64, NewGame_Wizard @ 10e8:0000,
+ *   Unit_ShowInfoPopup @ 11f0:468c, WorldGen_LoadEarth @ 1108:0243 +
+ *   FUN_1030_8d33/1060_01c1/1068_06af/1068_1f7e/1100_0a33/1138_0000/
+ *   1170_21b3/1178_0022/11c0_0ec2/11d0_0010/11d8_0000/11d8_087f.
+ * OS-free pomiary/pozycje poniżej są LIVE 1:1 (no Win16, no globals);
+ * GDI ogony (SELECTOBJECT/TEXTOUT/MOVETO/SETBKMODE) zostają STUB. */
+
+/* Orig Text_DrawShadowed @ 10d8:02df cień dx -> text_shadow_offset. 1:1
+ * tmHeight < 0x12 ? 0 : 1 (decompiler: local_126 < 0x12 ? x : x+1).
+ * height < 0 -> 0. No globals. */
+int text_shadow_offset(int height);
+
+/* Orig Text_DrawCentered @ 10d8:0528 + Text_DrawShadowedCentered @ 10d8:0495
+ * pomiar+x-w/2 -> text_centered_x. 1:1 x - w/2 (C trunc toward zero).
+ * No globals. */
+int text_centered_x(int x, int w);
+
+/* Orig Text_MeasureWidth @ 10d8:05b8 skala -> text_measure_scaled. 1:1
+ * (extent*10)/0x10 (decompiler: (iVar2*10)/0x10 po Text_MeasurePascal).
+ * extent < 0 -> 0. No globals. */
+int text_measure_scaled(int extent);
+
+/* Orig Text_PackPascal @ 1100:0000 połowa długości -> text_pascal_len.
+ * 1:1 strlen cap 255 (buf[0] = len, len = Util_StrLen). NULL -> -1. */
+int text_pascal_len(const char *s);
+
+/* Orig Text_DispatchFontHandler @ 11e8:0b40 tabela @ 11e8:0d1d ->
+ * text_font_slot_for_id / text_font_height_for_id. 1:1 id -> slot
+ * DAT_12d8_0024 / SI wysokość (aliasy 2->1, 7->0x10, 207/213->0x10).
+ * Nieznany id -> -1. No globals. */
+int text_font_slot_for_id(int id);
+int text_font_height_for_id(int id);
+
+/* Orig Text_* @ 10d8 GDI ogony -> STUBs (TEXTOUT/MOVETO/SELECTOBJECT +
+ * SETBKMODE + Text_SetColor @ 1098:0e0b -> SDL_ttf TBD). NULL text -> NOENT. */
+civ_error_t text_draw_shadowed(const char *text, int x, int y, int color,
+                               int shadow);
+civ_error_t text_draw_at(const char *text, int x, int y, int color);
+civ_error_t text_draw_clipped(const char *text, int x, int y, int color);
+civ_error_t text_draw_direct(const char *text, int x, int y, int color);
+civ_error_t text_draw_centered(const char *text, int x, int y, int color);
+civ_error_t text_draw_header_centered(const char *text, int x, int y,
+                                      int color);
+civ_error_t text_select_font(int id);
+
+/* --- Chain 2026-10-16 (12): font table dump + Pascal pack (goals 1/4) ---
+ * Anchors (civ.exe, x86:LE:16:Protected Mode):
+ *   Text_DispatchFontHandler @ 11e8:0b40 (25-entry id table @ 11e8:0d1d:
+ *     1..8, 200..215 (0xc8..0xd7), 333 (0x014d); jump offsets at +0x32;
+ *     per-id handler sets DAT_12d8_0024 slot + SI LOGFONT height, then the
+ *     shared tail @ 11e8:0cb0: Text_FontPreApply @ 1098:0186 (noop when
+ *     DAT_1420_b384 == 0) + DAT_1420_9960/+0x12 + DAT_1420_17cc/+0x28 +
+ *     Text_FontPostApply @ 1098:0194(0x45cb); Ghidra labels
+ *     Text_FontHandler_Slot*_H* mark the 20 distinct handler bodies;
+ *     aliases 2->Slot0F, 3->Slot11, 7->Slot10, 207->Slot10, 213->Slot10
+ *     via jmp chains @ 0b80/0b82/0bb7/0c32/0c7b; heights h12/h30/h24/h18/
+ *     h14/h36). Callers (27): Text_SelectFont @ 1100:0a33 (thin wrapper) +
+ *     Text_DrawShadowed @ 10d8:02df / DrawClipped @ 10d8:01b0 / DrawCentered
+ *     @ 10d8:0528 / ShadowedCentered @ 10d8:0495 + City_ChooseProduction @
+ *     1170:05ca, City_DrawTileView @ 1110:04d0, Diplo_PromptContact @
+ *     1160:20c0, Diplo_RunContactMenu @ 1160:328e, Game_UpdateStatusPanel @
+ *     1088:13d5, HoF_Show @ 1080:0119, MainMenu_WndProc @ 11e0:0221,
+ *     Map_DrawCityLabels @ 1208:1f64, NewGame_Wizard @ 10e8:0000,
+ *     Unit_ShowInfoPopup @ 11f0:468c, WorldGen_LoadEarth @ 1108:0243 +
+ *     FUN_1030_8d33/1060_01c1/1068_06af/1068_1f7e/1138_0000/1170_21b3/
+ *     1178_0022/11c0_0ec2/11d0_0010/11d8_0000/11d8_087f. Readers besides
+ *     the dispatch: Text_SelectFont wrapper + Text_GetFontHeight @
+ *     1098:0dda (GETTEXTMETRICS tmHeight; FNT side is font_text_height =
+ *     dfPixHeight, see boot.h) + status_font_height (same Orig, game.h).
+ *   Text_PackPascal @ 1100:0000 (C->Pascal: len = Util_StrLen, shift
+ *     right, buf[0] = len; callers Text_DrawDirect @ 10d8:00e0,
+ *     Text_MeasureWidth @ 10d8:05b8, Text_DrawDlgItemString @ 1098:2796,
+ *     Text_FitPascalEllipsis @ 1098:0000, FUN_10d8_002d).
+ *   Text_MeasurePascal @ 1100:00a1 (GETTEXTEXTENT on Pascal buf: len =
+ *     buf[0], chars = buf+1; callers Text_MeasureWidth + FitEllipsis).
+ *   Text_DrawPascalAtOrigin @ 1100:017b (SETBKMODE(1) + SETTEXTALIGN(1) +
+ *     Util_PascalToCStr @ 1100:0053 + TEXTOUT at 0,0 + restore; callers
+ *     Text_DrawDirect + FUN_10d8_002d).
+ *   Text_MeasureWidth @ 10d8:05b8 (Util_StrCopy + PackPascal +
+ *     MeasurePascal + (w*10)/0x10 via text_measure_scaled LIVE; callers
+ *     Text_DrawCentered @ 10d8:0528 + ShadowedCentered @ 10d8:0495 +
+ *     Demo_RankRow @ 1188:220a + FUN_1138_0000 + HoF_Show).
+ *   Res_AppendPascal @ 11f8:014a (Pascal append: dst[0] += src[0] +
+ *     payload copy; see rsc_loader.h res_append_pascal LIVE) +
+ *     Res_CopyPascal @ 11f8:00fc (Pascal copy, res_copy_pascal LIVE) +
+ *     Res_ComparePascal @ 11f8:0207 (memcmp on min(len) then len diff,
+ *     res_compare_pascal LIVE): the Pascal-buffer family shares the
+ *     buf[0]-is-len framing with Text_PackPascal (pack) /
+ *     Util_PascalToCStr (unpack, util_pascal_to_c LIVE).
+ * OS-free table/pack math below is LIVE 1:1 (no Win16, no globals,
+ * read-only except the pack dst); GETTEXTEXTENT/TEXTOUT tails stay STUB. */
+
+/* Orig table @ 11e8:0d1d full dump (25 entries, id -> slot + SI height).
+ * Static const, read-only, no globals mutated, no exit(). */
+typedef struct text_font_entry {
+    int id;   /* Orig id word (1..8, 200..215, 333) */
+    int slot; /* DAT_12d8_0024 LOGFONT slot */
+    int h;    /* SI LOGFONT height (0x0c/0x1e/0x18/0x12/0x0e/0x24) */
+} text_font_entry_t;
+
+/* Returns the borrowed table view (25 entries) + count via out (may be
+ * NULL for the view only). Never NULL (function-local static const). */
+const text_font_entry_t *text_font_table(int *count_out);
+
+/* Orig Text_DispatchFontHandler @ 11e8:0b40 combined half ->
+ * text_dispatch_font. 1:1 id -> (slot, h) via the table above (aliases
+ * resolved in the table: 2->0x0f, 3->0x11, 7->0x10, 207->0x10,
+ * 213->0x10). NULL outs -> NOENT; unknown id -> RANGE (outs untouched).
+ * Else CIV_OK. No Win16 (LOGFONT install via Text_FontPre/PostApply +
+ * SELECTOBJECT stays in text_select_font STUB). No globals. */
+civ_error_t text_dispatch_font(int id, int *slot_out, int *h_out);
+
+/* Orig Text_PackPascal @ 1100:0000 -> text_pack_pascal. 1:1 C->Pascal
+ * pack in place: len = strlen(buf) (cap 255, Util_StrLen shape), shift
+ * the N chars right by one, buf[0] = (char)len (NUL dropped, same byte
+ * count N+1 as the C form). NULL buf -> NOENT; cap == 0 -> TRUNCATED;
+ * strlen >= cap (no NUL in cap) -> TRUNCATED; len > 255 -> RANGE
+ * (buf untouched on any error). No globals, no exit(). */
+civ_error_t text_pack_pascal(char *buf, size_t cap);
+
+/* Orig Pascal framing (PackPascal @ 1100:0000 / MeasurePascal @ 1100:00a1
+ * len = buf[0] half) -> text_pascal_payload. 1:1 validates the Pascal
+ * buffer: pay_len = (uint8_t)buf[0], needs 1 + pay_len <= cap. NULL
+ * buf/out -> NOENT; cap == 0 -> TRUNCATED; short tail -> TRUNCATED
+ * (out zeroed when non-NULL on error). Else CIV_OK + *pay_len. This is
+ * the OS-free half of MeasurePascal (GETTEXTEXTENT width itself needs
+ * the DC and stays STUB); same framing as Res_Copy/AppendPascal in
+ * rsc_loader.h. No globals. */
+civ_error_t text_pascal_payload(const char *buf, size_t cap,
+                                size_t *pay_len_out);
+
 #endif /* CIVLIN_DIALOG_H */

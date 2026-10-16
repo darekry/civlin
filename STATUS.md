@@ -117,6 +117,8 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `font_render_glyph` | LIVE | 1008:0e99 |  |
 | `font_text_width` | LIVE | 1098:0dda, 11f8:0278 |  |
 | `font_text_height` | LIVE | 1098:0dda |  |
+| `font_fnt_stride` | LIVE | 1008:0e99 |  |
+| `font_fnt_glyph_len` | LIVE | 1008:0e99 |  |
 | `menu_strings_count` | LIVE | 1048:0000, 1420:435b, 14b0:0010, 14b0:0092, 14d0:0028 |  |
 | `menu_string_at` | LIVE |  |  |
 | `config_load_prefs` | STUB | 1008:0b4a | has TODO |
@@ -253,6 +255,24 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `dialog_frame3d_light` | LIVE |  |  |
 | `dialog_frame3d_layer` | LIVE |  |  |
 | `dialog_draw_frame3d` | STUB | 1018:24c5, 1220:0156, 1220:0d38 | has TODO |
+| `text_shadow_offset` | LIVE | 10d8:02df |  |
+| `text_centered_x` | LIVE | 10d8:0495, 10d8:0528 |  |
+| `text_measure_scaled` | LIVE | 10d8:05b8, 1100:00a1 |  |
+| `text_pascal_len` | LIVE | 1100:0000 |  |
+| `text_font_table` | LIVE | 11e8:0d1d |  |
+| `text_font_table_lookup` | LIVE | 11e8:0b40, 11e8:0d1d |  |
+| `text_font_slot_for_id` | LIVE | 11e8:0b40, 11e8:0d1d |  |
+| `text_font_height_for_id` | LIVE |  |  |
+| `text_dispatch_font` | LIVE | 1098:0186, 1098:0194, 11e8:0b40, 11e8:0cb0 |  |
+| `text_pack_pascal` | LIVE | 1100:0000, 1100:0053, 11f8:00fc, 11f8:014a |  |
+| `text_pascal_payload` | LIVE | 1100:0000, 1100:00a1 |  |
+| `text_draw_shadowed` | STUB | 1098:0e0b, 10d8:02df, 11e8:0b40, 1220:0f2f | has TODO |
+| `text_draw_at` | STUB | 1098:0e0b, 10d8:01fa | has TODO |
+| `text_draw_clipped` | STUB | 10d8:00e0, 10d8:01b0 | has TODO |
+| `text_draw_direct` | STUB | 10d8:00e0, 1100:0000, 1100:017b | has TODO |
+| `text_draw_centered` | STUB | 10d8:0528, 10d8:05b8 | has TODO |
+| `text_draw_header_centered` | STUB | 10d8:046e, 10d8:0495 | has TODO |
+| `text_select_font` | STUB | 1098:0186, 1100:0a33, 11e8:0b40 | has TODO |
 
 ### `src/game.c`
 
@@ -532,6 +552,11 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `hof_try_insert` | LIVE | 1080:0595 |  |
 | `hof_victory_ceremony` | LIVE | 1080:06ff |  |
 | `city_show_top_five` | LIVE | 1080:099b, 1420:159c |  |
+| `hof_tech_icon_skipped` | LIVE | 1030:84be |  |
+| `hof_tech_icon_index` | LIVE |  |  |
+| `hof_score_icon_index` | LIVE | 1040:1137 |  |
+| `hof_draw_score_icon_step` | STUB | 1040:1b51, 11a8:0cb1, 11e8:0674 | has TODO |
+| `hof_draw_tech_icon` | STUB | 1030:84be, 10d8:01b0, 11a8:0cb1, 11e8:0d81 | has TODO |
 
 ### `src/main.c`
 
@@ -969,6 +994,17 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `gfx_tech_palette_pick` | LIVE | 11a8:0cb1 |  |
 | `palette_copy_enabled` | LIVE | 1098:201d |  |
 | `palette_copy_range_len` | LIVE |  |  |
+| `gfx_icon_buffer_size` | LIVE | 11a8:0054 |  |
+| `gfx_icon_scaled_dim` | LIVE | 11a8:13c0, 11e8:0d81 |  |
+| `gfx_icon_scale_is_unit` | LIVE | 1040:1137, 11a8:002c, 11a8:0f56, 13a0:0000 |  |
+| `gfx_icon_copy_is_fast` | LIVE | 11a8:13c0 |  |
+| `gfx_icon_row_pad` | LIVE |  |  |
+| `gfx_alloc_icon_buffer` | PARTIAL | 1110:04d0, 11a8:0054, 11a8:00d1, 11a8:0f56, 11e8:0337 | has TODO |
+| `gfx_copy_icon_bits` | STUB | 11a8:0328, 11a8:0450, 11a8:0aa8, 11a8:13c0 | has TODO |
+| `gfx_blit_clip_len` | LIVE | 11a8:0000, 11a8:0aa8 |  |
+| `gfx_copy_span` | LIVE | 11a8:0328 |  |
+| `gfx_blit_scaled_is_direct` | LIVE | 1040:1137, 11a8:002c, 11a8:0450 |  |
+| `gfx_nearest_src` | LIVE | 11a8:13c0 |  |
 
 ### `src/worldgen.c`
 

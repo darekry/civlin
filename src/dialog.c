@@ -1669,3 +1669,248 @@ civ_error_t dialog_draw_frame3d(const dlg_rect_t *rc)
         return CIV_ERR_NOENT;
     return CIV_ERR_UNSUPPORTED;
 }
+
+/* --- Chain 2026-10-16 (11): Text_Draw* @ 10d8 + font dispatch @ 11e8:0b40.
+ * OS-free 1:1 LIVE + GDI STUBs. No globals, no exit(), C17. See dialog.h. */
+
+int text_shadow_offset(int height)
+{
+    /* Orig Text_DrawShadowed @ 10d8:02df: local_126 < 0x12 ? x : x+1. */
+    if (height < 0)
+        return 0;
+    return (height < 0x12) ? 0 : 1;
+}
+
+int text_centered_x(int x, int w)
+{
+    /* Orig Text_DrawCentered @ 10d8:0528: Text_DrawClipped(x - w/2); same in
+     * Text_DrawShadowedCentered @ 10d8:0495 for the shadow pass. */
+    return x - w / 2;
+}
+
+int text_measure_scaled(int extent)
+{
+    /* Orig Text_MeasureWidth @ 10d8:05b8: (extent*10)/0x10 after
+     * Text_MeasurePascal @ 1100:00a1. */
+    if (extent < 0)
+        return 0;
+    return (extent * 10) / 0x10;
+}
+
+int text_pascal_len(const char *s)
+{
+    /* Orig Text_PackPascal @ 1100:0000 len half: buf[0] = Util_StrLen. */
+    int n = 0;
+
+    if (!s)
+        return -1;
+    while (s[n] != '\0') {
+        n++;
+        if (n >= 255)
+            break;
+    }
+    return n;
+}
+
+/* Orig table @ 11e8:0d1d full dump (25 entries: 1..8, 200..215, 333).
+ * Function-local static const view (read-only, no globals mutated).
+ * Aliases resolved in the rows: 2->slot 0xf, 3->0x11, 7->0x10,
+ * 207->0x10, 213->0x10 (jmp chains 0b80/0b82/0bb7/0c32/0c7b).
+ * Ghidra labels Text_FontHandler_Slot*_H* mark the 20 distinct bodies. */
+static const text_font_entry_t text_font_dump[] = {
+    { 1, 0x0f, 0x0c }, { 2, 0x0f, 0x0c }, { 3, 0x11, 0x12 },
+    { 4, 0x13, 0x1e }, { 5, 0x12, 0x18 }, { 6, 0x10, 0x0e },
+    { 7, 0x10, 0x0e }, { 8, 0x11, 0x12 }, { 200, 0x00, 0x0e },
+    { 201, 0x01, 0x0e }, { 202, 0x02, 0x0e }, { 203, 0x03, 0x0e },
+    { 204, 0x04, 0x0e }, { 205, 0x05, 0x0e }, { 206, 0x06, 0x0e },
+    { 207, 0x10, 0x0e }, { 208, 0x07, 0x0e }, { 209, 0x08, 0x0e },
+    { 210, 0x09, 0x0e }, { 211, 0x0a, 0x0e }, { 212, 0x0b, 0x0e },
+    { 213, 0x10, 0x0e }, { 214, 0x0c, 0x0e }, { 215, 0x0d, 0x0e },
+    { 333, 0x14, 0x24 },
+};
+
+const text_font_entry_t *text_font_table(int *count_out)
+{
+    /* Orig table @ 11e8:0d1d dump accessor (borrowed view, no copy). */
+    if (count_out)
+        *count_out = (int)(sizeof(text_font_dump) / sizeof(text_font_dump[0]));
+    return text_font_dump;
+}
+
+static int text_font_table_lookup(int id, int want_slot)
+{
+    /* Orig Text_DispatchFontHandler @ 11e8:0b40 linear scan (CX 0x19 over
+     * @ 11e8:0d1d + indirect jmp via +0x32). */
+    size_t i;
+
+    for (i = 0; i < sizeof(text_font_dump) / sizeof(text_font_dump[0]); i++) {
+        if (text_font_dump[i].id == id)
+            return want_slot ? text_font_dump[i].slot : text_font_dump[i].h;
+    }
+    return -1;
+}
+
+int text_font_slot_for_id(int id)
+{
+    return text_font_table_lookup(id, 1);
+}
+
+int text_font_height_for_id(int id)
+{
+    return text_font_table_lookup(id, 0);
+}
+
+civ_error_t text_dispatch_font(int id, int *slot_out, int *h_out)
+{
+    /* Orig Text_DispatchFontHandler @ 11e8:0b40 combined half (slot +
+     * SI height; shared tail @ 11e8:0cb0 with Text_FontPreApply @
+     * 1098:0186 + Text_FontPostApply @ 1098:0194 stays in the
+     * text_select_font STUB). */
+    size_t i;
+
+    if (!slot_out || !h_out)
+        return CIV_ERR_NOENT;
+    for (i = 0; i < sizeof(text_font_dump) / sizeof(text_font_dump[0]); i++) {
+        if (text_font_dump[i].id == id) {
+            *slot_out = text_font_dump[i].slot;
+            *h_out = text_font_dump[i].h;
+            return CIV_OK;
+        }
+    }
+    return CIV_ERR_RANGE;
+}
+
+civ_error_t text_pack_pascal(char *buf, size_t cap)
+{
+    /* Orig Text_PackPascal @ 1100:0000 C->Pascal pack (len + shift right
+     * by one, buf[0] = len). Same framing as Res_CopyPascal @ 11f8:00fc
+     * / Res_AppendPascal @ 11f8:014a (buf[0]-is-len) in rsc_loader.h;
+     * unpack side is Util_PascalToCStr @ 1100:0053 (util_pascal_to_c). */
+    size_t n = 0;
+    size_t i;
+
+    if (!buf)
+        return CIV_ERR_NOENT;
+    if (cap == 0u)
+        return CIV_ERR_TRUNCATED;
+    while (n < cap && buf[n] != '\0')
+        n++;
+    if (n >= cap)
+        return CIV_ERR_TRUNCATED;
+    if (n > 255u)
+        return CIV_ERR_RANGE;
+    for (i = n; i > 0u; i--)
+        buf[i] = buf[i - 1u];
+    buf[0] = (char)(unsigned char)n;
+    return CIV_OK;
+}
+
+civ_error_t text_pascal_payload(const char *buf, size_t cap,
+                                size_t *pay_len_out)
+{
+    /* Orig Pascal len half (PackPascal @ 1100:0000 write side /
+     * MeasurePascal @ 1100:00a1 read side: len = buf[0], chars = buf+1;
+     * GETTEXTEXTENT width itself needs the DC and stays STUB). */
+    unsigned pay;
+
+    if (pay_len_out)
+        *pay_len_out = 0u;
+    if (!buf || !pay_len_out)
+        return CIV_ERR_NOENT;
+    if (cap == 0u)
+        return CIV_ERR_TRUNCATED;
+    pay = (unsigned char)buf[0];
+    if ((size_t)1u + (size_t)pay > cap)
+        return CIV_ERR_TRUNCATED;
+    *pay_len_out = (size_t)pay;
+    return CIV_OK;
+}
+
+civ_error_t text_draw_shadowed(const char *text, int x, int y, int color,
+                               int shadow)
+{
+    (void)x;
+    (void)y;
+    (void)color;
+    (void)shadow;
+    /* TODO: Orig Text_DrawShadowed @ 10d8:02df GDI tail (GfxPort_
+     * SelectForCoords @ 1220:0f2f + DispatchFont @ 11e8:0b40 + SELECTOBJECT
+     * + GETTEXTMETRICS + SETBKMODE(1) + Text_SetColor @ 1098:0e0b x2 +
+     * TEXTOUT shadow/main) -> SDL_ttf TBD. Measure lives in
+     * text_shadow_offset/text_measure_scaled above. */
+    if (!text)
+        return CIV_ERR_NOENT;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t text_draw_at(const char *text, int x, int y, int color)
+{
+    (void)x;
+    (void)y;
+    (void)color;
+    /* TODO: Orig Text_DrawAt @ 10d8:01fa (wrapper DrawShadowed(...,0)) ->
+     * same SDL_ttf tail as text_draw_shadowed. */
+    if (!text)
+        return CIV_ERR_NOENT;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t text_draw_clipped(const char *text, int x, int y, int color)
+{
+    (void)x;
+    (void)y;
+    (void)color;
+    /* TODO: Orig Text_DrawClipped @ 10d8:01b0 (SelectForCoords +
+     * DispatchFont + DrawDirect @ 10d8:00e0) -> SDL_ttf TBD. */
+    if (!text)
+        return CIV_ERR_NOENT;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t text_draw_direct(const char *text, int x, int y, int color)
+{
+    (void)x;
+    (void)y;
+    (void)color;
+    /* TODO: Orig Text_DrawDirect @ 10d8:00e0 (Text_SetColor + SELECTOBJECT
+     * + MOVETO + PackPascal @ 1100:0000 + DrawPascalAtOrigin @ 1100:017b)
+     * -> SDL_ttf TBD. */
+    if (!text)
+        return CIV_ERR_NOENT;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t text_draw_centered(const char *text, int x, int y, int color)
+{
+    (void)x;
+    (void)y;
+    (void)color;
+    /* TODO: Orig Text_DrawCentered @ 10d8:0528 (MeasureWidth @ 10d8:05b8 +
+     * x-w/2 via text_centered_x + DrawClipped) -> SDL_ttf TBD. */
+    if (!text)
+        return CIV_ERR_NOENT;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t text_draw_header_centered(const char *text, int x, int y,
+                                      int color)
+{
+    (void)x;
+    (void)y;
+    (void)color;
+    /* TODO: Orig Text_DrawHeaderCentered @ 10d8:046e (wrapper
+     * DrawShadowedCentered @ 10d8:0495(...,0), tytuł 0xa0,2) -> SDL_ttf. */
+    if (!text)
+        return CIV_ERR_NOENT;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t text_select_font(int id)
+{
+    /* TODO: Orig Text_SelectFont @ 1100:0a33 (wrapper DispatchFontHandler @
+     * 11e8:0b40) + LOGFONT install in the 0cb0 tail (DAT_1420_9960/+0x12,
+     * DAT_1420_17cc/+0x28, 1098:0186/0194) -> SDL_ttf face select TBD.
+     * Table lives in text_font_slot/height_for_id above. */
+    (void)id;
+    return CIV_ERR_UNSUPPORTED;
+}

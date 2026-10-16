@@ -1141,3 +1141,130 @@ int palette_copy_range_len(int src_off, int dst_off, int count)
         n = 0;
     return n;
 }
+
+/* --- Chain 2026-10-16 (11): icon scale/buffer @ 11a8.
+ * OS-free 1:1 LIVE + device STUBs. No globals, no exit(), C17. See video.h. */
+
+int gfx_icon_buffer_size(int w, int h)
+{
+    /* Orig Gfx_AllocIconBuffer @ 11a8:0054: GLOBALALLOC(w*h+6) + w/h store. */
+    if (w <= 0 || h <= 0)
+        return -1;
+    return w * h + 6;
+}
+
+int gfx_icon_scaled_dim(int v, int num, int den)
+{
+    /* Orig Gfx_CopyIconBits @ 11a8:13c0: (w*num)/den; ScaleIconX/Y to
+     * (v*0xa0)/100 (gfx_scale_icon_dim). x86 LONG divide truncates. */
+    if (den <= 0)
+        return v;
+    return (v * num) / den;
+}
+
+int gfx_icon_scale_is_unit(int num, int den)
+{
+    /* Orig para DAT_13a0_0000/0002 via Gfx_SetIconScale @ 11a8:002c:
+     * Hof_CalcFinalScore @ 1040:1137 wraca do (1,1); BlitTechIcon @
+     * 11a8:0f56 skaluje tylko gdy a != b (gfx_tech_needs_scale). */
+    return (num == den) ? 1 : 0;
+}
+
+int gfx_icon_copy_is_fast(int transparent, int scaled, int pad)
+{
+    /* Orig Gfx_CopyIconBits @ 11a8:13c0: (param_3 == -1 && param_4 == 0 &&
+     * local_12 == 0) -> word memcpy + odd tail. */
+    return (transparent == -1 && scaled == 0 && pad == 0) ? 1 : 0;
+}
+
+int gfx_icon_row_pad(int w, int need_align)
+{
+    /* Orig same: param_5 == 1 ? ((w+1)/2*2-w) : 0 (even pitch). */
+    if (w < 0)
+        return -1;
+    if (need_align == 0)
+        return 0;
+    return ((w + 1) / 2) * 2 - w;
+}
+
+civ_error_t gfx_alloc_icon_buffer(int w, int h, int *size_out)
+{
+    /* TODO: Orig Gfx_AllocIconBuffer @ 11a8:0054 device tail (GLOBALALLOC
+     * + GLOBALLOCK w/h store + GLOBALUNLOCK; callers 1110:04d0/0ff6,
+     * 11a8:0f56/05c7, 11e8:0337) + Gfx_FreeIconBuffer @ 11a8:00d1 GLOBALFREE
+     * -> SDL heap bridge TBD. Size math lives in gfx_icon_buffer_size. */
+    if (size_out)
+        *size_out = 0;
+    if (w <= 0 || h <= 0)
+        return CIV_ERR_RANGE;
+    if (!size_out)
+        return CIV_ERR_NOENT;
+    *size_out = gfx_icon_buffer_size(w, h);
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t gfx_copy_icon_bits(int transparent, int scaled)
+{
+    /* TODO: Orig Gfx_CopyIconBits @ 11a8:13c0 blit tail (transparent skip +
+     * scaled resample via GetIconScale + Gfx_CopyIconBuffer @ 11a8:0328
+     * HMEMCPY / Gfx_BlitIconScaled @ 11a8:0450 BITBLT / Gfx_BlitIconToPort
+     * @ 11a8:0aa8 HMEMCPY rows) -> SDL blit TBD. Gates live in
+     * gfx_icon_copy_is_fast/gfx_icon_row_pad/gfx_icon_scaled_dim. */
+    (void)transparent;
+    (void)scaled;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+/* --- Chain 2026-10-16 (12): icon blit geometry @ 11a8 (goals 3/5).
+ * OS-free 1:1 LIVE. No globals, no exit(), C17. See video.h chain block.
+ * HMEMCPY rows map to memcpy (util_mem_copy_far, see civ_common.h);
+ * GDI BITBLT/GLOBALLOCK tails stay STUB above. */
+
+int gfx_blit_clip_len(int pos, int scaled, int port_len)
+{
+    /* Orig Gfx_BlitIconToPort @ 11a8:0aa8 tail pair:
+     * if (*(port+0x0c) < pos_x + scaled_w) scaled_w = *(port+0x0c) - pos_x
+     * (same for h vs +0x0e). Scaled dims come from (w*num)/den via
+     * gfx_icon_scaled_dim (GetIconScale @ 11a8:0000). */
+    int max;
+
+    if (scaled <= 0 || port_len <= 0 || pos >= port_len)
+        return 0;
+    max = port_len - pos;
+    return (scaled < max) ? scaled : max;
+}
+
+civ_error_t gfx_copy_span(int w1, int h1, int w2, int h2,
+                          int *rows_out, int *cols_out)
+{
+    /* Orig Gfx_CopyIconBuffer @ 11a8:0328: same-size single HMEMCPY when
+     * w1 == w2 && h1 == h2, else per-row HMEMCPY of min(w1,w2) over
+     * min(h1,h2) rows (loop while row < min(h)). */
+    if (!rows_out || !cols_out)
+        return CIV_ERR_NOENT;
+    if (w1 <= 0 || h1 <= 0 || w2 <= 0 || h2 <= 0)
+        return CIV_ERR_RANGE;
+    *rows_out = (h1 < h2) ? h1 : h2;
+    *cols_out = (w1 < w2) ? w1 : w2;
+    return CIV_OK;
+}
+
+int gfx_blit_scaled_is_direct(int num, int den)
+{
+    /* Orig Gfx_BlitIconScaled @ 11a8:0450 head: GetIconScale pair, direct
+     * BITBLT 0xcc0020 when num == den (Hof restores (1,1)), else the port
+     * + GETBITMAPBITS + nearest resample path. */
+    return (num == den) ? 1 : 0;
+}
+
+int gfx_nearest_src(int dst, int num, int den)
+{
+    /* Orig Gfx_CopyIconBits @ 11a8:13c0 scaled loop: DDA err += num with
+     * err0 = num>>1 half bias, emit while err >= den. Floor map matches
+     * except documented half-tie shift; never interpolates (nearest). */
+    if (num <= 0 || dst < 0)
+        return -1;
+    if (den <= 0)
+        return dst;
+    return (dst * den) / num;
+}
