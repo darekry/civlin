@@ -1254,6 +1254,14 @@ civ_error_t text_draw_direct(const char *text, int x, int y, int color);
 civ_error_t text_draw_centered(const char *text, int x, int y, int color);
 civ_error_t text_draw_header_centered(const char *text, int x, int y,
                                       int color);
+/* Orig Text_SelectFont @ 1100:0a33 wrapper side -> text_select_font.
+ * PARTIAL: id->(slot,h) validation LIVE via text_dispatch_font (RANGE on
+ * unknown id); LOGFONT install tail @ 11e8:0cb0 (DAT_1420_9960/+0x12,
+ * DAT_1420_17cc/+0x28 + Text_FontPreApply @ 1098:0186 / PostApply @
+ * 1098:0194, see chain-13 NOOPs above) + SELECTOBJECT -> SDL_ttf TBD
+ * (CIV_ERR_UNSUPPORTED). Install timing: once at boot via
+ * Font_EnumFamiliesCallback @ 1008:0e12 (see boot.h chain-13), select
+ * per-draw here. NULL text -> NOENT on siblings. */
 civ_error_t text_select_font(int id);
 
 /* --- Chain 2026-10-16 (12): font table dump + Pascal pack (goals 1/4) ---
@@ -1341,5 +1349,81 @@ civ_error_t text_pack_pascal(char *buf, size_t cap);
  * rsc_loader.h. No globals. */
 civ_error_t text_pascal_payload(const char *buf, size_t cap,
                                 size_t *pay_len_out);
+
+/* --- Chain 2026-10-16 (13): ellipsis loop + pre/post tails + measure
+ * consistency (goals 3-5; civ.exe, x86:LE:16:Protected Mode, C17) ---
+ * Anchors, renamed this pass (Ghidra plates carry the shape):
+ *   Text_FitPascalEllipsis @ 1098:0000 (was FUN_1098_0000: Util_StrCopy @
+ *     1000:36b2 local_106 + Text_PackPascal @ 1100:0000 +
+ *     Text_MeasurePascal @ 1100:00a1; if max < w: bias local_6 = 4, while
+ *     (len > 0 && max < measure+4) buf[0]--, while trailing ' ' buf[0]--,
+ *     then caller_buf[len] = '.' + caller_buf[len+1] = 0 — single dot).
+ *   Text_FitPascalEllipsisScaled @ 11d0:02e4 (was FUN_11d0_02e4: forwards
+ *     with max = (w*16)/10, inverse of MeasureWidth (w*10)/0x10).
+ * Kiedy ellipsis (za długi tekst w polu? jakie pola? limity szerokości?):
+ *   Unit_ShowInfoPopup @ 11f0:468c: unit-name line + city-name line
+ *   (City_AppendName), limit = status-panel width - 8
+ *   (iVar4 = (local_1a - local_1e) - 8). Scaled wrapper pola: census
+ *   production/status (1018:0be0/208f), FUN_1030_8d33, FUN_1188_0b3e,
+ *   Pic_PlayShared @ 1030:0000 — limity w jednostkach po MeasureWidth,
+ *   wrapper je oddskalowuje (w*16)/10 przed pętlą.
+ * Text_FontPreApply @ 1098:0186 / PostApply @ 1098:0194 (ogony dispatch
+ *   11e8:0cb0): OBA to puste far stub-y (sama gadanina DS + RETF, brak
+ *   ciała). Callerzy poza dispatch: BRAK — jedyne xrefs to ogon
+ *   11e8:0cbd (Pre, gdy DAT_1420_b384 != 0) i 11e8:0d0e (Post(0x45cb),
+ *   gdy b384 != 0, po zapisach SI do DAT_1420_9960/+0x12 i
+ *   DAT_1420_17cc/+0x28). Port: text_font_pre/post_apply NOOP (jak
+ *   cursor_set), straże b384/9960/17cc zostają caller-side.
+ * Text_MeasurePascal @ 1100:00a1 GETTEXTEXTENT (metryki vs FNT raster —
+ *   spójność?): GETTEXTEXTENT mierzy ZAINSTALOWANY font GDI (slot z
+ *   dispatch + CREATEFONTINDIRECT z callbacku), font_text_width (boot.h)
+ *   sumuje dfCharTable-widths z FNT. Spójność: OBA liczą sumę advance
+ *   widths bez trackingu/kerningu (tracking = 0 w obu portach), więc
+ *   zgodne co do kształtu; różnice mogą wynikać z hintingu GDI vs
+ *   surowych bitów FNT (TODO: dowód na dumpie civfonts.fon vs
+ *   GETTEXTEXTENT; brak dowodu = brak claimu równości).
+ * font_glyph_to_surface (LIVE w gfx_indexed.c, AJ1) — związek z
+ *   render_glyph?: bierze TIGHT bits z font_render_glyph (boot.c,
+ *   stride (w+7)/8, MSB-first) i expanduje każdy bit do indeksu 8-bit
+ *   (0 = black, 1 = white) + 2-entry paleta w SDL_Surface. NIE bierze
+ *   surowych font_fnt_bits (source stride (max+7)/8) — ciasny repack
+ *   render_glyph jest jej kontraktem wejściowym; row locating
+ *   font_fnt_row_ptr (boot.h) operuje na surowym stride.
+ * OS-free pętla ellipsis poniżej jest LIVE 1:1 z measure-callbackiem
+ * (= strona GETTEXTEXTENT, FNT-strona via font_text_width); GDI ogony
+ * zostają STUB. No Win16, no globals, read-only poza buf. */
+
+/* Orig Text_FontPreApply @ 1098:0186 -> text_font_pre_apply. Empty far
+ * stub port (dispatch-tail hook, guard DAT_1420_b384 != 0 caller-side).
+ * NOOP void (jak cursor_set). */
+void text_font_pre_apply(void);
+
+/* Orig Text_FontPostApply @ 1098:0194 -> text_font_post_apply. Same empty
+ * stub shape (dispatch-tail hook with 0x45cb, guard caller-side). NOOP. */
+void text_font_post_apply(void);
+
+/* Orig Text_FitPascalEllipsis @ 1098:0000 -> text_fit_pascal_ellipsis.
+ * 1:1 truncate loop on a C string: w = measure(buf); if (max < w):
+ * while (len > 0 && max < measure+4) drop last char; strip trailing
+ * spaces; append single '.' + NUL. measure = GETTEXTEXTENT side
+ * (FNT side: font_text_width, see boot.h). NULL buf/measure -> NOENT;
+ * cap == 0 -> TRUNCATED; fits -> CIV_OK untouched; no room for dot+NUL
+ * -> TRUNCATED (orig assumed room in the far buffer). Empty input fits
+ * to "." when max < measure (orig writes the dot even at len 0). */
+civ_error_t text_fit_pascal_ellipsis(char *buf, size_t cap, int max_width,
+                                     int (*measure)(const char *s, void *ctx),
+                                     void *ctx);
+
+/* Orig Text_FitPascalEllipsisScaled @ 11d0:02e4 width half ->
+ * text_fit_scaled_width. 1:1 (w*16)/10 (inverse of text_measure_scaled).
+ * No clamp. No globals. */
+int text_fit_scaled_width(int w);
+
+/* Orig same driver -> text_fit_pascal_ellipsis_scaled. Forwards with
+ * max = text_fit_scaled_width(w). Same contracts as above. */
+civ_error_t text_fit_pascal_ellipsis_scaled(char *buf, size_t cap, int w,
+                                            int (*measure)(const char *s,
+                                                           void *ctx),
+                                            void *ctx);
 
 #endif /* CIVLIN_DIALOG_H */

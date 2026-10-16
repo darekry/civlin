@@ -1907,10 +1907,108 @@ civ_error_t text_draw_header_centered(const char *text, int x, int y,
 
 civ_error_t text_select_font(int id)
 {
-    /* TODO: Orig Text_SelectFont @ 1100:0a33 (wrapper DispatchFontHandler @
+    /* Orig Text_SelectFont @ 1100:0a33 (thin wrapper DispatchFontHandler @
      * 11e8:0b40) + LOGFONT install in the 0cb0 tail (DAT_1420_9960/+0x12,
      * DAT_1420_17cc/+0x28, 1098:0186/0194) -> SDL_ttf face select TBD.
-     * Table lives in text_font_slot/height_for_id above. */
-    (void)id;
+     * PARTIAL: id->(slot,h) validation is LIVE via text_dispatch_font
+     * (RANGE on unknown id, NOENT on NULL outs); the SELECTOBJECT/GDI
+     * install tail stays CIV_ERR_UNSUPPORTED. */
+    int slot = 0;
+    int h = 0;
+    civ_error_t err;
+
+    err = text_dispatch_font(id, &slot, &h);
+    if (err != CIV_OK)
+        return err;
+    (void)slot;
+    (void)h;
+    /* TODO: SDL_ttf face select for (slot, h) + Pre/PostApply bridge. */
     return CIV_ERR_UNSUPPORTED;
+}
+
+/* --- Chain 2026-10-16 (13): font pre/post tails + Pascal ellipsis (goals
+ * 3-5; civ.exe, x86:LE:16:Protected Mode, C17, no exit, no globals) --- */
+
+void text_font_pre_apply(void)
+{
+    /* Orig Text_FontPreApply @ 1098:0186: empty far stub (MOV AX,DS/NOP/
+     * INC BP/PUSH BP/MOV BP,SP/PUSH DS/MOV DS,AX/POP DS/POP BP/DEC BP/
+     * RETF — pure DS dance, no body). Called ONLY from the dispatch tail
+     * @ 11e8:0cb0 when DAT_1420_b384 != 0; no direct callers. NOOP. */
+}
+
+void text_font_post_apply(void)
+{
+    /* Orig Text_FontPostApply @ 1098:0194: same empty far stub shape as
+     * PreApply above. Called ONLY from the dispatch tail @ 11e8:0d0e as
+     * PostApply(0x45cb) when DAT_1420_b384 != 0 (after the SI stores to
+     * DAT_1420_9960/+0x12 and DAT_1420_17cc/+0x28); no direct callers.
+     * NOOP. */
+}
+
+civ_error_t text_fit_pascal_ellipsis(char *buf, size_t cap, int max_width,
+                                     int (*measure)(const char *s, void *ctx),
+                                     void *ctx)
+{
+    /* Orig Text_FitPascalEllipsis @ 1098:0000 measure/truncate loop 1:1 on
+     * a C string (orig packs a local Pascal copy, measures via
+     * Text_MeasurePascal @ 1100:00a1 = GETTEXTEXTENT on buf[0]/buf+1, then
+     * writes the single '.' + NUL back into the CALLER buffer at the
+     * truncated length; net caller-visible effect = truncate + "." ported
+     * here). Shape: w = measure(buf); if (max < w): bias local_6 = 4 for
+     * the dot; while (len > 0 && max < measure(buf)+4) len--; while
+     * (len > 0 && buf[len-1] == ' ') len--; buf[len] = '.', buf[len+1] = 0
+     * (single dot, NOT "..."). NULL buf/measure -> NOENT; cap == 0 ->
+     * TRUNCATED; empty/unfittable buf -> "." (orig writes the dot even at
+     * len 0); no room for dot+NUL -> TRUNCATED (orig far buffer assumed
+     * room; we bounds-check instead of faulting). measure == GETTEXTEXTENT
+     * side (FNT side = font_text_width in boot.h; consistency note in
+     * dialog.h chain-13). No globals, no exit(). */
+    size_t len = 0;
+
+    if (!buf || !measure)
+        return CIV_ERR_NOENT;
+    if (cap == 0u)
+        return CIV_ERR_TRUNCATED;
+    while (len < cap && buf[len] != '\0')
+        len++;
+    if (len >= cap)
+        return CIV_ERR_TRUNCATED;
+    if (max_width >= measure(buf, ctx))
+        return CIV_OK;
+    while (len > 0u && max_width < measure(buf, ctx) + 4) {
+        len--;
+        buf[len] = '\0';
+    }
+    while (len > 0u && buf[len - 1u] == ' ') {
+        len--;
+        buf[len] = '\0';
+    }
+    if (len + 1u >= cap)
+        return CIV_ERR_TRUNCATED;
+    buf[len] = '.';
+    buf[len + 1u] = '\0';
+    return CIV_OK;
+}
+
+int text_fit_scaled_width(int w)
+{
+    /* Orig Text_FitPascalEllipsisScaled @ 11d0:02e4 width half: 1:1
+     * (w*16)/10 — inverse of Text_MeasureWidth @ 10d8:05b8 (w*10)/0x10
+     * scale via text_measure_scaled. No clamp (negative stays negative
+     * and forces the ellipsis, like orig SI). No globals. */
+    return (w * 16) / 10;
+}
+
+civ_error_t text_fit_pascal_ellipsis_scaled(char *buf, size_t cap, int w,
+                                            int (*measure)(const char *s,
+                                                           void *ctx),
+                                            void *ctx)
+{
+    /* Orig Text_FitPascalEllipsisScaled @ 11d0:02e4 driver: forwards to
+     * Text_FitPascalEllipsis with max = (w*16)/10 (callers: census
+     * 1018:0be0/208f, FUN_1030_8d33, FUN_1188_0b3e, Pic_PlayShared
+     * @ 1030:0000). Same contracts as text_fit_pascal_ellipsis. */
+    return text_fit_pascal_ellipsis(buf, cap, text_fit_scaled_width(w),
+                                    measure, ctx);
 }

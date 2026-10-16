@@ -100,6 +100,13 @@ def classify(name, body):
         return "NOOP"
     if len(meat) == 1 and re.fullmatch(r"return\s+\w+\s*\(.*\)\s*;", meat[0]):
         return "LIVE"  # thin delegate to the real owner
+    if len(meat) == 1 and re.fullmatch(r"return\s+NULL\s*;", meat[0]):
+        return "STUB"  # pointer-stub with no UNSUPPORTED sentinel yet
+    if (any(re.fullmatch(r"return\s+NULL\s*;", ln) for ln in meat)
+            and all(re.fullmatch(r"return\s+NULL\s*;", ln)
+                    or ln.startswith("if") or ln in ("else", "else {")
+                    for ln in meat)):
+        return "STUB"  # guard + NULL returns only: unimplemented stub
     return "LIVE"
 
 

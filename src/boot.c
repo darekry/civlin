@@ -418,20 +418,73 @@ civ_error_t font_face_bitmap(const uint8_t *data, size_t len,
                              int *w_out, int *h_out,
                              const uint8_t **bits_out)
 {
-    /* Orig Font_EnumFamiliesInit @ 1008:0e99 FNT glyph side. Bounds are
-     * OS-free; raster needs dfBitsOffset + dfCharTable (per-char width
-     * and offset tables following the header) which are not yet decoded
-     * from the civfonts.fon faces, so the tail stays UNSUPPORTED (outs
-     * untouched). No SDL, no globals, no exit(), read-only. */
+    /* Orig Font_EnumFamiliesInit @ 1008:0e99 FNT glyph side. LIVE thin
+     * delegate to font_fnt_bits below (bounds + v2 dfCharTable width/file
+     * offset + sentinel length; v3 6-B entries stay UNSUPPORTED inside
+     * font_fnt_char_entry). Per-row locating lives in font_fnt_row_ptr
+     * (row_addr = bits + row*stride). No SDL, no globals, no exit(). */
     if (!data || !info || !w_out || !h_out || !bits_out)
         return CIV_ERR_NOENT;
     if (len < CIV_FNT_MIN_SIZE)
         return CIV_ERR_TRUNCATED;
-    if (c < (int)info->dfFirstChar || c > (int)info->dfLastChar)
+    return font_fnt_bits(data, len, info, c, bits_out, w_out, h_out);
+}
+
+/* Orig Font_EnumFamiliesInit @ 1008:0e99 FNT row locating (goal 2).
+ * Row address inside one glyph: row_addr = glyph_base + row * stride,
+ * where glyph_base = data + char_entry.offset (dfCharTable file offset),
+ * stride = (dfMaxWidth+7)/8 (source pitch, NOT dfWidthBytes which stays 2
+ * on disk; 2 B for max 13, 5 B for max 37), rows 0..dfPixHeight-1
+ * top-to-bottom (row 0 = top, row h-1 = bottom, no flipping), bit x of a
+ * row lives in row[x/8] MSB-first (bit 7 = leftmost, only the first
+ * `width` bits valid). OS-free 1:1 on borrowed bytes. No SDL, no globals,
+ * no exit(), read-only. */
+civ_error_t font_fnt_row_ptr(const uint8_t *data, size_t len,
+                             const font_fnt_info_t *info, int c, int row,
+                             const uint8_t **row_out)
+{
+    const uint8_t *bits = NULL;
+    int w_tmp = 0;
+    int h_tmp = 0;
+    unsigned stride;
+    civ_error_t err;
+
+    if (row_out)
+        *row_out = NULL;
+    if (!data || !info || !row_out)
+        return CIV_ERR_NOENT;
+    if (len < CIV_FNT_MIN_SIZE)
+        return CIV_ERR_TRUNCATED;
+    err = font_fnt_bits(data, len, info, c, &bits, &w_tmp, &h_tmp);
+    if (err != CIV_OK)
+        return err;
+    if (!bits || h_tmp <= 0)
+        return CIV_ERR_BAD_DATA;
+    if (row < 0 || row >= h_tmp)
         return CIV_ERR_RANGE;
-    /* TODO: locate glyph row via dfBitsOffset + dfCharTable (width table
-     * + offset table sized by dfLastChar-dfFirstChar+1, stride dfWidthBytes
-     * x dfPixHeight), then set w_out, h_out + bits_out into data. */
+    stride = ((unsigned)info->dfMaxWidth + 7u) / 8u;
+    if (stride == 0u)
+        return CIV_ERR_BAD_DATA;
+    *row_out = bits + (size_t)row * (size_t)stride;
+    return CIV_OK;
+}
+
+/* Orig Font_EnumFamiliesCallback @ 1008:0e12 slot-install side (goal 3).
+ * The callback installs one GDI face per ENUMFONTFAMILIES hit via
+ * CREATEFONTINDIRECT into DAT_1420_5484[DAT_12d8_0022++] (slot array freed
+ * in FUN_1008_062f over 0x1e entries; install happens once at boot inside
+ * Font_EnumFamiliesInit @ 1008:0e99, selection happens later per-draw via
+ * Text_SelectFont @ 1100:0a33 / Text_DispatchFontHandler @ 11e8:0b40).
+ * STUB: slot-range half is LIVE (0..0x1d valid, else RANGE), the
+ * CREATEFONTINDIRECT/ADDFONTRESOURCE GDI install has no Linux equivalent
+ * yet (bridge projekt: see boot.h chain-13, bundled-FNT raster first, no
+ * fontconfig, no TTF here) -> CIV_ERR_UNSUPPORTED. No globals, no exit(). */
+civ_error_t font_install_slot(int slot)
+{
+    if (slot < 0 || slot >= 0x1e)
+        return CIV_ERR_RANGE;
+    /* TODO: CREATEFONTINDIRECT install into the face-slot table
+     * (DAT_1420_5484 image) + ADDFONTRESOURCE(CIV_FONT_FILE) bridge. */
     return CIV_ERR_UNSUPPORTED;
 }
 

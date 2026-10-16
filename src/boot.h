@@ -300,12 +300,10 @@ civ_error_t font_fnt_parse(const uint8_t *data, size_t len,
                             font_fnt_info_t *out);
 
 /* Orig Font_EnumFamiliesInit @ 1008:0e99 FNT glyph side -> font_face_bitmap.
- * FNT glyph row for char c: reports width/height + row bits on borrowed
- * bytes (no copy, read-only). Bounds OS-free: NULL data/info/outs ->
- * NOENT; len < CIV_FNT_MIN_SIZE -> TRUNCATED; c outside
- * [dfFirstChar, dfLastChar] -> RANGE. Stub: TODO needs dfBitsOffset +
- * dfCharTable (per-char width + offset tables) to locate the glyph bytes,
- * so the raster tail stays CIV_ERR_UNSUPPORTED (outs untouched). */
+ * LIVE thin delegate to font_fnt_bits (bounds + v2 dfCharTable width/file
+ * offset + sentinel glyph length; v3 6-B entries stay UNSUPPORTED inside
+ * font_fnt_char_entry). Per-row locating lives in font_fnt_row_ptr below
+ * (row_addr = bits + row*stride). */
 civ_error_t font_face_bitmap(const uint8_t *data, size_t len,
                              const font_fnt_info_t *info, int c,
                              int *w_out, int *h_out,
@@ -430,6 +428,69 @@ int font_fnt_stride(int max_width);
  * font_fnt_glyph_len. 1:1 next_off - off (np. 30 B dla twarzy 15-px,
  * 190 B dla TIMES36). -1 gdy next_off <= off. No globals. */
 int font_fnt_glyph_len(int off, int next_off);
+
+/* --- Chain 2026-10-16 (13): ENUM order + row locating + TTF bridge projekt
+ * (goals 1-3; civ.exe, x86:LE:16:Protected Mode, C17, no exit, no globals) ---
+ * Anchors, renamed this pass (Ghidra plates carry the shape):
+ *   Font_EnumFamiliesCallback @ 1008:0e12 (was ENUMFUNC: MAKEPROCINSTANCE
+ *     target from Font_EnumFamiliesInit @ 1008:0e99; if (dwType & 1):
+ *     facename match via FUN_1000_3744(+0x12, 0x11b, mode 3), on match
+ *     CREATEFONTINDIRECT into DAT_1420_5484[DAT_12d8_0022++] with +0xf
+ *     mark; always Font_EnumFamiliesCallbackTail @ 1008:09d3; returns 1).
+ *   Font_EnumFamiliesCallbackTail @ 1008:09d3 (was FUN_1008_09d3: empty
+ *     far stub, sole caller is the callback above; purpose TBD).
+ *   ADDFONTRESOURCE side: no CALLF xref in the disasm (import
+ *     EXTERNAL:0000008c present, REMOVEFONTRESOURCE(0xfe) confirmed in
+ *     WinMain_Shutdown @ 1008:0329 against "civfonts.fon" @ 1420:00fe);
+ *     the install is the CREATEFONTINDIRECT slot fill above at boot, the
+ *     remove is the shutdown tail. Slot array DAT_1420_5484 holds 0x1e
+ *     entries (FUN_1008_062f frees 0x1e); counter DAT_12d8_0022.
+ * Kiedy install (boot? pierwszy Text_SelectFont?): install = raz przy
+ *   bocie w Font_EnumFamiliesInit (sole caller WinMain @ 1008:0000,
+ *   przed 5x ResMgr_LoadRsc @ 1190:0000); select = przy każdym rysowaniu
+ *   przez Text_SelectFont @ 1100:0a33 -> Text_DispatchFontHandler @
+ *   11e8:0b40 (slot DAT_12d8_0024 + SI height, ogon 11e8:0cb0), pierwszy
+ *   raz np. w Unit_ShowInfoPopup @ 11f0:468c (DispatchFontHandler(1)).
+ *   PreApply @ 1098:0186 / PostApply @ 1098:0194 to puste far stub-y
+ *   (sama gadanina DS + RETF), wołane WYŁĄCZNIE z ogona 11e8:0cb0 pod
+ *   strażą (Pre gdy DAT_1420_b384 != 0; Post gdy b384 != 0 z 0x45cb;
+ *   zapisy SI gdy DAT_1420_9960/17cc non-null) — brak callerów wprost.
+ * Kolejność ENUM vs fontdir strings: kanoniczna jest kolejność RT_FONT
+ *   w NE resource table (21 wpisów, fontdir w pliku 0x600, nazwy
+ *   CIVBABYLON..CIVTIMES36); ENUMFONTFAMILIES GDI może zwracać w innej
+ *   kolejności + callback filtruje (dwType&1, match FUN_1000_3744), więc
+ *   font_face_list zostaje STUB (NULL) aż kolejność ENUM-vs-fontdir
+ *   zostanie potwierdzona dumpem (nie zgadywać indeksów).
+ * Decyzja mostka TTF (projekt w komentarzu, BEZ implementacji TTF):
+ *   odrzucone: fontconfig/systemowe fonty (twarze to customowe rastry
+ *   z civfonts.fon, nie systemowe rodziny) oraz konwersja FNT->TTF
+ *   (utrata wierności metryk dfPixWidth/dfWeight/dfItalic). Wybrane:
+ *   (a) raster FNT jako kanoniczny (font_fnt_* LIVE 1:1 + row locating
+ *   poniżej), (b) ENUM = parse RT_FONT order + match jak callback,
+ *   slot-install = font_install_slot STUB, (c) viewer SDL_ttf dopiero
+ *   gdy raster SDL (font_glyph_to_surface, gfx_indexed.c) udowodni
+ *   spójność metryk z GETTEXTEXTENT (patrz dialog.h chain-13). Bez
+ *   bundled TTF, bez fontconfig, bez SDL_ttf w tym łańcuchu.
+ * OS-free row/slot poniżej: row LIVE 1:1, install STUB z LIVE walidacją
+ * zakresu (no Win16, no globals, read-only poza out). */
+
+/* Orig FNT row locating (dfCharTable offset + source pitch) ->
+ * font_fnt_row_ptr. 1:1 row_addr = glyph_base + row * stride
+ * (glyph_base via font_fnt_bits, stride = (dfMaxWidth+7)/8; wiersze
+ * 0..h-1 z góry na dół, bit x w row[x/8] MSB-first). NULL data/info/
+ * row_out -> NOENT (row_out zeroed); len < MIN -> TRUNCATED; v3/corrupt
+ * -> UNSUPPORTED/BAD_DATA (z font_fnt_bits); row OOR -> RANGE. No
+ * globals, no exit(), read-only (borrowed view, caller owns image). */
+civ_error_t font_fnt_row_ptr(const uint8_t *data, size_t len,
+                             const font_fnt_info_t *info, int c, int row,
+                             const uint8_t **row_out);
+
+/* Orig Font_EnumFamiliesCallback @ 1008:0e12 slot-install side ->
+ * font_install_slot. STUB: slot 0..0x1d (array DAT_1420_5484, 0x1e per
+ * FUN_1008_062f) LIVE-validated, < 0 / >= 0x1e -> RANGE; GDI
+ * CREATEFONTINDIRECT/ADDFONTRESOURCE install -> CIV_ERR_UNSUPPORTED
+ * (mostek wg projektu powyżej). No globals, no exit(). */
+civ_error_t font_install_slot(int slot);
 
 /* Orig Menu_InitMainBar @ 1048:0000 string side -> menu_strings.
  * OS-free static const port (const char * array, no Win16 USER handles,

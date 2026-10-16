@@ -109,9 +109,11 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `font_fon_u32le` | LIVE |  |  |
 | `font_fon_parse` | LIVE | 1008:0e99, 1420:00a4 |  |
 | `font_face_count` | LIVE | 1008:0e99 |  |
-| `font_face_list` | LIVE | 1008:0e99 |  |
+| `font_face_list` | STUB | 1008:0e99 | has TODO |
 | `font_fnt_parse` | LIVE | 1008:0e99 |  |
-| `font_face_bitmap` | PARTIAL | 1008:0e99 | has TODO |
+| `font_face_bitmap` | LIVE | 1008:0e99 |  |
+| `font_fnt_row_ptr` | LIVE |  |  |
+| `font_install_slot` | STUB | 1008:0e12 | has TODO |
 | `font_fnt_char_entry` | PARTIAL | 1008:0e99 | has TODO |
 | `font_fnt_bits` | LIVE | 1008:0e99 |  |
 | `font_render_glyph` | LIVE | 1008:0e99 |  |
@@ -130,7 +132,7 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `config_prefs_defaults` | LIVE | 1008:0b4a, 1008:0bbf, 1150:00c9, 12d0:0064 |  |
 | `config_prefs_sounds_on` | LIVE |  |  |
 | `boot_video_caps_count` | LIVE | 1008:059a, 1420:0af4 |  |
-| `boot_video_caps_describe` | LIVE |  |  |
+| `boot_video_caps_describe` | STUB |  |  |
 
 ### `src/civ_common.c`
 
@@ -272,7 +274,12 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `text_draw_direct` | STUB | 10d8:00e0, 1100:0000, 1100:017b | has TODO |
 | `text_draw_centered` | STUB | 10d8:0528, 10d8:05b8 | has TODO |
 | `text_draw_header_centered` | STUB | 10d8:046e, 10d8:0495 | has TODO |
-| `text_select_font` | STUB | 1098:0186, 1100:0a33, 11e8:0b40 | has TODO |
+| `text_select_font` | PARTIAL | 1008:0e12, 1098:0186, 1098:0194, 1100:0a33, 11e8:0b40, 11e8:0cb0 | has TODO |
+| `text_font_pre_apply` | NOOP | 1098:0186, 11e8:0cb0 |  |
+| `text_font_post_apply` | NOOP | 1098:0194, 11e8:0d0e |  |
+| `text_fit_pascal_ellipsis` | LIVE | 1098:0000, 1100:00a1 |  |
+| `text_fit_scaled_width` | LIVE | 10d8:05b8, 11d0:02e4 |  |
+| `text_fit_pascal_ellipsis_scaled` | LIVE | 1018:0be0, 1030:0000, 11d0:02e4 |  |
 
 ### `src/game.c`
 
@@ -662,7 +669,7 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `newgame_civ_count_from_index` | LIVE | 12d8:3b9a |  |
 | `newgame_alive_mask` | LIVE | 12d8:42f8 |  |
 | `newgame_pick_tribe` | STUB | 10e8:0000, 11f8:0080, 1220:0156, 12d8:4300, 1420:2ad2, 1420:2ae5 | has TODO |
-| `tribe_get_name_list` | LIVE | 10e8:0000, 10e8:2d46, 1100:078a, 11f8:0080, 1420:2ad2, 1420:2ae5 |  |
+| `tribe_get_name_list` | STUB | 10e8:0000, 10e8:2d46, 1100:078a, 11f8:0080, 1420:2ad2, 1420:2ae5 |  |
 | `newgame_customize_world` | STUB | 1058:06ab, 1058:081a, 1058:0921, 1058:09f6, 10e8:0000, 1220:0156, 1220:16fd | has TODO |
 | `newgame_custom_world_modal` | STUB | 1058:06ab, 1220:0156, 1220:16fd | has TODO |
 | `newgame_finalize` | PARTIAL | 1028:0000, 10e8:0000, 1150:00c9, 12d8:3b9a, 12d8:42f6, 12d8:42f8, 12d8:42fa, 12d8:4300 | has TODO |
