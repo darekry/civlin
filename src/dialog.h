@@ -1943,6 +1943,86 @@ int anim_advance_ret(long cur, long end);
  * hard stop instead of the far-pointer fault). No globals. */
 int anim_slot_should_step(long start, int per, int cur, long now);
 
+/* --- Chain 2026-10-16 (33): Anim opcode bodies — palette/slot/caption/
+ * dissolve phases (critical path, goal: engine 1..0xe) ---
+ * Orig Anim_AdvanceFrames @ 10b0:0461 case bodies (civ.exe,
+ * x86:LE:16:Protected Mode), decompiled 2026-10-16 (GLOBALLOCK/GfxPort/
+ * Art/ResMgr tails stay in the anim_advance_frames STUB above; the 11/0xe
+ * period half is already LIVE as anim_tick_is_due, mono caller-side).
+ * OS-free halves below are LIVE 1:1 on explicit params (no Win16, no
+ * globals, read-only except caller-owned palette outs, no exit(), C17).
+ * Palette entries are 4 B (RGBA-ish, alpha kept/copied verbatim like
+ * Anim_BlendSlotFrame @ 10a8:0228, see anim_slot_blend). */
+
+/* Orig case 2 palette-blob select (p9 == 0x81 -> blob @ 0x12b0005a, 0x82
+ * -> 0x12b00082, 0x85 -> 0x12b0006e) -> anim_pal_src_for. 1:1 0x81 -> 0,
+ * 0x82 -> 1, 0x85 -> 2, else -1 (caller picks the blob bytes; blob
+ * contents TBD from dump). */
+int anim_pal_src_for(int code);
+
+/* Orig case 1 fade-zero fill (for i in [p9,p10): pal[i*4+0..2] = 0,
+ * pal[i*4+3] = 1, then Palette_AnimateRange) -> anim_pal_fade_zero. 1:1
+ * zero-fill entries [first,last) with (0,0,0,1). NULL pal -> NOENT;
+ * first < 0 / last > (int)cap_entries / first >= last -> RANGE; else
+ * CIV_OK (orig unbounded far write; here capped). */
+civ_error_t anim_pal_fade_zero(uint8_t *pal, size_t cap_entries, int first,
+                               int last);
+
+/* Orig case 2 palette-set copy (for i in [0,n): dst[(i+off)*4..+4] =
+ * src[i*4..+4], u32 entries) -> anim_pal_copy. 1:1 n-entry copy to
+ * dst_off. NULL dst/src -> NOENT; n < 0 / dst_off < 0 / dst_off + n >
+ * dst_cap / n > src_cap -> RANGE; n == 0 -> CIV_OK (no-op).
+ * GLOBALLOCK/AnimateRange tails stay caller-side. */
+civ_error_t anim_pal_copy(uint8_t *dst, size_t dst_cap, int dst_off,
+                           const uint8_t *src, size_t src_cap, int n);
+
+/* Orig cases 3/4 slot lifecycle (start == cur -> Alloc, needs_store
+ * caller-side; end == cur && slot -> Step + Free + clear; slot &&
+ * middle -> Step; else nothing) -> anim_slot_phase. 1:1
+ * ANIM_SLOTPH_ALLOC / FINISH / STEP / NONE below. */
+#define ANIM_SLOTPH_NONE 0
+#define ANIM_SLOTPH_ALLOC 1
+#define ANIM_SLOTPH_STEP 2
+#define ANIM_SLOTPH_FINISH 3
+int anim_slot_phase(long start, long end, long cur, int has_slot);
+
+/* Orig case 7 caption flag bits (0x100 = palette apply on start-tick,
+ * 0x200 = alt-port palette path, 0x400 = force draw every tick, 0x800 =
+ * alt-palette copy path). */
+#define ANIM_CAPF_PALETTE_APPLY 0x100
+#define ANIM_CAPF_ALT_PORT 0x200
+#define ANIM_CAPF_FORCE 0x400
+#define ANIM_CAPF_ALT_PAL 0x800
+
+/* Orig case 7 draw/undraw branch ((start == cur || flags & 0x400) ->
+ * draw; else end == cur -> undraw; else nothing) -> anim_caption_phase.
+ * 1:1 ANIM_CAPPH_DRAW / UNDRAW / NONE below (draw wins ties). */
+#define ANIM_CAPPH_NONE 0
+#define ANIM_CAPPH_DRAW 1
+#define ANIM_CAPPH_UNDRAW 2
+int anim_caption_phase(long start, long end, long cur, int flags);
+
+/* Orig case 7 palette-apply gate ((start == cur) && (flags & 0x100) ->
+ * MainPort_ApplyPalette) -> anim_caption_needs_palette. 1:1 nonzero (1)
+ * when start == cur and (flags & ANIM_CAPF_PALETTE_APPLY) != 0. */
+int anim_caption_needs_palette(long start, long cur, int flags);
+
+/* Orig case 7 text-source select (text ptr == "PicDecompress..." magic +
+ * 0x19 -> Util_StrCopy path, else ResMgr_GetString @ 1100:078a) ->
+ * anim_caption_is_custom. 1:1 nonzero (1) when is_magic != 0 (caller
+ * compares the pointer). */
+int anim_caption_is_custom(int is_magic);
+
+/* Orig cases 12/13 dissolve lifecycle (mono == 0 && start == cur ->
+ * Setup; end == cur -> Step + Present + FreeDissolve + clear; else Step
+ * + Present; ClearActive tails caller-side) -> anim_dissolve_phase. 1:1
+ * ANIM_DIZPH_SETUP / FINISH / STEP below (setup wins ties).
+ * mono = DAT_12d8_28fc. */
+#define ANIM_DIZPH_STEP 0
+#define ANIM_DIZPH_SETUP 1
+#define ANIM_DIZPH_FINISH 2
+int anim_dissolve_phase(long start, long end, long cur, int mono);
+
 /* --- Chain 2026-10-16 (25): MenuZ modes + tracked IDs (task goal 4) ---
  * Orig Dialog_MenuZ_Modal @ 1220:0156 (civ.exe, x86:LE:16:Protected Mode),
  * decompiled this pass (shared modal MainMenu + kazdy NewGame_Wizard step):
@@ -2522,5 +2602,74 @@ int dialog_menuz_id_is_valid(int button_id, int count);
  * (sibling of dialog_frame3d_layers/dialog_refresh_view_count constants).
  * No globals. */
 int text_shadow_passes(void);
+
+/* --- Chain 2026-10-16 (33): tracked/MenuZ/help/res/diplo/split consts+gates.
+ * Orig (civ.exe, x86:LE:16:Protected Mode), 1:1 OS-free ports of pure
+ * constants/branches documented inside the STUB bodies below (no Win16, no
+ * globals, no exit(), read-only, C17). Handle/modal/GDI tails stay STUB with
+ * TODO Orig (dialog_menuz @ 1220:0156, dlg_create_tracked @ 1098:124f,
+ * dialog_open_help/help_open_topic @ 1160:xxxx, text_fill_res_string_list @
+ * 1098:1f4f, diplo_open_contact_dialog @ 1160:0000 + Diplo_ProcessTurn @
+ * 1168:0000, dialog_split_menu_text @ 1220:0000).
+ * Refs verified read-only 2026-10-16: unpacked/civ.exe strings
+ * ("MenuZ()  :  windows.c" + "Can't initialize timer in MenuZ",
+ * "RanDoMRadio"/"RanDoMStatic"/"RanDoMUser", "civhelp.hlp",
+ * "End of Turn"/"Press Return") + unpacked/civhelp.hlp 72787 B
+ * (magic 3F 5F 03 00 + version 0x46, see help_hlp_system above). */
+#define CIV_DLG_MENUZ_TIMER_MS 100
+#define CIV_DIALOG_MENUZ_CANCEL -1
+#define CIV_DIPLO_TRIBUTE_UNIT 0x32
+
+/* Orig Dlg_CreateTracked @ 1098:124f ctx alloc (mem_alloc_lock 0x18 ctx +
+ * push HWND/ctx onto the tracked stack @ 1420:1ea0, count @ 1420:1ec8; see
+ * dlg_create_tracked STUB + CIV_DLG_TRACKED_CTX_SIZE 0x18) ->
+ * dlg_tracked_ctx_size. 1:1 0x18 (sibling of anim_seq_ctx_size 0xa6 +
+ * ANIM_SLOT_SIZE 0x14 + ANIM_DISSOLVE_CTX_SIZE 0x79c). No globals. */
+int dlg_tracked_ctx_size(void);
+
+/* Orig same palette copy (GETDC/SELECTPALETTE/REALIZEPALETTE, 0xec entries
+ * via Palette_CopyRange @ 1098:201d; see dlg_create_tracked STUB +
+ * CIV_DLG_TRACKED_PAL_COUNT 0xec) -> dlg_tracked_pal_count. 1:1 0xec.
+ * No globals. */
+int dlg_tracked_pal_count(void);
+
+/* Orig Dialog_MenuZ_Modal @ 1220:0156 timer (SETTIMER 100; 0 = 'Can't
+ * initialize timer in MenuZ' @ 1420:4a41 via FUN_1098_28e4; see
+ * dialog_menuz STUB) -> dialog_menuz_timer_ms. 1:1 100 (ms tick for the
+ * modal PEEKMESSAGE/ISDIALOGMESSAGE pump). No globals. */
+int dialog_menuz_timer_ms(void);
+
+/* Orig same modal cancel code (DAT_12b0_00a0 == -1 exit + DAT_1418_0004 =
+ * cancel/back, sibling of dialog_menuz_is_cancel; see dialog_menuz STUB)
+ * -> dialog_menuz_cancel_code. 1:1 -1. No globals. */
+int dialog_menuz_cancel_code(void);
+
+/* Orig dialog_open_help/help_open_topic @ 1160:xxxx topic gate (topic NULL
+ * = contents page, non-NULL = NUL-terminated topic/context id; see
+ * dialog_open_help STUB + help_open_topic wrapper) ->
+ * help_topic_is_contents. 1:1 nonzero (1) when topic == NULL, 0 otherwise.
+ * No globals, read-only (never writes civhelp.hlp). */
+int help_topic_is_contents(const char *topic);
+
+/* Orig Text_FillResStringList @ 1098:1f4f empty-stop (LSTRLEN empty check:
+ * first empty string returns NULL, else the tail cursor; see
+ * text_fill_res_string_list STUB + text_res_list_advance cursor half) ->
+ * text_res_list_is_stop. 1:1 nonzero (1) when entry_len == 0 (stop), 0
+ * otherwise. No globals. */
+int text_res_list_is_stop(int entry_len);
+
+/* Orig Diplo_ProcessTurn @ 1168:0000 tribute unit + Diplo_OpenContactDialog
+ * @ 1160:0000 difficulty/afford/mercenary/threat branches (clamp(..)*0x32,
+ * (gold/0x32)*0x32, see diplo_tribute_amount/diplo_contact_tribute_scaled/
+ * diplo_contact_afford_snap/diplo_mercenary_amount/diplo_threat_gold LIVE)
+ * -> diplo_tribute_unit. 1:1 0x32 (gold rounding/demand unit). No globals. */
+int diplo_tribute_unit(void);
+
+/* Orig Dialog_SplitMenuText @ 1220:0000 title default (*max_w =
+ * DAT_1418_000e, default 0x96 via the MenuZ exit reset; sibling of
+ * dialog_menu_title_base; see dialog_split_menu_text STUB +
+ * CIV_SPLIT_DEFAULT_W 0x96) -> dialog_split_default_w. 1:1 0x96.
+ * No globals. */
+int dialog_split_default_w(void);
 
 #endif /* CIVLIN_DIALOG_H */

@@ -2550,6 +2550,134 @@ int anim_slot_should_step(long start, int per, int cur, long now)
     return (want <= now) ? 1 : 0;
 }
 
+/* --- Chain 2026-10-16 (33): Anim opcode bodies (see dialog.h chain-33).
+ * OS-free 1:1 LIVE (no Win16, no globals, no exit(), C17). */
+
+int anim_pal_src_for(int code)
+{
+    /* Orig Anim_AdvanceFrames @ 10b0:0461 case 2 blob select (decompiled
+     * 2026-10-16: 0x81 -> 0x12b0005a, 0x82 -> 0x12b00082, 0x85 ->
+     * 0x12b0006e). */
+    if (code == 0x81)
+        return 0;
+    if (code == 0x82)
+        return 1;
+    if (code == 0x85)
+        return 2;
+    return -1;
+}
+
+civ_error_t anim_pal_fade_zero(uint8_t *pal, size_t cap_entries, int first,
+                               int last)
+{
+    /* Orig Anim_AdvanceFrames @ 10b0:0461 case 1 fill (decompiled
+     * 2026-10-16: for (i = p9; i < p10; i++) { pal[i*4+0..2] = 0;
+     * pal[i*4+3] = 1; }, then Palette_AnimateRange @ 1090:0376
+     * caller-side). */
+    int i;
+
+    if (!pal)
+        return CIV_ERR_NOENT;
+    if (first < 0 || (size_t)last > cap_entries || first >= last)
+        return CIV_ERR_RANGE;
+    for (i = first; i < last; i++) {
+        pal[(size_t)i * 4u + 0u] = 0u;
+        pal[(size_t)i * 4u + 1u] = 0u;
+        pal[(size_t)i * 4u + 2u] = 0u;
+        pal[(size_t)i * 4u + 3u] = 1u;
+    }
+    return CIV_OK;
+}
+
+civ_error_t anim_pal_copy(uint8_t *dst, size_t dst_cap, int dst_off,
+                           const uint8_t *src, size_t src_cap, int n)
+{
+    /* Orig Anim_AdvanceFrames @ 10b0:0461 case 2 copy (decompiled
+     * 2026-10-16: for (i = 0; rec[0xb] > i; i++) dst[(i + rec[10])*4..+4]
+     * = src[i*4..+4], u32 entries from the anim_pal_src_for blob). */
+    int i;
+
+    if (!dst || !src)
+        return CIV_ERR_NOENT;
+    if (n < 0 || dst_off < 0)
+        return CIV_ERR_RANGE;
+    if (n == 0)
+        return CIV_OK;
+    if ((size_t)dst_off + (size_t)n > dst_cap)
+        return CIV_ERR_RANGE;
+    if ((size_t)n > src_cap)
+        return CIV_ERR_RANGE;
+    for (i = 0; i < n; i++) {
+        dst[(size_t)(dst_off + i) * 4u + 0u] = src[(size_t)i * 4u + 0u];
+        dst[(size_t)(dst_off + i) * 4u + 1u] = src[(size_t)i * 4u + 1u];
+        dst[(size_t)(dst_off + i) * 4u + 2u] = src[(size_t)i * 4u + 2u];
+        dst[(size_t)(dst_off + i) * 4u + 3u] = src[(size_t)i * 4u + 3u];
+    }
+    return CIV_OK;
+}
+
+int anim_slot_phase(long start, long end, long cur, int has_slot)
+{
+    /* Orig Anim_AdvanceFrames @ 10b0:0461 cases 3/4 (decompiled
+     * 2026-10-16: start == cur -> Anim_AllocSlot @ 10a8:0000; end == cur
+     * && slot -> Step + Anim_FreeSlot @ 10a8:00b4 + clear; slot && middle
+     * -> Step; needs_store flag caller-side via anim_opcode_needs_store
+     * for the alloc tick). */
+    if (start == cur)
+        return ANIM_SLOTPH_ALLOC;
+    if (end == cur && has_slot != 0)
+        return ANIM_SLOTPH_FINISH;
+    if (has_slot != 0)
+        return ANIM_SLOTPH_STEP;
+    return ANIM_SLOTPH_NONE;
+}
+
+int anim_caption_phase(long start, long end, long cur, int flags)
+{
+    /* Orig Anim_AdvanceFrames @ 10b0:0461 case 7 (decompiled 2026-10-16:
+     * (start == cur || flags & 0x400) -> draw; else end == cur -> undraw
+     * (Present + ClearActive); Gfx_StoreDC both draw branches via
+     * anim_opcode_needs_store). */
+    if (start == cur || (flags & ANIM_CAPF_FORCE) != 0)
+        return ANIM_CAPPH_DRAW;
+    if (end == cur)
+        return ANIM_CAPPH_UNDRAW;
+    return ANIM_CAPPH_NONE;
+}
+
+int anim_caption_needs_palette(long start, long cur, int flags)
+{
+    /* Orig same case 7 head (decompiled 2026-10-16: (start == cur) &&
+     * (flags & 0x100) -> MainPort_ApplyPalette before the port/palette
+     * select). */
+    if (start != cur)
+        return 0;
+    return ((flags & ANIM_CAPF_PALETTE_APPLY) != 0) ? 1 : 0;
+}
+
+int anim_caption_is_custom(int is_magic)
+{
+    /* Orig same case 7 text select (decompiled 2026-10-16: text ptr ==
+     * magic + 0x19 -> Util_StrCopy @ 1000:36b2 path, else
+     * ResMgr_GetString @ 1100:078a). */
+    return (is_magic != 0) ? 1 : 0;
+}
+
+int anim_dissolve_phase(long start, long end, long cur, int mono)
+{
+    /* Orig Anim_AdvanceFrames @ 10b0:0461 cases 12/13 (decompiled
+     * 2026-10-16: mono == 0 && start == cur -> Anim_SetupDissolve @
+     * 10b0:151b (+0xc Present when *rec == 0xc caller-side); end == cur
+     * -> Step + Present + Anim_FreeDissolve @ 10b0:172d + clear; else
+     * Step + Present; 0x8000 bit in p9 gates the finish Present
+     * caller-side). */
+    if (mono == 0 && start == cur)
+        return ANIM_DIZPH_SETUP;
+    if (end == cur)
+        return ANIM_DIZPH_FINISH;
+    return ANIM_DIZPH_STEP;
+}
+
 /* --- Chain 2026-10-16 (25): MenuZ modes + tracked IDs (goal 4). ---
  * See dialog.h block. OS-free 1:1 LIVE (no Win16, no globals, no exit()).
  * PEEKMESSAGE/ISDIALOGMESSAGE pump + CREATEWINDOW radio fan-out stay STUB
@@ -3156,4 +3284,75 @@ int text_shadow_passes(void)
     /* Orig Text_DrawAligned @ 1098:0ed1: shadow TEXTOUT x3, then the main
      * TEXTOUT (gate in text_needs_shadow). */
     return 3;
+}
+
+/* --- Chain 2026-10-16 (33): tracked/MenuZ/help/res/diplo/split consts+gates.
+ * See dialog.h block. OS-free 1:1 LIVE (no Win16, no globals, no exit()).
+ * Win16/GDI/USER tails stay CIV_ERR_UNSUPPORTED / WIN16_MSG_DEFAULT with
+ * TODO Orig in the STUBs above (dialog_menuz @ 1220:0156, dlg_create_tracked
+ * @ 1098:124f, dialog_open_help/help_open_topic @ 1160:xxxx,
+ * text_fill_res_string_list @ 1098:1f4f, diplo_open_contact_dialog @
+ * 1160:0000, dialog_split_menu_text @ 1220:0000). */
+
+int dlg_tracked_ctx_size(void)
+{
+    /* Orig Dlg_CreateTracked @ 1098:124f: mem_alloc_lock 0x18 ctx (see
+     * CIV_DLG_TRACKED_CTX_SIZE + dlg_create_tracked STUB). */
+    return CIV_DLG_TRACKED_CTX_SIZE;
+}
+
+int dlg_tracked_pal_count(void)
+{
+    /* Orig same: 0xec palette entries via Palette_CopyRange @ 1098:201d
+     * (see CIV_DLG_TRACKED_PAL_COUNT + dlg_create_tracked STUB). */
+    return CIV_DLG_TRACKED_PAL_COUNT;
+}
+
+int dialog_menuz_timer_ms(void)
+{
+    /* Orig Dialog_MenuZ_Modal @ 1220:0156: SETTIMER 100 (failure reports
+     * 'Can't initialize timer in MenuZ' @ 1420:4a41, windows.c; verified
+     * read-only via strings unpacked/civ.exe; see dialog_menuz STUB). */
+    return CIV_DLG_MENUZ_TIMER_MS;
+}
+
+int dialog_menuz_cancel_code(void)
+{
+    /* Orig same modal exit: DAT_12b0_00a0 == -1 means cancel/back (sets
+     * DAT_1418_0004; sibling gate in dialog_menuz_is_cancel; see
+     * dialog_menuz STUB). */
+    return CIV_DIALOG_MENUZ_CANCEL;
+}
+
+int help_topic_is_contents(const char *topic)
+{
+    /* Orig dialog_open_help/help_open_topic @ 1160:xxxx: topic NULL =
+     * contents page (WINHELP on CIV_HELP_FILE_NAME 'civhelp.hlp' with no
+     * topic; verified read-only via strings unpacked/civ.exe). */
+    return (topic == NULL) ? 1 : 0;
+}
+
+int text_res_list_is_stop(int entry_len)
+{
+    /* Orig Text_FillResStringList @ 1098:1f4f: LSTRLEN empty check stops
+     * the pack (returns NULL) on the first empty string (see
+     * text_fill_res_string_list STUB + text_res_list_advance). */
+    return (entry_len == 0) ? 1 : 0;
+}
+
+int diplo_tribute_unit(void)
+{
+    /* Orig Diplo_ProcessTurn @ 1168:0000 tribute demand + contact-dialog
+     * branches @ 1160:0000: gold amounts round to 0x32 units (see
+     * diplo_tribute_amount/diplo_contact_tribute_scaled/afford_snap/
+     * mercenary/threat_gold LIVE). */
+    return CIV_DIPLO_TRIBUTE_UNIT;
+}
+
+int dialog_split_default_w(void)
+{
+    /* Orig Dialog_SplitMenuText @ 1220:0000: non-empty title sets *max_w =
+     * DAT_1418_000e (default 0x96 via the MenuZ exit reset; sibling of
+     * dialog_menu_title_base; see dialog_split_menu_text STUB). */
+    return CIV_SPLIT_DEFAULT_W;
 }
