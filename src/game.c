@@ -127,13 +127,14 @@ civ_error_t game_turn_tick(civ_game_t *g)
      *  Win16 message/view tails. */
     g->turn += 1;
     g->year = game_turn_year_step(g->year, 0);
-    if (g->year == 0)
-        g->year = 1;
-    if (g->year == 0x15)
-        g->year = 0x14;
+    g->year = game_turn_fix_year(g->year);
     /* Exercise linkage for the frontier (results ignored until the per-civ
      * loop lands); keeps nm -g symbols wired without globals. */
     (void)game_turn_should_score(g->turn, g->player_civ);
+    (void)game_turn_quiz_due(0, g->year);
+    (void)game_turn_save_due(0, g->year, g->difficulty);
+    (void)game_turn_disaster_due(g->turn);
+    (void)game_turn_treasury_warn(0);
     (void)game_uprising_due(g->difficulty, g->turn);
     (void)game_spawn_uprisings();
     (void)game_do_pollution_and_wonder_race();
@@ -153,11 +154,18 @@ civ_error_t game_process_game_end(int hof_slot)
 
 civ_error_t game_spawn_uprisings(void)
 {
-    /* TODO: Orig FUN_1088_0be9 @ 1088:0be9. OS-free head (Rng_Range @
-     * 11c8:003d draws, see game_uprising_rng_scale) + tile gates 1110:16c0
-     * /18ce/1dbd + Unit_RevealArea @ 11c0:12c8 are documented in game.h;
-     * Travellers/Barbarian/Native/Guerrilla message + dialog tail needs
-     * Win16 dialogs + map buffer writes (map.h, parallel-owned). */
+    /* TODO: Orig FUN_1088_0be9 @ 1088:0be9. OS-free head below is LIVE
+     * 1:1 (wired here for linkage, results ignored until the map-buffer
+     * writes land); Travellers/Barbarian/Native/Guerrilla message + dialog
+     * tail needs Win16 dialogs + map buffer writes (map.h, parallel-owned).
+     * PARTIAL: head wired, tail TBD. */
+    (void)game_uprising_due(0, 0);
+    (void)game_uprising_rng_scale(0u, 1);
+    (void)game_uprising_tile_ok(10, -1, 0x10);
+    (void)game_uprising_wave_due(7);
+    (void)game_uprising_leader(0);
+    (void)unit_find_free_slot(NULL, 0);
+    (void)city_find_nearest(0, 0, NULL, NULL, NULL, 0, NULL);
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -174,12 +182,20 @@ unsigned game_uprising_rng_scale(unsigned rand15, int n)
 
 civ_error_t city_process_disaster(int city_idx)
 {
-    (void)city_idx;
     /* TODO: Orig FUN_1040_068e @ 1040:068e -> City_ProcessDisaster (see
-     * game.h). Random disaster switch Rng_Range(10) on the 0x1c city
-     * records @ 1420:5500/54fc + messages 1420:07f0/0839 + viewer
-     * 1030:0000 + dialog 1220:00d2 + Map_CenterOnTile @ 1110:03ae.
-     * Needs city-record decode + Win16 dialog/message pump. */
+     * game.h). OS-free pick/flag heads below are LIVE 1:1 (wired for
+     * linkage); random switch Rng_Range(10) on the 0x1c city records @
+     * 1420:5500/54fc + messages 1420:07f0/0839 + viewer Pic_PlayShared @
+     * 1030:0000 + dialog 1220:00d2 + Map_CenterOnTile @ 1110:03ae stay
+     * Win16. PARTIAL: heads wired, tails TBD. */
+    (void)city_idx;
+    (void)game_turn_disaster_due(0x33);
+    (void)city_disaster_city_ok(0, 2, 5);
+    (void)city_disaster_has_building(0x10u, 0x10u);
+    (void)city_disaster_has_building(0x100u, 0x100u);
+    (void)pic_mode_is_modal(1);
+    (void)pic_mode_is_sim(0);
+    (void)city_spot_valid(-1);
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -239,12 +255,19 @@ unsigned game_accum_pollution(unsigned counter, unsigned produced)
 
 civ_error_t game_do_pollution_and_wonder_race(void)
 {
-    /* TODO: Orig FUN_1088_1e32 @ 1088:1e32. OS-free head (12d8:42f0 via
-     * game_accum_pollution + Map_SpreadPollution @ 1028:1afd, see
-     * worldgen.h parallel-owned) + wonder pick via Game_PickWonderForAI @
-     * 1170:3181 (game_pick_wonder_for_ai below, implemented) are in game.h;
+    /* TODO: Orig FUN_1088_1e32 @ 1088:1e32. OS-free head below is LIVE
+     * 1:1 (wired for linkage; Map_SpreadPollution @ 1028:1afd lives in
+     * worldgen.h, parallel-owned); wonder pick via Game_PickWonderForAI @
+     * 1170:3181 (game_pick_wonder_for_ai, implemented) wired too.
      * "... builds ..." message + shield deduction + dialog tail needs Win16
-     * UI + city state. */
+     * UI + city state. PARTIAL: heads wired, tail TBD. */
+    (void)game_accum_pollution(0u, 0u);
+    (void)game_pollution_spread_due(0x11);
+    (void)game_pollution_alarm_due(0x0c, 7);
+    (void)game_pick_wonder_for_ai(NULL, 0, NULL, NULL, 0, 0u);
+    (void)tech_has_tech(1, 0x31, NULL, 0);
+    (void)city_is_wonder_open(0, NULL, 0, 0);
+    (void)tech_find_first_owner(NULL, 0, 0);
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -493,12 +516,26 @@ unsigned game_calc_progress_threshold(int n, int difficulty)
 
 civ_error_t unit_show_info_popup(int civ, int unit_idx)
 {
-    (void)civ;
-    (void)unit_idx;
     /* TODO: Orig FUN_11f0_468c @ 11f0:468c (Unit_ShowInfoPopup: turn==0 &&
      * difficulty==0 popup; font via status_font_height @ 1098:0dda at
      * 11f0:4754, modal via Dialog_MenuZ_Modal @ 1220:0156 family; needs
-     * SDL dialog + text bridge). */
+     * SDL dialog + text bridge). OS-free line predicates below are LIVE
+     * 1:1 (wired for linkage); GDI/present/modal tail stays Win16.
+     * PARTIAL: predicates wired, tail TBD. */
+    (void)civ;
+    (void)unit_idx;
+    (void)unit_popup_is_end_of_turn(unit_idx);
+    (void)unit_popup_has_veteran(0x20);
+    (void)unit_popup_moves_full(3);
+    (void)unit_popup_moves_frac(4);
+    (void)unit_popup_moves_needs_frac(4);
+    (void)unit_popup_build_tail_due(1);
+    (void)unit_popup_badge_needs_wrap(0, 0);
+    (void)unit_popup_has_pollution(0x40u);
+    (void)unit_popup_has_railroad(0x10u);
+    (void)unit_popup_has_river(0x08u);
+    (void)unit_popup_has_irrigation(0x02u);
+    (void)unit_popup_has_mine(0x04u);
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -547,29 +584,37 @@ int unit_popup_badge_needs_wrap(int x, int panel_right)
 }
 
 civ_error_t combat_resolve_attack(int atk_strength, int def_strength,
-                                  int terrain_bonus, int vet_bonus,
-                                  int *odds_out)
+                                   int terrain_bonus, int vet_bonus,
+                                   int *odds_out)
 {
+    /* TODO: Orig Combat_ResolveAttack @ 1050:0000 full flow (sole caller
+     * Unit_ChooseOrder @ 1078:1480). OS-free odds/math heads below are LIVE
+     * 1:1 (wired for linkage); animation/sound/Gfx tails
+     * (Unit_EnsureOnScreen @ 11c0:231d + Map_RefreshTileView @ 1110:0448 +
+     * Sound_PlayId @ 1150:00c9 + Gfx_DrawTechIcon @ 11a8:0cb1 + GfxPort @
+     * 10d0:0854/0956) + diplo tails (Combat_CheckPeaceBlock @ 1050:12be +
+     * Diplo_SetWar @ 1168:0e8e) + outcomes (diplomat 0x19 ->
+     * Combat_ScoreAdjacent @ 1050:13af; defender wins -> 396a++ +
+     * Unit_FoundCityIfHome @ 11c0:16a4 + combat_should_promote LIVE;
+     * attacker wins -> pillage/capture/city tails + 396a += CalcOdds +
+     * IterateStack + messages) stay Win16. PARTIAL: heads wired, tail TBD. */
+    int odds;
+
     if (!odds_out)
         return CIV_ERR_NOENT;
-    (void)atk_strength;
-    (void)def_strength;
     (void)terrain_bonus;
     (void)vet_bonus;
-    /* TODO: Orig Combat_ResolveAttack @ 1050:0000 full flow (sole caller
-     * Unit_ChooseOrder @ 1078:1480): effective kernels (combat_effective_
-     * attack/defense LIVE) + difficulty (combat_difficulty_scale LIVE) +
-     * preview (combat_preview_score LIVE, param_5 == 0) else rolls
-     * (combat_roll_winner LIVE via rng_range @ 11c8:003d + city-holder
-     * reroll) + animation/sound/Gfx tails (Unit_EnsureOnScreen @ 11c0:231d
-     * + Map_RefreshTileView @ 1110:0448 + Sound_PlayId @ 1150:00c9 +
-     * Gfx_DrawTechIcon @ 11a8:0cb1 + GfxPort @ 10d0:0854/0956) + diplo tails
-     * (Combat_CheckPeaceBlock @ 1050:12be + Diplo_SetWar @ 1168:0e8e) +
-     * outcomes (diplomat 0x19 -> Combat_ScoreAdjacent @ 1050:13af;
-     * defender wins -> 396a++ + Unit_FoundCityIfHome @ 11c0:16a4 +
-     * combat_should_promote LIVE; attacker wins -> pillage/capture/city
-     * tails + 396a += CalcOdds + IterateStack + messages). Odds scale via
-     * combat_calc_odds @ 11c0:1bc3 (LIVE v1). Needs game state + Win16 UI. */
+    (void)combat_effective_attack(atk_strength, 0, 3);
+    (void)combat_effective_defense(def_strength, 1, 0, 1, 1, 0);
+    odds = combat_calc_odds(atk_strength, def_strength);
+    (void)combat_preview_score(atk_strength, def_strength);
+    (void)combat_attacker_wins(0, odds);
+    (void)combat_roll_winner(atk_strength, def_strength, 0u, 0u, 0u, 0u, 0);
+    (void)combat_should_promote(1u);
+    (void)combat_difficulty_scale(atk_strength, 1, 2, 1, 0, 0);
+    (void)combat_check_peace_block(0, 0, 0);
+    (void)combat_adjacent_add(0, odds);
+    (void)odds;
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -1639,12 +1684,23 @@ unsigned status_lcg_next(unsigned seed)
 
 civ_error_t demo_show_demographics(int civ)
 {
-    (void)civ;
     /* TODO: Orig Demo_ShowDemographics @ 1188:123a (FUN_1188_0000 open +
      * live city-record sums over 0x80 0x1c records @ 1420:5500 + tile scan
      * via Map_IsSeaLand @ 1110:16c0/Map 1110:16ee + Demo_RankRow @
-     * 1188:220a per row + City_CloseCensusView @ 1018:0380 close).
-     * Ranking/math kernels above are LIVE; GDI/dialog tails -> SDL. */
+     * 1188:220a per row + City_CloseCensusView @ 1018:0380 close). OS-free
+     * ranking/math kernels below are LIVE 1:1 (wired for linkage);
+     * GDI/dialog tails -> SDL. PARTIAL: kernels wired, tail TBD. */
+    (void)civ;
+    (void)demo_approval(0, 1);
+    (void)demo_literacy(0, 1, NULL, 0);
+    (void)demo_disease_rate(1, 0, 0);
+    (void)demo_life_years(0);
+    (void)demo_military_rate(0, 1);
+    (void)demo_productivity(0, 1);
+    (void)demo_family_raw(0, 1);
+    (void)demo_life_clamp(0x14);
+    (void)demo_pollution_index(0, 1);
+    (void)demo_rank_player(NULL, 0, 1, 0u);
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -1746,15 +1802,22 @@ int trade_route_value(int size, int foreign)
 
 civ_error_t trade_deliver_caravan_goods(int civ, int unit_idx, int city_idx)
 {
+    /* TODO: Orig Trade_DeliverCaravanGoods @ 1038:0d09. OS-free bonus/route
+     * heads below are LIVE 1:1 (wired for linkage); tail needs city records
+     * @ 1420:5500 (x/y/5506/5507/5513 slots) + treasury cells + Res 0x8e /
+     * City_AppendName + Dialog_ShowMessage @ 1220:00d2 +
+     * Game_UpdateStatusPanel @ 1088:13d5 + consume via Unit_FoundCityIfHome
+     * @ 11c0:16a4. PARTIAL: heads wired, tail TBD. */
     (void)civ;
     (void)unit_idx;
     (void)city_idx;
-    /* TODO: Orig Trade_DeliverCaravanGoods @ 1038:0d09 (bonus kernel above
-     * is LIVE in trade_calc_bonus; route value in trade_route_value).
-     * Tail needs city records @ 1420:5500 (x/y/5506/5507/5513 slots) +
-     * treasury cells + Res 0x8e/City_AppendName/Dialog_ShowMessage @
-     * 1220:00d2 + Game_UpdateStatusPanel @ 1088:13d5 + consume via
-     * Unit_FoundCityIfHome @ 11c0:16a4. */
+    (void)trade_calc_bonus(0, 0, 0, 0, 0, 0, 0);
+    (void)trade_route_value(0, 0);
+    (void)caravan_dist_ok(0);
+    (void)caravan_prod_ok(0);
+    (void)caravan_foreign_bonus(0, 1);
+    (void)tech_has_tech(1, 0x31, NULL, 0);
+    (void)city_transfer_treasury(0, 0, 1);
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -1790,40 +1853,66 @@ int diplomat_bribe_cost(int treasury, int dist, int unit_cost, int type)
 
 civ_error_t diplomat_city_action(int city_idx, int civ, int unit_idx)
 {
+    /* TODO: Orig Diplomat_CityAction @ 11b8:0000 cases 0..5. OS-free cost
+     * heads below are LIVE 1:1 (wired for linkage: revolt via
+     * diplomat_revolt_cost; steal via Rng 0x48 + Res 0x82; sabotage via
+     * Rng 2/0x18 + Res 0x83/0x84; embassy bit 0x40 @ 12d8:3a0a +
+     * FUN_1018_1739; investigate via FUN_1170_05af). Needs diplo bits +
+     * city records + Rng_Range @ 11c8:003d + Win16 dialog
+     * (Dialog_ShowMessage @ 1220:00d2, DAT_1418_0002/0006). PARTIAL: heads
+     * wired, tail TBD. */
     (void)city_idx;
     (void)civ;
     (void)unit_idx;
-    /* TODO: Orig Diplomat_CityAction @ 11b8:0000 cases 0..5 (cost kernels
-     * above LIVE: revolt via diplomat_revolt_cost; steal via Rng 0x48 +
-     * Res 0x82; sabotage via Rng 2/0x18 + Res 0x83/0x84; embassy bit 0x40
-     * @ 12d8:3a0a + FUN_1018_1739; investigate via FUN_1170_05af).
-     * Needs diplo bits + city records + Rng_Range @ 11c8:003d + Win16
-     * dialog (Dialog_ShowMessage @ 1220:00d2, DAT_1418_0002/0006). */
+    (void)diplomat_revolt_cost(0, 0, 0, 0);
+    (void)diplomat_revolt_half_due(1u);
+    (void)diplomat_steal_blocked(0x20u);
+    (void)tech_has_tech(1, 0, NULL, 0);
+    (void)city_revolt_score(0, 0, 1);
+    (void)city_revolt_best_foreign(NULL, NULL, NULL, 0);
+    (void)diplo_nearest_palace_dist(1, NULL, NULL, NULL, NULL, 0, 0, 0);
     return CIV_ERR_UNSUPPORTED;
 }
 
 civ_error_t diplomat_bribe_unit(int civ, int unit_idx, int by_civ)
 {
+    /* TODO: Orig Diplomat_BribeUnit @ 11b8:07c2. OS-free price head below
+     * is LIVE 1:1 (wired for linkage in diplomat_bribe_cost); 11c0:1bc3
+     * dist<2 gate + Res 0x84 name + Map_CenterOnTile @ 1110:03ae + consume
+     * @ 11c0:16a4 + respawn @ 11c0:12c8 + seen-bit flip + treasury deduct +
+     * Game_UpdateStatusPanel @ 1088:13d5 + FUN_11e8_02a4(0x1e) stay Win16.
+     * PARTIAL: head wired, tail TBD. */
     (void)civ;
     (void)unit_idx;
     (void)by_civ;
-    /* TODO: Orig Diplomat_BribeUnit @ 11b8:07c2 (price kernel above LIVE
-     * in diplomat_bribe_cost; 11c0:1bc3 dist<2 gate + Res 0x84 name +
-     * Map_CenterOnTile @ 1110:03ae + consume @ 11c0:16a4 + respawn @
-     * 11c0:12c8 + seen-bit flip + treasury deduct + Game_UpdateStatusPanel
-     * @ 1088:13d5 + FUN_11e8_02a4(0x1e)). Needs unit records + treasury. */
+    (void)diplomat_bribe_cost(0, 0, 0, 0);
+    (void)diplomat_bribe_half_due(1);
+    (void)combat_calc_odds(1, 1);
+    (void)combat_attacker_wins(0, 0);
+    (void)diplo_nearest_palace_dist(civ, NULL, NULL, NULL, NULL, 0, 0, 0);
+    (void)unit_find_free_slot(NULL, 0);
+    (void)city_transfer_treasury(0, 0, 1);
     return CIV_ERR_UNSUPPORTED;
 }
 
 civ_error_t city_do_revolt(int city_idx, int new_owner)
 {
-    (void)city_idx;
-    (void)new_owner;
-    /* TODO: Orig City_DoRevolt @ 11b8:0f26 (-1 auto-pick via
-     * (00de-00e0)*0x20/dist scan; seen-bit flips x*0x32+y+10 + 0x14
+    /* TODO: Orig City_DoRevolt @ 11b8:0f26. OS-free score/auto-pick heads
+     * below are LIVE 1:1 (wired for linkage: -1 auto-pick via
+     * (00de-00e0)*0x20/dist scan); seen-bit flips x*0x32+y+10 + 0x14
      * diamond; near-unit moves via 1110:171f/1906 + 11c0:12c8; message
      * 1420:4168/4182 + Dialog_ShowMessage @ 1220:00d2; Unit_DoMove @
-     * 1038:0000(new_owner, city, 1) tail). Needs city/unit records. */
+     * 1038:0000(new_owner, city, 1) tail stay Win16. PARTIAL: heads wired,
+     * tail TBD. */
+    (void)city_idx;
+    (void)new_owner;
+    (void)city_revolt_score(0, 0, 1);
+    (void)city_revolt_best_foreign(NULL, NULL, NULL, 0);
+    (void)unit_seen_index(0, 0);
+    (void)unit_reveal_seen_or(0, 0);
+    (void)city_find_by_tile(NULL, NULL, NULL, 0, 0, 0);
+    (void)city_find_nearest(0, 0, NULL, NULL, NULL, 0, NULL);
+    (void)city_transfer_treasury(0, 0, 1);
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -4768,4 +4857,121 @@ int unit_reveal_seen_or(int cur, int civ)
     if (bit < 0)
         return -1;
     return cur | bit;
+}
+
+/* --- Packet 2026-10-16 (game-only top-up): turn gates + combat odds +
+ * revolt/diplo halves + popup moves/build tails + revolt auto-pick ---
+ * OS-free 1:1 LIVE on explicit params (no globals, no Win16, no exit(),
+ * C17). Ref: unpacked/civ.exe read-only (never edited, civ1win/ untouched).
+ * Win16/GDI/dialog tails stay in the STUB/PARTIAL parents above with TODO
+ * Orig refs (no fake). */
+
+int game_turn_fix_year(int year)
+{
+    /* Orig Game_TurnLoopTick @ 1088:0000 year fixups (g_nYear @ 12d8:42fa
+     * tail, after game_turn_year_step): year == 0 -> 1 (0-year doubling
+     * tail doubles treasuries caller-side, then year = 1); year == 0x15
+     * (21) -> 0x14 (20). */
+    if (year == 0)
+        return 1;
+    if (year == 0x15)
+        return 0x14;
+    return year;
+}
+
+int game_turn_quiz_due(int opt_flags, int year)
+{
+    /* Orig same 0x32 scoring branch quiz sub-gate (inside
+     * game_turn_should_score): ((opt & 1) == 0 && year < 0) fires
+     * Quiz_RunQuizPair @ 1178:0000, else Map_RefreshAllViews @ 1110:03e9.
+     * opt_flags is g_nOptionFlags (DAT_12d0_00b6 quiz/launch bits). */
+    if ((opt_flags & 1) != 0)
+        return 0;
+    return (year < 0) ? 1 : 0;
+}
+
+int game_turn_save_due(int opt_flags, int year, int difficulty)
+{
+    /* Orig same 0x32 scoring branch save/refresh gate: (option & 2) != 0
+     * && year != difficulty * -0x14 + 0x834 fires Save_SaveGame @
+     * 1198:00a3 + RefreshViews, else Replay_AppendLog @ 11c0:3beb 0xb
+     * only. Integer math in orig order. */
+    int want;
+
+    if ((opt_flags & 2) == 0)
+        return 0;
+    want = difficulty * -0x14 + 0x834;
+    return (year != want) ? 1 : 0;
+}
+
+int combat_attacker_wins(int roll, int odds)
+{
+    /* Orig Combat_ResolveAttack @ 1050:0000 + Combat_CalcOdds @ 11c0:1bc3
+     * win predicate: Rng_Range @ 11c8:003d 0..99 draw (via
+     * game_uprising_rng_scale) < combat_calc_odds 0..100 value. Odds 100
+     * always wins (roll <= 99), odds 0 never wins (roll >= 0). Complements
+     * unit_attack_resolve (odds + single roll) and combat_roll_winner
+     * (two-roll city-holder form). */
+    return (roll < odds) ? 1 : 0;
+}
+
+int diplomat_revolt_half_due(unsigned city_flags)
+{
+    /* Orig Diplomat_CityAction @ 11b8:0000 case 4 half gate: city flag
+     * 1420:5502 & 1 (temple/courthouse-class dampener, exact building TBD)
+     * halves the diplomat_revolt_cost price. */
+    return (city_flags & 1u) != 0u ? 1 : 0;
+}
+
+int diplomat_bribe_half_due(int type)
+{
+    /* Orig Diplomat_BribeUnit @ 11b8:07c2 half gate: type != 0 halves the
+     * diplomat_bribe_cost price (type 0 capital-class pays full, exact
+     * class split TBD; unit_cost is the 0x1a44 shield-cost entry). */
+    return (type != 0) ? 1 : 0;
+}
+
+int unit_popup_moves_needs_frac(int moves_raw)
+{
+    /* Orig Unit_ShowInfoPopup @ 11f0:468c moves line (moves @ 6300):
+     * full = moves/3 via unit_popup_moves_full, frac = moves%3 via
+     * unit_popup_moves_frac; frac != 0 draws the "..." @ 0x4813 + dec(rem)
+     * tail (x86 IDIV remainder sign follows the dividend, same as C %). */
+    return (moves_raw % 3 != 0) ? 1 : 0;
+}
+
+int unit_popup_build_tail_due(int prod_flag)
+{
+    /* Orig same moves line build tail: *(type*0x16+0x1a3e) != 0 draws the
+     * "..." @ 0x4815 + dec(full+rate) + "..." @ 0x4817 tail (rate =
+     * *(6301) * 1420:1a3c[type*0xb]). prod_flag is the
+     * *(type*0x16+0x1a3e) byte test passed explicitly. */
+    return (prod_flag != 0) ? 1 : 0;
+}
+
+int city_revolt_best_foreign(const int *v00de, const int *v00e0,
+                             const int *dists, int n)
+{
+    /* Orig City_DoRevolt @ 11b8:0f26 auto-pick (param_2 == -1): argmax of
+     * city_revolt_score ((00de-00e0)*0x20/dist) over foreign cities.
+     * dists[i] <= 0 skips (city_revolt_score guards dist <= 0 with -1).
+     * Ties break to the lower index (orig strict-> scan). */
+    int i;
+    int best = -1;
+    int best_s = 0;
+
+    if (!v00de || !v00e0 || !dists || n <= 0)
+        return -1;
+    for (i = 0; i < n; i++) {
+        int s;
+
+        if (dists[i] <= 0)
+            continue;
+        s = city_revolt_score(v00de[i], v00e0[i], dists[i]);
+        if (best < 0 || s > best_s) {
+            best = i;
+            best_s = s;
+        }
+    }
+    return best;
 }

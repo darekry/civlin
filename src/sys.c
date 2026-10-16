@@ -124,7 +124,9 @@ civ_error_t file_write_buffered(const uint8_t *src, size_t len)
     /* TODO: Orig FUN_1000_2e85 @ 1000:2e85 (File_WriteBuffered: Borland
      * buffered fwrite with 0x4e4e fd flags, 1420:4cd0 FILE struct, DOS
      * write via Dos_Write @ 1000:3fc4 INT 21h, overflow via File_EmitChar @
-     * 1000:2cba). Needs DOS fd table + stream struct. */
+     * 1000:2cba). Needs DOS fd table + stream struct. Live twin:
+     * file_write_chunk (fwrite, LIVE) + pure kernel
+     * file_buffered_is_direct (LIVE, no DOS). */
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -133,7 +135,9 @@ civ_error_t file_put_char_buffered(int c)
     (void)c;
     /* TODO: Orig FUN_1000_2cd8 @ 1000:2cd8 (File_PutCharBuffered: flag
      * 8/0x90/0x200 dispatch, flush via File_Flush @ 1000:2152, DOS via
-     * Dos_Write @ 1000:3fc4). Needs 1420:4cd0 stream + DOS. */
+     * Dos_Write @ 1000:3fc4). Needs 1420:4cd0 stream + DOS. Live twin:
+     * file_write_chunk single byte (fwrite, LIVE); pure kernels
+     * file_buffered_is_direct / file_is_text_mode (LIVE, no DOS). */
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -180,7 +184,7 @@ civ_error_t dos_map_error(int dos_code)
 int dos_map_error_lookup(int dos_code, int *out_e0010, int *out_e4e7a)
 {
     /* Orig Dos_MapError @ 1000:151a (decompiled 2026-10-16; table bytes
-     * @ 1420:4e7c read from civ.exe, 0x59 entries, all < 0x80 so the
+     * @ 1420:4e7c read from unpacked/civ.exe, 0x59 entries, all < 0x80 so the
      * orig (int)*(signed char *) extend is the identity). Note the
      * <= -0x31 fallthrough also clamps to 0x57: for negative input the
      * outer else-if is skipped, so control reaches `param_1 = 0x57`. */
@@ -274,7 +278,8 @@ civ_error_t dos_unlink(const char *path)
     if (!path)
         return CIV_ERR_NOENT;
     /* TODO: Orig FUN_1000_19a6 @ 1000:19a6 (Dos_Unlink: INT 21h AH=0x41,
-     * DS:DX=path). */
+     * DS:DX=path). No live twin at this layer (Linux twin would be
+     * unlink(); callers use the save_file_* POSIX path instead). */
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -338,7 +343,9 @@ civ_error_t dos_truncate(int fd)
 {
     (void)fd;
     /* TODO: Orig FUN_1000_2ac7 @ 1000:2ac7 (Dos_Truncate: INT 21h AH=0x40
-     * CX=0 zero-write at cursor; sole caller File_Open @ 1000:2ad9). */
+     * CX=0 zero-write at cursor; sole caller File_Open @ 1000:2ad9).
+     * No standalone live twin here (O_TRUNC lives inside save_file_open
+     * in save.c). */
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -608,7 +615,9 @@ civ_error_t sys_wait_for_input(void)
      * Cursor_Set(0x81) + sys_drain_input @ 11f0:4ea0, then PEEKMESSAGE
      * loop: 0x102 -> key, 0x201 click -> 1 + coords, else pump). SDL
      * SDL_WaitEvent key/mouse bridge TBD (modal for Unit_ShowInfoPopup
-     * @ 11f0:468c paint + 20 census/HoF/wizard/Pic/Replay callers). */
+     * @ 11f0:468c paint + 20 census/HoF/wizard/Pic/Replay callers).
+     * Live discriminators: sys_wait_msg_is_key / sys_wait_msg_is_lbutton
+     * / sys_wait_scale_coord / sys_wait_cursor_id (all LIVE, no Win16). */
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -1045,7 +1054,9 @@ civ_error_t sys_run_exit_table_single(void)
 {
     /* TODO: Orig FUN_1000_00b2 @ 1000:00b2 (ES=DS, SI=0x5140 DI=0x5146
      * 1x6B DGROUP entry 00 01 A7 41 00 00 @ 1420:5140 -> Sys_RunExit
-     * Table @ 1000:0122). Needs load-time seg fixup for fn ptr. */
+     * Table @ 1000:0122). Needs load-time seg fixup for fn ptr. Live
+     * twin: sys_run_exit_table (max-first drain, LIVE); only the
+     * fixed-DGROUP relocation is missing. */
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -1063,7 +1074,8 @@ civ_error_t dos_exit_process(int exit_code)
 {
     (void)exit_code;
     /* TODO: Orig FUN_1000_00c6 @ 1000:00c6 (AH=0x4c INT 0x21 + fallback
-     * via Sys_ExitFallback @ 1000:12d6). No exit() in libs. */
+     * via Sys_ExitFallback @ 1000:12d6). No exit() in libs and no live
+     * twin by design (see civ_common.h rules); the owner (main.c) exits. */
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -1072,7 +1084,9 @@ civ_error_t sys_do_exit(int exit_code, int flags)
     (void)exit_code;
     (void)flags;
     /* TODO: Orig FUN_1000_127f @ 1000:127f (atexit DAT_1420_4bac drain +
-     * 00b2 + 4cb0 + 00c4/00c5 + 4cb4/4cb8 + 00c6). DGROUP + INT 21h. */
+     * 00b2 + 4cb0 + 00c4/00c5 + 4cb4/4cb8 + 00c6). DGROUP + INT 21h.
+     * No live twin by design: a lib never exits (see civ_common.h
+     * rules); the owner (main.c) exits. */
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -1080,7 +1094,8 @@ civ_error_t sys_exit_fallback(int exit_code)
 {
     (void)exit_code;
     /* TODO: Orig FUN_1000_12d6 @ 1000:12d6 (Sys_DoExit(code,0,0)
-     * wrapper; entry @ 1000:0000 tail + 00c6 fallback). */
+     * wrapper; entry @ 1000:0000 tail + 00c6 fallback). Same no-exit /
+     * no-twin contract as Sys_DoExit above (owner main.c exits). */
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -1088,21 +1103,24 @@ civ_error_t float_check_range(void)
 {
     /* TODO: Orig FUN_1000_0164 @ 1000:0164 (x87 FSTCW/0x0c00/FLDCW +
      * range vs 0x43fe/0x407e + DAT_1420_0010=0x22; cf. OVERFLOW @
-     * 1420:4ad6, Floating Point Trap @ 1420:50cb). */
+     * 1420:4ad6, Floating Point Trap @ 1420:50cb). No live twin (x87
+     * control word + DGROUP error word have no C-ABI counterpart). */
     return CIV_ERR_UNSUPPORTED;
 }
 
 civ_error_t float_store_converted(void)
 {
     /* TODO: Orig FUN_1000_06cf @ 1000:06cf (SI-flag dispatch to
-     * Float_CheckRange + FSTP float/double/extended). */
+     * Float_CheckRange + FSTP float/double/extended). No live twin
+     * (x87 stack args have no C-ABI counterpart). */
     return CIV_ERR_UNSUPPORTED;
 }
 
 civ_error_t float_decompose_exponent(void)
 {
     /* TODO: Orig FUN_1000_0754 @ 1000:0754 (sign 0x7fff mask +
-     * (BX>>2)<<1 index -> JMP CS:[BX+0x784] jumptable). */
+     * (BX>>2)<<1 index -> JMP CS:[BX+0x784] jumptable). No live twin
+     * (x87 exponent/scale table TBD from the 0784-0967 gap). */
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -2036,7 +2054,9 @@ civ_error_t dos_select_drive(int drive, unsigned *out_total)
     /* TODO: Orig FUN_1000_1266 @ 1000:1266 (Dos_SelectDrive:
      * MOV DL,[BP+6] / DEC DL / MOV AH,0x0e / INT 0x21; AL = drive count
      * -> ES:[BX] out). Sole users: Dos_DriveReady @ 1000:1184 +
-     * Dos_GetCurrentDrive @ 1000:1252. Needs DOS. */
+     * Dos_GetCurrentDrive @ 1000:1252. Needs DOS. No live twin (drive
+     * letters don't exist on Linux; dos_get_current_drive() == 0 so the
+     * path guards skip the select). */
     (void)drive;
     return CIV_ERR_UNSUPPORTED;
 }

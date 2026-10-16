@@ -1,6 +1,6 @@
 /* DOS / system helpers + RNG (SDL3/Linux port).
  *
- * Ghidra anchors (civ.exe), renamed 2026-10-15 (Orig FUN_* -> New):
+ * Ghidra anchors (unpacked/civ.exe), renamed 2026-10-15 (Orig FUN_* -> New):
  *   Dos_GetCurrentDrive      @ 1000:1252 (INT 21h AH=19h; MOV AH,0x19 / INT
  *                              0x21 / INC AX; 1-based drive number)
  *   Sys_GetCurrentDrive      @ 1000:11bb (wrapper; WinMain stores result to
@@ -151,7 +151,7 @@ int dos_get_current_dir(int drive, char *buf, size_t cap);
  * kernel (no DGROUP writes) is dos_map_error_lookup below (LIVE). */
 civ_error_t dos_map_error(int dos_code);
 /* Orig Dos_MapError @ 1000:151a mapping kernel (decompiled 2026-10-16 +
- * byte table @ 1420:4e7c read from civ.exe, 0x59 entries, all < 0x80 so
+ * byte table @ 1420:4e7c read from unpacked/civ.exe, 0x59 entries, all < 0x80 so
  * the orig (int)*(char *) sign-extend is the identity): code in
  * [-0x30, -1] -> e0010 = -code, e4e7a = 0xffff; else idx = code clamped
  * to 0x57 when code <= -0x31 or >= 0x59 (the outer else-if is skipped
@@ -498,7 +498,7 @@ int ne_entry_count(const char *path);
  * as ne_entry_count) -> ne_entry_addr (AH2). OS-free file-scan read-only
  * port (same fopen "rb" + LE reads, no writes): 0-based index -> seg:off
  * via bundle walk (fixed: seg = bundle seg, off = u16 LE @ entry+1;
- * moveable 0xFF: seg = byte 3, off = u16 LE @ +4, e.g. civ.exe idx 0 ->
+ * moveable 0xFF: seg = byte 3, off = u16 LE @ +4, e.g. unpacked/civ.exe idx 0 ->
  * seg 2 off 0x0e12). NULL path/outs or index < 0 -> -1; header/table errors
  * -> -1 (outs untouched); index >= count -> -1 OOR (outs untouched); else
  * sets *seg_out and *off_out and returns 0. No globals, no exit(), C17,
@@ -674,7 +674,7 @@ double float_exp2(double x);
 #define FLOAT_LOG2E 1.4426950408889634
 
 /* --- Batch FPU-error: matherr + pow/scan (2026-10-16) ---
- * Borland matherr chain (civ.exe, seg 1000): Float_ReportError @ 1000:1056
+ * Borland matherr chain (unpacked/civ.exe, seg 1000): Float_ReportError @ 1000:1056
  * builds a Borland `struct exception` on the stack (type i16 @ +0, func
  * name far ptr @ +2, arg1/arg2/retval doubles @ +6/+14/+22 == 0x16) with
  * NULL doubles -> 0.0 (FLDZ), then Float_MatherrFilter @ 1000:0e2e, then
@@ -842,7 +842,7 @@ double float_exp2_checked(double x);
 double float_pow(double x, double y);
 
 /* --- Chain ports (2026-10-16) ---
- * Anchors (civ.exe, x86:LE:16:Protected Mode):
+ * Anchors (unpacked/civ.exe, x86:LE:16:Protected Mode):
  *   Util_ParseInt @ 1000:1ed2 (manual atoi: ctype isspace @ +0x4baf & 1
  *     skip, +/- sign, digit loop with carry overflow wrap, trailing
  *     non-digit stop; callers: date/float chain 1000:386e/3ba0/3d90).
@@ -943,7 +943,7 @@ int sys_wait_scale_coord(int v);
 int sys_wait_cursor_id(void);
 
 /* --- Chain 2026-10-16 (17): file-table geometry (goal 4) ---
- * Orig (civ.exe, x86:LE:16:Protected Mode), decompiled this pass:
+ * Orig (unpacked/civ.exe, x86:LE:16:Protected Mode), decompiled this pass:
  *   File_CloseAll @ 1000:1fc6 (uVar3 = 5; local_6 = 0x4d20; petla az
  *     uVar3 < DAT_1420_4e4c: local_6 += 0x14, uVar3++: gdy
  *     -1 < *(char *)(local_6 + 4) to File_CloseEntry @ 1000:2098
@@ -1006,7 +1006,7 @@ int file_entry_is_open(int fd_byte);
 int file_table_slot_rel(int fd);
 
 /* --- Chain 2026-10-16 (18): drive/path guards + tmp format (goals 1+3) ---
- * Orig (civ.exe, x86:LE:16:Protected Mode), decompiled this pass:
+ * Orig (unpacked/civ.exe, x86:LE:16:Protected Mode), decompiled this pass:
  *   Dos_SetPath @ 1000:116a (MOV AH,0x3b / LDS DX,[BP+6] / INT 0x21;
  *     CF -> Dos_MapError @ 1000:151a else 0; single far-path param).
  *   Dos_DriveReady @ 1000:1184 (Dos_SelectDrive @ 1000:1266(drive,
@@ -1085,7 +1085,7 @@ int file_build_temp_path(char *dst, size_t cap, const char *dir,
 int file_temp_next_num(int cur);
 
 /* --- Chain 2026-10-16 (19): message-pump hierarchy (goals 1+5) ---
- * Orig (civ.exe, x86:LE:16:Protected Mode), decompiled this pass:
+ * Orig (unpacked/civ.exe, x86:LE:16:Protected Mode), decompiled this pass:
  *   Sys_PumpMessages @ 1108:0000 (modalny pump: Gfx_GetCurrentDC +
  *     Main_DispatchQuitEntry @ 1098:061a + DAT_1328_0010/000e = 0, potem
  *     tryb DAT_1328_0012 z flag 1420:1d4c/1d50 (1d4c != 0 -> 1; else
@@ -1151,7 +1151,7 @@ int sys_pump_mode_select(int flag_1d4c, int flag_1d50);
 int sys_pump_scale_coord(int v);
 
 /* --- Chain 2026-10-16 (28): runtime-warning triggers/content (goal 3) ---
- * Orig (civ.exe, x86:LE:16:Protected Mode), decompiled this pass:
+ * Orig (unpacked/civ.exe, x86:LE:16:Protected Mode), decompiled this pass:
  *   Sys_CheckRuntimeMemory @ 11e8:0075 (sole caller Game_TurnLoopTick @
  *     1088:0000, per-civ w petli tur: po Diplo_ProcessTurn @ 1168:0000 +
  *     FUN_1078_0000/448f, PRZED Civ_ProcessUnitMoves; NIE co tick timera:

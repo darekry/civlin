@@ -3404,4 +3404,74 @@ int demo_pollution_index(int smoke, int pop);
  * values). No globals. */
 int unit_reveal_seen_or(int cur, int civ);
 
+/* --- Packet 2026-10-16 (game-only top-up): turn gates + combat odds +
+ * revolt/diplo halves + popup moves/build tails + revolt auto-pick ---
+ * Parents stay STUB/PARTIAL (Win16/GDI/dialog tails with TODO Orig in
+ * game.c); predicates below are LIVE 1:1 on explicit params (no globals,
+ * no Win16, no exit(), read-only, C17). Ref: unpacked/civ.exe read-only
+ * (never edited, civ1win/ untouched). */
+
+/* Orig Game_TurnLoopTick @ 1088:0000 year fixups -> game_turn_fix_year.
+ * 1:1: year == 0 -> 1 (0-year doubling tail sets treasuries caller-side,
+ * then year = 1); year == 0x15 (21) -> 0x14 (20). Takes the stepped year
+ * (game_turn_year_step output) explicitly. No globals. */
+int game_turn_fix_year(int year);
+
+/* Orig same 0x32 scoring branch quiz sub-gate -> game_turn_quiz_due.
+ * 1:1: ((opt_flags & 1) == 0) && year < 0 fires Quiz_RunQuizPair @
+ * 1178:0000 (vs Map_RefreshAllViews @ 1110:03e9 when gated off). Caller
+ * runs game_turn_should_score first (turn % 0x32 == 0 && player != 0xffff).
+ * No globals. */
+int game_turn_quiz_due(int opt_flags, int year);
+
+/* Orig same 0x32 scoring branch save/refresh gate -> game_turn_save_due.
+ * 1:1: (opt_flags & 2) != 0 && year != difficulty * -0x14 + 0x834 fires
+ * Save_SaveGame @ 1198:00a3 + RefreshViews (vs Replay_AppendLog @ 11c0:3beb
+ * 0xb only). opt_flags is g_nOptionFlags, difficulty g_nDifficulty.
+ * No globals. */
+int game_turn_save_due(int opt_flags, int year, int difficulty);
+
+/* Orig Combat_ResolveAttack @ 1050:0000 + Combat_CalcOdds @ 11c0:1bc3
+ * win predicate -> combat_attacker_wins. 1:1: roll < odds (roll is the
+ * Rng_Range @ 11c8:003d 0..99 draw via game_uprising_rng_scale, odds the
+ * combat_calc_odds 0..100 value; odds 100 always wins, 0 never wins).
+ * Complements unit_attack_resolve (odds + roll) and combat_roll_winner
+ * (two-roll city-holder form). Returns 1 attacker wins / 0 defender wins.
+ * No globals. */
+int combat_attacker_wins(int roll, int odds);
+
+/* Orig Diplomat_CityAction @ 11b8:0000 case 4 half gate ->
+ * diplomat_revolt_half_due. 1:1: (city_flags & 1) != 0 halves the
+ * diplomat_revolt_cost price (city flag 1420:5502&1 temple/courthouse-class
+ * dampener, exact building TBD). city_flags is the 5502 word. No globals. */
+int diplomat_revolt_half_due(unsigned city_flags);
+
+/* Orig Diplomat_BribeUnit @ 11b8:07c2 half gate ->
+ * diplomat_bribe_half_due. 1:1: type != 0 halves the diplomat_bribe_cost
+ * price (type 0 capital-class pays full, exact class split TBD; unit_cost
+ * is the 0x1a44 shield-cost entry). No globals. */
+int diplomat_bribe_half_due(int type);
+
+/* Orig Unit_ShowInfoPopup @ 11f0:468c moves line fraction gate ->
+ * unit_popup_moves_needs_frac. 1:1: moves_raw % 3 != 0 draws the "..." @
+ * 0x4813 + dec(rem) tail (moves @ 6300, full = moves/3 via
+ * unit_popup_moves_full, frac via unit_popup_moves_frac). No globals. */
+int unit_popup_moves_needs_frac(int moves_raw);
+
+/* Orig same moves line build tail gate -> unit_popup_build_tail_due.
+ * 1:1: prod_flag != 0 draws the "..." @ 0x4815 + dec(full+rate) + "..." @
+ * 0x4817 tail (prod_flag is *(type*0x16+0x1a3e) != 0, rate = *(6301) *
+ * 1420:1a3c[type*0xb]). No globals. */
+int unit_popup_build_tail_due(int prod_flag);
+
+/* Orig City_DoRevolt @ 11b8:0f26 auto-pick (param_2 == -1) ->
+ * city_revolt_best_foreign. 1:1 argmax of city_revolt_score
+ * ((v00de-v00e0)*0x20/dist) over n foreign cities (v00de/v00e0/dists
+ * parallel read-only arrays, dists > 0 required like city_revolt_score).
+ * Returns the winning index 0..n-1, -1 on NULL/n <= 0/none valid
+ * (ties break to the lower index, like the orig strict-> scan). Seen-bit
+ * flips + Unit_DoMove tail stay in city_do_revolt (STUB). No globals. */
+int city_revolt_best_foreign(const int *v00de, const int *v00e0,
+                             const int *dists, int n);
+
 #endif /* CIVLIN_GAME_H */

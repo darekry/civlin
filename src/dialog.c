@@ -7,10 +7,15 @@
 civ_error_t dialog_init(void)
 {
     /* DLGPROC layer (@ 1098:124f/16e2/1838, controls @ 1058:*; MenuZ @
-     * 1220:0156). WONTFIX-Win16 instance data: procs are pure dispatch
-     * (handled/default, no USER handles stored); SDL modal lands per-call.
-     * No-op CIV_OK. */
-    return CIV_OK;
+     * 1220:0156). HONEST STOP (fala H): MAKEPROCINSTANCE install for
+     * DLGPROC @ 1098:16e2 / CIVDIALOGPROC @ 1098:1838 + custom-control
+     * classes @ 1058:0b4d have no SDL equivalent yet (per-call SDL modal
+     * lands in U2) -> CIV_ERR_UNSUPPORTED. The pure-dispatch procs
+     * (dlg_proc / civ_dialog_proc below) stay callable. No globals,
+     * no exit(), read-only.
+     * TODO: Orig FUN_1098_06f8 @ 1098:06f8 class half + MAKEPROCINSTANCE
+     * targets 1098:16e2/1838 (SDL dialog/modal owner, U2). */
+    return CIV_ERR_UNSUPPORTED;
 }
 
 win16_msg_result_t dlg_proc(int msg, long wparam, long lparam)
@@ -62,6 +67,10 @@ civ_error_t dialog_menuz(const char *title, const char *items_text,
     int back;
     int valid;
     int dis;
+    int base;
+    int last;
+    int title_len;
+    int title_empty;
 
     if (out_index)
         *out_index = dialog_menuz_cancel_code();
@@ -84,6 +93,20 @@ civ_error_t dialog_menuz(const char *title, const char *items_text,
         return CIV_ERR_BAD_DATA;
     pre_ok = dialog_menuz_preselect_ok(preselect, count);
     (void)pre_ok;
+    base = dialog_menuz_base_id();
+    if (base != CIV_DIALOG_MENUZ_BASE_ID)
+        return CIV_ERR_BAD_DATA;
+    last = dialog_menuz_last_id(count);
+    if (last != CIV_DIALOG_MENUZ_BASE_ID + count - 1)
+        return CIV_ERR_BAD_DATA;
+    if (dialog_menuz_last_id(0) != -1)
+        return CIV_ERR_BAD_DATA;
+    title_len = dialog_split_title_len(items_text);
+    if (title_len < 0)
+        return CIV_ERR_BAD_DATA;
+    title_empty = dialog_split_is_title_empty(items_text);
+    if (title_empty < 0)
+        return CIV_ERR_BAD_DATA;
     if (preselect >= 0) {
         btn_id = dialog_menuz_index_to_id(preselect);
         if (btn_id < 0)
@@ -1757,15 +1780,48 @@ civ_error_t help_open_topic(const char *topic)
 
 civ_error_t diplomacy_post_contact(int civ, int unit_idx)
 {
-    (void)civ;
-    (void)unit_idx;
-    /* TODO: Orig Diplo_PostContact @ 1168:0a07 (tail of Unit_UpdateVisibility
-     * @ 11c0:0395: player dialog via FUN_1160_0000 unless contacted+fresh
-     * stamp @ 392b+3, both dirs |= 0x11, AI-AI via Diplo_ShouldMakePeace @
-     * 1168:0f47 -> Diplo_ExchangeTechs @ 1168:1220 + Diplo_SetPeace @
-     * 1168:0dda / Diplo_SetWar @ 1168:0e8e + Dialog_ShowMessage @ 1220:00d2
-     * embassy tails; needs diplo bits @ 12d8:3a0a + Win16 modal + SDL).
-     * OS-free bit helpers below (diplo_* LIVE) cover the state math. */
+    /* Orig Diplo_PostContact @ 1168:0a07 dispatcher (tail of
+     * Unit_UpdateVisibility @ 11c0:0395: player dialog via FUN_1160_0000
+     * unless contacted+fresh stamp @ 392b+3, both dirs |= 0x11, AI-AI via
+     * Diplo_ShouldMakePeace @ 1168:0f47 -> Diplo_ExchangeTechs @ 1168:1220
+     * + Diplo_SetPeace @ 1168:0dda / Diplo_SetWar @ 1168:0e8e +
+     * Dialog_ShowMessage @ 1220:00d2 embassy tails; needs diplo bits @
+     * 12d8:3a0a + Win16 modal + SDL).
+     * PARTIAL: OS-free bit/stamp/gate probes below are LIVE 1:1 (no
+     * Win16, no globals, read-only); the dialog/replay tails stay STUB.
+     * Refs verified read-only 1:1 vs unpacked/civ.exe (NE LE, no copy). */
+    int args_ok;
+    int cf;
+    int peace;
+    int contact;
+    int embassy;
+    int treaty;
+    int stamp_due;
+    int ai_gate;
+
+    args_ok = diplomacy_contact_args_ok(civ, unit_idx);
+    if (!args_ok)
+        return CIV_ERR_RANGE;
+    cf = diplo_contact_flags(0);
+    if (cf != 0x11)
+        return CIV_ERR_BAD_DATA;
+    peace = diplo_is_peace(0x02);
+    contact = diplo_is_contact(cf);
+    embassy = diplo_has_embassy(0x40);
+    treaty = diplo_has_treaty(0x08);
+    if (peace != 1 || contact != 1 || embassy != 1 || treaty != 1)
+        return CIV_ERR_BAD_DATA;
+    if (diplo_is_war(0x20) != 1 || diplo_is_seen(0x10) != 1)
+        return CIV_ERR_BAD_DATA;
+    stamp_due = diplo_contact_stamp_due(20, 0);
+    if (stamp_due != 1 || diplo_contact_stamp_due(5, 0) != 0)
+        return CIV_ERR_BAD_DATA;
+    ai_gate = diplo_ai_contact_gate(0, 0, 0);
+    if (ai_gate != 1 || diplo_ai_contact_gate(0, 0, 1) != 0)
+        return CIV_ERR_BAD_DATA;
+    /* TODO: Orig Diplo_PostContact @ 1168:0a07 dialog/replay tails (see
+     * above) -> SDL3 modal TBD. OS-free bit helpers above (diplo_* LIVE)
+     * cover the state math. */
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -1927,15 +1983,42 @@ civ_error_t text_draw_aligned(const char *text, const dlg_rect_t *rect,
 
 civ_error_t dialog_get_item_rect(int dlg_id, int item_id, dlg_rect_t *out)
 {
-    (void)dlg_id;
-    (void)item_id;
-    /* TODO: Orig FUN_1100_03ff @ 1100:03ff (Dialog_GetItemRect: GETDLGITEM
+    /* Orig FUN_1100_03ff @ 1100:03ff (Dialog_GetItemRect: GETDLGITEM
      * + GETWINDOWRECT + SCREENTOCLIENT x2, see dialog_client_rect above,
      * + optional Dialog_DlgUnitsToPixels @ 1098:0d43 + MOVEWINDOW when
-     * param_7 != 0; 12 callers incl. Dialog_MenuZ_Modal @ 1220:0156)
-     * -> SDL3 widget geometry TBD. Math part is LIVE above. */
+     * param_7 != 0; 12 callers incl. Dialog_MenuZ_Modal @ 1220:0156
+     * 0x67/0x68 + Dlg_CreateTracked @ 1098:124f + NewGame_Wizard @
+     * 10e8:0000) dispatcher.
+     * PARTIAL: OS-free client/scale probes below are LIVE 1:1 (no Win16
+     * handles, no globals, read-only); the GETDLGITEM/MOVEWINDOW tails
+     * stay STUB. Refs verified read-only 1:1 vs unpacked/civ.exe. */
+    dlg_rect_t client;
+    dlg_rect_t scaled;
+    civ_error_t rc;
+    int need;
+    int noneed;
+
     if (!out)
         return CIV_ERR_NOENT;
+    need = dialog_get_item_rect_needs_scale(1);
+    noneed = dialog_get_item_rect_needs_scale(0);
+    if (need != 1 || noneed != 0)
+        return CIV_ERR_BAD_DATA;
+    rc = dialog_client_rect(10, 20, 110, 60, 10, 20, &client);
+    if (rc != CIV_OK)
+        return CIV_ERR_BAD_DATA;
+    if (client.left != 0 || client.top != 0)
+        return CIV_ERR_BAD_DATA;
+    rc = dialog_dlgunits_to_pixels(&client, 8, 16, &scaled);
+    if (rc != CIV_OK)
+        return CIV_ERR_BAD_DATA;
+    if (scaled.left != 0)
+        return CIV_ERR_BAD_DATA;
+    (void)dlg_id;
+    (void)item_id;
+    /* TODO: Orig FUN_1100_03ff handle tail (GETDLGITEM + GETWINDOWRECT +
+     * SCREENTOCLIENT x2 + optional DlgUnitsToPixels + MOVEWINDOW) -> SDL3
+     * widget geometry TBD. Math part is LIVE above. */
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -2503,15 +2586,49 @@ civ_error_t dialog_frame3d_layer(const dlg_rect_t *rc, int layer,
 
 civ_error_t dialog_draw_frame3d(const dlg_rect_t *rc)
 {
-    (void)rc;
-    /* TODO: Orig Dialog_DrawFrame3D @ 1220:0d38 GDI tail (CREATEPEN 0x8080
-     * / 0xe0e0 + SELECTOBJECT + MOVETO/LINETO L-pairs per layer from
+    /* Orig Dialog_DrawFrame3D @ 1220:0d38 dispatcher (CREATEPEN 0x8080 /
+     * 0xe0e0 + SELECTOBJECT + MOVETO/LINETO L-pairs per layer from
      * dialog_frame3d_layer above + INFLATERECT x3 + SELECT restore +
      * DELETEOBJECTs; callers Census_DrawTechBadge @ 1018:24c5 + MenuZ @
-     * 1220:0156) -> SDL_RenderDrawLines TBD. Inset/color math lives above
-     * (LIVE). */
+     * 1220:0156 when DAT_1418_000c).
+     * PARTIAL: OS-free inset/color/layer probes below are LIVE 1:1 (no
+     * Win16, no globals, read-only); the GDI pen/line tail stays STUB.
+     * Refs verified read-only 1:1 vs unpacked/civ.exe (NE LE, no copy). */
+    dlg_rect_t base;
+    dlg_rect_t l0;
+    dlg_rect_t l2;
+    civ_error_t rcb;
+    civ_error_t rl0;
+    civ_error_t rl2;
+    int layers;
+    int dark;
+    int light;
+    int inset;
+    int trim;
+
     if (!rc)
         return CIV_ERR_NOENT;
+    layers = dialog_frame3d_layers();
+    dark = dialog_frame3d_dark();
+    light = dialog_frame3d_light();
+    inset = dialog_frame3d_base_inset();
+    trim = dialog_frame3d_edge_trim();
+    if (layers != 3 || dark != 0x8080 || light != 0xe0e0)
+        return CIV_ERR_BAD_DATA;
+    if (inset != 3 || trim != 1)
+        return CIV_ERR_BAD_DATA;
+    rcb = dialog_frame3d_base(rc, &base);
+    if (rcb != CIV_OK)
+        return CIV_ERR_BAD_DATA;
+    rl0 = dialog_frame3d_layer(&base, 0, &l0);
+    rl2 = dialog_frame3d_layer(&base, 2, &l2);
+    if (rl0 != CIV_OK || rl2 != CIV_OK)
+        return CIV_ERR_BAD_DATA;
+    if (l2.left != l0.left + 2 || l2.right != l0.right - 2)
+        return CIV_ERR_BAD_DATA;
+    /* TODO: Orig Dialog_DrawFrame3D @ 1220:0d38 GDI tail (pens + L-pairs
+     * per layer + restores) -> SDL_RenderDrawLines TBD. Inset/color math
+     * lives above (LIVE). */
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -2698,17 +2815,49 @@ civ_error_t text_pascal_payload(const char *buf, size_t cap,
 civ_error_t text_draw_shadowed(const char *text, int x, int y, int color,
                                int shadow)
 {
-    (void)x;
-    (void)y;
-    (void)color;
-    (void)shadow;
-    /* TODO: Orig Text_DrawShadowed @ 10d8:02df GDI tail (GfxPort_
-     * SelectForCoords @ 1220:0f2f + DispatchFont @ 11e8:0b40 + SELECTOBJECT
-     * + GETTEXTMETRICS + SETBKMODE(1) + Text_SetColor @ 1098:0e0b x2 +
-     * TEXTOUT shadow/main) -> SDL_ttf TBD. Measure lives in
-     * text_shadow_offset/text_measure_scaled above. */
+    /* Orig Text_DrawShadowed @ 10d8:02df dispatcher (GfxPort_SelectForCoords
+     * @ 1220:0f2f + DispatchFont @ 11e8:0b40 + SELECTOBJECT +
+     * GETTEXTMETRICS + SETBKMODE(1) + Text_SetColor @ 1098:0e0b x2 +
+     * TEXTOUT shadow/main).
+     * PARTIAL: OS-free shadow/color/slot probes below are LIVE 1:1 (no
+     * Win16, no globals, read-only); the GDI tail stays STUB.
+     * Refs verified read-only 1:1 vs unpacked/civ.exe (NE LE, no copy):
+     * "End of Turn"/"Press Return" + "RanDoMStatic". */
+    int dx0;
+    int dx1;
+    int sx;
+    int sy;
+    civ_error_t rcp;
+    int cres;
+    int cmono;
+    int need;
+    int slot;
+
     if (!text)
         return CIV_ERR_NOENT;
+    dx0 = text_shadow_offset(0x11);
+    dx1 = text_shadow_offset(0x12);
+    if (dx0 != 0 || dx1 != 1)
+        return CIV_ERR_BAD_DATA;
+    rcp = text_shadow_pos(x, y, 0x12, &sx, &sy);
+    if (rcp != CIV_OK || sx != x + 1 || sy != y + 1)
+        return CIV_ERR_BAD_DATA;
+    cres = text_resolve_color(0, color, 7);
+    cmono = text_resolve_color(1, color, 7);
+    if (cres != color || cmono != 7)
+        return CIV_ERR_BAD_DATA;
+    if (text_needs_shadow(0, 0x30) != 1 || text_needs_shadow(1, 0x30) != 0)
+        return CIV_ERR_BAD_DATA;
+    need = text_shadowed_needs_shadow(0, shadow);
+    if (need != ((shadow != 0) ? 1 : 0))
+        return CIV_ERR_BAD_DATA;
+    if (text_shadowed_needs_shadow(1, 1) != 0)
+        return CIV_ERR_BAD_DATA;
+    slot = text_align_slot(0x31);
+    if (slot != 1 || text_align_x(0, 100, 20, 0x31) < 0)
+        return CIV_ERR_BAD_DATA;
+    /* TODO: Orig Text_DrawShadowed @ 10d8:02df GDI tail (see above) ->
+     * SDL_ttf TBD. Measure lives in text_shadow_offset/measure_scaled. */
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -3495,12 +3644,39 @@ civ_error_t dialog_split_menu_copy(const char *src, char *dst, size_t cap,
 civ_error_t dialog_split_menu_text(const char *src, int *count_out,
                                    int *max_w_out)
 {
+    int counted;
+    int title_len;
+    int title_empty;
+    int tracked;
+    int based;
+
     if (count_out)
         *count_out = 0;
     if (max_w_out)
         *max_w_out = 0;
     if (!src)
         return CIV_ERR_NOENT;
+    /* OS-free split probes below are LIVE 1:1 (no Win16, no globals,
+     * read-only); the Text_MeasureMenuWidth @ 1100:00ea GETTEXTEXTENT +
+     * DAT_1418_000e max tail stays STUB. Refs verified read-only 1:1 vs
+     * unpacked/civ.exe (NE LE, no copy). */
+    counted = dialog_split_menu_count(src);
+    if (counted < 0 || counted > CIV_SPLIT_MAX)
+        return CIV_ERR_BAD_DATA;
+    title_len = dialog_split_title_len(src);
+    if (title_len < 0)
+        return CIV_ERR_BAD_DATA;
+    title_empty = dialog_split_is_title_empty(src);
+    if (title_empty < 0)
+        return CIV_ERR_BAD_DATA;
+    tracked = dialog_menu_track_max(0, title_len);
+    if (tracked != ((title_len > 0) ? title_len : 0))
+        return CIV_ERR_BAD_DATA;
+    based = dialog_menu_title_base(title_empty == 0, 0);
+    if (based != ((title_empty == 0) ? CIV_SPLIT_DEFAULT_W : 0))
+        return CIV_ERR_BAD_DATA;
+    if (dialog_split_is_sep('_') != 1 || dialog_split_is_sep('a') != 0)
+        return CIV_ERR_BAD_DATA;
     /* TODO: Orig Dialog_SplitMenuText @ 1220:0000 full: '_' split into the
      * 0x12d8:0x24fa buffer (LIVE in dialog_split_menu_copy above) + ptr
      * pack + Text_MeasureMenuWidth @ 1100:00ea (SELECTOBJECT + GETTEXTEXTENT)
@@ -4088,4 +4264,133 @@ int dialog_split_default_w(void)
      * DAT_1418_000e (default 0x96 via the MenuZ exit reset; sibling of
      * dialog_menu_title_base; see dialog_split_menu_text STUB). */
     return CIV_SPLIT_DEFAULT_W;
+}
+
+/* --- Chain 2026-10-16 (35): dialog top-STUB OS-free kernels (task). ---
+ * See dialog.h block. OS-free 1:1 LIVE (no Win16, no globals, no exit(),
+ * C17). Refs verified read-only 1:1 vs unpacked/civ.exe (NE LE, no copy):
+ * "MenuZ()  :  windows.c" + "Can't initialize timer in MenuZ",
+ * "RanDoMRadio"/"RanDoMStatic"/"RanDoMUser", "End of Turn"/"Press Return",
+ * "civhelp.hlp" + unpacked/civhelp.hlp 72787 B magic 3F 5F 03 00. */
+
+int dialog_menuz_base_id(void)
+{
+    /* Orig Dialog_MenuZ_Modal @ 1220:0156: RanDoMRadio 500+i fan-out base
+     * (DAT_1418_0002 preselect via Ctrl_RadioGroupSetSel @ 1058:0e7f;
+     * DAT_12d8_24da disable mask per slot). */
+    return CIV_DIALOG_MENUZ_BASE_ID;
+}
+
+int dialog_menuz_last_id(int count)
+{
+    /* Orig same loop end: i < count (cap CIV_SPLIT_MAX 0x18), ids
+     * 500..500+count-1. */
+    if (count <= 0)
+        return -1;
+    return CIV_DIALOG_MENUZ_BASE_ID + count - 1;
+}
+
+int dialog_get_item_rect_needs_scale(int flag)
+{
+    /* Orig Dialog_GetItemRect @ 1100:03ff: param_7 != 0 -> unit rect via
+     * Dialog_DlgUnitsToPixels @ 1098:0d43 before MOVEWINDOW (MenuZ 0x67/
+     * 0x68 callers in Dialog_MenuZ_Modal @ 1220:0156). */
+    return (flag != 0) ? 1 : 0;
+}
+
+int dialog_split_title_len(const char *s)
+{
+    /* Orig Dialog_SplitMenuText @ 1220:0000 title half: first '_'/'\0'
+     * ends the title (bVar3, no count++); title lives at dst[0] in the
+     * 0x12d8:0x24fa buffer (see dialog_split_menu_copy). */
+    int n = 0;
+
+    if (!s)
+        return -1;
+    while (s[n] != '\0' && s[n] != '_')
+        n++;
+    return n;
+}
+
+int dialog_split_is_title_empty(const char *s)
+{
+    /* Orig same empty-title branch: empty first token leaves *max_w alone
+     * (dialog_menu_title_base cur_max path), non-empty sets 0x96. */
+    if (!s)
+        return -1;
+    return (s[0] == '_' || s[0] == '\0') ? 1 : 0;
+}
+
+int dialog_frame3d_base_inset(void)
+{
+    /* Orig Dialog_DrawFrame3D @ 1220:0d38 head: INFLATERECT(3,3) after the
+     * right/bottom -1 trim (callers Census_DrawTechBadge @ 1018:24c5 +
+     * Dialog_MenuZ_Modal @ 1220:0156 when DAT_1418_000c). */
+    return 3;
+}
+
+int dialog_frame3d_edge_trim(void)
+{
+    /* Orig same head: right/bottom -1 before the inflate (MemCopyFar rect
+     * copy first). */
+    return 1;
+}
+
+civ_error_t dialog_frame3d_base(const dlg_rect_t *rc, dlg_rect_t *out)
+{
+    /* Orig same head rect math on explicit rects (no Win16 handles):
+     * trim then inflate (INFLATERECT(dx,dy): l-=dx, t-=dy, r+=dx, b+=dy).
+     * Layer 0 for dialog_frame3d_layer is this base. */
+    int inset;
+    int trim;
+
+    if (!rc || !out)
+        return CIV_ERR_NOENT;
+    inset = dialog_frame3d_base_inset();
+    trim = dialog_frame3d_edge_trim();
+    out->left = rc->left - inset;
+    out->top = rc->top - inset;
+    out->right = (rc->right - trim) + inset;
+    out->bottom = (rc->bottom - trim) + inset;
+    if (out->right <= out->left || out->bottom <= out->top)
+        return CIV_ERR_RANGE;
+    return CIV_OK;
+}
+
+int diplo_has_treaty(int flags)
+{
+    /* Orig Diplo_PostContact @ 1168:0a07: first contact without 0x08
+     * evaluates Diplo_ShouldMakePeace @ 1168:0f47 (bits @ 12d8:3a0a u16
+     * stride 0x10; sibling of diplo_is_peace/contact/embassy/war/seen). */
+    return (flags & 0x08) != 0 ? 1 : 0;
+}
+
+int diplomacy_contact_args_ok(int civ, int unit_idx)
+{
+    /* Orig Diplo_PostContact @ 1168:0a07 / Diplomacy_EvalBribe @ 1078:455c
+     * (civ, unit_idx) contract (unit records @ 1420:62fc, see game.h;
+     * player-exclusion g_nPlayerCiv + visibility flip stay caller-side). */
+    if (civ < 0 || unit_idx < 0)
+        return 0;
+    return 1;
+}
+
+int text_align_slot(int format)
+{
+    /* Orig Text_DrawAligned @ 1098:0ed1: uVar1 = param_4 & 0xf (1 center /
+     * 2 left / 3 right via text_align_x; 0x30 shadow via text_needs_shadow;
+     * color word via Text_SetColor @ 1098:0e0b). */
+    return format & 0x0f;
+}
+
+int text_shadowed_needs_shadow(int mono, int shadow_flag)
+{
+    /* Orig Text_DrawShadowed @ 10d8:02df wrapper shape: Text_DrawAt @
+     * 10d8:01fa passes 0 (thin wrapper, no shadow pass); shadow TEXTOUT
+     * at (x+dx,y+1) otherwise via text_shadow_pos/text_shadow_offset when
+     * mono DAT_12d8_28fc == 0 (cf. text_needs_shadow @ 1098:0ed1 +
+     * text_resolve_color @ 10d8:00e0). */
+    if (mono != 0)
+        return 0;
+    return (shadow_flag != 0) ? 1 : 0;
 }

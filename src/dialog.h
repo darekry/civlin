@@ -2766,4 +2766,95 @@ int diplo_tribute_unit(void);
  * No globals. */
 int dialog_split_default_w(void);
 
+/* --- Chain 2026-10-16 (35): dialog top-STUB OS-free kernels (task) ---
+ * Orig (civ.exe, x86:LE:16:Protected Mode), 1:1 OS-free ports of pure
+ * branches/constants still buried in the 25 STUB bodies below (no Win16,
+ * no globals, no exit(), read-only except caller-owned outs, C17).
+ * Handle/modal/GDI tails stay STUB/PARTIAL with TODO Orig
+ * (dialog_menuz @ 1220:0156, dlg_create_tracked @ 1098:124f,
+ * dialog_open_help/help_open_topic @ 1160:xxxx, diplomacy_post_contact @
+ * 1168:0a07, dialog_get_item_rect @ 1100:03ff, dialog_show_message @
+ * 1220:00d2, dialog_draw_frame3d @ 1220:0d38, text_draw star @ 10d8:046e).
+ * Refs verified read-only 1:1 vs unpacked/civ.exe (NE LE, no copy):
+ *   "MenuZ()  :  windows.c" + "Can't initialize timer in MenuZ" @
+ *   1420:4a41 (MenuZ timer 100 / cancel -1), "RanDoMRadio"/"RanDoMStatic"/
+ *   "RanDoMUser" (500-based radio ids + '_' split buffer @ 0x12d8:0x24fa),
+ *   "End of Turn"/"Press Return" (0x3c/0x1e blink, see ui_end_turn_phase),
+ *   "civhelp.hlp" + unpacked/civhelp.hlp 72787 B magic 3F 5F 03 00 +
+ *   version 0x46 (see help_hlp_system). MenuZ ID/timer/cancel + split +
+ *   frame3D layers + diplo gates + text shadow families only; no fake. */
+
+/* Orig Dialog_MenuZ_Modal @ 1220:0156 radio base (RanDoMRadio 500+i
+ * CREATEWINDOW fan-out; DAT_1418_0002 preselect; DAT_12d8_24da disable
+ * mask) -> dialog_menuz_base_id. 1:1 500 (CIV_DIALOG_MENUZ_BASE_ID).
+ * No globals. */
+int dialog_menuz_base_id(void);
+
+/* Orig same fan-out end (i < count, cap CIV_SPLIT_MAX 0x18 via
+ * dialog_split_menu_count) -> dialog_menuz_last_id. 1:1 500 + count - 1
+ * (last radio id); count <= 0 -> -1. No globals. */
+int dialog_menuz_last_id(int count);
+
+/* Orig Dialog_GetItemRect @ 1100:03ff unit flag (param_7 != 0 ->
+ * Dialog_DlgUnitsToPixels @ 1098:0d43 + MOVEWINDOW; sole MenuZ callers
+ * Dialog_MenuZ_Modal @ 1220:0156 0x67/0x68 + Dialog_ShowMessage path) ->
+ * dialog_get_item_rect_needs_scale. 1:1 nonzero (1) when flag != 0.
+ * No globals. */
+int dialog_get_item_rect_needs_scale(int flag);
+
+/* Orig Dialog_SplitMenuText @ 1220:0000 title half (first '_'/'\0' ends
+ * the title into the 0x12d8:0x24fa buffer; title NOT measured, items are
+ * via Text_MeasureMenuWidth @ 1100:00ea) -> dialog_split_title_len.
+ * 1:1 bytes before the first '_' or NUL (empty title -> 0). NULL -> -1.
+ * No globals. */
+int dialog_split_title_len(const char *s);
+
+/* Orig same title-empty branch (empty first token leaves *max_w alone,
+ * non-empty sets DAT_1418_000e 0x96 via dialog_menu_title_base) ->
+ * dialog_split_is_title_empty. 1:1 nonzero (1) when first char is '_'
+ * or '\0' (empty title), 0 otherwise; NULL -> -1. No globals. */
+int dialog_split_is_title_empty(const char *s);
+
+/* Orig Dialog_DrawFrame3D @ 1220:0d38 head (MemCopyFar rect + right/
+ * bottom -1 + INFLATERECT(3,3), then 3x INFLATERECT(-1,-1) layers via
+ * dialog_frame3d_layer) -> dialog_frame3d_base_inset / edge_trim. 1:1
+ * 3 (inflate dx/dy) / 1 (right/bottom trim). No globals. */
+int dialog_frame3d_base_inset(void);
+int dialog_frame3d_edge_trim(void);
+
+/* Orig same head rect math -> dialog_frame3d_base. 1:1 base = trim then
+ * inflate: out = (l-3, t-3, (r-1)+3, (b-1)+3) = (l-3, t-3, r+2, b+2)
+ * (INFLATERECT(dx,dy): l-=dx, t-=dy, r+=dx, b+=dy). NULL -> NOENT;
+ * inverted/degenerate out (r <= l || b <= t) -> RANGE. No globals. */
+civ_error_t dialog_frame3d_base(const dlg_rect_t *rc, dlg_rect_t *out);
+
+/* Orig Diplo_PostContact @ 1168:0a07 first-contact gate (contact without
+ * 0x08 skips ShouldMakePeace @ 1168:0f47 evaluation; AI-AI periodic slot
+ * via diplo_ai_contact_gate; bits @ 12d8:3a0a u16 stride 0x10) ->
+ * diplo_has_treaty. 1:1 nonzero (1) when (flags & 0x08) != 0.
+ * No globals. */
+int diplo_has_treaty(int flags);
+
+/* Orig Diplo_PostContact @ 1168:0a07 / Diplomacy_EvalBribe @ 1078:455c
+ * arg contract (foreign civ + contacting/diplomat unit index into the
+ * 1420:62fc unit records; player-exclusion + visibility tails stay
+ * caller-side) -> diplomacy_contact_args_ok. 1:1 nonzero (1) when
+ * civ >= 0 && unit_idx >= 0 (no upper clamp: max civ/unit counts live
+ * in game.h tables, never invented here). No globals. */
+int diplomacy_contact_args_ok(int civ, int unit_idx);
+
+/* Orig Text_DrawAligned @ 1098:0ed1 slot half (decompiler uVar1 =
+ * param_4 & 0xf; 1 center / 2 left / 3 right via text_align_x; 0x30
+ * shadow bits via text_needs_shadow; color via Text_SetColor @
+ * 1098:0e0b) -> text_align_slot. 1:1 format & 0x0f. No globals. */
+int text_align_slot(int format);
+
+/* Orig Text_DrawShadowed @ 10d8:02df wrapper param (Text_DrawAt @
+ * 10d8:01fa passes 0 = no shadow; shadow TEXTOUT at (x+dx,y+1) via
+ * text_shadow_pos + dx via text_shadow_offset, gated by mono
+ * DAT_12d8_28fc via text_needs_shadow/text_resolve_color) ->
+ * text_shadowed_needs_shadow. 1:1 nonzero (1) when mono == 0 and
+ * shadow_flag != 0. No globals. */
+int text_shadowed_needs_shadow(int mono, int shadow_flag);
+
 #endif /* CIVLIN_DIALOG_H */

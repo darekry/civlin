@@ -18,24 +18,27 @@ sekcji „Ścieżka krytyczna" poniżej).
   — to wskazówki RE, nie approved mapping.
 - „has TODO" = w ciele jest znacznik TODO z adresem Orig i opisem braków.
 
-## Ścieżka krytyczna WinMain @ 1008:0000 (stan na 2026-10-16)
+## Ścieżka krytyczna WinMain @ 1008:0000 (stan na 2026-10-16, fala H)
 
+Fala H rule: `CIV_OK` = efekt osiągnięty albo krok dowodliwie pusty na SDL;
+w przeciwnym razie uczciwy `CIV_ERR_UNSUPPORTED` (koniec z fake-OK).
 `main.c`: SDL_Init + okno/renderer + arena 16 MB (`win16_mem_init`) ->
-prawdziwy `boot_run` (**CIV_OK**, zweryfikowane uruchomieniem `boot: ok`) ->
-`mainmenu_run` (STUB, pierwszy strict-stop) -> `game_init` (LIVE) ->
-`game_new` (STUB) -> jeden `game_tick` (STUB) -> shutdown, exit 0.
-Reszta za bootem leci best-effort (log, nigdy fatal).
+`boot_run` zatrzymuje się uczciwie na `boot_register_classes` (STUB:
+pędzle/metryki/klasy, U2); fail buta = abort jak orig MESSAGEBOX+exit
+(return 1). Za każdym lądowaniem fali binarka dochodzi dalej; frontier
+czytaj z logu `boot:`. Za bootem reszta leci best-effort (log, nigdy fatal).
 Warstwa Win16/DOS żyje w `src/win16.{h,c}` (SDL3/stdio, arena zamiast
-GLOBALALLOC/GETFREESPACE; WONTFIX-y jako no-op `CIV_OK` z adresem Orig).
+GLOBALALLOC/GETFREESPACE; WONTFIX-y jako no-op `CIV_OK` z adresem Orig
+tylko gdy krok jest dowodliwie pusty).
 
 | Krok WinMain | Funkcja | Stan | Komentarz |
 |---|---|---|---|
 | Sys_CheckFreeMemory | `sys_check_free_memory` | LIVE | delegat do `win16_check_free_memory` (SDL_GetSystemRAM vs 2,5 MB + 0x23) |
 | paths (drive/cwd) | `sys_init_paths` | LIVE | |
-| App_RegisterWindowClasses | `app_register_window_classes` | LIVE | WONTFIX: brak klas okien na SDL — no-op `CIV_OK` via `win16_register_classes` |
+| App_RegisterWindowClasses | `app_register_window_classes` | STUB | HONEST STOP (fala H): pędzle/metryki/klasy/custom TBD (U2) |
 | civfonts.fon | `font_enum_families_init` | LIVE | sonda plików via `win16_probe_fonts`; parse na żądanie (`font_fon/fnt_*` LIVE), install GDI WONTFIX |
 | ResMgr_LoadRsc x5 | `boot_load_resources` | LIVE | sonda 5 plików via `win16_probe_resources` (case-insensitive); `rsc_load_rsc` LIVE, właściciel mgr TBD |
-| Video_CheckDriverCaps | `boot_check_video` | LIVE | WONTFIX-checklist: no-op w tym kroku; żywy check renderera gdzie renderer istnieje |
+| Video_CheckDriverCaps | `video_init` | LIVE | check renderera tam gdzie renderer istnieje (arg-less step usunięty, fala H) |
 | Art_MaybeConvertArtwork | `art_maybe_convert_artwork` | LIVE | na Linuksie zbędne — no-op CIV_OK |
 | Config_LoadPrefs | `boot_load_prefs` | LIVE | domyślne (sounds on); I/O `civ.prf` zostaje w `config_load_prefs` (STUB) |
 | Palette_Init | `palette_init` | LIVE | no-op (paleta per-tekstura) |
@@ -44,8 +47,8 @@ GLOBALALLOC/GETFREESPACE; WONTFIX-y jako no-op `CIV_OK` z adresem Orig).
 | Init_UnitFontTables | `boot_init_unit_font_tables` | STUB | potrzebne dopiero wizardowi (P1) |
 | Sound_PlayId(STOP) | `audio_play_id` | LIVE | |
 | MainPort/GfxPort | `mainport_get_or_create`, `gfx_port_create` | STUB | mostek na SDL_Texture — średnia praca (P3) |
-| WdwMap/SmMap/Status_Open | `map_open_*` | STUB | `map_init` LIVE (no-op); widoki SDL TBD |
-| Menu_InitMainBar | `menu_init_mainbar` | LIVE | WONTFIX: brak USER-menu na SDL — no-op (stringi w `menu_strings` LIVE) |
+| WdwMap/SmMap/Status_Open | `map_open_*` | STUB | `map_init` HONEST STOP (bufor/widoki, U4); `boot_open_windows` STUB po `video_init` |
+| Menu_InitMainBar | `menu_init_mainbar` | LIVE | WONTFIX: brak USER-menu na SDL — no-op (stringi w `menu_strings` LIVE); `boot_init_menu` STUB via `dialog_init` (U2) |
 | pętla Game_TurnLoopTick | `game_turn_tick` | STUB | gra właściwa — poza zakresem |
 | WinMain_Shutdown | `boot_shutdown` | LIVE | no-op shutdowny + `win16_mem_shutdown` w `main.c` |
 
@@ -112,18 +115,17 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 |---|---|---|---|
 | `boot_setup_paths` | LIVE | 1000:11bb, 1000:2826 |  |
 | `boot_check_memory` | LIVE | 11e8:0000, 1420:43b8 |  |
-| `app_register_window_classes` | LIVE | 1058:0b4d, 1098:06f8 |  |
+| `app_register_window_classes` | STUB | 1058:0b4d, 1098:06f8, 1098:1838, 1208:0054, 1210:0000, 1218:0000 | has TODO |
 | `boot_register_classes` | LIVE | 1098:06f8 |  |
 | `boot_load_fonts` | LIVE | 1008:0e99 |  |
 | `boot_load_resources` | LIVE | 1190:0000 |  |
-| `boot_check_video` | LIVE | 1008:059a |  |
-| `boot_maybe_convert_artwork` | LIVE | 10b8:0000, 10b8:079d, 1420:20a9 |  |
+| `boot_maybe_convert_artwork` | LIVE | 1008:059a, 10b8:0000, 10b8:079d, 1420:20a9 |  |
 | `boot_load_prefs` | LIVE | 1008:0b4a |  |
 | `boot_init_palette` | LIVE | 1090:0488 |  |
 | `boot_init_tables` | LIVE | 1090:0488, 11c8:0000, 11e0:0000, 11e8:0337, 11f8:0080, 1420:b394 |  |
 | `boot_init_unit_font_tables` | STUB | 10e8:0000, 10e8:2d46 | has TODO |
 | `cursor_set` | NOOP | 1048:0000, 1098:096c |  |
-| `boot_open_windows` | LIVE | 1098:114a, 10d0:0000, 1208:0af1, 1210:025b, 1218:0386 |  |
+| `boot_open_windows` | PARTIAL | 1098:114a, 10d0:0000, 1208:0af1, 1210:025b, 1218:0386 | has TODO |
 | `menu_init_mainbar` | LIVE | 1048:0000, 1098:096c, 14b0:0010, 14b0:0092, 14d0:0028 |  |
 | `boot_init_menu` | LIVE | 1048:0000, 1098:096c |  |
 | `dos_drive_ready` | LIVE | 1000:1184, 1008:0bbf, 1150:00c9 |  |
@@ -153,7 +155,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `menu_string_at` | LIVE |  |  |
 | `config_load_prefs` | STUB | 1008:0b4a, 12d0:0064, 1420:010b | has TODO |
 | `config_save_prefs` | STUB | 1000:116a, 1000:1184, 1008:0bbf, 1420:0113 | has TODO |
-| `boot_run` | LIVE | 1000:11bb, 1000:2826, 1008:0000, 1008:059a, 1008:0b4a, 1008:0d68, 1008:0e99, 1088:0000, 1090:0488, 1098:06f8, 1098:096c, 10b8:0000, 10e8:2d46, 1190:0000, 11e8:0000, 11e8:0337 |  |
+| `boot_run` | LIVE | 1008:0000, 1008:0e99, 1088:0000, 1098:06f8, 11e8:0000 |  |
 | `boot_shutdown` | LIVE | 1008:0329, 1008:0d68, 12d8:28fa, 12d8:460e |  |
 | `art_maybe_convert_artwork` | LIVE | 1090:0488, 10b8:0000, 10b8:04df, 10b8:062d, 10b8:06a0, 10b8:076a, 10b8:079d, 10b8:0aa8, 10b8:0c1c, 10b8:0ded, 10b8:0e36, 10b8:11bc, 10b8:158c, 10d0:0cfa, 1420:20a9 |  |
 | `main_run_startup_sequence` | PARTIAL | 1008:0329, 1098:124f, 1098:1612, 10b0:005b, 10b0:008a, 10b0:0461, 10b8:079d, 10d0:0000, 10e8:0000, 1108:0243, 1130:000e, 11e0:0000, 11e0:0221, 1220:0156, 1420:435b | has TODO |
@@ -233,7 +235,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 
 | Function | State | Orig addr | Note |
 |---|---|---|---|
-| `dialog_init` | LIVE | 1058:0000, 1058:0440, 1058:049b, 1058:04f6, 1058:0b4d, 1058:0d71, 1058:0e7f, 1098:0157, 1098:124f, 1098:1612, 1098:16e2, 1098:1838, 10b0:0000, 10b0:0461, 1220:0156, 1420:1ea0, 1420:1ec8, 1420:1f40, 1420:4a41, 14b0:0010, 14b0:0092, 14d0:0028 |  |
+| `dialog_init` | STUB | 1058:0000, 1058:0440, 1058:049b, 1058:04f6, 1058:0b4d, 1058:0d71, 1058:0e7f, 1098:0157, 1098:124f, 1098:1612, 1098:16e2, 1098:1838, 10b0:0000, 10b0:0461, 1220:0156, 1420:1ea0, 1420:1ec8, 1420:1f40, 1420:4a41, 14b0:0010, 14b0:0092, 14d0:0028 | has TODO |
 | `dlg_proc` | LIVE | 1098:124f, 1098:16e2, 1420:1ea0 |  |
 | `civ_dialog_proc` | LIVE | 1098:124f, 1098:1838 |  |
 | `dialog_shutdown` | NOOP |  |  |
@@ -285,7 +287,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `help_hlp_decompress` | PARTIAL | 10f8:040a | has TODO |
 | `help_topic_get_full` | PARTIAL |  | has TODO |
 | `help_open_topic` | LIVE |  |  |
-| `diplomacy_post_contact` | STUB | 1168:0a07, 1168:0dda, 1168:0e8e, 1168:0f47, 1168:1220, 11c0:0395, 1420:62fc | has TODO |
+| `diplomacy_post_contact` | PARTIAL | 1168:0a07, 1168:0dda, 1168:0e8e, 1168:0f47, 1168:1220, 11c0:0395, 1220:00d2, 1420:62fc | has TODO |
 | `diplomacy_eval_bribe` | STUB | 1078:1480, 1078:455c, 11c0:0395 | has TODO |
 | `ui_draw_end_turn_prompt` | STUB | 10d0:0854, 10d8:00e0, 1110:0448, 11c0:0ec2, 1210:07ae | has TODO |
 | `dialog_menuz_id_to_index` | LIVE | 1220:0156 |  |
@@ -297,7 +299,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `dialog_client_rect` | LIVE | 1100:03ff |  |
 | `dlg_center_rect` | LIVE | 1068:0958, 1098:0a5b, 1098:0ae0, 1098:0b67, 1170:2623, 11f8:0000, 1210:0e29 |  |
 | `text_draw_aligned` | STUB | 1080:08e9, 1088:1554, 1098:00b5, 1098:01b0, 1098:0e0b, 1098:0ed1, 1098:103f, 1098:20f4, 10b0:137a, 10e8:0667, 1110:07c3, 1180:02d3, 1220:0889 | has TODO |
-| `dialog_get_item_rect` | STUB | 1098:0d43, 1100:03ff, 1220:0156 | has TODO |
+| `dialog_get_item_rect` | PARTIAL | 1098:0d43, 1098:124f, 10e8:0000, 1100:03ff, 1220:0156 | has TODO |
 | `dialog_show_message` | STUB | 1040:068e, 1098:124f, 1098:1612, 1220:00d2, 1220:0156, 1220:0eb8, 12b0:0004 | has TODO |
 | `text_res_list_advance` | LIVE | 1098:1f4f, 1100:0053, 1100:078a |  |
 | `main_enqueue_res_string` | LIVE | 1008:0a8d, 1420:4473 |  |
@@ -345,7 +347,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `dialog_frame3d_dark` | LIVE |  |  |
 | `dialog_frame3d_light` | LIVE |  |  |
 | `dialog_frame3d_layer` | LIVE |  |  |
-| `dialog_draw_frame3d` | STUB | 1018:24c5, 1220:0156, 1220:0d38 | has TODO |
+| `dialog_draw_frame3d` | PARTIAL | 1018:24c5, 1220:0156, 1220:0d38 | has TODO |
 | `text_shadow_offset` | LIVE | 10d8:02df |  |
 | `text_centered_x` | LIVE | 10d8:0495, 10d8:0528 |  |
 | `text_measure_scaled` | LIVE | 10d8:05b8, 1100:00a1 |  |
@@ -359,7 +361,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `text_dispatch_font` | LIVE | 1098:0186, 1098:0194, 11e8:0b40, 11e8:0cb0 |  |
 | `text_pack_pascal` | LIVE | 1100:0000, 1100:0053, 11f8:00fc, 11f8:014a |  |
 | `text_pascal_payload` | LIVE | 1100:0000, 1100:00a1 |  |
-| `text_draw_shadowed` | STUB | 1098:0e0b, 10d8:02df, 11e8:0b40, 1220:0f2f | has TODO |
+| `text_draw_shadowed` | PARTIAL | 1098:0e0b, 10d8:02df, 11e8:0b40, 1220:0f2f | has TODO |
 | `text_draw_at` | STUB | 1098:0e0b, 10d8:01fa | has TODO |
 | `text_draw_clipped` | STUB | 10d8:00e0, 10d8:01b0 | has TODO |
 | `text_draw_direct` | STUB | 10d8:00e0, 1100:0000, 1100:017b | has TODO |
@@ -474,6 +476,18 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `text_res_list_is_stop` | LIVE | 1098:1f4f |  |
 | `diplo_tribute_unit` | LIVE | 1160:0000, 1168:0000 |  |
 | `dialog_split_default_w` | LIVE | 1220:0000 |  |
+| `dialog_menuz_base_id` | LIVE | 1058:0e7f, 1220:0156 |  |
+| `dialog_menuz_last_id` | LIVE |  |  |
+| `dialog_get_item_rect_needs_scale` | LIVE | 1098:0d43, 1100:03ff, 1220:0156 |  |
+| `dialog_split_title_len` | LIVE | 1100:00ea, 1220:0000 |  |
+| `dialog_split_is_title_empty` | LIVE |  |  |
+| `dialog_frame3d_base_inset` | LIVE | 1018:24c5, 1220:0156, 1220:0d38 |  |
+| `dialog_frame3d_edge_trim` | LIVE |  |  |
+| `dialog_frame3d_base` | LIVE |  |  |
+| `diplo_has_treaty` | LIVE | 1168:0a07, 1168:0f47, 12d8:3a0a |  |
+| `diplomacy_contact_args_ok` | LIVE | 1078:455c, 1168:0a07, 1420:62fc |  |
+| `text_align_slot` | LIVE | 1098:0e0b, 1098:0ed1 |  |
+| `text_shadowed_needs_shadow` | LIVE | 1098:0ed1, 10d8:00e0, 10d8:01fa, 10d8:02df |  |
 
 ### `src/game.c`
 
@@ -487,14 +501,14 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `game_uprising_due` | LIVE | 1088:0be9, 1110:16c0, 1110:18ce, 11c8:003d |  |
 | `game_turn_tick` | PARTIAL | 1008:0000, 1040:068e, 1088:0000, 1088:0b6d, 1088:0be9, 1088:108a, 1088:13d5, 1088:1d99, 1088:1e32, 1110:03e9, 1138:0000, 1168:0000, 1178:0000, 1198:00a3, 11c0:3beb, 11e8:0075, 11f0:0000, 12d8:42f8 | has TODO |
 | `game_process_game_end` | STUB | 1040:1137, 1088:0b6d, 1180:0000, 1188:07ad | has TODO |
-| `game_spawn_uprisings` | STUB | 1088:0be9, 1110:16c0, 1110:18ce, 1110:1dbd, 11c0:12c8, 11c8:003d | has TODO |
+| `game_spawn_uprisings` | PARTIAL | 1088:0be9, 1110:16c0, 1110:18ce, 1110:1dbd, 11c0:12c8, 11c8:003d | has TODO |
 | `game_uprising_rng_scale` | LIVE | 1088:0be9, 11c8:003d |  |
-| `city_process_disaster` | STUB | 1030:0000, 1040:068e, 1088:0000, 1110:03ae, 11c8:003d, 1220:00d2, 1420:07f0, 1420:3efe, 1420:54fc, 1420:5500, 1420:5502, 1420:5503 | has TODO |
+| `city_process_disaster` | PARTIAL | 1030:0000, 1040:068e, 1088:0000, 1110:03ae, 11c8:003d, 1220:00d2, 1420:07f0, 1420:3efe, 1420:54fc, 1420:5500, 1420:5502, 1420:5503 | has TODO |
 | `game_calc_power_score` | LIVE | 1088:108a |  |
 | `game_update_power_rankings` | LIVE | 1088:108a, 12a8:000c |  |
 | `game_update_status_panel` | STUB | 1088:13d5, 1088:1a82, 11f8:0278, 1218:0956, 1220:00d2 | has TODO |
 | `game_accum_pollution` | LIVE | 1028:1afd, 1088:1e32, 12d8:42f0 |  |
-| `game_do_pollution_and_wonder_race` | STUB | 1028:1afd, 1088:1e32, 1170:3181, 12d8:42f0 | has TODO |
+| `game_do_pollution_and_wonder_race` | PARTIAL | 1028:1afd, 1088:1e32, 1170:3181, 12d8:42f0 | has TODO |
 | `game_pick_wonder_for_ai` | LIVE | 1088:1e32, 1170:05ca, 1170:3181 |  |
 | `civ_process_unit_moves` | LIVE | 1078:1480, 1128:0000, 11c0:0395, 11c0:0ec2, 11c0:16a4, 11f0:0000, 11f0:44d4, 1420:62fc |  |
 | `status_draw_tech_icons` | STUB | 1088:1a82, 11a8:0cb1 | has TODO |
@@ -511,13 +525,13 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `unit_reveal_area` | STUB | 11c0:0395, 11c0:12c8 | has TODO |
 | `sys_drain_input` | STUB | 1038:0c1d, 1108:0000, 11c0:0395, 11f0:0000, 11f0:06d2, 11f0:4ea0, 12b0:004c, 1420:1d44 | has TODO |
 | `game_calc_progress_threshold` | LIVE | 1088:1d99 |  |
-| `unit_show_info_popup` | STUB | 1098:0dda, 11f0:468c, 11f0:4754, 1218:0801, 1220:0156, 1420:62fc | has TODO |
+| `unit_show_info_popup` | PARTIAL | 1098:0dda, 11f0:468c, 11f0:4754, 1218:0801, 1220:0156, 1420:62fc | has TODO |
 | `unit_popup_is_end_of_turn` | LIVE | 1000:36b2, 1018:067b, 1030:0000, 1038:0bba, 1038:0c1d, 1080:0119, 1098:0000, 1098:00b5, 1098:0dda, 1098:0e0b, 1098:1104, 10d0:0854, 10d0:09a2, 10d8:00e0, 10e8:0000, 1100:0a33, 1110:0ff6, 1110:16c0, 1110:199b, 1180:0000, 11c8:00c4, 11f0:468c, 11f0:4808, 11f0:4a76, 11f8:0080, 11f8:0278, 1218:0abf, 1420:1a3c, 1420:47dd, 1420:47e9, 1420:47f6, 1420:4803, 1420:480b, 1420:481d, 1420:482f, 1420:483c, 1420:4845 |  |
 | `unit_popup_has_veteran` | LIVE | 1420:4803 |  |
 | `unit_popup_moves_full` | LIVE | 11c8:0063 |  |
 | `unit_popup_moves_frac` | LIVE |  |  |
 | `unit_popup_badge_needs_wrap` | LIVE |  |  |
-| `combat_resolve_attack` | STUB | 1050:0000, 1078:1480, 11c0:1bc3 | has TODO |
+| `combat_resolve_attack` | PARTIAL | 1050:0000, 1078:1480, 10d0:0854, 1110:0448, 1150:00c9, 11a8:0cb1, 11c0:1bc3, 11c0:231d | has TODO |
 | `combat_calc_odds` | LIVE | 1078:1480, 11c0:1bc3 |  |
 | `unit_found_city_if_home` | STUB | 11c0:16a4, 1420:5500, 1420:62fc | has TODO |
 | `map_check_zoc` | LIVE | 1110:16c0, 1110:18ce, 1110:1dbd, 1128:0000, 11c0:23fd |  |
@@ -565,7 +579,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `demo_life_years` | LIVE | 1188:123a |  |
 | `demo_rank_player` | LIVE | 1188:220a |  |
 | `status_lcg_next` | LIVE | 1088:1a82 |  |
-| `demo_show_demographics` | STUB | 1018:0380, 1110:16c0, 1110:16ee, 1188:123a, 1188:220a, 1420:5500 | has TODO |
+| `demo_show_demographics` | PARTIAL | 1018:0380, 1110:16c0, 1110:16ee, 1188:123a, 1188:220a, 1420:5500 | has TODO |
 | `demo_rank_row` | STUB | 1188:220a, 1420:3ced | has TODO |
 | `city_show_census_report` | STUB | 1018:0000, 1018:0380, 1018:1d5b, 1018:202a, 1030:0000 | has TODO |
 | `census_show_tech_bars` | STUB | 1018:0000, 1018:0380, 1018:03f0, 11c8:008a | has TODO |
@@ -573,12 +587,12 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `census_show_terrain_counts` | STUB | 1018:09cc | has TODO |
 | `trade_calc_bonus` | LIVE | 1038:0d09, 1110:1d99, 1170:3181, 11c8:02ec, 11e8:0dcf, 1420:5506 |  |
 | `trade_route_value` | LIVE | 1038:0d09, 1420:5513 |  |
-| `trade_deliver_caravan_goods` | STUB | 1038:0d09, 1088:13d5, 11c0:16a4, 1220:00d2, 1420:5500 | has TODO |
+| `trade_deliver_caravan_goods` | PARTIAL | 1038:0d09, 1088:13d5, 11c0:16a4, 1220:00d2, 1420:5500 | has TODO |
 | `diplomat_revolt_cost` | LIVE | 1168:12c1, 11b8:0000, 1420:5502 |  |
 | `diplomat_bribe_cost` | LIVE | 1168:12c1, 11b8:07c2 |  |
-| `diplomat_city_action` | STUB | 11b8:0000, 12d8:3a0a | has TODO |
-| `diplomat_bribe_unit` | STUB | 1088:13d5, 1110:03ae, 11b8:07c2, 11c0:12c8, 11c0:16a4, 11c0:1bc3 | has TODO |
-| `city_do_revolt` | STUB | 1038:0000, 1110:171f, 11b8:0f26, 11c0:12c8, 1220:00d2, 1420:4168 | has TODO |
+| `diplomat_city_action` | PARTIAL | 11b8:0000, 11c8:003d, 12d8:3a0a | has TODO |
+| `diplomat_bribe_unit` | PARTIAL | 1088:13d5, 1110:03ae, 11b8:07c2, 11c0:12c8, 11c0:16a4, 11c0:1bc3 | has TODO |
+| `city_do_revolt` | PARTIAL | 1038:0000, 1110:171f, 11b8:0f26, 11c0:12c8, 1220:00d2, 1420:4168 | has TODO |
 | `pic_play_shared` | STUB | 1018:0be0, 1018:1d5b, 1018:208f, 1030:0000, 1030:79ce, 1030:7c28, 1030:7e57, 1030:7ece, 1030:7f65, 1038:0000, 1040:068e, 1040:1137, 1080:099b, 1098:124f, 1170:0000, 1170:05af, 1170:05ca, 1188:0db8, 1188:123a, 11b8:0f26 | has TODO |
 | `tech_has_tech` | LIVE | 1170:3181 |  |
 | `pic_mode_is_modal` | LIVE | 1030:0000, 1098:124f, 1170:05ca |  |
@@ -820,6 +834,15 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `city_revolt_score` | LIVE | 1110:171f, 11b8:0f26, 11c0:12c8, 1220:00d2, 1420:4168 |  |
 | `demo_pollution_index` | LIVE | 1188:123a, 1188:220a, 11c8:0334, 1420:5500 |  |
 | `unit_reveal_seen_or` | LIVE | 11b8:0f26, 11c0:0395 |  |
+| `game_turn_fix_year` | LIVE | 1088:0000, 12d8:42fa |  |
+| `game_turn_quiz_due` | LIVE | 1110:03e9, 1178:0000 |  |
+| `game_turn_save_due` | LIVE | 1198:00a3, 11c0:3beb |  |
+| `combat_attacker_wins` | LIVE | 1050:0000, 11c0:1bc3, 11c8:003d |  |
+| `diplomat_revolt_half_due` | LIVE | 11b8:0000, 1420:5502 |  |
+| `diplomat_bribe_half_due` | LIVE | 11b8:07c2 |  |
+| `unit_popup_moves_needs_frac` | LIVE | 11f0:468c |  |
+| `unit_popup_build_tail_due` | LIVE | 1420:1a3c |  |
+| `city_revolt_best_foreign` | LIVE | 11b8:0f26 |  |
 
 ### `src/gfx_indexed.c`
 
@@ -954,7 +977,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `map_fill_rect` | LIVE | 1028:1d15 |  |
 | `map_draw_rect_border` | LIVE | 1028:1ca7 |  |
 | `map_try_place_isolated_tile` | LIVE | 1028:05e7 |  |
-| `map_init` | LIVE | 1208:0af1, 1210:025b, 1218:0386, 1420:b394 |  |
+| `map_init` | STUB | 1208:0af1, 1210:025b, 1218:0386, 1420:b394 | has TODO |
 | `map_wndproc_main` | LIVE | 1008:0329, 1008:0d68, 1098:06f8, 10d0:0854, 1110:03e9, 1208:0054, 1208:0af1 |  |
 | `map_wndproc_small` | LIVE | 1110:03ae, 1110:03e9, 1210:0000, 1210:025b, 1210:09b4 |  |
 | `map_wndproc_status` | LIVE | 1088:13d5, 11f8:0278, 1218:0000, 1218:0386, 1218:0801, 1218:0956 |  |

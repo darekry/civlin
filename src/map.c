@@ -87,11 +87,13 @@ int map_try_place_isolated_tile(int x, int y)
 civ_error_t map_init(void)
 {
     /* WdwMap/WdwSmMap/WdwStatus_Open @ 1208:0af1/1210:025b/1218:0386.
-     * WONTFIX-Win16: no CREATEWINDOW/scroll-range/SETTIMER; the 64 KB tile
-     * buffer (1420:b394/b396, s_map above, .bss = startup-allocated, no
-     * GLOBALALLOC lock) is ready. Views/ports are SDL textures (owner:
-     * caller). No-op CIV_OK. */
-    return CIV_OK;
+     * HONEST STOP (fala H): no CREATEWINDOW/scroll-range/200 ms timer, no
+     * 64 KB tile buffer carve (1420:b394/b396), no views/ports as SDL
+     * textures yet (owner: caller, U4) -> CIV_ERR_UNSUPPORTED. No globals,
+     * no exit(), read-only.
+     * TODO: Orig WdwMap_Open @ 1208:0af1 + WdwSmMap_Open @ 1210:025b +
+     * WdwStatus_Open @ 1218:0386 (window/buffer/view owners, U4). */
+    return CIV_ERR_UNSUPPORTED;
 }
 
 win16_msg_result_t map_wndproc_main(int msg, long wparam, long lparam)
@@ -160,7 +162,7 @@ void map_shutdown(void)
 
 civ_error_t wdwstatus_calc_upper_rect(civ_rect_t *out)
 {
-    /* TODO: FUN_1218_0956 @ 1218:0956 (client-rect -> centered frame,
+    /* TODO: Orig FUN_1218_0956 @ 1218:0956 (client-rect -> centered frame,
      * cy+0x1e variant; INFLATERECT -1,-1; see map.h). OS-free cx/cy head
      * is LIVE in wdwstatus_frame_metrics below; the SETRECT field order
      * + GLOBALLOCK rect fetch stay Win16 until decoded. Ref
@@ -173,7 +175,7 @@ civ_error_t wdwstatus_calc_upper_rect(civ_rect_t *out)
 
 civ_error_t wdwstatus_calc_lower_rect(civ_rect_t *out)
 {
-    /* TODO: FUN_1218_0a06 @ 1218:0a06 (cy*2+0x46/0x1e variant; same head
+    /* TODO: Orig FUN_1218_0a06 @ 1218:0a06 (cy*2+0x46/0x1e variant; same head
      * as above, LIVE in wdwstatus_frame_metrics). Ref unpacked/civ.exe
      * read-only (NE Win3.x, 832512 B): anchor 1218:0a06. NULL out ->
      * NOENT (orig faulted on a bad far pointer). */
