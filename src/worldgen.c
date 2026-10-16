@@ -34,15 +34,153 @@ int worldgen_dir_dy_at(int dir)
 
 civ_error_t worldgen_generate_random(void)
 {
-    /* TODO: Map_GenerateRandomOrLoad @ 1028:0000 param==0 path, ordered
-     * pipeline: Sound_PlayId(4)=OPENING at start, then seed_one_island ->
-     * paint_blob loop (Rng_Range @ 11c8:003d sized scatter) ->
-     * label_continents (@ 1028:0a93) -> gen_rivers (@ 1028:066a) ->
-     * score_city_sites (@ 1028:0fb4) -> build_continent/ocean_links (@
-     * 1028:12c6/162c), with Sys_Yield @ 1098:0157 per row + Rng_Range for
-     * every random pick and progress 1000:29ea. Callers outward: NewGame
-     * random path; scratch/Win16 tail TBD -> stub. */
-    return CIV_ERR_UNSUPPORTED;
+    /* Orig Map_GenerateRandomOrLoad @ 1028:0000 param==0 path: Sound_PlayId
+     * (4)=OPENING.wav at start (audio.h, SDL tail TBD), then FillRect
+     * scratch, SeedOneIsland loop (island_target/done), DrawRectBorder x2,
+     * 6x-neighbour fixup, latitude/moisture, scatter TryPlaceIsolatedTile,
+     * GenRivers, FillRect + LabelContinents (label + Score + Links +
+     * borders). Ordered pipeline with Sys_Yield @ 1098:0157 per row +
+     * Rng_Range @ 11c8:003d every pick + progress 1000:29ea. OS-free 1:1
+     * port via map_fill_rect/draw_rect_border/get/set_tile,
+     * map_try_place_isolated_tile @ 1028:05e7, map_wrap_x, rng_range,
+     * island_target/done, seed_origin, scatter_count/is_resample/
+     * tile_action, river_target/commit, score/label/link kernels,
+     * sys_yield. Settings DAT_12d8_38f4/38f6/38f8/38fa TBD -> Linux
+     * defaults land=1 (960 tiles), scatter=1 (1600 tries). Sound tail
+     * TODO Orig Sound_PlayId(4) (audio module, not gated here). Latitude
+     * exact band/6 switch + moisture budget/decay TBD -> minimal approx
+     * (50% 1s kept for Score 1/2/0xb, rest random 3/6/7/0xd/0xe via
+     * Rng_Range). Moisture sweep TBD. No Win16, no globals, no exit(). */
+    int target;
+    int count;
+    int x;
+    int y;
+    int step;
+    int scat_n;
+    int cur_x;
+    int cur_y;
+    civ_error_t r;
+
+    /* 1. Scratch clear (0,0,0x140,200). */
+    map_fill_rect(0, 0, CIV_MAP_BUF_W, CIV_MAP_BUF_H, 0);
+    /* 2. SeedOneIsland loop (no timeout per decompile: avg >0, always
+     * ends; target-count !=0 && count <= target via island_done). */
+    target = worldgen_island_target(1);
+    count = 0;
+    while (!worldgen_island_done(count, target)) {
+        int added;
+
+        r = worldgen_seed_one_island();
+        if (r != CIV_OK)
+            return r;
+        added = 0;
+        for (y = 0; y < (int)CIV_MAP_H; y++) {
+            for (x = 0; x < (int)CIV_MAP_W; x++) {
+                int s = map_get_tile(x + 0xa0, y);
+
+                if (s != -1 && s != 0)
+                    added++;
+            }
+        }
+        count += added;
+        sys_yield();
+    }
+    /* 3. Borders 0x0f (game 0x50 x 0x32, interior 1..0x4e/1..0x30). */
+    map_draw_rect_border(0, 0, 0x4f, 0x31, 0x0f);
+    map_draw_rect_border(1, 1, 0x4d, 0x2f, 0x0f);
+    map_fill_rect(0, 0, CIV_MAP_W, 1, 0x0f);
+    map_fill_rect(0, 0x31, CIV_MAP_W, 1, 0x0f);
+    /* 4. 6x-neighbour diagonal fixup (0110/1001 over 2x2, 3 writes). */
+    for (y = 1; y <= 0x30; y++) {
+        for (x = 1; x <= 0x4d; x++) {
+            int tl = map_get_tile(x, y);
+            int tr = map_get_tile(x + 1, y);
+            int bl = map_get_tile(x, y + 1);
+            int br = map_get_tile(x + 1, y + 1);
+
+            if (tl < 0 || tr < 0 || bl < 0 || br < 0)
+                continue;
+            if (tl == 0x0f || tr == 0x0f || bl == 0x0f || br == 0x0f)
+                continue;
+            if (tl == br && tr == bl && tl != tr) {
+                map_set_tile(x + 1, y, (uint8_t)tl);
+                map_set_tile(x, y + 1, (uint8_t)tl);
+                map_set_tile(x + 1, y + 1, (uint8_t)tl);
+            }
+        }
+        sys_yield();
+    }
+    /* 5. Latitude approx (exact band/6 desert/plains/forest/jungle/tundra
+     * 3/6/7/0xc/0xd/0xe switch TBD). */
+    for (y = 0; y < (int)CIV_MAP_H; y++) {
+        for (x = 0; x < (int)CIV_MAP_W; x++) {
+            int t = map_get_tile(x, y);
+
+            if (t != 1)
+                continue;
+            if (rng_range(2) != 0)
+                continue;
+            {
+                unsigned p = rng_range(5);
+
+                if (p == 0)
+                    map_set_tile(x, y, 3);
+                else if (p == 1)
+                    map_set_tile(x, y, 6);
+                else if (p == 2)
+                    map_set_tile(x, y, 7);
+                else if (p == 3)
+                    map_set_tile(x, y, 0x0d);
+                else
+                    map_set_tile(x, y, 0x0e);
+            }
+        }
+        sys_yield();
+    }
+    /* 6. Scatter (DAT_12d8_38fa+1)*800, even resample + odd neighbour
+     * step, 0xd -> TryPlaceIsolatedTile, 2/3/6/7/10/0xb/0xc/0xf/0xe commit
+     * (no-op, tile already that value), default skip. */
+    scat_n = worldgen_scatter_count(1);
+    cur_x = 0;
+    cur_y = 0;
+    for (step = 0; step < scat_n; step++) {
+        int t;
+        int act;
+
+        if (worldgen_scatter_is_resample((unsigned)step)) {
+            cur_x = (int)rng_range((int)CIV_MAP_W);
+            cur_y = (int)rng_range((int)CIV_MAP_H);
+        } else {
+            int dir = (int)rng_range(8);
+
+            cur_x = map_wrap_x(cur_x + worldgen_dir_dx_at(dir));
+            cur_y = cur_y + worldgen_dir_dy_at(dir);
+            if (cur_y < 0 || cur_y >= (int)CIV_MAP_H)
+                continue;
+            if (cur_x < 0 || cur_x >= (int)CIV_MAP_W)
+                continue;
+        }
+        t = map_get_tile(cur_x, cur_y);
+        if (t < 0)
+            continue;
+        act = worldgen_scatter_tile_action(t);
+        if (act == 2)
+            (void)map_try_place_isolated_tile(cur_x, cur_y);
+        else if (act == 1)
+            (void)0;
+        sys_yield();
+    }
+    /* 7. Rivers. */
+    r = worldgen_gen_rivers();
+    if (r != CIV_OK)
+        return r;
+    /* 8. Tail: FillRect(0xa0,0,0xa0,200,0) + Label (label + Score + Links
+     * + borders, DAT_1248_0000=1 caller-side). */
+    map_fill_rect(0xa0, 0, 0xa0, 200, 0);
+    r = worldgen_label_continents();
+    if (r != CIV_OK)
+        return r;
+    return CIV_OK;
 }
 
 civ_error_t worldgen_load_preset(const uint8_t *image, size_t len)
@@ -290,68 +428,673 @@ civ_error_t worldgen_paint_blob(int x, int y)
 
 civ_error_t worldgen_label_continents(void)
 {
-    /* TODO: Map_LabelContinents @ 1028:0a93: connected-components
-     * labeling over 0x50 x 0x32 + rank sort (flood-merge labels, size
-     * counts @ 0x4334, top-0xF rank sort with sort comparator size desc
-     * -- larger first, tiebreak TBD; calls 1028:12c6/162c/0fb4 tail +
-     * border FillRects via Map_FillRect @ 1028:1d15 /
-     * Map_DrawRectBorder @ 1028:1ca7). Caller: generate_random tail. */
-    return CIV_ERR_UNSUPPORTED;
+    /* Orig Map_LabelContinents @ 1028:0a93: connected-components labeling
+     * over 0x50 x 0x32 + rank sort (flood-merge labels, size counts @
+     * 0x4334, top-0xF rank sort size desc via worldgen_continent_rank_cmp,
+     * calls 1028:12c6/162c/0fb4 tail + border FillRects via Map_FillRect @
+     * 1028:1d15 / Map_DrawRectBorder @ 1028:1ca7). OS-free 1:1 port via
+     * map_get/set_tile, map_wrap_x @ 1128:177e (X wrap, Y never wraps),
+     * worldgen_label_is_land_pass gate ((tile != 10) == (pass == 0)),
+     * rank cmp, sys_yield per row. Continent ids live at tile(x,y+0x32)
+     * (cf. map_get_continent_id @ 1110:1d99). No Win16, no globals (queue
+     * + sizes are locals), no exit(). */
+    static const int fdx[4] = { 0, 1, 0, -1 };
+    static const int fdy[4] = { -1, 0, 1, 0 };
+    int sizes[256];
+    int remap[256];
+    int order[256];
+    int next_id;
+    int pass;
+    int y;
+    int x;
+    int i;
+    int n;
+    civ_error_t r;
+
+    for (i = 0; i < 256; i++) {
+        sizes[i] = 0;
+        remap[i] = 0;
+        order[i] = 0;
+    }
+    /* Clear continent plane (0,0x32,0x50,0x32). */
+    map_fill_rect(0, 0x32, CIV_MAP_W, CIV_MAP_H, 0);
+    next_id = 1;
+    for (pass = 0; pass <= 1; pass++) {
+        for (y = 0; y < (int)CIV_MAP_H; y++) {
+            for (x = 0; x < (int)CIV_MAP_W; x++) {
+                int t;
+                int is_ocean;
+                int cur;
+                int qx[4000];
+                int qy[4000];
+                int qh;
+                int qt;
+
+                t = map_get_tile(x, y);
+                if (t < 0)
+                    continue;
+                is_ocean = (t == 10) ? 1 : 0;
+                if (!worldgen_label_is_land_pass(pass, is_ocean))
+                    continue;
+                cur = map_get_tile(x, y + 0x32);
+                if (cur != 0)
+                    continue;
+                if (next_id >= 255)
+                    continue;
+                cur = next_id;
+                next_id++;
+                sizes[cur] = 1;
+                map_set_tile(x, y + 0x32, (uint8_t)cur);
+                qx[0] = x;
+                qy[0] = y;
+                qh = 0;
+                qt = 1;
+                while (qh < qt) {
+                    int cx = qx[qh];
+                    int cy = qy[qh];
+                    int d;
+
+                    qh++;
+                    for (d = 0; d < 4; d++) {
+                        int nx = map_wrap_x(cx + fdx[d]);
+                        int ny = cy + fdy[d];
+                        int nt;
+                        int n_ocean;
+                        int nl;
+
+                        if (ny < 0 || ny >= (int)CIV_MAP_H)
+                            continue;
+                        if (nx < 0 || nx >= (int)CIV_MAP_W)
+                            continue;
+                        nl = map_get_tile(nx, ny + 0x32);
+                        if (nl != 0)
+                            continue;
+                        nt = map_get_tile(nx, ny);
+                        if (nt < 0)
+                            continue;
+                        n_ocean = (nt == 10) ? 1 : 0;
+                        if (n_ocean != is_ocean)
+                            continue;
+                        if (!worldgen_label_is_land_pass(pass, n_ocean))
+                            continue;
+                        map_set_tile(nx, ny + 0x32, (uint8_t)cur);
+                        sizes[cur]++;
+                        if (qt < 4000) {
+                            qx[qt] = nx;
+                            qy[qt] = ny;
+                            qt++;
+                        }
+                    }
+                }
+            }
+            sys_yield();
+        }
+    }
+    /* Rank sort size desc (larger first, tie 0 stable) via
+     * worldgen_continent_rank_cmp, then remap old -> rank+1. */
+    n = next_id - 1;
+    if (n > 255)
+        n = 255;
+    for (i = 0; i < n; i++)
+        order[i] = i + 1;
+    for (i = 0; i < n; i++) {
+        int j;
+
+        for (j = i + 1; j < n; j++) {
+            int a = order[i];
+            int b = order[j];
+            int c = worldgen_continent_rank_cmp(sizes[a], sizes[b]);
+
+            if (c > 0) {
+                order[i] = b;
+                order[j] = a;
+            }
+        }
+    }
+    for (i = 0; i < n; i++)
+        remap[order[i]] = i + 1;
+    for (y = 0; y < (int)CIV_MAP_H; y++) {
+        for (x = 0; x < (int)CIV_MAP_W; x++) {
+            int old = map_get_tile(x, y + 0x32);
+
+            if (old > 0 && old < 256 && remap[old] != 0)
+                map_set_tile(x, y + 0x32, (uint8_t)remap[old]);
+        }
+    }
+    /* Border FillRects + DrawRectBorder tails (Map_FillRect @ 1028:1d15
+     * edges + Map_DrawRectBorder @ 1028:1ca7). Idempotent with the
+     * generate_random borders. */
+    map_fill_rect(0, 0, CIV_MAP_W, 1, 0x0f);
+    map_fill_rect(0, 0x31, CIV_MAP_W, 1, 0x0f);
+    map_draw_rect_border(0, 0, 0x4f, 0x31, 0x0f);
+    map_draw_rect_border(1, 1, 0x4d, 0x2f, 0x0f);
+    /* Tails: BuildContinentLinks @ 1028:12c6 + BuildOceanLinks @ 1028:162c
+     * + ScoreCitySites @ 1028:0fb4 (sole caller 1028:0f0c path). */
+    r = worldgen_build_continent_links(1);
+    if (r != CIV_OK)
+        return r;
+    r = worldgen_build_ocean_links(1);
+    if (r != CIV_OK)
+        return r;
+    r = worldgen_score_city_sites();
+    if (r != CIV_OK)
+        return r;
+    return CIV_OK;
 }
 
 civ_error_t worldgen_gen_rivers(void)
 {
-    /* TODO: Map_GenRivers @ 1028:066a: river random-walk (collect 0x0c
-     * tiles, directional walk on the 8-dir dx/dy table via Rng_Range,
-     * len > 4 required to commit) + save/restore island at +0xa0 via
-     * copy_rect @ 1028:06c1 (save) / 0865 (restore) / 0908 (commit).
-     * Walk metric TBD. */
-    return CIV_ERR_UNSUPPORTED;
+    /* Orig Map_GenRivers @ 1028:066a: collect 0x0c tiles (8000B x2 bufs),
+     * Rng_Range @ 11c8:003d start + dir, walk until adjacent 0x01/0x09/
+     * 0x0d/0x01 or len cap; len > 4 commit via worldgen_river_commit_len
+     * (banks 0x02 -> clear); save/restore island at +0xa0 via Map_CopyRect
+     * @ 1028:1dfb (save @ 06c1, restore @ 0865, commit @ 0908); count =
+     * river_target = DAT_12d8_38f4*2+DAT_12d8_38f8*2+6; abort after 0xff
+     * tries / 0x32 fails. OS-free 1:1 port via map_get/set_tile,
+     * map_wrap_x (X wrap), rng_range, copy_rect, river_commit_len/target,
+     * dir dx/dy table, sys_yield per try. Settings 38f4/38f8 TBD -> Linux
+     * defaults land=1/moist=1 (preset 1 => target 10). Walk drift
+     * (local_c+iVar6*2+(local_10&1)*-2)&7 TBD -> simplified 8-dir
+     * Rng_Range(8) walk (PARTIAL, exact metric TODO Orig). No Win16, no
+     * globals (seeds + path are locals), no exit(). */
+    int seed_x[4000];
+    int seed_y[4000];
+    int nseed;
+    int target;
+    int committed;
+    int tries;
+    int fails;
+    int y;
+    int x;
+
+    nseed = 0;
+    for (y = 0; y < (int)CIV_MAP_H; y++) {
+        for (x = 0; x < (int)CIV_MAP_W; x++) {
+            int t = map_get_tile(x, y);
+
+            if (t == 0x0c && nseed < 4000) {
+                seed_x[nseed] = x;
+                seed_y[nseed] = y;
+                nseed++;
+            }
+        }
+    }
+    if (nseed == 0)
+        return CIV_OK;
+    target = worldgen_river_target(1, 1);
+    if (target < 0)
+        target = 10;
+    committed = 0;
+    tries = 0;
+    fails = 0;
+    while (committed < target && tries < 0xff && fails < 0x32) {
+        int si;
+        int rx;
+        int ry;
+        int dir;
+        int len;
+        int path_x[32];
+        int path_y[32];
+        int k;
+        int reached;
+        civ_error_t sr;
+
+        tries++;
+        si = (int)rng_range(nseed);
+        rx = seed_x[si];
+        ry = seed_y[si];
+        dir = (int)rng_range(8);
+        /* Save island at +0xa0 (06c1). */
+        sr = worldgen_copy_rect(0, 0, CIV_MAP_W, (int)CIV_MAP_H, 0xa0, 0);
+        if (sr != CIV_OK) {
+            fails++;
+            sys_yield();
+            continue;
+        }
+        len = 0;
+        reached = 0;
+        for (k = 0; k < 32; k++) {
+            int d;
+            int found;
+
+            found = 0;
+            for (d = 0; d < 8; d++) {
+                int ax = map_wrap_x(rx + worldgen_dir_dx_at(d));
+                int ay = ry + worldgen_dir_dy_at(d);
+                int at;
+
+                if (ay < 0 || ay >= (int)CIV_MAP_H)
+                    continue;
+                if (ax < 0 || ax >= (int)CIV_MAP_BUF_W)
+                    continue;
+                at = map_get_tile(ax, ay);
+                if (at == 0x01 || at == 0x09 || at == 0x0d) {
+                    found = 1;
+                    break;
+                }
+            }
+            if (found) {
+                reached = 1;
+                break;
+            }
+            dir = (int)rng_range(8);
+            rx = map_wrap_x(rx + worldgen_dir_dx_at(dir));
+            ry = ry + worldgen_dir_dy_at(dir);
+            if (ry < 0 || ry >= (int)CIV_MAP_H)
+                break;
+            if (rx < 0 || rx >= (int)CIV_MAP_W)
+                break;
+            if (len < 32) {
+                path_x[len] = rx;
+                path_y[len] = ry;
+                len++;
+            }
+            map_set_tile(rx, ry, 0x0c);
+        }
+        (void)reached;
+        if (worldgen_river_commit_len(len)) {
+            int p;
+            int d;
+
+            /* Commit (0908): keep walk + clear banks 0x02. */
+            for (p = 0; p < len; p++) {
+                for (d = 0; d < 8; d++) {
+                    int bx = map_wrap_x(path_x[p] + worldgen_dir_dx_at(d));
+                    int by = path_y[p] + worldgen_dir_dy_at(d);
+
+                    if (by < 0 || by >= (int)CIV_MAP_H)
+                        continue;
+                    if (bx < 0 || bx >= (int)CIV_MAP_W)
+                        continue;
+                    if (map_get_tile(bx, by) == 0x02)
+                        map_set_tile(bx, by, 0);
+                }
+            }
+            committed++;
+        } else {
+            /* Restore (0865). */
+            (void)worldgen_copy_rect(0xa0, 0, CIV_MAP_W, (int)CIV_MAP_H,
+                                     0, 0);
+            fails++;
+        }
+        sys_yield();
+    }
+    return CIV_OK;
 }
 
 civ_error_t worldgen_spread_pollution(unsigned level)
 {
-    (void)level;
-    /* TODO: Map_SpreadPollution @ 1028:1afd: fallout tiles from
-     * Game_DoPollutionAndWonderRace. Intended OS-free loop is level -> n
-     * tiles via Rng_Range + Map_SetTile over 0x50 x 0x32, but the exact n
-     * formula + ocean-neighbour count vs 7 - level gate + paint
-     * 0x130e/0x1306 or 0x130b/0x1303 + 1110:1b36 tail are still TBD from
-     * decompile, so this stays a stub (CIV_ERR_UNSUPPORTED). */
-    return CIV_ERR_UNSUPPORTED;
+    /* Orig Map_SpreadPollution @ 1028:1afd: fallout tiles from
+     * Game_DoPollutionAndWonderRace. Level -> n tiles via Rng_Range @
+     * 11c8:003d + Map_SetTile @ 11e8:0e19 loop over 0x50 x 0x32 (n grows
+     * with level, random sites via Rng_Range, paint fallout tile via
+     * Map_SetTile). Gate via worldgen_pollution_should_paint (ocean_neigh
+     * < 7-level && ((x*0xb+y*0xd)&7) == (level&7), decompiler local_8 +
+     * iVar6*0xb+iVar7*0xd&7). Paint is tile|1 + 130e/1306 vs 130b/1303 +
+     * Map_ClearOccupancyBits(6) @ 1110:1b36 + Map_RevealCenter @ 1110:1461
+     * tails. OS-free 1:1 port via rng_range, map_get/set_tile,
+     * map_clear_occupancy_bits (LIVE), should_paint gate, sys_yield.
+     * Exact n formula TBD -> Linux n = level*8 (grows with level, level 0
+     * => 0 no-op). Ocean-neighbour count is 8-neighbour ocean(10) via
+     * shared dx/dy. 130e/1306 vs 130b/1303 layer choice + RevealCenter SDL
+     * view tail TBD -> PARTIAL (tile|1 + clear(6) LIVE, view documented).
+     * Level 0 returns CIV_OK (provably no-op). No Win16, no globals. */
+    unsigned n;
+    unsigned i;
+
+    if (level == 0)
+        return CIV_OK;
+    if (level > 7)
+        level = 7;
+    n = level * 8u;
+    for (i = 0; i < n; i++) {
+        int x = (int)rng_range((int)CIV_MAP_W);
+        int y = (int)rng_range((int)CIV_MAP_H);
+        int t;
+        int d;
+        int ocean_n;
+
+        t = map_get_tile(x, y);
+        if (t < 0)
+            continue;
+        ocean_n = 0;
+        for (d = 0; d < 8; d++) {
+            int nx = map_wrap_x(x + worldgen_dir_dx_at(d));
+            int ny = y + worldgen_dir_dy_at(d);
+
+            if (ny < 0 || ny >= (int)CIV_MAP_H)
+                continue;
+            if (nx < 0 || nx >= (int)CIV_MAP_W)
+                continue;
+            if (map_get_tile(nx, ny) == 10)
+                ocean_n++;
+        }
+        if (!worldgen_pollution_should_paint(ocean_n, (int)level, x, y))
+            continue;
+        map_set_tile(x, y, (uint8_t)(t | 1));
+        (void)map_clear_occupancy_bits(x, y, 6u);
+        if ((i & 7u) == 0u)
+            sys_yield();
+    }
+    return CIV_OK;
 }
 
 civ_error_t worldgen_score_city_sites(void)
 {
-    /* TODO: FUN_1028_0fb4 @ 1028:0fb4: weights[0x18] from
-     * 1420:17d6*3+17d8 (+17d7*2 except cols 2/0xb, moisture penalties at
-     * 12b8/12bc), x 2..0x4d y 2..0x2f scan for land 1/2/0xb, 0x15
-     * neighbours sum (x2 idx<9 and idx==0, +2 water-adjacent 2/0xb, +0xc
-     * river), dither -0x10 on (x*7+y*0xb&2), clamp ((sum-0x78)/8,1,0xf),
-     * Map_SetTile(x+0x50,y,score) + rank layer (y+0x32) + hist 0x218a.
-     * Caller 1028:0f0c. Tables TBD. */
-    return CIV_ERR_UNSUPPORTED;
+    /* Orig FUN_1028_0fb4 @ 1028:0fb4 -> Map_ScoreCitySites: weights[0x18]
+     * from 1420:17d6*3+17d8 (+17d7*2 except cols 2/0xb, moisture at
+     * 12b8/12bc), scan x 2..0x4d y 2..0x2f for land 1/2/0xb, 0x15
+     * neighbours (5x5 minus 4 corners: centre + 8 + outer 12), x2 idx<9
+     * and idx==0, +2 water-adjacent 2/0xb, +0xc improved, dither -0x10,
+     * clamp ((sum-0x78)/8,1,0xf) via worldgen_score_clamp + layer
+     * score/2+8 via worldgen_score_layer, writes Map_SetTile(x+0x50,y,score)
+     * + rank layer (y+0x32) + hist 0x218a. Caller Map_LabelContinents @
+     * 1028:0f0c. OS-free 1:1 port via map_get/set_tile, map_wrap_x (X wrap),
+     * map_check_tile_improved @ 1110:1c72 (seed DAT_13c0_0000 TBD -> 0),
+     * score_weight/water_bonus/dither/accum/clamp/layer kernels, sys_yield
+     * per row. Tables 1420:17d6/17d8/17d7 + 12b8/12bc caller-side TBD ->
+     * Linux approx w = tile*3 via score_weight for land (ocean 10 folded
+     * to 0, only water bonus matters), exact yield tables TBD. Rank-copy
+     * (y+0x32 overwrite) + hist 0x218a tails TBD -> PARTIAL (score layer
+     * LIVE, rank/hist documented). No Win16, no globals, no exit(). */
+    static const int ndx[21] = {
+        0, 0, 1, 1, 1, 0, -1, -1, -1,
+        -2, -2, -2, -1, -1, 0, 0, 1, 1, 2, 2, 2
+    };
+    static const int ndy[21] = {
+        0, -1, -1, 0, 1, 1, 1, 0, -1,
+        -1, 0, 1, -2, 2, -2, 2, -2, 2, -1, 0, 1
+    };
+    int y;
+    int x;
+
+    for (y = 2; y <= 0x2f; y++) {
+        for (x = 2; x <= 0x4d; x++) {
+            int centre;
+            int sum;
+            int idx;
+            int score;
+
+            centre = map_get_tile(x, y);
+            if (centre != 1 && centre != 2 && centre != 0x0b)
+                continue;
+            sum = 0;
+            for (idx = 0; idx < 21; idx++) {
+                int nx = map_wrap_x(x + ndx[idx]);
+                int ny = y + ndy[idx];
+                int t;
+                int w;
+                int bonus;
+
+                if (ny < 0 || ny >= (int)CIV_MAP_BUF_H) {
+                    w = 0;
+                    bonus = 0;
+                } else {
+                    if (nx < 0 || nx >= (int)CIV_MAP_BUF_W)
+                        t = -1;
+                    else
+                        t = map_get_tile(nx, ny);
+                    if (t < 0) {
+                        w = 0;
+                        bonus = 0;
+                    } else if (t == 10) {
+                        w = 0;
+                        bonus = worldgen_score_water_bonus(t, x, y);
+                    } else {
+                        w = worldgen_score_weight(t, 0, 0, t, 0, 0);
+                        bonus = worldgen_score_water_bonus(t, x, y);
+                    }
+                }
+                sum = worldgen_score_accum(sum, w, idx, bonus);
+            }
+            if (map_check_tile_improved(centre, x, y, 0))
+                sum += 0x0c;
+            sum += worldgen_score_dither(centre, x, y);
+            score = worldgen_score_clamp(sum);
+            (void)worldgen_score_layer(score);
+            map_set_tile(x + 0x50, y, (uint8_t)score);
+        }
+        sys_yield();
+    }
+    return CIV_OK;
 }
 
 civ_error_t worldgen_build_continent_links(int yield)
 {
-    (void)yield;
-    /* TODO: FUN_1028_12c6 @ 1028:12c6 (yield): 0x14 x 0x0d blocks of 4x4,
-     * ocean (10) vs land corner pair on one continent id, gate
-     * Path_CheckContinentLink @ 1128:16d0 < 0x14, OR dir bits at +4 (+
-     * reverse). Progress 1000:29ea (Util_Progress over 0x1248) +
-     * Sys_Yield @ 1098:0157 per row when yield!=0. Caller labeling. */
-    return CIV_ERR_UNSUPPORTED;
+    /* Orig FUN_1028_12c6 @ 1028:12c6 (yield) -> Map_BuildContinentLinks:
+     * 0x14 x 0x0d blocks of 4x4, ocean(10)/land corner pair on one
+     * continent id, gate Path_CheckContinentLink @ 1128:16d0 < 0x14, OR
+     * dir bits at +4 (+ reverse). Progress 1000:29ea (Util_Progress over
+     * 0x1248 bar) + Sys_Yield @ 1098:0157 per row when yield!=0. Caller
+     * Map_LabelContinents @ 1028:0a93. OS-free 1:1 port via map_get_tile,
+     * map_get_continent_id @ 1110:1d99 (tile(x,y+0x32)), map_wrap_x,
+     * path_check_continent_link, continent_link_allowed, link_grid_w/h,
+     * link_idx/bit/rev_bit, sys_yield. Link tables 0x104B at 1248:0004 /
+     * 0108 have no Linux globals -> mapped into the free tile-buffer
+     * window (80,50) 20x13 cont + (80,64) 20x13 ocean (x 80..99, y
+     * 50..76, free vs main/score/scratch/continent/occupancy, see map.h),
+     * persisted via map_get/set_tile (no new globals). Dir 1..4 cont
+     * (1=N,2=E,3=S,4=W) from ocean->land delta; reverse via rev_bit.
+     * Progress UI stays caller-side (util_progress available). No Win16,
+     * no exit(). */
+    const int base_x = (int)CIV_MAP_W;
+    const int base_y = (int)CIV_MAP_H;
+    int bx;
+    int by;
+
+    map_fill_rect(base_x, base_y, (unsigned)worldgen_link_grid_w(),
+                  (unsigned)worldgen_link_grid_h(), 0);
+    for (by = 0; by < worldgen_link_grid_h(); by++) {
+        for (bx = 0; bx < worldgen_link_grid_w(); bx++) {
+            int cx[4];
+            int cy[4];
+            int ct[4];
+            int cc[4];
+            int k;
+            int ocean_i;
+            int land_i;
+
+            cx[0] = bx * 4 + 1;
+            cy[0] = by * 4 + 1;
+            cx[1] = bx * 4 + 2;
+            cy[1] = by * 4 + 1;
+            cx[2] = bx * 4 + 1;
+            cy[2] = by * 4 + 2;
+            cx[3] = bx * 4 + 2;
+            cy[3] = by * 4 + 2;
+            for (k = 0; k < 4; k++) {
+                int wx = map_wrap_x(cx[k]);
+
+                if (cx[k] < 0 || cx[k] >= (int)CIV_MAP_W ||
+                    cy[k] < 0 || cy[k] >= (int)CIV_MAP_H) {
+                    ct[k] = -1;
+                    cc[k] = -1;
+                } else {
+                    ct[k] = map_get_tile(wx, cy[k]);
+                    cc[k] = map_get_continent_id(wx, cy[k]);
+                }
+            }
+            ocean_i = -1;
+            land_i = -1;
+            for (k = 0; k < 4; k++) {
+                int t = ct[k];
+
+                if (t == 10 && cc[k] >= 0) {
+                    int m;
+
+                    for (m = 0; m < 4; m++) {
+                        int lt = ct[m];
+
+                        if (m == k)
+                            continue;
+                        if (lt < 0 || lt == 10 || lt == 0 || lt == 0x0f)
+                            continue;
+                        if (cc[m] < 0)
+                            continue;
+                        if (cc[m] == cc[k]) {
+                            ocean_i = k;
+                            land_i = m;
+                            break;
+                        }
+                    }
+                    if (ocean_i >= 0)
+                        break;
+                }
+            }
+            if (ocean_i < 0 || land_i < 0)
+                continue;
+            {
+                int cont = cc[ocean_i];
+                int cost = path_check_continent_link(cx[ocean_i],
+                                                     cy[ocean_i], cont);
+                int dir;
+                int bit;
+                int rev;
+                int idx;
+                int dx;
+                int dy;
+                int old;
+
+                if (!worldgen_continent_link_allowed(cost))
+                    continue;
+                dx = cx[land_i] - cx[ocean_i];
+                dy = cy[land_i] - cy[ocean_i];
+                if (dx > 0)
+                    dir = 2;
+                else if (dx < 0)
+                    dir = 4;
+                else if (dy > 0)
+                    dir = 3;
+                else if (dy < 0)
+                    dir = 1;
+                else
+                    dir = 1;
+                bit = worldgen_link_bit(dir);
+                rev = worldgen_link_rev_bit(dir);
+                idx = worldgen_link_idx(bx, by);
+                if (idx < 0)
+                    continue;
+                old = map_get_tile(base_x + bx, base_y + by);
+                if (old < 0)
+                    old = 0;
+                map_set_tile(base_x + bx, base_y + by,
+                             (uint8_t)(old | bit | rev));
+            }
+        }
+        if (yield != 0)
+            sys_yield();
+    }
+    return CIV_OK;
 }
 
 civ_error_t worldgen_build_ocean_links(int yield)
 {
-    (void)yield;
-    /* TODO: FUN_1028_162c @ 1028:162c (yield): 8-dir + 5-step ocean-run
-     * check, bits at +0x108 (+ reverse), (0xb,3) corner exception, edge
-     * OR 0xe0/0x0e + AND masks. Progress 1000:29ea (0x108,...) +
-     * Sys_Yield per row when yield!=0. Callers 1028:0f01 + 10f8:01e9. */
-    return CIV_ERR_UNSUPPORTED;
+    /* Orig FUN_1028_162c @ 1028:162c (yield) -> Map_BuildOceanLinks: same
+     * 0x14 x 0x0d grid, 8-dir variant with 5-step ocean-run check straight
+     * from g_offMapBuf/g_segMapBuf (needs 2+ clear rows each step via
+     * worldgen_ocean_run_ok), bits at +0x108 (+ reverse) with (0xb,3)
+     * corner exception, edge fixups (OR 0xe0/0x0e, AND masks). Progress
+     * 1000:29ea (0x108,...) + Sys_Yield per row when yield!=0. Callers
+     * Map_LabelContinents @ 1028:0f01 + save_deserialize @ 10f8:01e9.
+     * OS-free 1:1 port via map_get_tile, map_wrap_x, link_grid_w/h, idx,
+     * bit/rev_bit, ocean_run_ok, sys_yield. Tables mapped to free window
+     * (80,64) 20x13 (see build_continent_links). Per-step gate: 2-wide
+     * ocean pair (both 10) => clear_rows 2 else 0, must be >=2. Start
+     * requires ocean at block origin. Edge ORs LIVE, AND masks TBD ->
+     * PARTIAL (graph LIVE, masks documented). No Win16, no globals. */
+    const int base_x = (int)CIV_MAP_W;
+    const int base_y = (int)CIV_MAP_H + (int)CIV_LINK_GRID_H + 1;
+    int bx;
+    int by;
+
+    map_fill_rect(base_x, base_y, (unsigned)worldgen_link_grid_w(),
+                  (unsigned)worldgen_link_grid_h(), 0);
+    for (by = 0; by < worldgen_link_grid_h(); by++) {
+        for (bx = 0; bx < worldgen_link_grid_w(); bx++) {
+            int sx = bx * 4 + 1;
+            int sy = by * 4 + 1;
+            int st;
+            int dir;
+
+            if (sx < 0 || sx >= (int)CIV_MAP_W || sy < 0 ||
+                sy >= (int)CIV_MAP_H)
+                continue;
+            st = map_get_tile(map_wrap_x(sx), sy);
+            if (st != 10)
+                continue;
+            for (dir = 1; dir <= 8; dir++) {
+                int dx = worldgen_dir_dx_at(dir - 1);
+                int dy = worldgen_dir_dy_at(dir - 1);
+                int s;
+                int ok;
+
+                /* (0xb,3) corner exception. */
+                if (st == 0x0b && dir == 3)
+                    continue;
+                ok = 1;
+                for (s = 0; s < 5; s++) {
+                    int px = map_wrap_x(sx + dx * s);
+                    int py = sy + dy * s;
+                    int qx = map_wrap_x(px + 1);
+                    int t1;
+                    int t2;
+                    int clear_rows;
+
+                    if (py < 0 || py >= (int)CIV_MAP_H) {
+                        ok = 0;
+                        break;
+                    }
+                    if (px < 0 || px >= (int)CIV_MAP_W || qx < 0 ||
+                        qx >= (int)CIV_MAP_W) {
+                        ok = 0;
+                        break;
+                    }
+                    t1 = map_get_tile(px, py);
+                    t2 = map_get_tile(qx, py);
+                    clear_rows = (t1 == 10 && t2 == 10) ? 2 : 0;
+                    if (!worldgen_ocean_run_ok(clear_rows)) {
+                        ok = 0;
+                        break;
+                    }
+                }
+                if (!ok)
+                    continue;
+                {
+                    int bit = worldgen_link_bit(dir);
+                    int rev = worldgen_link_rev_bit(dir);
+                    int idx = worldgen_link_idx(bx, by);
+                    int old;
+
+                    if (idx < 0 || bit == 0)
+                        continue;
+                    old = map_get_tile(base_x + bx, base_y + by);
+                    if (old < 0)
+                        old = 0;
+                    map_set_tile(base_x + bx, base_y + by,
+                                 (uint8_t)(old | bit | rev));
+                }
+            }
+        }
+        if (yield != 0)
+            sys_yield();
+    }
+    /* Edge fixups: OR 0xe0/0x0e (AND masks TBD). */
+    for (by = 0; by < worldgen_link_grid_h(); by++) {
+        int old_l;
+        int old_r;
+
+        old_l = map_get_tile(base_x + 0, base_y + by);
+        if (old_l < 0)
+            old_l = 0;
+        map_set_tile(base_x + 0, base_y + by, (uint8_t)(old_l | 0x0e));
+        old_r = map_get_tile(base_x + worldgen_link_grid_w() - 1,
+                             base_y + by);
+        if (old_r < 0)
+            old_r = 0;
+        map_set_tile(base_x + worldgen_link_grid_w() - 1, base_y + by,
+                     (uint8_t)(old_r | 0xe0));
+    }
+    return CIV_OK;
 }
 
 civ_error_t worldgen_copy_rect(int src_x, int src_y, unsigned w_bytes,
@@ -392,13 +1135,26 @@ civ_error_t worldgen_copy_rect(int src_x, int src_y, unsigned w_bytes,
 
 int path_check_continent_link(int x, int y, int continent)
 {
-    (void)x;
-    (void)y;
-    (void)continent;
-    /* TODO: Orig FUN_1128_16d0 @ 1128:16d0 (continent-link cost for the
-     * 1028:12c6 ocean/land corner pairs; links only when < 0x14).
-     * Pure tile-buffer walk; metric decode pending, so report no link. */
-    return 0x14;
+    /* Orig FUN_1128_16d0 @ 1128:16d0 -> Path_CheckContinentLink: gate
+     * inside Map_BuildContinentLinks @ 1028:12c6 for ocean(10)/land corner
+     * pairs sharing one continent id, returns cost linking only when
+     * cost != -1 && cost < 0x14 (via worldgen_continent_link_allowed).
+     * Full BFS is Path_FindCorridor @ 1128:10de (16x16 window +-8, 0x100B
+     * cost bytes, 256 ring queue, road&8 + fast-unit + tile_cost, sea/land
+     * + occupancy gates, budgets 0x14 links / 999 goto / 0x12 entry).
+     * OS-free PARTIAL port via map_get_tile: OOB (-1) -> 0x14 (no link),
+     * continent < 0 -> -1 (unreachable), else 0 (link, cost 0 < 0x14).
+     * Exact corridor cost TBD (TODO Orig 1128:10de BFS), but gate shape
+     * (|dx|<8|| |dy|<8 else 0xffff via path_corridor_gate_ok in map.c)
+     * + allowed check are LIVE. No Win16, no globals. */
+    int t;
+
+    if (continent < 0)
+        return -1;
+    t = map_get_tile(x, y);
+    if (t < 0)
+        return 0x14;
+    return 0;
 }
 
 /* --- Chain 2026-10-16 (25): Map tile-passes (goal 2) + Earth frame (goal 5). ---
