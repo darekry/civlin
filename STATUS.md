@@ -1049,7 +1049,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `newgame_civ_count_from_index` | LIVE | 12d8:3b9a |  |
 | `newgame_alive_mask` | LIVE | 12d8:42f8 |  |
 | `newgame_pick_tribe` | STUB | 10e8:0000, 11f8:0080, 1220:0156, 12d8:4300, 1420:2ad2, 1420:2ae5 | has TODO |
-| `tribe_get_name_list` | STUB | 10e8:0000, 10e8:2d46, 1100:078a, 11f8:0080, 1420:2ad2, 1420:2ae5 |  |
+| `tribe_get_name_list` | STUB | 10e8:0000, 10e8:2d46, 1100:078a, 11f8:0080, 1420:2ad2, 1420:2ae5 | has TODO |
 | `newgame_customize_world` | STUB | 1058:06ab, 1058:081a, 1058:0921, 1058:09f6, 10e8:0000, 1220:0156, 1220:16fd | has TODO |
 | `newgame_custom_world_modal` | STUB | 1058:06ab, 1220:0156, 1220:16fd | has TODO |
 | `newgame_finalize` | PARTIAL | 1028:0000, 10e8:0000, 1150:00c9, 12d8:3b9a, 12d8:42f6, 12d8:42f8, 12d8:42fa, 12d8:4300 | has TODO |

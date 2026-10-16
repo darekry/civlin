@@ -77,6 +77,9 @@ const char *tribe_get_name_list(int index)
      * TBD (string-table id vs MenuZ buffer length), so no 1:1 table port
      * is possible. Keeps the NULL stub (also NULL for out-of-range
      * index); doc extended in newgame.h without breaking this stub.
+     * TODO: Orig Res blob 0x94 entry group (Res_GetStringCopy(0x94,i) /
+     * (0x94,i+8) two-column list) + Res 0x8c leader / 0x95 title dump
+     * needed for the 1:1 table port; ResMgr tail TBD.
      * Read-only; no globals; no exit(). */
     return NULL;
 }
