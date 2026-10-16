@@ -1187,4 +1187,40 @@ int main_startup_earth_seq_id(void);
  * owned by mainmenu, not here). */
 int main_startup_rebase_ticks(void);
 
+/* --- Chain 2026-10-16 (P1): intro host procedural widgets (goal P1) ---
+ * Orig Main_RunStartupSequence @ 11e0:0000 loop#1 intro host:
+ * Dlg_CreateTracked @ 1098:124f (0x94,0x41) + Dialog_MenuZ_Modal @ 1220:0156
+ * (civ.exe, x86:LE:16:Protected Mode; ref unpacked/civ.exe strings
+ * "RanDoMRadio"/"RanDoMStatic" + "Can't initialize timer in MenuZ" @
+ * 1420:4a41, file offset 0xbba41). Procedural host below is LIVE 1:1 on
+ * explicit params (no Win16, no globals, read-only): preset size + dialog-id
+ * gate place the centered 0x200x0x140 host without any bitmap, so the intro
+ * frame is drivable (main_run_startup_sequence PARTIAL dispatcher) before
+ * frames land. Faithful look waits for the frame decode via rsc_get_indexed
+ * @ 1190:0a29 (+ payload via rsc_load_to_mem @ 1190:0fda, see rsc_loader.h).
+ * Pump/host tails stay STUB in main_run_startup_sequence with TODO Orig
+ * 1220:0156 / 1098:124f. No exit(), C17. */
+
+/* Orig Dlg_CreateTracked @ 1098:124f preset branch for the 0x94 intro host
+ * (DAT_12d8_002e = 0x200, see dlg_preset_w in dialog.h) ->
+ * main_startup_intro_proc_w. 1:1 0x200 (procedural host width). No globals. */
+int main_startup_intro_proc_w(void);
+
+/* Orig Dlg_CreateTracked @ 1098:124f preset branch (DAT_12d8_002c = 0x140,
+ * see dlg_preset_h in dialog.h) -> main_startup_intro_proc_h. 1:1 0x140
+ * (procedural host height). No globals. */
+int main_startup_intro_proc_h(void);
+
+/* Orig same dialog-id gate (param_1 == 0x94 intro/PIC host, see
+ * dlg_id_needs_preset_size) -> main_startup_procedural_ready. 1:1 1 when
+ * dlg_id == 0x94 (procedural fallback covers the intro host), 0 otherwise
+ * (0x8f earth-custom / 0x90 wizard frame need their own art). No globals. */
+int main_startup_procedural_ready(int dlg_id);
+
+/* Orig frame source gate (faithful bitmaps via rsc_get_indexed @ 1190:0a29)
+ * -> main_startup_needs_rsc_frame. 1:1 1 (procedural host is drawn until
+ * the RSC frame decode lands; never 0 while the faithful look is pending).
+ * No globals. */
+int main_startup_needs_rsc_frame(void);
+
 #endif /* CIVLIN_BOOT_H */

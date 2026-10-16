@@ -405,11 +405,19 @@ civ_error_t anim_pump_if_active(void)
     stepped = anim_seq_phase_step(ANIM_SEQ_OPEN, 0, 1, 0, 0);
     if (stepped != ANIM_SEQ_PLAYING)
         return CIV_ERR_BAD_DATA;
+    if (anim_clamp_tick(110L, 100L, 50L) != 10L)
+        return CIV_ERR_BAD_DATA;
+    if (anim_tick_is_due(0L, 0L, 8) != 1 || anim_tick_is_due(0L, 1L, 8) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (anim_seq_is_finished(0L, 1L) != 0 || anim_seq_is_finished(1L, 1L) != 1)
+        return CIV_ERR_BAD_DATA;
     /* TODO: Orig Anim_PumpIfActive @ 10b0:0000 (while DAT_1420_1f40 != 0
      * run Anim_AdvanceFrames @ 10b0:0461 per Sys_GetTickScaled @
-     * 1100:02e1 tick via Sys_Yield @ 1098:0157) -> SDL timer bridge TBD
-     * (active-flag storage @ 1420:1f40 stays caller-side; phase math is
-     * LIVE in anim_seq_phase_step above). */
+     * 1100:02e1 tick via Sys_Yield @ 1098:0157; per-tick elapsed via
+     * anim_clamp_tick + 11/0xe period via anim_tick_is_due + end via
+     * anim_seq_is_finished above) -> SDL timer bridge TBD (active-flag
+     * storage @ 1420:1f40 stays caller-side; phase math is LIVE in
+     * anim_seq_phase_step above). */
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -506,6 +514,28 @@ int anim_advance_frames(void)
     if (anim_pal_src_for(0x81) != 0 || anim_pal_src_for(0x82) != 1 ||
         anim_pal_src_for(0x85) != 2 || anim_pal_src_for(0) != -1)
         return 1;
+    /* Timed tails (P0 chain-34): GfxPort PresentRect @ 10d0:0854 cases
+     * 7/9/11/12/13 (5 is SetActive-only @ 10d0:0956, no Present) +
+     * Palette_AnimateRange @ 1090:0376 cases 1/12/14 (2 via CopyRange @
+     * 1098:201d, not Animate) + Sound_PlayId @ 1150:00c9 invariant (no
+     * opcode plays sound inside; caller-side (3,0)/(1,0) + OPENING.wav) +
+     * 11/0xe period gate via anim_tick_is_due (mono caller-side). */
+    if (anim_opcode_needs_present(7) != 1 || anim_opcode_needs_present(9) != 1 ||
+        anim_opcode_needs_present(11) != 1 ||
+        anim_opcode_needs_present(12) != 1 ||
+        anim_opcode_needs_present(13) != 1 ||
+        anim_opcode_needs_present(5) != 0 || anim_opcode_needs_present(1) != 0)
+        return 1;
+    if (anim_opcode_needs_animate(1) != 1 ||
+        anim_opcode_needs_animate(12) != 1 ||
+        anim_opcode_needs_animate(14) != 1 ||
+        anim_opcode_needs_animate(2) != 0 || anim_opcode_needs_animate(7) != 0)
+        return 1;
+    if (anim_opcode_needs_sound(3) != 0 || anim_opcode_needs_sound(7) != 0 ||
+        anim_opcode_needs_sound(12) != 0)
+        return 1;
+    if (anim_tick_is_due(0L, 0L, 8) != 1 || anim_tick_is_due(0L, 1L, 8) != 0)
+        return 1;
     return 1;
 }
 
@@ -550,6 +580,15 @@ civ_error_t anim_open_sequence(void)
     max_end = anim_seq_max_end(sample_ends, 2u);
     if (max_end != 21L)
         return CIV_ERR_BAD_DATA;
+    if (anim_clamp_tick(110L, 100L, 50L) != 10L)
+        return CIV_ERR_BAD_DATA;
+    {
+        long base = 0L;
+
+        if (anim_rebase_clock(1100L, 1000L, &base, NULL) != CIV_OK ||
+            base != 100L)
+            return CIV_ERR_BAD_DATA;
+    }
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -3439,6 +3478,51 @@ int anim_opcode_is_text(int op)
      * (both sub-branches StoreDC; fine split of anim_opcode_needs_store
      * 5/7/8/9 above). */
     return (op == 7) ? 1 : 0;
+}
+
+/* --- Chain 2026-10-16 (34): Anim timed-tail gates (P0). See dialog.h.
+ * OS-free 1:1 LIVE (no Win16, no globals, no exit(), read-only). Timed
+ * GfxPort_SetActive @ 10d0:0956 / PresentRect @ 10d0:0854 +
+ * Palette_AnimateRange @ 1090:0376 + Sound_PlayId @ 1150:00c9 bridges stay
+ * in the anim_advance_frames / anim_pump_if_active / anim_open_sequence
+ * PARTIAL dispatchers above (TODO Orig 10b0:0461/008a/0000). */
+
+int anim_opcode_needs_present(int op)
+{
+    /* Orig Anim_AdvanceFrames @ 10b0:0461 timed PresentRect @ 10d0:0854
+     * tails: 7 (caption undraw + Present + ClearActive @ 10d0:09a2), 9
+     * (port-swap + Present), 11 (scroll + Present), 12/13 (dissolve Step
+     * + Present + FreeDissolve @ 10b0:172d on end-tick). Op 5 switches
+     * ports via GfxPort_SetActive @ 10d0:0956 with no Present. */
+    if (op == 7 || op == 9 || op == 11 || op == 12 || op == 13)
+        return 1;
+    return 0;
+}
+
+int anim_opcode_needs_animate(int op)
+{
+    /* Orig Anim_AdvanceFrames @ 10b0:0461 timed Palette_AnimateRange @
+     * 1090:0376 tails: 1 (fade-zero fill via anim_pal_fade_zero + Animate),
+     * 12 (0xc palette pre-copy branch + Animate), 14 (rotate-shift +
+     * AnimateRange; timed (tick-start)%len == 0 gate via anim_tick_is_due,
+     * mono caller-side). Op 2 copies via Palette_CopyRange @ 1098:201d
+     * (see anim_pal_copy / anim_opcode_is_palette), not Animate. */
+    if (op == 1 || op == 12 || op == 0x0e)
+        return 1;
+    return 0;
+}
+
+int anim_opcode_needs_sound(int op)
+{
+    /* Orig Anim_AdvanceFrames @ 10b0:0461 sound invariant: no case 1..0xe
+     * calls Sound_PlayId @ 1150:00c9 inside (slots 3/4 run silent via
+     * Anim_AllocSlot @ 10a8:0000 / StepSlotA/B @ 10a8:00fc/018e / FreeSlot
+     * @ 10a8:00b4 only). Sound rides caller-side in Main_RunStartupSequence
+     * @ 11e0:0000 via Sound_PlayId(3,0)/(1,0) + OPENING.wav @ 1420:3114
+     * (strings unpacked/civ.exe, read-only). Always 0; documents the tail
+     * so future SDL bridges do not invent per-opcode playback. */
+    (void)op;
+    return 0;
 }
 
 /* --- Chain 2026-10-16 (32): tracked/anim/diplo/menu/text gates (task). ---

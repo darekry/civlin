@@ -206,6 +206,54 @@ typedef struct menu_dispatch_entry {
     int target_off; /* handler offset @ seg 1048 */
 } menu_dispatch_entry_t;
 
+/* --- Chain 2026-10-16 (P1): MenuZ modal procedural widgets (goal P1) ---
+ * Orig Dialog_MenuZ_Modal @ 1220:0156 + Dlg_CreateTracked @ 1098:124f host
+ * (civ.exe, x86:LE:16:Protected Mode), decompiled read-only vs
+ * unpacked/civ.exe: modal creates RanDoMStatic 0x4a6e title +
+ * RanDoMRadio 500+i rows (DAT_1418_000a cols, OFFSETRECT per item) +
+ * SETTIMER 100 (menuz_timer_interval_ms) + PEEKMESSAGE/ISDIALOGMESSAGE pump
+ * to cancel -1, over CIV_MAINMENU_TEXT @ 1420:435b (file offset 0xbb35b:
+ * "_Start a New Game_..._Quit", 6 items). Procedural widgets below are LIVE
+ * 1:1 on explicit params (no Win16, no globals, read-only): row count +
+ * row-y place the 500+i fan-out without any bitmap, so the menu is drivable
+ * (mainmenu_run PARTIAL dispatcher) before frames land. Faithful look waits
+ * for the frame decode via rsc_get_indexed @ 1190:0a29 (+ payload via
+ * rsc_load_to_mem @ 1190:0fda, see rsc_loader.h); menu idle clock uses the
+ * rebase ticks below (MainMenu_WndProc @ 11e0:0884 idle 100000 +
+ * @ 11e0:090d resync 0x48c, owned here per boot.h chain-28, not in boot).
+ * Pump/host tails stay STUB in mainmenu_run with TODO Orig 1220:0156 /
+ * 1098:124f. No exit(), C17. */
+
+/* Orig MainMenu_WndProc @ 11e0:0884 menu-idle rebase ->
+ * mainmenu_idle_rebase_ticks. 1:1 100000 (Anim_RebaseClock @ 10b0:005b param
+ * for the menu idle loop; startup loop#2 uses 1000 via
+ * main_startup_rebase_ticks in boot.h, not here). No globals. */
+int mainmenu_idle_rebase_ticks(void);
+
+/* Orig MainMenu_WndProc @ 11e0:090d menu resync rebase ->
+ * mainmenu_resync_rebase_ticks. 1:1 0x48c (1164, re-sync of the menu loop
+ * when 0x8c < tick < 0x48c; see anim_rebase_clock in dialog.h). No globals. */
+int mainmenu_resync_rebase_ticks(void);
+
+/* Orig Dialog_MenuZ_Modal @ 1220:0156 row fan-out (DAT_1418_000a cols,
+ * OFFSETRECT per item) -> mainmenu_procedural_rows. 1:1 row count for
+ * n_items radio buttons in cols columns: (n + cols - 1) / cols (C trunc).
+ * cols <= 0 or n_items < 0 -> -1; n_items == 0 -> 0. No globals. */
+int mainmenu_procedural_rows(int n_items, int cols);
+
+/* Orig Dialog_MenuZ_Modal @ 1220:0156 OFFSETRECT per item ->
+ * mainmenu_widget_row_y. 1:1 procedural row origin: top + index * row_h
+ * (row_h <= 0 -> top, keeps the title row visible when the metric is not
+ * yet measured). index < 0 -> -1 (OOR, caller re-prompts like
+ * dialog_menuz_id_to_index). No globals. */
+int mainmenu_widget_row_y(int top, int row_h, int index);
+
+/* Orig frame source gate (faithful bitmaps via rsc_get_indexed @ 1190:0a29)
+ * -> mainmenu_needs_rsc_frame. 1:1 1 (procedural boxes are drawn until the
+ * RSC frame decode lands; never 0 while the faithful look is pending).
+ * No globals. */
+int mainmenu_needs_rsc_frame(void);
+
 /* Orig CX = 0x44: liczba wpisow (68). */
 int menu_dispatch_count(void);
 /* Orig scan 1:1: indeks wpisu o danym id, -1 przy pudle. */

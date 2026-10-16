@@ -986,7 +986,10 @@ civ_error_t main_run_startup_sequence(void)
      * 1420:435b (see mainmenu.h). SDL modal/event bridge TBD -> stub
      * CIV_ERR_UNSUPPORTED. No globals, no exit(), read-only.
      * TODO: Orig FUN_11e0_0000 @ 11e0:0000 (SDL modal/event bridge for
-     * the Dlg/Anim/Sound order above). Live twins: main_startup_anim_loops
+     * the Dlg/Anim/Sound order above: Dialog_MenuZ_Modal @ 1220:0156
+     * PEEKMESSAGE/ISDIALOGMESSAGE pump + Dlg_CreateTracked @ 1098:124f
+     * (0x94,0x41) host; procedural host below is LIVE, faithful bitmaps
+     * wait for rsc_get_indexed @ 1190:0a29). Live twins: main_startup_anim_loops
      * / intro_sound / stop_sound / should_run_wizard / should_break (LIVE
      * counters/gates below) + newgame_wizard_run (see newgame.h). */
     int loops;
@@ -1015,6 +1018,10 @@ civ_error_t main_run_startup_sequence(void)
     int off;
     int is_init;
     int is_extra;
+    int proc_w;
+    int proc_h;
+    int proc_ready;
+    int need_rsc;
 
     /* OS-free 1:1 order probe (ref unpacked/civ.exe @ 11e0:0000 decompile):
      * intro dialog 0x94/0x41 + 2 anim loops (intro + earth-prepare 0x91e) +
@@ -1089,6 +1096,22 @@ civ_error_t main_run_startup_sequence(void)
     n_items = mainmenu_item_count();
     if (split_n != 6 || n_items != split_n)
         return CIV_ERR_UNSUPPORTED;
+    /* OS-free 1:1 P1 procedural-host gates for the 0x94 intro dialog
+     * (Dlg_CreateTracked @ 1098:124f host + Dialog_MenuZ_Modal @ 1220:0156
+     * widgets; ref unpacked/civ.exe strings "RanDoMRadio"/"RanDoMStatic"):
+     * centered 0x200x0x140 host without any bitmap, so the intro frame is
+     * drivable before the faithful look lands via rsc_get_indexed @
+     * 1190:0a29. Read-only. */
+    proc_w = main_startup_intro_proc_w();
+    proc_h = main_startup_intro_proc_h();
+    proc_ready = main_startup_procedural_ready(dlg_id);
+    need_rsc = main_startup_needs_rsc_frame();
+    if (proc_w != CIV_DLG_PRESET_W || proc_h != CIV_DLG_PRESET_H)
+        return CIV_ERR_BAD_DATA;
+    if (w != proc_w || h != proc_h)
+        return CIV_ERR_BAD_DATA;
+    if (proc_ready != 1 || need_rsc != 1)
+        return CIV_ERR_BAD_DATA;
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -1503,4 +1526,39 @@ int main_startup_rebase_ticks(void)
 {
     /* Orig same loop#2 Anim_RebaseClock @ 10b0:005b param (1000 ticks). */
     return 1000;
+}
+
+/* --- Chain 2026-10-16 (P1): intro host procedural widgets (goal P1) ---
+ * See boot.h block. OS-free 1:1 (no Win16, no globals, no exit()). */
+
+int main_startup_intro_proc_w(void)
+{
+    /* Orig Dlg_CreateTracked @ 1098:124f preset branch for the 0x94 intro
+     * host (DAT_12d8_002e = 0x200, see dlg_preset_w @ 1098:124f in
+     * dialog.h; same value as CIV_DLG_PRESET_W). */
+    return 0x200;
+}
+
+int main_startup_intro_proc_h(void)
+{
+    /* Orig same (DAT_12d8_002c = 0x140, see dlg_preset_h; same value as
+     * CIV_DLG_PRESET_H). */
+    return 0x140;
+}
+
+int main_startup_procedural_ready(int dlg_id)
+{
+    /* Orig same dialog-id gate (param_1 == 0x94 intro/PIC host vs 0x8f
+     * earth-custom, see dlg_id_needs_preset_size @ 1098:124f). Faithful
+     * bitmaps behind the host wait for rsc_get_indexed @ 1190:0a29. */
+    return (dlg_id == 0x94) ? 1 : 0;
+}
+
+int main_startup_needs_rsc_frame(void)
+{
+    /* Orig frame source gate: faithful intro bitmaps decode via
+     * rsc_get_indexed @ 1190:0a29 (+ payload via rsc_load_to_mem @
+     * 1190:0fda, see rsc_loader.h); procedural host (preset above) until
+     * then. Always 1 while the decode is pending. */
+    return 1;
 }

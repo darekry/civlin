@@ -117,7 +117,7 @@ OVERRIDES = {
     "audio_play_id": "LIVE",
     "sound_play_file": "LIVE",
     "newgame_wizard_run": "PARTIAL",  # real dispatcher, all steps still STUB
-    "anim_advance_frames": "STUB",  # constant 1 = "done" placeholder
+    "anim_advance_frames": "PARTIAL",  # OS-free opcode 1..0xe/tick/ret/slot/caption/dissolve probes LIVE in dialog.c:416, timed GfxPort/frame tail STUB
 }
 
 HEADER = """# CivLin — stan implementacji (per-function)

@@ -468,14 +468,30 @@ civ_error_t mainport_get_or_create(SDL_Renderer *ren, gfx_port_t **out)
     rc = gfx_port_create(ren, w, h, &probe);
     if (rc != CIV_OK)
         return rc;
+    /* P3 tail probe (Orig FUN_1098_114A @ 1098:114a): SELECTPALETTE /
+     * REALIZEPALETTE via palette_apply_to_port @ 1200:00a8/1090:0376
+     * (full godpal 0..0xec range; blocked on the godpal runtime capture,
+     * see gfx_godpal_get, so no fake commit) + main-screen
+     * GfxPort_SetActive @ 10d0:0956 render-target select exercised on
+     * the probe (target saved/restored, no leaked state). Port still NOT
+     * returned: palette commit + main-screen active semantics stay TBD. */
+    {
+        SDL_Texture *prev = SDL_GetRenderTarget(ren);
+
+        (void)palette_apply_to_port(probe, 0, (int)GFX_GODPAL_COUNT);
+        (void)gfx_port_set_active(probe);
+        (void)SDL_SetRenderTarget(ren, prev);
+    }
     gfx_port_destroy(probe);
     /* TODO: Orig FUN_1098_114A @ 1098:114a -> MainPort_GetOrCreate () ->
-     * port/DC. GETDC + SELECTPALETTE/REALIZEPALETTE + GfxPort_SetActive
-     * @ 10d0:0956 bridge, called before WdwMap_Open @ 1208:0af1 /
+     * port/DC. GETDC + SELECTPALETTE/REALIZEPALETTE (via
+     * palette_apply_to_port @ 1200:00a8/1090:0376, blocked on the godpal
+     * runtime capture, see gfx_godpal_get) + GfxPort_SetActive @
+     * 10d0:0956 bridge, called before WdwMap_Open @ 1208:0af1 /
      * WdwSmMap_Open @ 1210:025b / WdwStatus_Open @ 1218:0386 in
      * boot_open_windows. SDL3 render-target select + palette commit TBD
-     * (see palette_apply_to_port); returning the probed port as CIV_OK
-     * now would fake the palette half. */
+     * (tail exercised as a probe above with target restore); returning
+     * the probed port as CIV_OK now would fake the palette half. */
     return CIV_ERR_UNSUPPORTED;
 }
 

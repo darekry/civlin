@@ -192,6 +192,10 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `main_startup_intro_dialog_flags` | LIVE |  |  |
 | `main_startup_earth_seq_id` | LIVE | 10b0:008a |  |
 | `main_startup_rebase_ticks` | LIVE | 10b0:005b, 11e0:0221 |  |
+| `main_startup_intro_proc_w` | LIVE | 1098:124f |  |
+| `main_startup_intro_proc_h` | LIVE | 1098:124f |  |
+| `main_startup_procedural_ready` | LIVE | 1098:124f, 1190:0a29 |  |
+| `main_startup_needs_rsc_frame` | LIVE | 1190:0a29, 1190:0fda |  |
 
 ### `src/civ_common.c`
 
@@ -251,7 +255,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `dlg_move_extent` | LIVE | 1098:0a5b, 1098:0ae0, 1098:0b67 |  |
 | `dlg_move_should_use_default` | LIVE | 1098:0b67 |  |
 | `anim_pump_if_active` | PARTIAL | 1098:0157, 10a8:0000, 10a8:00b4, 10b0:0000, 10b0:0026, 10b0:008a, 10b0:0287, 10b0:0461, 10b0:151b, 1100:02e1, 1150:00c9, 1420:1f40 | has TODO |
-| `anim_advance_frames` | STUB | 1098:1104, 10b0:0461, 1100:02e1, 1150:00c9 | has TODO |
+| `anim_advance_frames` | PARTIAL | 1098:1104, 10b0:0461, 1100:02e1, 1150:00c9 | has TODO |
 | `anim_open_sequence` | PARTIAL | 10b0:008a, 1100:02e1, 1420:1f40 | has TODO |
 | `anim_close_sequence` | LIVE | 10a8:00b4, 10b0:0287 |  |
 | `anim_seq_count_frames` | LIVE | 10b0:008a |  |
@@ -441,6 +445,9 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `dialog_refresh_view_count` | LIVE | 1220:00d2, 1220:0eb8, 12b0:0004 |  |
 | `dialog_refresh_msg` | LIVE | 1220:0eb8 |  |
 | `anim_opcode_is_text` | LIVE | 1000:36b2, 1098:0ed1, 1098:1104, 10b0:0461, 10d0:0854, 1100:078a |  |
+| `anim_opcode_needs_present` | LIVE | 10b0:0461, 10b0:172d, 10d0:0854, 10d0:0956, 10d0:09a2 |  |
+| `anim_opcode_needs_animate` | LIVE | 1090:0376, 1098:201d, 10b0:0461 |  |
+| `anim_opcode_needs_sound` | LIVE | 10a8:0000, 10a8:00b4, 10a8:00fc, 10b0:0461, 1150:00c9, 11e0:0000, 1420:3114 |  |
 | `dlg_preset_w` | LIVE | 1098:124f |  |
 | `dlg_preset_h` | LIVE |  |  |
 | `anim_seq_resolve_count` | LIVE | 10b0:008a |  |
@@ -915,6 +922,11 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `mainmenu_should_loop` | LIVE | 1000:36b2, 11e0:0000, 11e0:0221, 1220:0156, 12d8:44e2 |  |
 | `menu_toggle_show_cmd` | LIVE | 1210:1134, 1218:077d |  |
 | `menu_toggle_view_window` | LIVE | 1048:02af, 1208:0af1, 1210:025b, 1218:0386, 12b0:0004, 12b0:001c, 12b0:0034 |  |
+| `mainmenu_idle_rebase_ticks` | LIVE | 10b0:005b, 11e0:0884, 11e0:090d |  |
+| `mainmenu_resync_rebase_ticks` | LIVE | 10b0:005b, 11e0:090d |  |
+| `mainmenu_procedural_rows` | LIVE | 1220:0000, 1220:0156, 1420:435b |  |
+| `mainmenu_widget_row_y` | LIVE | 1190:0a29, 1220:0156 |  |
+| `mainmenu_needs_rsc_frame` | LIVE | 1190:0a29, 1190:0fda |  |
 
 ### `src/map.c`
 

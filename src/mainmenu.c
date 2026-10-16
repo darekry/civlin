@@ -62,6 +62,11 @@ civ_error_t mainmenu_run(civ_mainmenu_choice_t *out)
     int group;
     int intro_id;
     int intro_flags;
+    int idle_rb;
+    int rsync_rb;
+    int rows;
+    int ry0;
+    int need_rsc;
 
     if (!out)
         return CIV_ERR_NOENT;
@@ -145,6 +150,23 @@ civ_error_t mainmenu_run(civ_mainmenu_choice_t *out)
     row_target = menu_dispatch_target_at(row);
     group = menu_command_group(101);
     if (row != 0 || row_id != 101 || row_target != 0x1ff || group != 1)
+        return CIV_ERR_BAD_DATA;
+    /* OS-free 1:1 P1 procedural-widget gates @ 1220:0156 (RanDoMRadio 500+i
+     * fan-out over CIV_MAINMENU_TEXT @ 1420:435b, ref unpacked/civ.exe file
+     * offset 0xbb35b, 6 items): single-column rows == items, row 0 at top,
+     * menu-idle rebases 100000 / 0x48c (MainMenu_WndProc @ 11e0:0884/090d),
+     * faithful bitmaps pending on rsc_get_indexed @ 1190:0a29 (procedural
+     * boxes until then). Read-only. */
+    idle_rb = mainmenu_idle_rebase_ticks();
+    rsync_rb = mainmenu_resync_rebase_ticks();
+    rows = mainmenu_procedural_rows(n_items, 1);
+    ry0 = mainmenu_widget_row_y(0, 1, 0);
+    need_rsc = mainmenu_needs_rsc_frame();
+    if (idle_rb != 100000 || rsync_rb != 0x48c)
+        return CIV_ERR_BAD_DATA;
+    if (rows != n_items || ry0 != 0)
+        return CIV_ERR_BAD_DATA;
+    if (need_rsc != 1)
         return CIV_ERR_BAD_DATA;
     *out = CIV_MENU_NONE;
     return CIV_ERR_UNSUPPORTED;
@@ -401,4 +423,58 @@ int menu_toggle_view_window(int cmd)
     if (cmd == 208)
         return 0x34;
     return -1;
+}
+
+/* --- Chain 2026-10-16 (P1): MenuZ modal procedural widgets (goal P1) ---
+ * See mainmenu.h block. OS-free 1:1 (no Win16, no globals, no exit()). */
+
+int mainmenu_idle_rebase_ticks(void)
+{
+    /* Orig MainMenu_WndProc @ 11e0:0884 menu-idle Anim_RebaseClock @
+     * 10b0:005b param (100000 ticks: skips the menu-idle time; sibling
+     * 0x48c resync at 11e0:090d, startup loop#2 uses 1000 via
+     * main_startup_rebase_ticks in boot.h). */
+    return 100000;
+}
+
+int mainmenu_resync_rebase_ticks(void)
+{
+    /* Orig MainMenu_WndProc @ 11e0:090d menu re-sync Anim_RebaseClock @
+     * 10b0:005b param (0x48c = 1164, re-sync of the menu loop when
+     * 0x8c < tick < 0x48c). */
+    return 0x48c;
+}
+
+int mainmenu_procedural_rows(int n_items, int cols)
+{
+    /* Orig Dialog_MenuZ_Modal @ 1220:0156 row fan-out (DAT_1418_000a cols,
+     * OFFSETRECT per item over the Dialog_SplitMenuText @ 1220:0000 items,
+     * e.g. 6 over CIV_MAINMENU_TEXT @ 1420:435b, ref unpacked/civ.exe file
+     * offset 0xbb35b). */
+    if (cols <= 0 || n_items < 0)
+        return -1;
+    if (n_items == 0)
+        return 0;
+    return (n_items + cols - 1) / cols;
+}
+
+int mainmenu_widget_row_y(int top, int row_h, int index)
+{
+    /* Orig same OFFSETRECT per item: row origin for the index-th RanDoMRadio
+     * 500+i button (dialog_menuz_index_to_id fan-out). Faithful bitmap
+     * frames behind the rows wait for rsc_get_indexed @ 1190:0a29. */
+    if (index < 0)
+        return -1;
+    if (row_h <= 0)
+        return top;
+    return top + index * row_h;
+}
+
+int mainmenu_needs_rsc_frame(void)
+{
+    /* Orig frame source gate: faithful menu bitmaps decode via
+     * rsc_get_indexed @ 1190:0a29 (+ payload via rsc_load_to_mem @
+     * 1190:0fda, see rsc_loader.h); procedural boxes (rows above) until
+     * then. Always 1 while the decode is pending. */
+    return 1;
 }

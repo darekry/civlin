@@ -211,9 +211,11 @@ civ_error_t gfx_port_blit(gfx_port_t *dst, const gfx_port_t *src,
 /* Orig: FUN_1098_114A @ 1098:114a -> mainport_get_or_create
  * (MainPort_GetOrCreate). PARTIAL SDL_Texture probe bridge (see video.c):
  * window-sized port geometry is proven via SDL_GetRenderOutputSize +
- * gfx_port_create @ 10d0:0000 INDEX8 TARGET + destroy probe (same backing
- * store the Anim_OpenSequence @ 10b0:008a GfxPort x2 pair and the map views
- * need), but the port is NOT returned yet: SELECTPALETTE/REALIZEPALETTE
+ * gfx_port_create @ 10d0:0000 INDEX8 TARGET + tail probe (palette_apply_to_port
+ * @ 1200:00a8/1090:0376 full 0..0xec range + gfx_port_set_active @ 10d0:0956
+ * with render-target save/restore, results ignored) + destroy probe (same
+ * backing store the Anim_OpenSequence @ 10b0:008a GfxPort x2 pair and the map
+ * views need), but the port is NOT returned yet: SELECTPALETTE/REALIZEPALETTE
  * (via palette_apply_to_port @ 1200:00a8/1090:0376, blocked on the godpal
  * runtime capture) + main-screen GfxPort_SetActive @ 10d0:0956
  * render-target semantics stay TBD, so the tail keeps UNSUPPORTED (no fake

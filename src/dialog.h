@@ -2551,6 +2551,42 @@ int dialog_refresh_msg(void);
  * anim_opcode_is_text. 1:1 op == 7. */
 int anim_opcode_is_text(int op);
 
+/* --- Chain 2026-10-16 (34): Anim timed-tail gates (P0) ---
+ * Orig Anim_AdvanceFrames @ 10b0:0461 timed tails (civ.exe,
+ * x86:LE:16:Protected Mode), decompiled 2026-10-16 (chain-22 switch
+ * 1..0xe; GfxPort/Art/ResMgr tails stay in the anim_advance_frames
+ * PARTIAL dispatcher above). OS-free gates below are LIVE 1:1 on explicit
+ * op (no Win16, no globals, read-only, no exit(), C17); the timed
+ * GfxPort_SetActive @ 10d0:0956 / PresentRect @ 10d0:0854 +
+ * Palette_AnimateRange @ 1090:0376 + Sound_PlayId @ 1150:00c9 bridges stay
+ * STUB in anim_advance_frames / anim_pump_if_active / anim_open_sequence
+ * (PARTIAL dispatchers with TODO Orig 10b0:0461/008a/0000).
+ * Refs verified read-only 2026-10-16: strings unpacked/civ.exe
+ * ("OPENING.wav", "RanDoMRadio"/"RanDoMStatic"/"RanDoMUser").
+ *   SetActive @ 10d0:0956 cases: 5 (port-switch +0x12/+0x31), 7 (caption),
+ *     9 (swap), 11 (scroll x2), 12/13 (dissolve x2).
+ *   PresentRect @ 10d0:0854 cases: 7 (undraw tail), 9, 11, 12, 13 (5 is
+ *     switch-only, no present; 8 fills via FILLRECT; 6 loads via Art).
+ *   AnimateRange @ 1090:0376 cases: 1 (fade-zero), 12 (0xc pre-copy branch
+ *     + Animate), 14 (rotate + Animate). Op 2 uses Palette_CopyRange @
+ *     1098:201d, not Animate (covered by anim_opcode_is_palette).
+ *   Sound_PlayId @ 1150:00c9: no opcode plays sound inside (slots 3/4 run
+ *     silent; OPENING.wav + (3,0)/(1,0) ride caller-side in
+ *     Main_RunStartupSequence @ 11e0:0000, see boot.h). */
+
+/* Orig timed PresentRect tail (@ 10d0:0854 in cases 7/9/11/12/13) ->
+ * anim_opcode_needs_present. 1:1 nonzero (1) for 7/9/11/12/13, else 0. */
+int anim_opcode_needs_present(int op);
+
+/* Orig timed AnimateRange tail (@ 1090:0376 in cases 1/12/14) ->
+ * anim_opcode_needs_animate. 1:1 nonzero (1) for 1/12/14, else 0. */
+int anim_opcode_needs_animate(int op);
+
+/* Orig sound invariant (no Sound_PlayId @ 1150:00c9 inside any opcode
+ * 1..0xe; caller-side only) -> anim_opcode_needs_sound. 1:1 always 0
+ * (documents the no-sound tail; caller plays (3,0)/(1,0) + OPENING.wav). */
+int anim_opcode_needs_sound(int op);
+
 /* --- Chain 2026-10-16 (32): tracked/anim/diplo/menu/text gates (task) ---
  * Orig (civ.exe, x86:LE:16:Protected Mode), 1:1 OS-free ports of pure
  * branches documented inside the STUB bodies below (no Win16, no globals,
