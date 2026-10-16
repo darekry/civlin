@@ -396,3 +396,64 @@ civ_error_t newgame_custom_help_dialog(int help_id)
      * 0x29e5 callers). Win16 USER/GDI -> SDL3 TBD. */
     return CIV_ERR_UNSUPPORTED;
 }
+
+/* --- Chain 2026-10-16 (30): NewGame_RateStartPositions kernels (task goal 3) ---
+ * See newgame.h block. OS-free 1:1 LIVE (no Win16, no globals, no exit()). */
+
+int newgame_start_dist_score(int dist)
+{
+    /* Orig NewGame_RateStartPositions @ 10e8:1d48 dist-base: <10 close 0,
+     * <0x14 moderate 1, ==999 isolated 4, else far 2. */
+    if (dist == 999)
+        return 4;
+    if (dist < 10)
+        return 0;
+    if (dist < 0x14)
+        return 1;
+    return 2;
+}
+
+int newgame_start_terrain_bonus(int river_cnt, int grass_cnt)
+{
+    /* Orig NewGame_RateStartPositions @ 10e8:1d48 terrain: river(0xb) >= 2
+     * -> +2 river valley; else grass(2) >= 3 -> +1 grasslands; else +0. */
+    if (river_cnt >= 2)
+        return 2;
+    if (grass_cnt >= 3)
+        return 1;
+    return 0;
+}
+
+int newgame_start_continent_bonus(int ocean_val)
+{
+    /* Orig NewGame_RateStartPositions @ 10e8:212a switch (val/0x32): 0/1 -> +0
+     * (small/large island), 2/3 -> +1 (small/medium continent), else +2. */
+    int q;
+
+    if (ocean_val < 0)
+        return -1;
+    q = ocean_val / 0x32;
+    if (q <= 1)
+        return 0;
+    if (q <= 3)
+        return 1;
+    return 2;
+}
+
+int newgame_start_needs_extra_settler(int best, int score)
+{
+    /* Orig NewGame_RateStartPositions @ 10e8:1d48 settler-gap: 3 < best-score
+     * -> Unit_SpawnUnit extra settler (unit 0). */
+    return ((best - score) > 3) ? 1 : 0;
+}
+
+int newgame_start_should_pick(int score, int best, int is_first, int is_isolated)
+{
+    /* Orig NewGame_RateStartPositions @ 10e8:1d48 best-tie: score == best &&
+     * (local_1a == -1 || isolated-bit) -> pick (izolowane wygrywaja remisy). */
+    if (score != best)
+        return 0;
+    if (is_first != 0)
+        return 1;
+    return (is_isolated != 0) ? 1 : 0;
+}

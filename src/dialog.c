@@ -2614,3 +2614,45 @@ civ_error_t text_wrapped_row_span(int base_off, int cur_off, int start_off,
     *len_out = end_off - start_off;
     return CIV_OK;
 }
+
+/* --- Chain 2026-10-16 (30): Text_ShowTextByName + Quiz kernels (task goal 5) ---
+ * See dialog.h block. OS-free 1:1 LIVE (no Win16, no globals, no exit()). */
+
+int text_wrapped_total_height(int row_h, int n_rows, int y0)
+{
+    /* Orig Text_ShowTextByName @ 1068:1dd7 layout: *param_4 = *(+0x10) *
+     * *(+0x18) + *(+2) (row_h * count + y0). */
+    return y0 + row_h * n_rows;
+}
+
+int text_show_needs_long_desc(int opt_flags)
+{
+    /* Orig Pedia_ShowEntry @ 1068:06af gate: (g_nOptionFlags & 0x40) != 0 ->
+     * Text_ShowTextByName @ 1068:1dd7 (dlugi opis cywilopedii). */
+    return ((opt_flags & 0x40) != 0) ? 1 : 0;
+}
+
+int quiz_answer_is_correct(int picked, int correct)
+{
+    /* Orig Quiz_RunCivilizationQuiz @ 1178:0022 compare: local_e == local_10
+     * (MenuZ pick vs wylosowany tech; dobrze -> 12d0:00b6 |= 1). */
+    return (picked == correct) ? 1 : 0;
+}
+
+int quiz_should_retry(int first_result)
+{
+    /* Orig Quiz_RunQuizPair @ 1178:0000: Quiz(1) == 0 -> Quiz(0) (retry w
+     * trybie 0 z FoundCityIfHome-resettle przy pudle). */
+    return (first_result == 0) ? 1 : 0;
+}
+
+int quiz_tech_is_valid(int pre1, int pre2)
+{
+    /* Orig Quiz_RunCivilizationQuiz @ 1178:0022 pick: pre1(1894) != -1 &&
+     * pre2(1895) != -1 && pre1 != 0x7f (lancuch pre, jak Tech_Choose). */
+    if (pre1 == -1 || pre1 == 0x7f)
+        return 0;
+    if (pre2 == -1)
+        return 0;
+    return 1;
+}

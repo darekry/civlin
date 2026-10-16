@@ -357,6 +357,11 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `text_wrapped_trim_trailing` | LIVE | 1068:2072 |  |
 | `text_wrapped_skip_leading` | LIVE | 1068:2072 |  |
 | `text_wrapped_row_span` | LIVE | 1068:2072 |  |
+| `text_wrapped_total_height` | LIVE | 1068:1dd7 |  |
+| `text_show_needs_long_desc` | LIVE | 1068:06af, 1068:1dd7 |  |
+| `quiz_answer_is_correct` | LIVE | 1178:0022, 12d0:00b6 |  |
+| `quiz_should_retry` | LIVE | 1178:0000 |  |
+| `quiz_tech_is_valid` | LIVE | 1178:0022 |  |
 
 ### `src/game.c`
 
@@ -614,6 +619,16 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `pic_dispatch_is_arrow` | LIVE | 1030:96ad |  |
 | `pic_dispatch_arrow_variant` | LIVE |  |  |
 | `pic_pump_owner_is_shared` | LIVE | 1030:0000, 1030:900d, 1030:9aed, 1048:01cd |  |
+| `city_found_free_slot` | LIVE | 1040:0000 |  |
+| `city_found_initial_prod` | LIVE | 1040:0000 |  |
+| `city_found_is_first` | LIVE | 1040:0000 |  |
+| `city_found_trim_len` | LIVE | 1040:0000 |  |
+| `tech_calc_cost` | LIVE | 1170:31ec |  |
+| `tech_research_eligible` | LIVE | 1170:21b3 |  |
+| `tech_research_roll_is_better` | LIVE | 1170:21b3, 12d0:0062 |  |
+| `tech_grant_is_future` | LIVE | 1170:2aaa, 12a8:0022 |  |
+| `tech_bit_word` | LIVE | 1170:3181 |  |
+| `tech_bit_mask` | LIVE | 1170:3181 |  |
 
 ### `src/gfx_indexed.c`
 
@@ -830,6 +845,11 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `map_city_coastal_should_set` | LIVE | 1040:03f6 |  |
 | `map_cont_size_class` | LIVE | 10e8:212a, 1110:1dbd |  |
 | `map_cont_size_remainder` | LIVE | 10e8:212a |  |
+| `path_route_cost_is_better` | LIVE | 1128:081c, 11c8:02ec |  |
+| `path_route_domain_mismatch` | LIVE | 1128:081c |  |
+| `path_route_needs_fallback` | LIVE | 1128:081c |  |
+| `status_headline_needs_short` | LIVE | 1038:0bba, 1068:0958, 1138:0000 |  |
+| `status_main_needs_city_scan` | LIVE | 1138:0000 |  |
 
 ### `src/newgame.c`
 
@@ -864,6 +884,11 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `newgame_civ_note_player_needed` | LIVE | 10e0:07e8 |  |
 | `newgame_show_custom_help` | STUB | 10e0:0000, 10e0:03a2 | has TODO |
 | `newgame_custom_help_dialog` | STUB | 1098:124f, 10e0:03a2, 1100:03ff | has TODO |
+| `newgame_start_dist_score` | LIVE | 10e8:1d48 |  |
+| `newgame_start_terrain_bonus` | LIVE | 10e8:1d48 |  |
+| `newgame_start_continent_bonus` | LIVE | 10e8:212a |  |
+| `newgame_start_needs_extra_settler` | LIVE | 10e8:1d48 |  |
+| `newgame_start_should_pick` | LIVE | 10e8:1d48 |  |
 
 ### `src/rsc_loader.c`
 

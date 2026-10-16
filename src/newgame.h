@@ -401,4 +401,51 @@ civ_error_t newgame_show_custom_help(int row);
  * Help body (Dlg 0x87 + layout + PEEKMESSAGE). Win16 -> SDL TBD; stub. */
 civ_error_t newgame_custom_help_dialog(int help_id);
 
+/* --- Chain 2026-10-16 (30): NewGame_RateStartPositions kernels (task goal 3) ---
+ * Orig NewGame_RateStartPositions @ 10e8:1d48 (civ.exe, x86:LE:16:Protected
+ * Mode), decompiled this pass (caller NewGame_Wizard @ 10e8:0000 finalize;
+ * placement osobno w NewGame_InitCivState @ 10e8:12b5 + Rng(0x32)):
+ *   rating WSZYSTKICH startow (civ 1..7 z unit 62ff != -1): dystans do
+ *   najblizszego sasiada na tym samym kontynencie (Map_GetContinentId @
+ *   1110:1d99 + Map_WrapStepDist @ 11c8:02ec, min; 999 = brak sasiada):
+ *   <10 close (0), <0x14 moderate (+1), ==999 isolated (+4 + bit 1<<civ w
+ *   local_1c), else far (+2). Kryteria terenu (9-tile: self+8): ocean count
+ *   (10 -> coastal/inland), 2-count (grass 2 -> +1 grasslands), 0xb-count
+ *   (river >= 2 -> +2 river valley, else grass/plains). OceanVal @ 1110:1dbd
+ *   /0x32 switch: 0 small island (+0), 1 large island (+0), 2 small cont (+1),
+ *   3 medium (+1), else large (+2); remainder %0x32 nieuzywany (zob. map.h
+ *   map_cont_size_class/remainder LIVE). Score iVar6 = dist-base + terrain +
+ *   continent; best local_a = max; local_5c[civ] = score.
+ *   Pick: drugi loop: 3 < best-score -> Unit_SpawnUnit extra settler (unit 0);
+ *   tech loop (score-gap entries): Tech_ChooseResearch(civ,0) + Res 0x82
+ *   append; best-tie: score == best && (pierwszy || isolated-bit) -> pick
+ *   (izolowane wygrywaja remisy; zwraca best civ, nie losuje z waga — waga
+ *   to tylko gap->settlers/techs). Ile pozycji: 7 civow (1..7), nie tile.
+ *   Zwiazek z Map_ScoreCitySites @ 1028:0fb4 (NIEUZYWANY tu: tamten waguje
+ *   tile weights @ 1420:17d6 dla miast w grze; rating startow liczy wlasny
+ *   9-tile + continent-size, nie wagi) i City_FindNearest @ 11c8:0124 (LIVE
+ *   city_find_nearest: InitCivState uzywa go do min-dist od miast + od
+ *   wczesniejszych startow; Rate uzywa WrapStepDist wprost do sasiadow).
+ *   Port ponizej LIVE 1:1 (no Win16, no globals); StrCopy/MenuZ ogony STUB. */
+
+/* Orig dist-base (<10:0, <0x14:1, ==999:4, else 2) -> newgame_start_dist_score.
+ * 1:1; dist < 0 -> 2 (far path, orig nigdy ujemny). */
+int newgame_start_dist_score(int dist);
+
+/* Orig terrain (+2 river>=2 else +1 grass>=3 else 0) -> newgame_start_terrain_bonus.
+ * 1:1. */
+int newgame_start_terrain_bonus(int river_cnt, int grass_cnt);
+
+/* Orig continent (/0x32: 0/1:+0, 2/3:+1, else +2) -> newgame_start_continent_bonus.
+ * 1:1 via map_cont_size_class (0..4+); val < 0 -> -1. */
+int newgame_start_continent_bonus(int ocean_val);
+
+/* Orig extra-settler (3 < best-score) -> newgame_start_needs_extra_settler.
+ * 1:1 1 gdy dosypac settlera. */
+int newgame_start_needs_extra_settler(int best, int score);
+
+/* Orig best-tie (score == best && (first || isolated)) ->
+ * newgame_start_should_pick. 1:1. */
+int newgame_start_should_pick(int score, int best, int is_first, int is_isolated);
+
 #endif /* CIVLIN_NEWGAME_H */

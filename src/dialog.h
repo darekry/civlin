@@ -2066,4 +2066,41 @@ int text_wrapped_skip_leading(const char *s, int pos, int n);
 civ_error_t text_wrapped_row_span(int base_off, int cur_off, int start_off,
                                   int end_off, int *off_out, int *len_out);
 
+/* --- Chain 2026-10-16 (30): Text_ShowTextByName + Quiz kernels (task goal 5) ---
+ * Orig Text_ShowTextByName @ 1068:1dd7 (ResMgr_GetByName + GLOBALALLOC 0x42 +
+ * MemCopyFar + Text_BuildWrappedList @ 1068:2072 + DrawAlignedListFree; indeks:
+ * NIE numer — NAZWA zasobu (ResMgr_GetByName, cywilopedia: jaki tekst? ten
+ * ktory Pedia_ShowEntry @ 1068:06af poda: tech/building/unit/terrain long-desc
+ * gdy (g_nOptionFlags & 0x40) != 0; param_3 == 4 (terrain pomoc?) omija long).
+ * Civilopedia? TAK — Pedia_ShowEntry to viewer civilopedii (switch param_3:
+ * 1 tech (+0x44c icon), 2 building/wonder (0xd07/0xd08), 3 unit (+0x4b0), 4
+ * terrain yields, 5 pusty); ShowTextByName rysuje dlugi opis pod ikona.
+ * Orig Quiz_RunCivilizationQuiz @ 1178:0022 (CIVILIZATION QUIZ @ 1420:37d4 +
+ * Dialog_MenuZ_Modal @ 1220:0156; kiedy? Quiz_RunQuizPair @ 1178:0000 z
+ * Game_TurnLoopTick @ 1088:0000: tryb 1 (nagroda?) potem retry 0 gdy Pudlo;
+ * easter egg? NIE — quiz tech-tree (nagroda: DAT_12d0_00b6 |= 1 gdy dobrze;
+ * pudlo w trybie 0: DAT_13b8_0000 = 1 + FoundCityIfHome resettle wszystkich
+ * jednostek gracza; koniec gry? NIE — srodek gry, tech-check). MenuZ z
+ * 12 odpowiedzi (local_18 < 0xc, pre-chain via 1894/1895 jak Tech_Choose).
+ * Port ponizej LIVE 1:1 (no Win16, no globals); GDI/MenuZ ogony STUB. */
+
+/* Orig ShowTextByName layout (*param_4 = *(+0x10)* *(+0x18) + *(+2)) ->
+ * text_wrapped_total_height. 1:1 y0 + row_h * n_rows. */
+int text_wrapped_total_height(int row_h, int n_rows, int y0);
+
+/* Orig Pedia long-desc gate ((opt & 0x40) != 0) -> text_show_needs_long_desc.
+ * 1:1 1 gdy pokazac dlugi opis (terrain kind 4 caller-side omija). */
+int text_show_needs_long_desc(int opt_flags);
+
+/* Orig Quiz compare (local_e == local_10) -> quiz_answer_is_correct. 1:1. */
+int quiz_answer_is_correct(int picked, int correct);
+
+/* Orig Quiz pair retry (pierwszy == 0 -> drugi z 0) -> quiz_should_retry.
+ * 1:1 1 gdy retry (tryb 1 pudlo). */
+int quiz_should_retry(int first_result);
+
+/* Orig Quiz tech-pick (pre1 != -1 && pre2 != -1 && pre1 != 0x7f) ->
+ * quiz_tech_is_valid. 1:1 (0x7f = terminator lancucha pre, -1 = brak). */
+int quiz_tech_is_valid(int pre1, int pre2);
+
 #endif /* CIVLIN_DIALOG_H */

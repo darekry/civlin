@@ -3792,3 +3792,131 @@ int pic_pump_owner_is_shared(int from_shared)
      * WM_COMMAND 0x111 -> Menu_DispatchCommand @ 1048:01cd). */
     return (from_shared != 0) ? 1 : 0;
 }
+
+/* --- Chain 2026-10-16 (30): City_FoundCity kernels (task goal 2) ---
+ * See game.h block. OS-free 1:1 LIVE (no Win16, no globals, no exit()). */
+
+int city_found_free_slot(const int *valids, int n)
+{
+    /* Orig City_FoundCity @ 1040:0000 slot: while (iVar8 <= 0x7f) if
+     * (5502[i] == -1) break; 0x7f < i -> msg + -1. valids[i] == -1/0xff. */
+    int i;
+
+    if (!valids || n <= 0)
+        return -1;
+    for (i = 0; i < n && i < 0x80; i++) {
+        if (valids[i] == -1 || (valids[i] & 0xff) == 0xff)
+            return i;
+    }
+    return -1;
+}
+
+int city_found_initial_prod(int has_t34, int has_t64)
+{
+    /* Orig City_FoundCity @ 1040:0000 prod: 5505 = 1; Tech(0x22) -> 4;
+     * Tech(0x40) -> 5 (nadpisuje 4). */
+    int prod = 1;
+
+    if (has_t34 != 0)
+        prod = 4;
+    if (has_t64 != 0)
+        prod = 5;
+    return prod;
+}
+
+int city_found_is_first(const int *owners, const int *valids, int n,
+                        int civ, int exclude)
+{
+    /* Orig City_FoundCity @ 1040:0000 first: bVar9 = true; for 0x80: owner ==
+     * civ && i != nowe -> false; palace 54fc = 1 gdy true. */
+    int i;
+
+    if (!owners || !valids || n <= 0)
+        return 0;
+    for (i = 0; i < n && i < 0x80; i++) {
+        if (i == exclude)
+            continue;
+        if (valids[i] == -1 || (valids[i] & 0xff) == 0xff)
+            continue;
+        if (owners[i] == civ)
+            return 0;
+    }
+    return 1;
+}
+
+int city_found_trim_len(const char *s, int len)
+{
+    /* Orig City_FoundCity @ 1040:0000 trim: iVar4 = 0x1f; while (0 < iVar4 &&
+     * name[iVar4] == ' ') name[iVar4--] = 0. Zwraca dlugosc bez ' '. */
+    int n;
+
+    if (!s || len <= 0)
+        return 0;
+    n = len;
+    while (n > 0 && s[n - 1] == ' ')
+        n--;
+    return n;
+}
+
+/* --- Chain 2026-10-16 (30): Tech_ChooseResearch kernels (task goal 4) ---
+ * See game.h block. OS-free 1:1 LIVE (no Win16, no globals, no exit()). */
+
+int tech_calc_cost(int base0, int base1, int civ_factor)
+{
+    /* Orig Tech_CalcCost @ 1170:31ec: *(tech*2+0x90) + *(tech*2+0x91) *
+     * 1ca4[civ] (signed char x s16). */
+    return base0 + base1 * civ_factor;
+}
+
+int tech_research_eligible(int not_owned, int pre1_owned, int pre2_owned)
+{
+    /* Orig Tech_ChooseResearch @ 1170:21b3 eligible: HasTech(t) == 0 &&
+     * HasTech(pre1 @ 1894) != 0 && HasTech(pre2 @ 1895) != 0. */
+    if (!not_owned)
+        return 0;
+    if (!pre1_owned)
+        return 0;
+    if (!pre2_owned)
+        return 0;
+    return 1;
+}
+
+int tech_research_roll_is_better(int roll, int best, int cur_tech,
+                                 int active_tech, int civ, int player_civ)
+{
+    /* Orig Tech_ChooseResearch @ 1170:21b3 MAX-roll: (local_c < roll) &&
+     * (12d0:0062 != tech || player != civ). */
+    if (roll <= best)
+        return 0;
+    if (cur_tech == active_tech && civ == player_civ)
+        return 0;
+    return 1;
+}
+
+int tech_grant_is_future(int tech)
+{
+    /* Orig Tech_GrantTech @ 1170:2aaa Future: tech == 0x47 (Future Technology,
+     * 12a8:0022++ licznik, bez ESCHISM-bitu). */
+    return (tech == 0x47) ? 1 : 0;
+}
+
+int tech_bit_word(int tech)
+{
+    /* Orig Tech_HasTech @ 1170:3181 word: tech/0x10 (0..4 dla 0x47). */
+    if (tech < 0)
+        return -1;
+    return tech / 0x10;
+}
+
+int tech_bit_mask(int tech)
+{
+    /* Orig Tech_HasTech @ 1170:3181 mask: 1 << (tech%0x10). */
+    int r;
+
+    if (tech < 0)
+        return -1;
+    r = tech % 0x10;
+    if (r < 0)
+        r += 0x10;
+    return 1 << r;
+}

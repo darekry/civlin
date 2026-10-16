@@ -2684,4 +2684,91 @@ int pic_dispatch_arrow_variant(int mode);
  * DISPATCH tail stays STUB in pic_play_shared). */
 int pic_pump_owner_is_shared(int from_shared);
 
+/* --- Chain 2026-10-16 (30): City_FoundCity kernels (task goal 2) ---
+ * Orig City_FoundCity @ 1040:0000 (civ.exe, x86:LE:16:Protected Mode),
+ * decompiled this pass (0x68d B; wola FUN_1078_4c1a reveal + Hut_ProcessHut
+ * @ 11c0:2677 hut-case-0 + City_ChooseProduction @ 1170:05ca dla AI +
+ * City_OpenProductionView @ 1170:05af dla gracza + Map_* + Tech_HasTech):
+ *   slot: pierwszy 0x80 z 5502 == -1 (0xff), brak -> gracz: msg 0x7eb +
+ *   Dialog_ShowMessage @ 1220:00d2, return -1.
+ *   nazwa: local_e = (43b8+0x9c[civ]-1)<<4 (>6: -2), scan 0x10 nazw
+ *   (29e9+0x17 free == -1, wrap +0x10->0xe0, 0x100->0/local_a=999),
+ *   5512 = local_e, nazwa trim trailing ' ' (0x1f w dol).
+ *   Kto wola: Hut_ProcessHut @ 11c0:2677 (hut-case-0: tile+0x50 food>4 +
+ *   dist>3 -> FoundCity(x,y,1) + reveal; jedyny Bezposredni caller) +
+ *   Unit_DoMove @ 1038:0000 posrednio (przejecie miasta resetuje home via
+ *   Unit_FoundCityIfHome @ 11c0:16a4, nie FoundCity) + NewGame_InitCivState
+ *   @ 10e8:12b5 (start: Unit_SpawnUnit + Map_SetTileOwner, nie FoundCity —
+ *   pierwsze miasto gracza powstaje z hut/settle, nie z wizarda) + AI
+ *   (ChooseProduction dla nowego miasta). Pelne zakladanie: slot + nazwa
+ *   (5512/0x4da trim) + populacja 5503 = param_5 (size, hut daje 1) +
+ *   budynki 54fc/5508/550a = 0 (palace 54fc = 1 gdy pierwsze miasto civ) +
+ *   prod 5505 = 1 (4 gdy Tech 0x22/34, 5 gdy Tech 0x40/64) + 5516/5517 =
+ *   0xff + owner 5507 = civ + 5513 x3 = 0xff + 5510 = 0 + coastal 5502 |= 2
+ *   (sea && (val>0x100 || player) @ 1040:03f6) + farm 5502 |= 8 (tile 0xb/5)
+ *   + seen 0x19/0x1d-tile diamond (x+0x50 layer, gracz vs AI) + home jednostek
+ *   (FoundCityIfHome resettle w DoMove, nie tu) + replay log + okupacja.
+ *   Port ponizej LIVE 1:1 (no Win16, no globals); dialog/map ogony STUB. */
+
+/* Orig slot scan (pierwszy 5502 == -1/0xff w 0x80) -> city_found_free_slot.
+ * 1:1 indeks albo -1 (pelne/NULL/n<=0). valids to bajty 5502 (0xff wolny). */
+int city_found_free_slot(const int *valids, int n);
+
+/* Orig prod init (1; 4 gdy Tech 0x22, 5 gdy Tech 0x40) ->
+ * city_found_initial_prod. 1:1 5 > 4 > 1 (oba owned -> 5). */
+int city_found_initial_prod(int has_t34, int has_t64);
+
+/* Orig first-city (brak innego miasta tego civ) -> city_found_is_first.
+ * 1:1 1 gdy pierwsze (palace 54fc = 1), 0 wpp. owners to 5507 bajty,
+ * valids to 5502 (0xff skip); exclude to wlasny idx (ignorowany). */
+int city_found_is_first(const int *owners, const int *valids, int n,
+                        int civ, int exclude);
+
+/* Orig name-trim (0x1f w dol while ' ') -> city_found_trim_len. 1:1
+ * dlugosc bez koncowych ' ' (0..len). s moze byc NULL -> 0. */
+int city_found_trim_len(const char *s, int len);
+
+/* --- Chain 2026-10-16 (30): Tech_ChooseResearch kernels (task goal 4) ---
+ * Orig Tech_ChooseResearch @ 1170:21b3 (0x896 B; dla OBOJGA: AI bierze
+ * wazone losowanie, gracz dialog MenuZ; wola Tech_GrantTech @ 1170:2aaa po
+ * wyborze + FUN_1078_4ca5 broadcast; callers: NewGame_RateStartPositions
+ * @ 10e8:1d48 rating-loop (Res 0x82 append), Game_DoPollutionAndWonderRace
+ * @ 1088:1e32 (AI wonder/tech?), Pic_PlayShared @ 1030:0000):
+ *   eligible: 0x48 techow: !HasTech(t) && HasTech(pre1 @ 1894) &&
+ *   HasTech(pre2 @ 1895) (pre -1 = unconditional via HasTech(-1)==1).
+ *   Kryteria: koszt Tech_CalcCost @ 1170:31ec (base0 @ +0x90 + base1 @ +0x91
+ *   * civ_factor @ 1ca4[civ]) -> roll = Rng_Range(koszt<<2), MAX roll
+ *   wygrywa (local_c < roll; nie min-cost! drozsze waza wiecej — AI pcha
+ *   drogie techy); wykluczenie biezacego badania gracza (12d0:0062 != t ||
+ *   player != civ). Era/drzewo: tylko via pre1/pre2 lancuch (brak ery wprost;
+ *   Future 0x47 to fallback gdy brak eligible: dialog "Future Technology"
+ *   + 12a8:0022++). Losowosc: Rng_Range wszedzie (AI roll + gracz 50/50
+ *   Tech(0x14) wise/scientists + hut Tech shuffle).
+ *   Zwiazek: Tech_HasTech @ 1170:3181 (bit-predykat LIVE) + Tech_FindFirstOwner
+ *   @ 1030:7ece (pierwszy owner 1..7, else discover) + Tech_CalcCost (GetTechValue/
+ *   Cost: base0/base1 to koszt-tabela) + tech_names (NIE tabela: live nazwy via
+ *   ResMgr_GetString @ 1100:078a entry 0x82 przez Res_GetStringCopy @ 11f8:0080).
+ *   Port ponizej LIVE 1:1 (no Win16, no globals); dialog/MenuZ ogon STUB. */
+
+/* Orig Tech_CalcCost @ 1170:31ec -> tech_calc_cost. 1:1 base0 + base1*factor
+ * (factor to 1ca4[civ] tribe-factor; ujemne dozwolone, orig signed char). */
+int tech_calc_cost(int base0, int base1, int civ_factor);
+
+/* Orig eligible (!owned && pre1 && pre2) -> tech_research_eligible. 1:1. */
+int tech_research_eligible(int not_owned, int pre1_owned, int pre2_owned);
+
+/* Orig MAX-roll pick (local_c < roll && (active != t || player != civ)) ->
+ * tech_research_roll_is_better. 1:1 1 gdy lepszy. */
+int tech_research_roll_is_better(int roll, int best, int cur_tech,
+                                 int active_tech, int civ, int player_civ);
+
+/* Orig Future-fallback (0x47) -> tech_grant_is_future. 1:1 tech == 0x47. */
+int tech_grant_is_future(int tech);
+
+/* Orig ESCHISM bit (word tech/0x10, mask 1<<(tech%0x10)) -> tech_bit_word /
+ * tech_bit_mask. 1:1 word 0..4 (0x47 Future OOR -> word 4/mask poza tabela,
+ * caller gate via is_future). tech < 0 -> -1. */
+int tech_bit_word(int tech);
+int tech_bit_mask(int tech);
+
 #endif /* CIVLIN_GAME_H */

@@ -1051,4 +1051,76 @@ int map_cont_size_class(int v);
  * map_cont_size_remainder. 1:1 v % 0x32 (C trunc; v < 0 -> -1). */
 int map_cont_size_remainder(int v);
 
+/* --- Chain 2026-10-16 (30): Path_FindLinkRoute kernels (task goal 1) ---
+ * Orig Path_FindLinkRoute @ 1128:081c (civ.exe, x86:LE:16:Protected Mode),
+ * decompiled this pass (caller TYLKO Unit_StepTowardGoal @ 1128:0000 —
+ * AI ruch / goto gracza / karawany przez unit_step_toward_goal, budget
+ * 999; trade routes posrednio przez trade_deliver_caravan_goods; zadnych
+ * innych callerow):
+ *   1338:0002/0000 = goal (6302/6303); 1. Path_FindLinkEntry(unit) — gdy 0
+ *   (brak wejscia: tile ani 8 sasiadow bez linku/domeny/probe 0x12) ->
+ *   restore goal + return 0 (fallback: brak trasy, jednostka stoi).
+ *   2. Path_FindLinkEntry(goal) (drugie wejscie; inny tile, ten sam graf
+ *   0x14x0x0d, dir-bity +4 land / +0x108 sea, wrap X 0x14) + MemSet 0x104
+ *   (s_Support+4 visited 0x100) + ring DAT_1420_afaa/aeaa 256 x/u8 (&0xff,
+ *   head local_8, tail local_6=1, seed = goal-link + cost 1).
+ *   Jak laczy wpisy: BFS po link-graph (nie tile-graph): z kolejki (x,y)
+ *   bierze dir-bity linku (land +4 / sea +0x108 wg domeny 1a3a==2), dla
+ *   kazdego dir 1..8: nx = x+dx (wrap: 0x14->0, -1->0x13), ny = y+dy;
+ *   gdy cost[nx*0xd+ny]==0 to cost = cost[cur]+1 + enqueue (bez limitu
+ *   kosztu w tej petli — limit 0xe1 iters / ring-full via head==tail;
+ *   koszt terenu NIE liczy sie tu: to czysty BFS-hop, koszt terenu siedzi
+ *   w FindCorridor @ 1128:10de road/fast/base*3).
+ *   Koszt: hop-count (cost byte, seed 1, +1 per link); cel = unit-link
+ *   (uVar4/uVar3 z 1. Entry): dequeue == cel -> found=1, break.
+ *   Fallback gdy brak trasy: found==0 -> 1338 = 0xffff, potem na dole
+ *   (==0xffff) restore goal + return 0 (jak w 1.).
+ *   Wybor kierunku: sposrod 8 sasiadow unit-link z link-dir + cost != 0
+ *   wybiera MIN cost (init 'c'=99), tie-break via Map_WrapStepDist @
+ *   11c8:02ec (unit-tile*4+1 vs sasiad*4+1, mniejszy dystans wygrywa);
+ *   potem 1338 = (ux+dx)*4+1 wrap X via Map_WrapX @ 1128:177e,
+ *   (uy+dy)*4+1, + domena-shift: gdy (class==10)!=sea to x+1 (re-check) to
+ *   y+1 (embark-align na róg 4-tile linku, cf. Entry corner-ok).
+ *   Port ponizej: czyste porownania/gate LIVE 1:1 (no Win16, no globals);
+ *   tile/ring/BFS ogon zostaje caller-side (path_find_corridor STUB). */
+
+/* Orig Route best-pick (cost < best || (== && dist < best_dist), init
+ * best 99/'c') -> path_route_cost_is_better. 1:1 1 gdy lepszy, 0 wpp. */
+int path_route_cost_is_better(int cur_cost, int best_cost, int cur_dist,
+                              int best_dist);
+
+/* Orig Route domain-shift ((class==10)!=sea -> x+1, re-check -> y+1) gate ->
+ * path_route_domain_mismatch. 1:1 is_sea_tile != unit_is_sea (oba 0/1). */
+int path_route_domain_mismatch(int is_sea_tile, int unit_is_sea);
+
+/* Orig Route fallback (found==0 -> 1338=0xffff -> restore goal, return 0) ->
+ * path_route_needs_fallback. 1:1 found==0 (0 = brak trasy). */
+int path_route_needs_fallback(int found);
+
+/* --- Chain 2026-10-16 (30): Status_FormatMainRow helpers (task goal 5) ---
+ * Orig Status_FormatMainRow @ 1138:0000 (dialog 0x94 via Dlg_CreateTracked
+ * @ 1098:124f 0x61 + GfxPort_Create/SetActive + CREATEPEN/LINETO siatka +
+ * Tech_Badge @ 1018:24c5 x4 gdy param==-2 (New Cabinet) else Rng_Range(3)
+ * linia 0x21 + wrap Text_BuildWrappedList @ 1068:2072 + City_AppendName @
+ * 1038:0bba headline switch Rng_Range(4) (0x2fa2/Today/Times/Tribune) +
+ * 300-px short-form gate + FLASH headline + 10 cents + January year via
+ * Status_AppendYearText @ 1088:1dd0 + 11d0:00e4 line; glowny wiersz statusu
+ * = gazeta/newspaper front page (miasto + rok + naglowek), nie pasek
+ * statusu mapy (tamten to Text_DrawStatusRow @ 11f8:0278 rows).
+ * Format: city + era-year + losowy headline; callers: Tech_GrantTech @
+ * 1170:2aaa (wonder-cancel), Gov_AnnounceChange @ 10e8:32c1 (rzad), Unit_DoMove
+ * @ 1038:0000 (zdobycie miasta), Game_TurnLoopTick @ 1088:0000,
+ * Game_DoPollutionAndWonderRace @ 1088:1e32, Map_SpreadPollution @ 1028:1afd.
+ * Dialog 0x94 to generyczny modal (jak Pic_PlayShared city view); wrap z
+ * 1068:2072 (Text_BuildWrappedList). Pelny GDI tail STUB (status_format_*
+ * w map.c); ponizsze gate LIVE. */
+
+/* Orig headline short-form (measure > 300 -> City_AppendName + 0x2fcb) ->
+ * status_headline_needs_short. 1:1 width > 300. */
+int status_headline_needs_short(int width);
+
+/* Orig city-scan (param < 0 -> 0x80 scan valid+owner+palace, -1 tez) ->
+ * status_main_needs_city_scan. 1:1 param < 0. */
+int status_main_needs_city_scan(int param);
+
 #endif /* CIVLIN_MAP_H */

@@ -1446,3 +1446,50 @@ int map_cont_size_remainder(int v)
         return -1;
     return v % 0x32;
 }
+
+/* --- Chain 2026-10-16 (30): Path_FindLinkRoute kernels (task goal 1) ---
+ * See map.h block. OS-free 1:1 LIVE (no Win16, no globals, no exit()). */
+
+int path_route_cost_is_better(int cur_cost, int best_cost, int cur_dist,
+                              int best_dist)
+{
+    /* Orig Path_FindLinkRoute @ 1128:081c best-pick: cVar2 < cVar1 (init 'c'
+     * = 99) -> take; == -> Map_WrapStepDist @ 11c8:02ec < local_a -> take. */
+    if (cur_cost < best_cost)
+        return 1;
+    if (cur_cost == best_cost && cur_dist < best_dist)
+        return 1;
+    return 0;
+}
+
+int path_route_domain_mismatch(int is_sea_tile, int unit_is_sea)
+{
+    /* Orig Path_FindLinkRoute @ 1128:081c domain-shift: (class == 10) !=
+     * (1a3a == 2) -> x+1, re-check -> y+1 (embark-align). */
+    int tile_sea = (is_sea_tile != 0) ? 1 : 0;
+    int unit_sea = (unit_is_sea != 0) ? 1 : 0;
+
+    return (tile_sea != unit_sea) ? 1 : 0;
+}
+
+int path_route_needs_fallback(int found)
+{
+    /* Orig Path_FindLinkRoute @ 1128:081c fallback: local_1a == 0 (BFS nie
+     * doszedl do unit-link) -> 1338 = 0xffff -> restore goal + return 0;
+     * tez 1. Entry == 0 -> restore + 0. */
+    return (found == 0) ? 1 : 0;
+}
+
+int status_headline_needs_short(int width)
+{
+    /* Orig Status_FormatMainRow @ 1138:0000 short-form: measure (Text_MeasureWidth
+     * @ 1068:0958?) > 300 -> City_AppendName @ 1038:0bba + 0x2fcb. */
+    return (width > 300) ? 1 : 0;
+}
+
+int status_main_needs_city_scan(int param)
+{
+    /* Orig Status_FormatMainRow @ 1138:0000 city-scan: param < 0 (0xffff/-1/-2)
+     * -> 0x80 scan (5502 != -1 + owner == player + (palace || param == -1)). */
+    return (param < 0) ? 1 : 0;
+}
