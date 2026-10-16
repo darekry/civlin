@@ -1146,7 +1146,9 @@ rsc_error_t res_copy_pascal(uint8_t *dst, size_t cap,
 /* Orig: Res_GetStringCopy @ 11f8:0080 — STUB (shared-static owner).
  * ResMgr_GetString into DAT_13f8_0000 + Util_PascalToCStr; returns a
  * pointer to the shared static (overwritten next call). No globals on
- * Linux -> stub RSC_ERR_UNSUPPORTED. NULL out -> NOENT. */
+ * Linux -> stub RSC_ERR_UNSUPPORTED. NULL out -> NOENT. Entry->meaning
+ * map lives in res_blob_entry_kind below (same table/entry domain);
+ * the LIVE fetch path is rsc_get_blob_string @ 1100:078a. */
 rsc_error_t res_get_string_copy(unsigned table, unsigned entry,
                                 char *out, size_t cap);
 
@@ -1154,5 +1156,76 @@ rsc_error_t res_get_string_copy(unsigned table, unsigned entry,
  * length byte kept, no PascalToCStr). Same contract as copy. */
 rsc_error_t res_get_string_raw(unsigned table, unsigned entry,
                                uint8_t *out, size_t cap);
+
+/* --- BLOB 0x2da8 entry->meaning map (2026-10-16) ---
+ * Anchors (civ.exe, x86:LE:16:Protected Mode):
+ *   ResMgr_GetString @ 1100:078a (blob id 0x2da8 via ResMgr_GetById @
+ *     1190:0aea + ResMgr_DisposeHandle @ 1190:09ed; u16 BE count @ +0,
+ *     then Pascal strings @ +2; entry N is 1-based, N = entry+1 in the
+ *     res_get_string_copy/raw domain below; walk skips N-1 via p +=
+ *     *p + 1, copies len + bytes via Util_MemCopy + Res_AppendPascal @
+ *     11f8:014a shape; N < 1 or count < N -> Empty).
+ *   Res_GetStringCopy @ 11f8:0080 (copy: + Util_PascalToCStr @ 1100:0053
+ *     into DAT_13f8_0000) vs Res_GetStringRaw @ 11f8:00c5 (raw Pascal,
+ *     same static) — both STUB (shared static, no globals on Linux).
+ *   LIVE fetch: rsc_get_blob_string (data/size/index 0-based, N=index+1).
+ * Readers (14 ResMgr_GetString xrefs, entry first param of copy/raw):
+ *   0x82 tech names: NewGame_Wizard @ 10e8:03c6 finalize loop (FUN_1170_3181
+ *     gate + Res_GetStringCopy(0x82, tech)) + Replay_PlayLog @ 1180:02d3
+ *     case 5 (discover + Res_GetStringCopy(0x82)). Live path for tech
+ *     strings — tech_names() in game.h is NOT this chain (returns "?").
+ *   0x83 wonder/improvement build names: Replay_PlayLog case 10 (build +
+ *     0x3967 when < 8 + Res_GetStringCopy(0x83)). wonder_names() is NOT
+ *     this chain (returns "?").
+ *   0x84 produce-first names: Replay_PlayLog case 6 (produce_first +
+ *     Res_GetStringCopy(0x84)).
+ *   0x8d government/form names: Replay_PlayLog case 8 (form +
+ *     Res_GetStringCopy(0x8d)).
+ *   0x8a report titles: City_ShowCensusReport @ 1018:1d5b (Res_GetStringCopy
+ *     (0x8a, 3, 9) header twice).
+ *   0x8c leader names: NewGame_Wizard tribe pick (Res_GetStringCopy(0x8c,
+ *     leader_id) -> 12d8:civ*0x20+0x1da).
+ *   0x94 tribe/civ names: NewGame_Wizard step 2 list (Res_GetStringCopy(0x94,
+ *     i) + Res_GetStringCopy(0x94, i+8) two columns) — tribe_get_name_list()
+ *     in newgame.h IS this chain (0x94).
+ *   0x95 civ adjectives: NewGame_Wizard tribe pick (Res_GetStringCopy(0x95,
+ *     leader_id) -> acStack + FUN_10d8_0528 plural tail).
+ *   0x88 city-name parts: City_FormatName @ 1048:0101 (ResMgr_GetString
+ *     0x88,4/5 via Menu_CheckCityNameId @ 1008:0d93 gate + GLOBALLOCK tail
+ *     + Res_AppendPascal x2).
+ *   year: NOT blob — Status_AppendYearText @ 1088:1dd0 (abs + " BC" @
+ *     1420:173c / " AD" @ 1420:1740 onto 12d8:24fa) + Save_SaveGame @
+ *     1198:00a3 filename variant (0x3efe/0x3f00 spaceless); see
+ *     game_append_year_text/year_suffix in game.h.
+ *   menu: MainMenu_WndProc @ 11e0:0221 text @ 1420:435b via Util_StrCopy +
+ *     Dialog_MenuZ_Modal (not blob); msg==4 repaint branch draws one
+ *     ResMgr_GetString line (id implicit, DAT_1420_17a6==1 only).
+ *   save filename: Save_SaveGame @ 1198:00a3 (civname 12d8:civ*0x20+0x1da +
+ *     year + ResMgr_GetString ext line + Save_SaveDialog @ 1098:26d4).
+ *   status: Game_UpdateStatusPanel @ 1088:13d5 (City_CalcPopTotal @
+ *     11c8:0334 + Status_AppendYearText + Status_DrawPanelFrame @ 11f8:0278
+ *     + Status_DrawTechIcons @ 1088:1a82).
+ * Terrain costs are NOT blob: 1420:17d4 table (*3-or-3, see
+ * terrain_cost_table/unit_move_cost in game.h + tile_move_cost in map.h).
+ * OS-free 1:1 helper below on explicit (table, entry-ignored) — no Win16,
+ * no globals, read-only. */
+
+/* BLOB entry groups (first param of Res_GetStringCopy/Raw @ 11f8:0080/00c5). */
+#define RES_BLOB_TECH 0x82
+#define RES_BLOB_WONDER_BUILD 0x83
+#define RES_BLOB_PRODUCE 0x84
+#define RES_BLOB_GOVERNMENT 0x8d
+#define RES_BLOB_REPORT 0x8a
+#define RES_BLOB_LEADER 0x8c
+#define RES_BLOB_TRIBE 0x94
+#define RES_BLOB_TRIBE_ADJ 0x95
+#define RES_BLOB_CITY 0x88
+
+/* Orig: BLOB 0x2da8 entry group -> kind string (new helper, no Orig addr;
+ * documents the ResMgr_GetString @ 1100:078a reader map above). OS-free
+ * 1:1 static-const port: returns "tech"/"wonder-build"/"produce"/
+ * "government"/"report"/"leader"/"tribe"/"tribe-adj"/"city" for the
+ * known groups, "?" otherwise (never NULL). No globals, no exit(). */
+const char *res_blob_entry_kind(unsigned table);
 
 #endif /* CIVLIN_RSC_LOADER_H */

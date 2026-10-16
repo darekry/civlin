@@ -99,15 +99,19 @@ int newgame_civ_count_from_index(int modal_index);
 int newgame_alive_mask(int civ_count);
 
 /* Orig: FUN_11f8_0080 @ 11f8:0080 -> Tribe_GetNameList.
- * Tribe-name table read with param 0x94 at the newgame_pick_tribe call
- * site (resource/buffer meaning TBD: 0x94 = 148 could be a string-table
- * id or a MenuZ text-buffer length, see Ghidra). OS-free string table
- * (segment 1420 dump TBD 2026-10-15: no tribe-name block decoded yet,
- * so no 1:1 table port possible; FIRSTMOVE/PILLAGE/font-map tables also
- * pending via boot_init_unit_font_tables @ 10e8:2d46): index selects
- * the tribe, returns the NUL-terminated name, NULL when out of range or
- * not yet dumped. Packet I scope: doc-only extension; stub body in
- * newgame.c untouched (still returns NULL). Read-only. */
+ * CHAIN ANSWER (2026-10-16): YES — this IS the ResMgr blob chain.
+ * The 0x94 call-site param is the BLOB 0x2da8 entry group
+ * (Res_GetStringCopy(0x94, i) + Res_GetStringCopy(0x94, i+8) two-column
+ * tribe list in NewGame_Wizard @ 10e8:0000 step 2 over text 1420:2ad2 +
+ * 1420:2ae5 "_Custom"; ResMgr_GetString @ 1100:078a + Res_GetStringCopy
+ * @ 11f8:0080; see res_blob_entry_kind()/RES_BLOB_TRIBE in rsc_loader.h).
+ * OS-free string table (segment 1420 dump TBD 2026-10-15: no tribe-name
+ * block decoded yet, so no 1:1 table port possible; FIRSTMOVE/PILLAGE/
+ * font-map tables also pending via boot_init_unit_font_tables @
+ * 10e8:2d46): index selects the tribe, returns the NUL-terminated name,
+ * NULL when out of range or not yet dumped. Packet I scope: doc-only
+ * extension; stub body in newgame.c untouched (still returns NULL).
+ * Read-only. */
 const char *tribe_get_name_list(int index);
 
 /* Orig: NewGame_Wizard @ 10e8:0000 step 2 -> newgame_pick_tribe.

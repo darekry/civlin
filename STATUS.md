@@ -32,7 +32,7 @@ Prawdziwy `boot_run` pada na pierwszym stubie (`boot_check_memory`).
 | civfonts.fon | `font_enum_families_init` | STUB | FON pakowany EDI; wiernie = unpack + NE-fonty |
 | ResMgr_LoadRsc x5 | `rsc_load_rsc` | LIVE | BE-walk katalogu EOF (2 passy, bounds-checked, `RSC_OK`); wpięcie 5 plików w `boot_load_resources` — STUB |
 | Video_CheckDriverCaps | `video_check_driver_caps` | LIVE | |
-| Art_MaybeConvertArtwork | `art_maybe_convert_artwork` | STUB | na Linuksie zbędne — no-op CIV_OK |
+| Art_MaybeConvertArtwork | `art_maybe_convert_artwork` | LIVE | na Linuksie zbędne — no-op CIV_OK |
 | Config_LoadPrefs | `config_load_prefs` | STUB | wystarczą domyślne (sounds on) — CIV_OK |
 | Palette_Init | `palette_init` | LIVE | no-op |
 | Game_InitGlobalTables | `boot_init_tables` | PARTIAL | rng + próba malloc żyją; win16-lock nie ma odpowiednika |
@@ -123,7 +123,7 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `config_save_prefs` | STUB | 1000:116a, 1000:1184, 1008:0bbf | has TODO |
 | `boot_run` | PARTIAL | 1000:11bb, 1000:2826, 1008:0000, 1008:059a, 1008:0b4a, 1008:0d68, 1008:0e99, 1088:0000, 1090:0488, 1098:06f8, 1098:096c, 10b8:0000, 10e8:2d46, 1190:0000, 11e8:0000, 11e8:0337 |  |
 | `boot_shutdown` | LIVE | 1008:0000, 1008:0329, 1008:0d68, 1208:0af1 |  |
-| `art_maybe_convert_artwork` | STUB | 10b8:0000, 10b8:079d, 1420:20a9 |  |
+| `art_maybe_convert_artwork` | LIVE | 1090:0488, 10b8:0000, 10b8:04df, 10b8:062d, 10b8:06a0, 10b8:076a, 10b8:079d, 10b8:0aa8, 10b8:0c1c, 10b8:0ded, 10b8:0e36, 10b8:11bc, 10b8:158c, 10d0:0cfa, 1420:20a9 |  |
 | `main_run_startup_sequence` | STUB | 1008:0329, 10e8:0000, 1108:0243, 1130:000e, 11e0:0000, 11e0:0221, 1420:435b |  |
 | `config_prefs_defaults` | LIVE | 1008:0b4a, 1008:0bbf, 1150:00c9, 12d0:0064 |  |
 | `config_prefs_sounds_on` | LIVE |  |  |
@@ -205,8 +205,8 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `text_center_y` | LIVE | 1098:0dda, 1098:0ed1 |  |
 | `dialog_dlgunits_to_pixels` | LIVE | 1098:0d43, 1100:03ff |  |
 | `dialog_client_rect` | LIVE | 1100:03ff |  |
-| `dlg_center_rect` | LIVE | 11f8:0000 |  |
-| `text_draw_aligned` | STUB | 1098:0ed1, 1098:20f4 | has TODO |
+| `dlg_center_rect` | LIVE | 1068:0958, 1098:0a5b, 1098:0ae0, 1098:0b67, 1170:2623, 11f8:0000, 1210:0e29 |  |
+| `text_draw_aligned` | STUB | 1080:08e9, 1088:1554, 1098:00b5, 1098:01b0, 1098:0e0b, 1098:0ed1, 1098:103f, 1098:20f4, 10b0:137a, 10e8:0667, 1110:07c3, 1180:02d3, 1220:0889 | has TODO |
 | `dialog_get_item_rect` | STUB | 1098:0d43, 1100:03ff, 1220:0156 | has TODO |
 | `dialog_show_message` | STUB | 1040:068e, 1098:124f, 1098:1612, 1220:00d2, 1220:0156, 1220:0eb8, 12b0:0004 | has TODO |
 
@@ -278,9 +278,9 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `city_get_prod` | LIVE | 1420:5500 |  |
 | `unit_move_attack_step` | LIVE | 1110:1c4b, 1110:1dbd, 1128:0000, 1128:081c, 1420:17d4 |  |
 | `unit_attack_resolve` | LIVE | 1078:1480, 11c0:1bc3, 11c8:003d |  |
-| `tech_names` | LIVE | 1088:108a, 1170:3181 |  |
-| `wonder_names` | LIVE | 1088:1e32, 1170:3181 |  |
-| `terrain_cost_table` | LIVE | 1420:17d4 |  |
+| `tech_names` | LIVE | 1088:108a, 10e8:03c6, 1100:078a, 1170:3181, 1180:02d3, 11f8:0080 |  |
+| `wonder_names` | LIVE | 1088:1e32, 1100:078a, 1170:3181, 11f8:0080 |  |
+| `terrain_cost_table` | LIVE | 1110:16c0, 1420:17d4 |  |
 | `game_shutdown` | LIVE |  |  |
 | `city_format_pop_count` | LIVE | 11c8:03ac, 12d8:42ec, 1420:172b |  |
 | `city_calc_pop_total` | LIVE | 11c8:0334, 1420:5500, 1420:5502, 1420:5503, 1420:5507 |  |
@@ -421,7 +421,7 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `newgame_civ_count_from_index` | LIVE | 12d8:3b9a |  |
 | `newgame_alive_mask` | LIVE | 12d8:42f8 |  |
 | `newgame_pick_tribe` | STUB | 10e8:0000, 11f8:0080, 1220:0156, 12d8:4300, 1420:2ad2, 1420:2ae5 | has TODO |
-| `tribe_get_name_list` | LIVE | 10e8:2d46, 11f8:0080 |  |
+| `tribe_get_name_list` | LIVE | 10e8:0000, 10e8:2d46, 1100:078a, 11f8:0080, 1420:2ad2, 1420:2ae5 |  |
 | `newgame_customize_world` | STUB | 1058:06ab, 1058:081a, 1058:0921, 1058:09f6, 10e8:0000, 1220:0156, 1220:16fd | has TODO |
 | `newgame_custom_world_modal` | STUB | 1058:06ab, 1220:0156, 1220:16fd | has TODO |
 | `newgame_finalize` | PARTIAL | 1028:0000, 10e8:0000, 1150:00c9, 12d8:3b9a, 12d8:42f6, 12d8:42f8, 12d8:42fa, 12d8:4300 | has TODO |
@@ -519,8 +519,9 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `res_append_pascal` | LIVE | 1048:0101, 1100:078a, 11f8:014a |  |
 | `res_compare_pascal` | LIVE | 11f8:0207 |  |
 | `res_copy_pascal` | LIVE | 11f8:00fc |  |
-| `res_get_string_copy` | STUB | 1100:0053, 11f8:0080 | has TODO |
+| `res_get_string_copy` | STUB | 1100:0053, 1100:078a, 11f8:0080 | has TODO |
 | `res_get_string_raw` | STUB | 11f8:00c5 | has TODO |
+| `res_blob_entry_kind` | LIVE | 1100:078a |  |
 
 ### `src/save.c`
 
@@ -679,6 +680,8 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `palette_animate_range` | LIVE | 1090:0376, 10b0:0461, 1200:00a8 |  |
 | `video_check_driver_caps` | LIVE | 1008:059a, 1420:0af4 |  |
 | `palette_init` | LIVE | 1090:0488 |  |
+| `gfx_brush_is_solid` | LIVE | 1098:00b5 |  |
+| `gfx_color_table_kind` | LIVE | 1098:01b0 |  |
 | `gfx_port_create` | STUB | 10d0:0000, 10d0:0cfa | has TODO |
 | `gfx_port_alloc_bitmap` | LIVE | 10d0:0000, 10d0:08f1, 10d0:0cfa |  |
 | `gfx_port_set_active` | STUB | 10d0:0956 | has TODO |

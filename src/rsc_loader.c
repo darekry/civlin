@@ -3011,7 +3011,9 @@ rsc_error_t res_get_string_copy(unsigned table, unsigned entry,
      * GetString call — caller must copy immediately; see rsc_loader.h
      * ownership note) -> Linux has no shared static (no globals), so
      * the blob fetch (rsc_get_blob_string @ 1100:078a, LIVE) + copy
-     * wiring stays TBD. */
+     * wiring stays TBD. Entry map: see res_blob_entry_kind (0x82 tech,
+     * 0x83 wonder-build, 0x84 produce, 0x8d government, 0x8a report,
+     * 0x8c leader, 0x94 tribe, 0x95 tribe-adj, 0x88 city). */
     if (!out)
         return RSC_ERR_NOENT;
     if (cap > 0)
@@ -3026,10 +3028,42 @@ rsc_error_t res_get_string_raw(unsigned table, unsigned entry,
     (void)entry;
     /* TODO: Orig FUN_11f8_00c5 @ 11f8:00c5 (Res_GetStringRaw: same as
      * copy above but WITHOUT Util_PascalToCStr — Pascal length byte
-     * kept; same shared static @ DAT_13f8_0000 ownership) -> same TBD. */
+     * kept; same shared static @ DAT_13f8_0000 ownership) -> same TBD.
+     * Entry map: see res_blob_entry_kind in rsc_loader.h (0x82 tech,
+     * 0x83 wonder-build, 0x84 produce, 0x8d government, 0x8a report,
+     * 0x8c leader, 0x94 tribe, 0x95 tribe-adj, 0x88 city); LIVE fetch
+     * is rsc_get_blob_string @ 1100:078a. */
     if (!out)
         return RSC_ERR_NOENT;
     if (cap > 0)
         out[0] = 0;
     return RSC_ERR_UNSUPPORTED;
+}
+
+const char *res_blob_entry_kind(unsigned table)
+{
+    /* BLOB 0x2da8 entry->meaning map (see rsc_loader.h; ResMgr_GetString
+     * @ 1100:078a readers). OS-free static-const 1:1, no Win16. */
+    switch (table) {
+    case RES_BLOB_TECH:
+        return "tech";
+    case RES_BLOB_WONDER_BUILD:
+        return "wonder-build";
+    case RES_BLOB_PRODUCE:
+        return "produce";
+    case RES_BLOB_GOVERNMENT:
+        return "government";
+    case RES_BLOB_REPORT:
+        return "report";
+    case RES_BLOB_LEADER:
+        return "leader";
+    case RES_BLOB_TRIBE:
+        return "tribe";
+    case RES_BLOB_TRIBE_ADJ:
+        return "tribe-adj";
+    case RES_BLOB_CITY:
+        return "city";
+    default:
+        return "?";
+    }
 }

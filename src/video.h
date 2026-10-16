@@ -69,6 +69,46 @@ civ_error_t video_check_driver_caps(SDL_Renderer *ren);
  * on the 8-bit surfaces TBD). */
 civ_error_t palette_init(void);
 
+/* --- Gfx brush/color chain (segment 1098, 2026-10-16) ---
+ * Anchors (civ.exe, x86:LE:16:Protected Mode):
+ *   Gfx_MakeBrush @ 1098:00b5 (color < 10 or > 0xf5 or DAT_1420_17a6 == 1
+ *     -> Gfx_LookupColor + CREATESOLIDBRUSH; else 8x8 pattern bitmap via
+ *     GfxPort_AllocBitmap @ 10d0:0cfa filled with the color +
+ *     CREATEPATTERNBRUSH + DELETEOBJECT; 20 callers incl. the PIC player
+ *     @ 1030:0000, Text_DrawAligned paths, Anim_AdvanceFrames @ 10b0:0461).
+ *   Gfx_LookupColor @ 1098:01b0 (color < 10 -> static table @ +0x66;
+ *     10 < color < 0xf6 -> 0xec palette via GLOBALLOCK(DAT_1420_9964) + 4
+ *     at entry (param-10)*4+4, GLOBALUNLOCK after; else (>= 0xf6) static
+ *     high table @ -0x34a; 8 callers incl. Gfx_MakeBrush, Text_SetColor @
+ *     1098:0e0b, Text_SetBkColor @ 1098:2144).
+ *   Text_SetColor @ 1098:0e0b (Gfx_GetCurrentDC + Gfx_LookupColor +
+ *     SETTEXTCOLOR + CREATEPEN(1) + Gfx_MakeBrush; DAT_1420_5480/547e/547c
+ *     caches; 50+ callers: Game_UpdateStatusPanel @ 1088:1554, PIC player,
+ *     dialogs, NewGame_Wizard @ 10e8:0667/0771/0b0b/0bf6, MenuZ @ 1220).
+ *   Text_SetBkColor @ 1098:2144 (DAT_12d8_28fc gate + Gfx_LookupColor +
+ *     SETBKCOLOR; mono vs color branch).
+ * Relationship to gfx_indexed.c: the 0xec palette IS the godpal run
+ * (gfx_godpal_count/get/search — LOGPALETTE 0x300 zero tail + 0xec RGB
+ * entries feeding Palette_Init @ 1090:0488 -> CREATEPALETTE; Linux
+ * applies via SDL_SetPaletteColors in palette_apply_to_port, see above;
+ * static low/high tables have no dump yet and stay STUB). GDI handles
+ * (HBRUSH/HPEN/CREATEPATTERNBRUSH) have no Linux equivalent -> the full
+ * MakeBrush/LookupColor/SetColor tails stay STUB with TODO Orig; the
+ * OS-free branch predicates below are LIVE 1:1 (no Win16, no globals). */
+
+/* Orig: Gfx_MakeBrush @ 1098:00b5 branch — solid vs pattern brush.
+ * 1 when the color takes the CREATESOLIDBRUSH path (color < 10 or
+ * color > 0xf5 or mono != 0, i.e. DAT_1420_17a6 == 1), 0 for the 8x8
+ * pattern path. OS-free 1:1, no Win16, no globals, no exit(). */
+int gfx_brush_is_solid(int color, int mono);
+
+/* Orig: Gfx_LookupColor @ 1098:01b0 table select — which table serves
+ * the color. 0 = static low table (< 10, @ +0x66), 1 = 0xec palette
+ * (10 < color < 0xf6 via DAT_1420_9964), 2 = static high table
+ * (>= 0xf6 @ -0x34a), -1 = boundary (10 / 0xf6 fall through in orig).
+ * OS-free 1:1, no Win16, no globals, no exit(). */
+int gfx_color_table_kind(int color);
+
 /* Palette_AnimateRange @ 1090:0376 (ported; range repaint via
  * SDL_SetPaletteColors staging on a temp 256-entry palette, no globals.
  * Orig copies RGB triples + flag byte then ANIMATEPALETTE; callers issue

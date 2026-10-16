@@ -774,14 +774,16 @@ void boot_shutdown(void)
 
 civ_error_t art_maybe_convert_artwork(void)
 {
-    /* Orig: FUN_10b8_0000 @ 10b8:0000 -> Art_MaybeConvertArtwork. Orig
-     * shape: 1420:20a9 prompt, then optional artwork conversion gating
-     * WorldGen_CopyPreset @ 10b8:079d (HMEMCPY 64000 B preset, see
-     * worldgen.h worldgen_copy_preset). Prompt bytes not yet decoded
-     * from the dump (no literal ported); conversion format/port bridge
-     * TBD -> stub CIV_ERR_UNSUPPORTED. No globals, no exit(),
-     * read-only. */
-    return CIV_ERR_UNSUPPORTED;
+    /* Orig: FUN_10b8_0000 @ 10b8:0000 -> Art_MaybeConvertArtwork.
+     * LIVE no-op on Linux (see boot.h): the Win16 driver conversion
+     * (Art_PortDataToBitmap @ 10b8:0e36 even-BITBLT vs odd-pad via
+     * DAT_1420_17a6 / CREATECOMPATIBLEDC + SETBITMAPBITS + BITBLT per
+     * row; 0xec palette via Palette_Init @ 1090:0488; LZW via
+     * Art_DecodeLZW @ 10b8:158c; disk cache via Art_SaveConvertedFrame
+     * @ 10b8:0c1c with Art_ShouldConvert @ 10b8:0ded = 1) has no Linux
+     * equivalent — SDL3 INDEX8 textures take any width, palette via
+     * SDL_SetPaletteColors, LZW via gfx_lzw_decode. Trivial CIV_OK. */
+    return CIV_OK;
 }
 
 civ_error_t main_run_startup_sequence(void)

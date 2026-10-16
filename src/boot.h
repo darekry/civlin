@@ -454,13 +454,36 @@ civ_error_t dos_set_path(int drive, const char *path);
  * OS-free parts (prefs defaults, caps index shape) are ported 1:1. */
 
 /* Orig: FUN_10b8_0000 @ 10b8:0000 -> art_maybe_convert_artwork
- * (Art_MaybeConvertArtwork). Optional artwork conversion gated by the
- * 1420:20a9 prompt (prompt bytes not yet decoded from the segment dump,
- * so no literal is ported here); on confirm it converts before
- * WorldGen_CopyPreset @ 10b8:079d copies the 64000 B preset (see
- * worldgen.h worldgen_copy_preset). Conversion format/port bridge TBD
- * -> stub CIV_ERR_UNSUPPORTED. Called from the boot_maybe_convert_artwork
- * step above. No globals, no exit(), read-only. */
+ * (Art_MaybeConvertArtwork). LIVE no-op on Linux (returns CIV_OK).
+ * Orig shape: DAT_1420_17a8 gate + _LOPEN probe + 1420:20a9 prompt
+ * ("CONVERT CIVILIZATION ARTWORK" branch), then the convert loop over
+ * frame ranges (200..0xca, 0x44c..0x514, 0x80..0x90, 500..0x201,
+ * 400..0x196, 0x3f5..0x3f7, top-five, 0xd05..0xd13, gov, tech) via
+ * Art_PreviewFrame @ 10b8:076a + Art_PumpConvertCancel @ 10b8:06a0 +
+ * Art_DrawProgressFill @ 10b8:062d (art_progress_fill_x, LIVE) +
+ * Art_CheckDiskSpace @ 10b8:04df 9 MB gate, each frame through
+ * Art_LoadFrameData @ 10b8:079d (disk via Art_LoadDiskFile @ 10b8:0aa8
+ * + save_unpack when DAT_1420_17a8 != 0, else RSC via
+ * Art_LoadResPaletted @ 10b8:11bc + palette expand to 0xec +
+ * Art_DecodeLZW @ 10b8:158c GIF-style LZW) + Art_SaveConvertedFrame @
+ * 10b8:0c1c (Art_ShouldConvert @ 10b8:0ded = 1 always; save_pack +
+ * _LCREAT/_HWRITE disk cache) + Art_PortDataToBitmap @ 10b8:0e36.
+ * What PortDataToBitmap converts: device-independent port data to a
+ * device-dependent bitmap — even width = direct GfxPort_AllocBitmap @
+ * 10d0:0cfa + BITBLT; odd width = pad to even (GLOBALALLOC + HMEMCPY
+ * per row when DAT_1420_17a6 == 1, else CREATECOMPATIBLEDC +
+ * SETBITMAPBITS + BITBLT 0xcc0020 per scanline); then SELECTOBJECT +
+ * SETRECT clip. Palette is the 0xec LOGPALETTE from Palette_Init @
+ * 1090:0488 (DAT_1420_9964 -> CREATEPALETTE -> DAT_1420_9966, see
+ * video.h/gfx_indexed.h gfx_godpal_get); dimensions ride in the
+ * port-data struct (+0xe/+0x10 w, +0xc/+0xe h region). On Linux this
+ * whole driver conversion is unnecessary: SDL3 INDEX8 textures take
+ * arbitrary widths (no WORD-align pad), palette applies via
+ * SDL_SetPaletteColors (see palette_apply_to_port), LZW decodes via
+ * gfx_lzw_decode/pic_decompress_chunk — so a trivial CIV_OK no-op is
+ * faithful (same contract as the STATUS.md boot path note). Called
+ * from the boot_maybe_convert_artwork step above. No globals, no
+ * exit(), read-only. */
 civ_error_t art_maybe_convert_artwork(void);
 
 /* Orig: FUN_11e0_0000 @ 11e0:0000 -> main_run_startup_sequence

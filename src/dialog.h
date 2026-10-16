@@ -634,13 +634,31 @@ civ_error_t dialog_client_rect(int scr_l, int scr_t, int scr_r, int scr_b,
 
 /* Orig: Dlg_CenterRect @ 11f8:0000 — center inner rect inside outer,
  * keeping inner size (same math as dlg_center_window, but CIV_OK on
- * success so tests can assert it). NULL -> NOENT. No Win16. */
+ * success so tests can assert it). NULL -> NOENT. No Win16.
+ * Callers (7 xrefs, all rect-center placements): FUN_1068_06af @
+ * 1068:0958/0b36 (city dialog layout x2), FUN_1098_0b33 @ 1098:0b67,
+ * FUN_1098_0a0d @ 1098:0a5b, FUN_1098_0aa4 @ 1098:0ae0 (dialog create
+ * paths), FUN_1170_21b3 @ 1170:2623 (tech/wonder dialog), FUN_1210_09b4
+ * @ 1210:0e29 (small-map window). */
 civ_error_t dlg_center_rect(const dlg_rect_t *outer, const dlg_rect_t *inner,
                             dlg_rect_t *out);
 
 /* Orig: Text_DrawAligned @ 1098:0ed1 + Text_DrawResString @ 1098:20f4 —
  * GDI text-out tail (SELECTOBJECT font + SETBKMODE/SETTEXTALIGN +
- * TEXTOUT + shadow via Text_SetColor). SDL_ttf bridge TBD. */
+ * TEXTOUT + shadow via Text_SetColor). SDL_ttf bridge TBD.
+ * Text_SetColor @ 1098:0e0b callers (who sets text colors, 50+ xrefs):
+ * Game_UpdateStatusPanel @ 1088:1554 (DAT_12d8_45be before the pop
+ * line), Text_DrawAligned @ 1098:103f/10c3 (aligned-text shadow pass),
+ * Anim_AdvanceFrames @ 10b0:137a/13e9 (opcode 7 caption + opcode 8
+ * fill), NewGame_Wizard @ 10e8:0667/0771/0b0b/0bf6 (wizard screens),
+ * Replay_PlayLog @ 1180:02d3 head (mono branch), Dialog_MenuZ_Modal @
+ * 1220:0889/10c6/118e (menu items), HoF_VictoryCeremony @ 1080:08e9,
+ * FUN_1110_04d0 city-draw @ 1110:07c3..0c61 x6, FUN_1170_05ca/21b3,
+ * FUN_1178_0022, FUN_1188_0000/013f/07ad end-game screens. Full
+ * Gfx_LookupColor @ 1098:01b0 + SETTEXTCOLOR + CREATEPEN + Gfx_MakeBrush
+ * @ 1098:00b5 tail stays Win16 (see video.h brush/color chain for the
+ * palette link + the LIVE gfx_brush_is_solid/gfx_color_table_kind
+ * predicates). */
 civ_error_t text_draw_aligned(const char *text, const dlg_rect_t *rect,
                               int format, int color);
 

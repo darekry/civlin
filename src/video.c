@@ -173,6 +173,30 @@ civ_error_t palette_init(void)
     return CIV_OK;
 }
 
+int gfx_brush_is_solid(int color, int mono)
+{
+    /* Orig Gfx_MakeBrush @ 1098:00b5 branch (see video.h): solid when
+     * color < 10 or color > 0xf5 or mono (DAT_1420_17a6 == 1); else 8x8
+     * pattern. OS-free 1:1, no Win16. */
+    if (color < 10 || color > 0xf5 || mono != 0)
+        return 1;
+    return 0;
+}
+
+int gfx_color_table_kind(int color)
+{
+    /* Orig Gfx_LookupColor @ 1098:01b0 select (see video.h): < 10 low
+     * table, 10 < color < 0xf6 palette, >= 0xf6 high table; 10 / 0xf6
+     * fall through in orig -> -1 here. OS-free 1:1, no Win16. */
+    if (color < 10)
+        return 0;
+    if (color > 10 && color < 0xf6)
+        return 1;
+    if (color >= 0xf6)
+        return 2;
+    return -1;
+}
+
 civ_error_t gfx_port_create(SDL_Renderer *ren, int w, int h, gfx_port_t **out)
 {
     if (out)

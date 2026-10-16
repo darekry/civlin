@@ -793,7 +793,12 @@ int unit_attack_resolve(int atk_strength, int def_strength,
  * yet; Alphabet/.../Nuclear hypothesis stays TODO. Returns "?" for any
  * tech (confirmed subset empty + "?" unknown, never NULL, read-only
  * literal). Count TBD (callers pass n_tech explicitly). No globals, no
- * exit(). */
+ * exit().
+ * CHAIN ANSWER (2026-10-16): NO — live tech strings are NOT this table.
+ * They arrive via ResMgr_GetString @ 1100:078a entry 0x82 through
+ * Res_GetStringCopy @ 11f8:0080 (NewGame_Wizard @ 10e8:03c6 finalize
+ * loop gated by FUN_1170_3181 + Replay_PlayLog @ 1180:02d3 case 5
+ * discover); see res_blob_entry_kind()/RES_BLOB_TECH in rsc_loader.h. */
 const char *tech_names(int tech);
 
 /* Orig wonder table for Game_PickWonderForAI @ 1170:3181 (eligible[w]
@@ -802,7 +807,12 @@ const char *tech_names(int tech);
  * no fake): checked game.c (only wonder indices, no string literals)
  * so no confirmed names; 7-wonders hypothesis (Pyramids/Hanging/
  * Oracle/etc.) stays TODO. Returns "?" for any wonder (never NULL).
- * Count TBD (callers pass n_wonders explicitly). No globals, no exit(). */
+ * Count TBD (callers pass n_wonders explicitly). No globals, no exit().
+ * CHAIN ANSWER (2026-10-16): NO — live wonder/build strings are NOT
+ * this table. They arrive via ResMgr_GetString @ 1100:078a entries
+ * 0x83 (build, Replay_PlayLog case 10 + 0x3967 when < 8) / 0x84
+ * (produce-first, case 6) through Res_GetStringCopy @ 11f8:0080; see
+ * RES_BLOB_WONDER_BUILD/RES_BLOB_PRODUCE in rsc_loader.h. */
 const char *wonder_names(int wonder);
 
 /* Orig 1420:17d4 terrain base-cost table for unit_move_cost /
@@ -812,7 +822,10 @@ const char *wonder_names(int wonder);
  * the fixed image is decoded (see unit_move_cost + tile_move_cost in
  * map.h, same formula). Returns base cost per tile when known, -1 TBD
  * for now on any tile (no fake entries; tile param void). TODO Orig
- * 1420:17d4 layout. No globals, no exit(), read-only. */
+ * 1420:17d4 layout. No globals, no exit(), read-only.
+ * CHAIN ANSWER (2026-10-16): NOT the ResMgr blob — terrain costs live
+ * in the 1420:17d4 byte table (sea = tile 10, river = tile 0x0c per
+ * map.h; Map_IsSeaLand @ 1110:16c0 == 10 gate in unit_can_enter). */
 int terrain_cost_table(int tile);
 
 void game_shutdown(civ_game_t *g);
@@ -822,16 +835,36 @@ void game_shutdown(civ_game_t *g);
  *   City_FormatPopCount @ 11c8:03ac (pop -> "1,230" style via
  *     Util_IntToDec @ 1000:2928 + Util_StrAppend @ 1000:363e with DGROUP
  *     separators @ 12d8:42ec/42ee/42f0; callers City_CalcPopTotal @
- *     11c8:0334 + 1030:8b39 + 1180:02d3 + HoF_Show @ 1080:0119).
+ *     11c8:0334 + City_ShowInfoDialog @ 1030:8b39 + Replay_PlayLog @
+ *     1180:02d3 case 0xb + HoF_Show @ 1080:0119).
  *   City_CalcPopTotal @ 11c8:0334 (triangular sum over the 0x80 0x1c
  *     city records @ 1420:5500: owner @ +7 == civ and valid @ +2 != -1,
- *     sum 1..size @ +3, then City_FormatPopCount; 5 callers incl.
- *     Game_TurnLoopTick @ 1088:0000 + Game_UpdateStatusPanel @ 1088:13d5
- *     + HoF_TryInsert @ 1080:0595).
+ *     sum 1..size @ +3, then City_FormatPopCount; 5 callers:
+ *     Game_TurnLoopTick @ 1088:0000 scoring (u16 split /0x100 + &0xff
+ *       via FUN_11c0_3beb), Game_UpdateStatusPanel @ 1088:13d5 (pop line
+ *       at local_14+4/local_12+2 via TEXTOUT + "00,000 citizens." @
+ *       1420:172b tail), HoF_TryInsert @ 1080:0595 (slot pop @ +0x27
+ *       stride w6), City_ShowCensusReport @ 1018:1d5b (census totals +
+ *       FUN_1018_202a ratios), Demo_ShowDemographics @ 1188:123a
+ *       (per-civ Population row)).
  *   City_FormatName @ 1048:0101 (ResMgr_GetString 0x88,4/5 via
- *     FUN_1008_0d93 gate + GLOBALLOCK/UNLOCK + Res_GetStringCopy tail +
- *     Res_AppendPascal @ 11f8:014a x2; sole caller Menu_InitMainBar @
- *     1048:0000).
+ *     Menu_CheckCityNameId @ 1008:0d93 gate + GLOBALLOCK/UNLOCK +
+ *     Res_GetStringCopy tail + Res_AppendPascal @ 11f8:014a x2; sole
+ *     caller Menu_InitMainBar @ 1048:0000 with city ids 0x1c/0x34 into
+ *     the 256 B local_106 Pascal buffer, Util_PascalToCStr, MODIFYMENU
+ *     0xcf/0xd0).
+ * Status-panel neighbours (Game_UpdateStatusPanel @ 1088:13d5 context):
+ *   Status_DrawPanelFrame @ 11f8:0278 (FILLRECT via Gfx_MakeBrush @
+ *     1098:00b5 + white/black CREATEPEN 0xffff/0 + MOVETO/LINETO border;
+ *     upper rect via FUN_1218_0956 + lower via FUN_1218_0a06, see map.h).
+ *   Status_AppendYearText @ 1088:1dd0 (abs(year) + " BC" @ 1420:173c /
+ *     " AD" @ 1420:1740 onto 12d8:24fa; alias of game_append_year_text).
+ *   Status_DrawTechIcons @ 1088:1a82 (separator rule + 9 icons via
+ *     Gfx_DrawTechIcon @ 11a8:0cb1 from DAT_1420:9632; player rows live,
+ *     others LCG-faked; see game.h status_draw_tech_icons).
+ *   Text_SetColor @ 1098:0e0b (DAT_12d8_45be color at @ 1088:1554 before
+ *     the pop line; Gfx_LookupColor @ 1098:01b0 + SETTEXTCOLOR +
+ *     CREATEPEN + Gfx_MakeBrush @ 1098:00b5 tail stays Win16).
  * OS-free number/name math below is LIVE 1:1 on explicit params (no
  * Win16, no globals, read-only); DGROUP separator bytes stay caller
  * params (exact 42ec/42ee/42f0 literals TBD vs runtime dump). */

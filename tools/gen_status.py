@@ -148,7 +148,7 @@ Prawdziwy `boot_run` pada na pierwszym stubie (`boot_check_memory`).
 | civfonts.fon | `font_enum_families_init` | STUB | FON pakowany EDI; wiernie = unpack + NE-fonty |
 | ResMgr_LoadRsc x5 | `rsc_load_rsc` | LIVE | BE-walk katalogu EOF (2 passy, bounds-checked, `RSC_OK`); wpięcie 5 plików w `boot_load_resources` — STUB |
 | Video_CheckDriverCaps | `video_check_driver_caps` | LIVE | |
-| Art_MaybeConvertArtwork | `art_maybe_convert_artwork` | STUB | na Linuksie zbędne — no-op CIV_OK |
+| Art_MaybeConvertArtwork | `art_maybe_convert_artwork` | LIVE | na Linuksie zbędne — no-op CIV_OK |
 | Config_LoadPrefs | `config_load_prefs` | STUB | wystarczą domyślne (sounds on) — CIV_OK |
 | Palette_Init | `palette_init` | LIVE | no-op |
 | Game_InitGlobalTables | `boot_init_tables` | PARTIAL | rng + próba malloc żyją; win16-lock nie ma odpowiednika |
