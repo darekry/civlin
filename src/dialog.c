@@ -2950,3 +2950,81 @@ int pedia_dlg_flags(void)
     /* Orig same: Dlg_CreateTracked(0x82, 0x61). */
     return 0x61;
 }
+
+/* --- Chain 2026-10-16 (31): dialog STUB-split OS-free gates (task). ---
+ * See dialog.h block. OS-free 1:1 LIVE (no Win16, no globals, no exit()).
+ * Win16/GDI/USER tails stay CIV_ERR_UNSUPPORTED / WIN16_MSG_DEFAULT with
+ * TODO Orig in the STUBs above (dialog_menuz @ 1220:0156, dlg_create_tracked
+ * @ 1098:124f, diplomacy_post_contact @ 1168:0a07, diplo_open_contact_dialog
+ * @ 1160:0000, ui_draw_end_turn_prompt @ 10d8:00e0, text_draw_aligned @
+ * 1098:0ed1, dialog_show_message @ 1220:00d2 + Dialog_RefreshViews @
+ * 1220:0eb8, anim_advance_frames @ 10b0:0461). */
+
+int dlg_ctl_is_earth_extra(int ctl_id)
+{
+    /* Orig Dlg_CreateTracked @ 1098:124f: 0x8f adds the 0x323-0x332 ctl
+     * init (sibling of the 0x65-0x6e loop in dlg_ctl_is_tracked_init). */
+    return (ctl_id >= 0x323 && ctl_id <= 0x332) ? 1 : 0;
+}
+
+int diplo_ai_contact_gate(int civ_a, int civ_b, int turn)
+{
+    /* Orig Diplo_PostContact @ 1168:0a07: AI-AI pairs on
+     * (civA+civB+turn)&3 == 0 evaluate Diplo_ShouldMakePeace @ 1168:0f47
+     * (first contact without 0x08 is the sibling gate, caller-side). */
+    return (((civ_a + civ_b + turn) & 3) == 0) ? 1 : 0;
+}
+
+int diplo_senate_forces_peace(int gov)
+{
+    /* Orig Diplo_OpenContactDialog @ 1160:0000: senate override (< 4 gov)
+     * forces the peace message (republic+ governments bypass). */
+    if (gov < 0 || gov >= 4)
+        return 0;
+    return 1;
+}
+
+int ui_end_turn_phase(long tick)
+{
+    /* Orig UI_DrawEndTurnPrompt @ 10d8:00e0: Sys_GetTickScaled % 0x3c
+     * 0x1e-phase clock shared with the unit sprite blink in
+     * unit_wait_for_orders @ 11c0:0ec2 (text phase first half). */
+    long phase = tick % 0x3cL;
+
+    if (phase < 0)
+        phase += 0x3cL;
+    return (phase < 0x1eL) ? 1 : 0;
+}
+
+int text_needs_shadow(int mono, int format)
+{
+    /* Orig Text_DrawAligned @ 1098:0ed1: shadow TEXTOUT x3 via Text_SetColor
+     * @ 1098:0e0b when DAT_12d8_28fc == 0 (color/VGA, cf. text_resolve_color
+     * @ 10d8:00e0) and format & 0x30 (0x30 shadow bits beside the low-nibble
+     * align slot in text_align_x). */
+    if (mono != 0)
+        return 0;
+    return ((format & 0x30) != 0) ? 1 : 0;
+}
+
+int dialog_refresh_view_count(void)
+{
+    /* Orig Dialog_RefreshViews @ 1220:0eb8: SENDMESSAGE 0xf to the three
+     * tracked views 12b0:0004/001c/0034 (tail of Dialog_ShowMessage @
+     * 1220:00d2). */
+    return 3;
+}
+
+int dialog_refresh_msg(void)
+{
+    /* Orig Dialog_RefreshViews @ 1220:0eb8: refresh message id 0xf. */
+    return 0x0f;
+}
+
+int anim_opcode_is_text(int op)
+{
+    /* Orig Anim_AdvanceFrames @ 10b0:0461 case 7: caption-text branch
+     * (both sub-branches StoreDC; fine split of anim_opcode_needs_store
+     * 5/7/8/9 above). */
+    return (op == 7) ? 1 : 0;
+}

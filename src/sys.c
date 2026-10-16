@@ -152,8 +152,44 @@ civ_error_t dos_map_error(int dos_code)
     (void)dos_code;
     /* TODO: Orig FUN_1000_151a @ 1000:151a (Dos_MapError: errno mapper to
      * DAT_1420_0010/DAT_1420_4e7a, always returns 0xffff). Needs the
-     * DGROUP errno words + table @ 1420:4e7c. */
+     * DGROUP errno words + table @ 1420:4e7c. Pure kernel:
+     * dos_map_error_lookup below (LIVE, explicit outs). */
     return CIV_ERR_UNSUPPORTED;
+}
+
+int dos_map_error_lookup(int dos_code, int *out_e0010, int *out_e4e7a)
+{
+    /* Orig Dos_MapError @ 1000:151a (decompiled 2026-10-16; table bytes
+     * @ 1420:4e7c read from civ.exe, 0x59 entries, all < 0x80 so the
+     * orig (int)*(signed char *) extend is the identity). Note the
+     * <= -0x31 fallthrough also clamps to 0x57: for negative input the
+     * outer else-if is skipped, so control reaches `param_1 = 0x57`. */
+    static const int8_t table[0x59] = {
+        0, 19, 2, 2, 4, 5, 6, 8, 8, 8, 20, 21, 5, 19, 14, 22,
+        5, 17, 2, 30, 41, 44, 40, 40, 40, 40, 40, 41, 44, 40,
+        40, 40, 5, 5, 41, 23, 23, 14, 14, 14, 14, 14, 14, 14,
+        14, 14, 14, 14, 14, 14, 15, 44, 35, 2, 44, 15, 42, 40,
+        40, 40, 19, 27, 28, 2, 2, 5, 15, 2, 23, 40, 42, 19,
+        42, 14, 14, 14, 14, 14, 14, 14, 35, 14, 28, 40, 23, 35,
+        37, 19, 40,
+    };
+    int idx;
+
+    _Static_assert(sizeof(table) == 0x59, "dos map table is 0x59 bytes");
+    if (!out_e0010 || !out_e4e7a)
+        return -1;
+    if (dos_code < 0 &&
+        (dos_code == -0x30 || -(long)dos_code < 0x30L)) {
+        *out_e0010 = -dos_code;
+        *out_e4e7a = 0xFFFF;
+        return 0xFFFF;
+    }
+    idx = dos_code;
+    if (idx < 0 || idx >= 0x59)
+        idx = 0x57;
+    *out_e4e7a = idx;
+    *out_e0010 = (int)table[idx];
+    return 0xFFFF;
 }
 
 civ_error_t dos_is_char_device(int fd)
@@ -220,8 +256,16 @@ civ_error_t dos_is_eof(int fd, int *out_eof)
         return CIV_ERR_NOENT;
     *out_eof = 0;
     /* TODO: Orig FUN_1000_201e @ 1000:201e (Dos_IsEof: 4400-device gate +
-     * 4201/4202/4200 tell/end/restore probe). Needs DOS seeks. */
+     * 4201/4202/4200 tell/end/restore probe). Needs DOS seeks. Pure tail
+     * compare: dos_eof_at_end below (LIVE). */
     return CIV_ERR_UNSUPPORTED;
+}
+
+int dos_eof_at_end(long cur, long end)
+{
+    /* Orig Dos_IsEof @ 1000:201e tail (decompiled 2026-10-16:
+     * `cur_restored < end ? 0 : 1` after the 4200 restore). */
+    return (end <= cur) ? 1 : 0;
 }
 
 civ_error_t dos_create(const char *path, int attrs)
@@ -247,9 +291,33 @@ civ_error_t dos_open(const char *path, int mode_flags)
     if (!path)
         return CIV_ERR_NOENT;
     /* TODO: Orig FUN_1000_2c4a @ 1000:2c4a (Dos_Open: INT 21h AH=0x3d,
-     * AL=mode from flags; live twin save_file_open O_RDONLY in save.c). */
+     * AL=mode from flags; live twin save_file_open O_RDONLY in save.c).
+     * Pure mode/table kernels: dos_open_mode_map/table_word below. */
     (void)mode_flags;
     return CIV_ERR_UNSUPPORTED;
+}
+
+int dos_open_mode_map(int flags)
+{
+    /* Orig Dos_Open @ 1000:2c4a (disassembled 2026-10-16: AL=1;
+     * TEST CX,2/JNZ take; AL=2; TEST CX,4/JNZ take; AL=0; then
+     * AL |= flags_low & 0xf0 for INT 21h AH=0x3d). Bit 1 wins. */
+    int base;
+
+    if ((flags & 0x2) != 0)
+        base = 1;
+    else if ((flags & 0x4) != 0)
+        base = 2;
+    else
+        base = 0;
+    return base | ((unsigned)flags & 0xF0u);
+}
+
+unsigned dos_open_table_word(int flags)
+{
+    /* Orig Dos_Open @ 1000:2c4a table site (MOV AX,[BP+0xa] /
+     * AND AX,0xb8ff / OR AX,0x8000 into the 0x4e4e-table word). */
+    return ((unsigned)flags & 0xB8FFu) | 0x8000u;
 }
 
 civ_error_t dos_write(int fd, const void *buf, unsigned len)
@@ -1031,15 +1099,30 @@ int util_sprintf(char *dst, size_t cap, const char *fmt, ...)
 
 civ_error_t sys_fatal_abort(const char *msg)
 {
-    (void)msg;
-    /* TODO: Orig FUN_1000_4124 @ 1000:4124 (Sys_FatalAbort: strrchr
-     * '\\' via Util_StrRChr @ 1000:37b2 on DAT_1420_4f9a/4f9c, then
-     * Win16 GETDESKTOPWINDOW + MESSAGEBOX CALLF 1608:01a4/0080 style
-     * 0x1010 with the Util_Sprintf @ 1000:35f6 buffer). Needs a parent
-     * window + DGROUP; NULL msg -> NOENT. No exit() in libs. */
+    /* Orig Sys_FatalAbort @ 1000:4124 (decompiled 2026-10-16: caption
+     * via sys_fatal_basename kernel below, then GETDESKTOPWINDOW +
+     * MESSAGEBOX style 0x1010; void, never returns in practice).
+     * PARTIAL: best-effort dialog via win16_message_box (caption
+     * "CivLin" default); the UNSUPPORTED tail stays because a lib never
+     * exits — the owner (main.c) exits. Callers (float_report_error @
+     * 1000:1056) ignore the code, like orig ignoring the MESSAGEBOX rc.
+     * NULL msg -> NOENT (orig faulted). */
     if (!msg)
         return CIV_ERR_NOENT;
+    (void)win16_message_box(msg, NULL);
     return CIV_ERR_UNSUPPORTED;
+}
+
+const char *sys_fatal_basename(const char *path)
+{
+    /* Orig Sys_FatalAbort @ 1000:4124 caption kernel: Util_StrRChr @
+     * 1000:37b2 over '\\' 0x5c, +1 past it, else the whole far path. */
+    const char *b;
+
+    if (!path)
+        return NULL;
+    b = strrchr(path, '\\');
+    return b ? b + 1 : path;
 }
 
 double float_report_error(float_matherr_t *e, char *buf, size_t cap,
@@ -1811,6 +1894,14 @@ int file_build_temp_path(char *dst, size_t cap, const char *dir,
     if (n < 0 || (size_t)n >= cap)
         return -1;
     return n;
+}
+
+int file_temp_next_num(int cur)
+{
+    /* Orig File_BuildUniqueTempPath @ 1000:16a5 (decompiled 2026-10-16:
+     * *p == -1 (free slot) ? *p += 2 : *p += 1; the Dos_GetFileAttr @
+     * 1000:1210 probe loop around it needs DOS, see dos_file_attr). */
+    return cur + ((cur == -1) ? 2 : 1);
 }
 
 /* --- Chain 2026-10-16 (19): message-pump hierarchy (goals 1+5) ---

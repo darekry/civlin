@@ -4419,3 +4419,91 @@ int game_status_progress_index(int science, int difficulty, int base,
     v = ((long)science << 2) / denom;
     return util_clamp((int)v, 0, 3);
 }
+
+/* --- Turn-loop gates + tech-icon budget + demo rows (2026-10-16) ---
+ * See game.h block. OS-free 1:1 LIVE (no globals, no Win16, no exit()). */
+
+int game_turn_disaster_due(int turn)
+{
+    /* Orig Game_TurnLoopTick @ 1088:0000 (g_nTurn @ 12d8:42fe): 2x
+     * City_ProcessDisaster @ 1040:068e once g_nTurn > 0x32 (Rng_Range @
+     * 11c8:003d 0x80 draws stay caller-side). */
+    return (turn > 0x32) ? 1 : 0;
+}
+
+int game_turn_treasury_warn(int treasury)
+{
+    /* Orig Game_TurnLoopTick @ 1088:0000 treasury<100 memory-warning
+     * branch (Dialog_ShowMessage @ 1220:00d2 via FUN_11d0_01f7 tail stays
+     * Win16 caller-side). */
+    return (treasury < 100) ? 1 : 0;
+}
+
+int status_tech_count_ok(int count, int progress)
+{
+    /* Orig Status_DrawTechIcons @ 1088:1a82 budget (count <=
+     * Util_Clamp(param2+3,3,0x24) @ 11c8:0063; Util_Clamp inline here, no
+     * link, like unit_popup_moves_full). */
+    int budget = progress + 3;
+
+    if (budget < 3)
+        budget = 3;
+    if (budget > 0x24)
+        budget = 0x24;
+    if (count < 0)
+        return 0;
+    return (count <= budget) ? 1 : 0;
+}
+
+int status_tech_height_ok(int height, int count)
+{
+    /* Orig Status_DrawTechIcons @ 1088:1a82 (height <= count/5, <= 3;
+     * x86 IDIV truncates toward zero, same as C /). */
+    if (height < 0)
+        return 0;
+    if (height > 3)
+        return 0;
+    return (height <= count / 5) ? 1 : 0;
+}
+
+int demo_military_rate(int count, int pop)
+{
+    /* Orig Demo_ShowDemographics @ 1188:123a Military row: (3eee count *
+     * 10) / pop. Caller sums live 0x80 city records per civ (no LCG
+     * fake, unlike the status tech-icon AI rows). */
+    if (pop <= 0)
+        return -1;
+    return (count * 10) / pop;
+}
+
+int demo_productivity(int output, int pop)
+{
+    /* Orig Demo_ShowDemographics @ 1188:123a Productivity row:
+     * output*10/pop. */
+    if (pop <= 0)
+        return -1;
+    return output * 10 / pop;
+}
+
+int demo_family_raw(int food, int pop)
+{
+    /* Orig Demo_ShowDemographics @ 1188:123a Family Size row:
+     * (food*0x28)/pop+0x14 (callers render x/10 + "." + x%10 +
+     * " children", rank /10). */
+    if (pop <= 0)
+        return -1;
+    return (food * 0x28) / pop + 0x14;
+}
+
+int demo_life_clamp(int impr)
+{
+    /* Orig Demo_ShowDemographics @ 1188:123a Life Expectancy row:
+     * Util_Clamp(impr,0x14,99) @ 11c8:0063 (inline here, no link). */
+    int v = impr;
+
+    if (v < 0x14)
+        v = 0x14;
+    if (v > 99)
+        v = 99;
+    return v;
+}

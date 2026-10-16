@@ -2351,4 +2351,83 @@ int pedia_dlg_id(void);
  * 1:1 0x61. */
 int pedia_dlg_flags(void);
 
+/* --- Chain 2026-10-16 (31): dialog STUB-split OS-free gates (task) ---
+ * Orig (civ.exe, x86:LE:16:Protected Mode), 1:1 ports of pure branches
+ * documented inside the STUB bodies below (no Win16, no globals, no exit(),
+ * read-only, C17). The handle/modal/GDI tails stay STUB with TODO Orig:
+ *   Dialog_MenuZ_Modal @ 1220:0156 (PEEKMESSAGE/ISDIALOGMESSAGE pump +
+ *     CREATEWINDOW radio fan-out -> dialog_menuz STUB),
+ *   Dlg_CreateTracked @ 1098:124f (CREATEDIALOG + MAKEPROCINSTANCE(DLGPROC @
+ *     1098:16e2 / CIVDIALOGPROC @ 1098:1838) + palette copy + tracked-stack
+ *     push @ 1420:1ea0/1ec8 -> dlg_create_tracked STUB; flag/id math LIVE in
+ *     dlg_create_should_center/show + dlg_ctl_is_tracked_init +
+ *     dlg_tracked_push_off/pop + dlg_id_needs_preset_size above),
+ *   Diplo_PostContact @ 1168:0a07 (contact bits @ 12d8:3a0a + dialogs ->
+ *     diplomacy_post_contact STUB; bit math LIVE in diplo_* above),
+ *   Diplo_OpenContactDialog @ 1160:0000 (MenuZ tribute/peace/war branches ->
+ *     diplo_open_contact_dialog STUB; tribute math LIVE above),
+ *   UI_DrawEndTurnPrompt @ 10d8:00e0 ("End of Turn" string in civ.exe dump
+ *     + sprite blink in unit_wait_for_orders @ 11c0:0ec2 on the
+ *     Sys_GetTickScaled % 0x3c 0x1e-phase clock -> ui_draw_end_turn_prompt
+ *     STUB; phase gate LIVE below),
+ *   Text_DrawAligned @ 1098:0ed1 (SELECTOBJECT + SETBKMODE/SETTEXTALIGN +
+ *     shadow TEXTOUT x3 + TEXTOUT -> text_draw_aligned STUB; x/y math LIVE
+ *     in text_align_x/text_center_y above, shadow gate LIVE below),
+ *   Dialog_ShowMessage @ 1220:00d2 (Dlg_CreateTracked 0x88/0x91 +
+ *     Dialog_MenuZ_Modal + Dlg_DestroyTracked + Dialog_RefreshViews @
+ *     1220:0eb8 SENDMESSAGE 0xf to 12b0:0004/001c/0034 -> dialog_show_message
+ *     STUB; id math LIVE in dialog_show_message_id above),
+ *   Anim_AdvanceFrames @ 10b0:0461 (timed opcode switch 1..0xe ->
+ *     anim_advance_frames STUB/PARTIAL; decoder LIVE in anim_opcode_* above,
+ *     caption case 7 LIVE below).
+ * Refs verified read-only 2026-10-16: unpacked/civ.exe strings
+ *   ("RanDoMRadio"/"RanDoMStatic"/"RanDoMUser", "RANDOMRADIOPROC"/
+ *   "RANDOMSTATICPROC"/"RANDOMUSERPROC", "civhelp.hlp", "End of Turn") +
+ *   unpacked/civhelp.hlp 72787 B (magic 3F 5F 03 00 + version 0x46, see
+ *   help_hlp_system above). */
+
+/* Orig Dlg_CreateTracked @ 1098:124f earth-custom extra loop (0x8f adds
+ * 0x323-0x332, see dlg_create_tracked STUB) -> dlg_ctl_is_earth_extra.
+ * 1:1 0x323 <= id <= 0x332 (GETDLGITEM-guarded init, sibling of
+ * dlg_ctl_is_tracked_init 0x65..0x6e above). No globals. */
+int dlg_ctl_is_earth_extra(int ctl_id);
+
+/* Orig Diplo_PostContact @ 1168:0a07 AI-AI contact gate ((civA+civB+turn)&3
+ * == 0 or first contact without 0x08, see diplomacy_post_contact STUB) ->
+ * diplo_ai_contact_gate. 1:1 nonzero (1) when (a+b+turn)&3 == 0 (periodic
+ * AI-AI evaluation slot), 0 otherwise. No globals. */
+int diplo_ai_contact_gate(int civ_a, int civ_b, int turn);
+
+/* Orig Diplo_OpenContactDialog @ 1160:0000 senate override (gov < 4 forces
+ * the peace message, see chain-7 block) -> diplo_senate_forces_peace.
+ * 1:1 nonzero (1) when 0 <= gov < 4, 0 otherwise. No globals. */
+int diplo_senate_forces_peace(int gov);
+
+/* Orig UI_DrawEndTurnPrompt @ 10d8:00e0 blink phase (alternates the
+ * "End of Turn / Press Return" text with the unit sprite blink in
+ * unit_wait_for_orders @ 11c0:0ec2 on the Sys_GetTickScaled % 0x3c
+ * 0x1e-phase clock) -> ui_end_turn_phase. 1:1 nonzero (1) in the text
+ * phase ((tick % 0x3c) < 0x1e), 0 in the sprite phase. No globals. */
+int ui_end_turn_phase(long tick);
+
+/* Orig Text_DrawAligned @ 1098:0ed1 shadow gate (shadow TEXTOUT x3 via
+ * Text_SetColor @ 1098:0e0b when DAT_12d8_28fc == 0 and format & 0x30,
+ * see text_draw_aligned STUB) -> text_needs_shadow. 1:1 nonzero (1) when
+ * mono == 0 (DAT_12d8_28fc color/VGA, sibling of text_resolve_color @
+ * 10d8:00e0 above) and (format & 0x30) != 0, 0 otherwise. No globals. */
+int text_needs_shadow(int mono, int format);
+
+/* Orig Dialog_RefreshViews @ 1220:0eb8 (tail of Dialog_ShowMessage @
+ * 1220:00d2, see dialog_show_message STUB) -> dialog_refresh_view_count /
+ * dialog_refresh_msg. 1:1 3 views (12b0:0004/001c/0034) / message 0xf. */
+int dialog_refresh_view_count(void);
+int dialog_refresh_msg(void);
+
+/* Orig Anim_AdvanceFrames @ 10b0:0461 case 7 (caption-text: palette apply +
+ * ResMgr_GetString @ 1100:078a / Util_StrCopy @ 1000:36b2 +
+ * Text_DrawAligned @ 1098:0ed1 + PresentRect @ 10d0:0854, both branches
+ * StoreDC via Gfx_StoreDC @ 1098:1104, see anim_opcode_needs_store) ->
+ * anim_opcode_is_text. 1:1 op == 7. */
+int anim_opcode_is_text(int op);
+
 #endif /* CIVLIN_DIALOG_H */

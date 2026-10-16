@@ -1521,3 +1521,139 @@ int status_main_needs_city_scan(int param)
      * -> 0x80 scan (5502 != -1 + owner == player + (palace || param == -1)). */
     return (param < 0) ? 1 : 0;
 }
+
+/* --- Chain 2026-10-16 (map takeover): corridor/dir/scan/bits/center/seen/clip.
+ * See map.h block. OS-free 1:1 LIVE (no Win16, no globals, no exit()). */
+
+int path_corridor_visited_idx(int ox, int oy)
+{
+    /* Orig Path_FindCorridor @ 1128:10de: visited byte at s_Support+4 +
+     * (x-x0)*0x10+(y-y0) with x0 = goal_x-8 / y0 = goal_y-8 (16x16 window).
+     * Caller passes window offsets ox/oy (0..15); OOR -> -1 (orig never
+     * indexes outside the 0x100 B block). */
+    if (ox < 0 || ox > 15 || oy < 0 || oy > 15)
+        return -1;
+    return ox * 0x10 + oy;
+}
+
+int path_corridor_iter_limit(void)
+{
+    /* Orig Path_FindCorridor @ 1128:10de stop: queue empty or 0xe1 iters
+     * (ring DAT_1420_afaa/aeaa 256 x/u8, head local_6 / tail uVar17). */
+    return 0xe1;
+}
+
+civ_error_t map_dir_to_dxdy(int dir, int *dx_out, int *dy_out)
+{
+    /* Orig Map_ResolveDirect @ 1110:1c4b inverse (1=N clockwise, same table
+     * as map_resolve_direct above; 0 arrived; exact orig numbering TBD). */
+    if (!dx_out || !dy_out)
+        return CIV_ERR_NOENT;
+    switch (dir) {
+    case 0:
+        *dx_out = 0;
+        *dy_out = 0;
+        return CIV_OK;
+    case 1:
+        *dx_out = 0;
+        *dy_out = -1;
+        return CIV_OK;
+    case 2:
+        *dx_out = 1;
+        *dy_out = -1;
+        return CIV_OK;
+    case 3:
+        *dx_out = 1;
+        *dy_out = 0;
+        return CIV_OK;
+    case 4:
+        *dx_out = 1;
+        *dy_out = 1;
+        return CIV_OK;
+    case 5:
+        *dx_out = 0;
+        *dy_out = 1;
+        return CIV_OK;
+    case 6:
+        *dx_out = -1;
+        *dy_out = 1;
+        return CIV_OK;
+    case 7:
+        *dx_out = -1;
+        *dy_out = 0;
+        return CIV_OK;
+    case 8:
+        *dx_out = -1;
+        *dy_out = -1;
+        return CIV_OK;
+    default:
+        return CIV_ERR_RANGE;
+    }
+}
+
+int map_find_unit_at(int x, int y, const int *unit_xs, const int *unit_ys,
+                     int n_units)
+{
+    /* Orig Map_FindUnitAt @ 1110:180e: linear 0x80 scan for x/y match over
+     * unit records (1420:62fc + civ*0x600 + idx*0xc); hit sets 12d8:4304/
+     * 4306 + clears stale tile(x+0xa0,y) caller-side, miss -> -1. Explicit
+     * arrays keep map.c free of globals (cf. map_is_occupied bool twin). */
+    int i;
+
+    if (unit_xs == NULL || unit_ys == NULL || n_units <= 0)
+        return -1;
+    for (i = 0; i < n_units; i++) {
+        if (unit_xs[i] == x && unit_ys[i] == y)
+            return i;
+    }
+    return -1;
+}
+
+int map_occupancy_has_road(int occupancy)
+{
+    /* Orig FUN_1110_197a @ 1110:197a: road test on Map_GetOccupancyFlags @
+     * 1110:199b value (occupancy & 8); feeds Path_FindCorridor @ 1128:10de
+     * road-to-road +1 branch (see path_corridor_step_cost). */
+    return (occupancy & 8) != 0 ? 1 : 0;
+}
+
+int map_occupancy_is_city(int occupancy)
+{
+    /* Orig Map_CheckZOC @ 11c0:23fd gate: Map_GetOccupancyFlags @ 1110:199b
+     * & 1 city -> 0 clear (else Map_ScanZOCDetail @ 11c0:2437, live in
+     * map_scan_zoc_detail). */
+    return (occupancy & 1) != 0 ? 1 : 0;
+}
+
+civ_error_t map_center_origin_for_tile(int x, int y, int view_w, int view_h,
+                                       int *ox_out, int *oy_out)
+{
+    /* Orig Map_CenterOnTile @ 1110:03ae: centers (x - w/2, y - h/2), then
+     * Map_RefreshAllViews @ 1110:03e9 (STUB map_refresh_all_views). View
+     * dims are tile counts (positive); C / trunc matches x86 IDIV for the
+     * non-negative dims. */
+    if (!ox_out || !oy_out)
+        return CIV_ERR_NOENT;
+    if (view_w <= 0 || view_h <= 0)
+        return CIV_ERR_RANGE;
+    *ox_out = x - view_w / 2;
+    *oy_out = y - view_h / 2;
+    return CIV_OK;
+}
+
+int map_tile_is_seen(int seen)
+{
+    /* Orig fog gate @ 1208:1534/1866: (seen & 1) on the 1408:00cc byte at
+     * Map_WrapX(x)*0x32+y+10 (reveal is DAT_1330_0000; folded with reveal
+     * in map_tile_needs_blank above). */
+    return (seen & 1) != 0 ? 1 : 0;
+}
+
+int text_status_row_needs_clip(int total_w, int rect_w)
+{
+    /* Orig Text_DrawStatusRow @ 11f8:0278: single row, no wrap, per-char
+     * blit breaks when xoff >= rect_w (rect = 1218:0956/0a06 frame;
+     * total_w is the font_text_width GetTextExtent shape, rect_w the
+     * right-left span; live loop in text_draw_with_font). */
+    return (total_w > rect_w) ? 1 : 0;
+}

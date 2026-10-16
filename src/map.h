@@ -1124,4 +1124,84 @@ int status_headline_needs_short(int width);
  * status_main_needs_city_scan. 1:1 param < 0. */
 int status_main_needs_city_scan(int param);
 
+/* --- Chain 2026-10-16 (map takeover): corridor index/limit + dir inverse
+ * + authoritative unit scan + occupancy bits + center origin + seen bit
+ * + status clip (goals path/passability/reveal/status-text) ---
+ * Orig (civ.exe NE, x86:LE:16:Protected Mode), ref unpacked/civ.exe:
+ *   Path_FindCorridor @ 1128:10de (16x16 window around goal +-8 tiles:
+ *     visited/cost bytes at s_Support+4, 0x100 B, index
+ *     (x-x0)*0x10+(y-y0) with x0 = goal_x-8 / y0 = goal_y-8; ring queue
+ *     DAT_1420_afaa/aeaa 256 x/u8 (& 0xff); stop at empty or 0xe1 iters;
+ *     callers Path_CheckContinentLink @ 1128:16d0 budget 0x14 +
+ *     Unit_StepTowardGoal @ 1128:0000 budget 999; sea gate
+ *     (tileClass == 10) == (domain 1a3a == 2) OR occupancy & 1 +
+ *     road&8 cost branch live in path_corridor_* above).
+ *   Map_ResolveDirect @ 1110:1c4b (player-adjacent |dx|<2,|dy|<2 resolve,
+ *     dir 1..8 1=N clockwise, 0 arrived, 0xffff not adjacent; live in
+ *     map_resolve_direct above; inverse below).
+ *   Map_FindUnitAt @ 1110:180e (authoritative O(0x80) linear x/y scan over
+ *     unit records at 1420:62fc + civ*0x600 + idx*0xc; sets 12d8:4304/4306,
+ *     clears stale tile(x+0xa0,y) to 0; vs O(1) nibble hint GetUnitAt @
+ *     1110:18ce live in map_unit_slot_from_tile above).
+ *   Map_GetOccupancyFlags @ 1110:199b (tile(x,y+100) + tile(x,y+0x96)*0x10;
+ *     &1 city / &8 road; live in map_get_occupancy_flags above; road test
+ *     FUN_1110_197a = flags & 8 feeds corridor step cost; city test & 1
+ *     gates Map_CheckZOC @ 11c0:23fd).
+ *   Map_CenterOnTile @ 1110:03ae (centers x/y as x - w/2, y - h/2, then
+ *     Map_RefreshAllViews @ 1110:03e9; SDL view sync stays in
+ *     map_center_on_tile STUB).
+ *   Fog gate @ 1208:1534/1866 (reveal == 0 && (seen & 1) == 0 -> blank;
+ *     seen is the 1408:00cc byte; live folded in map_tile_needs_blank).
+ *   Text_DrawStatusRow @ 11f8:0278 (single row, no wrap, clipped at
+ *     rect->right: break when xoff >= rect_w; live SDL bridge in
+ *     text_draw_with_font above).
+ * OS-free 1:1 on explicit params (no Win16, no globals, no exit(),
+ * read-only except outs). Win16 tails (WndProcs/Open/Refresh/blt) stay
+ * CIV_ERR_UNSUPPORTED + TODO Orig (WndProcs return WIN16_MSG_DEFAULT). */
+
+/* Orig Path_FindCorridor @ 1128:10de visited index ->
+ * path_corridor_visited_idx. 1:1 ox*0x10+oy with ox/oy window offsets
+ * 0..15 (ox = x-(goal_x-8), oy = y-(goal_y-8)); -1 when OOR. */
+int path_corridor_visited_idx(int ox, int oy);
+
+/* Orig same iter cap -> path_corridor_iter_limit. 1:1 0xe1 (225). */
+int path_corridor_iter_limit(void);
+
+/* Orig Map_ResolveDirect @ 1110:1c4b inverse -> map_dir_to_dxdy. 1:1
+ * 1=N(0,-1) 2=NE(1,-1) 3=E(1,0) 4=SE(1,1) 5=S(0,1) 6=SW(-1,1) 7=W(-1,0)
+ * 8=NW(-1,-1) (matches map_resolve_direct); 0 -> (0,0) arrived.
+ * NOENT on NULL outs, RANGE on dir < 0 or > 8, else CIV_OK. */
+civ_error_t map_dir_to_dxdy(int dir, int *dx_out, int *dy_out);
+
+/* Orig Map_FindUnitAt @ 1110:180e scan -> map_find_unit_at. 1:1 linear
+ * 0..n_units-1 x/y match (authoritative vs GetUnitAt hint); stale tile
+ * clear + 4304/4306 sets stay caller-side. Returns index or -1 (miss;
+ * NULL arrays / n_units <= 0 -> -1). */
+int map_find_unit_at(int x, int y, const int *unit_xs, const int *unit_ys,
+                     int n_units);
+
+/* Orig FUN_1110_197a (occupancy & 8 road) -> map_occupancy_has_road.
+ * 1:1 (occupancy & 8) != 0 (feeds path_corridor_step_cost road branch). */
+int map_occupancy_has_road(int occupancy);
+
+/* Orig Map_CheckZOC @ 11c0:23fd city gate (occupancy & 1) ->
+ * map_occupancy_is_city. 1:1 (occupancy & 1) != 0 (city -> ZOC clear). */
+int map_occupancy_is_city(int occupancy);
+
+/* Orig Map_CenterOnTile @ 1110:03ae center math -> map_center_origin_for_tile.
+ * 1:1 ox = x - view_w/2, oy = y - view_h/2 (C trunc; view dims > 0).
+ * NOENT on NULL outs, RANGE on view_w <= 0 or view_h <= 0, else CIV_OK.
+ * Refresh tail (Map_RefreshAllViews @ 1110:03e9) stays STUB. */
+civ_error_t map_center_origin_for_tile(int x, int y, int view_w, int view_h,
+                                       int *ox_out, int *oy_out);
+
+/* Orig fog seen bit (1408:00cc & 1) -> map_tile_is_seen.
+ * 1:1 (seen & 1) != 0 (complements map_tile_needs_blank gate). */
+int map_tile_is_seen(int seen);
+
+/* Orig Text_DrawStatusRow @ 11f8:0278 clip -> text_status_row_needs_clip.
+ * 1:1 total_w > rect_w (single row, no wrap; xoff >= rect_w breaks).
+ * Widths from font_text_width + rect spans (explicit, no font access). */
+int text_status_row_needs_clip(int total_w, int rect_w);
+
 #endif /* CIVLIN_MAP_H */

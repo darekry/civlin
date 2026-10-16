@@ -454,16 +454,24 @@ civ_error_t mainport_get_or_create(SDL_Renderer *ren, gfx_port_t **out)
 civ_error_t gfx_port_fill_or_copy(gfx_port_t *dst, const gfx_port_t *src,
                                   const SDL_Rect *rect, int dst_x, int dst_y)
 {
-    (void)src;
+    if (!dst)
+        return CIV_ERR_NOENT;
+    if (src)
+        /* Orig FUN_10c0_xxxx @ 10c0:xxxx copy half (between HMEMCPY @
+         * 10b8:079d and BITBLT @ 10d0:0854/08f1; Anim_AdvanceFrames @
+         * 10b0:0461 blit helper): else-branch BITBLT rop 0xcc0020
+         * (SRCCOPY) delegates 1:1 to gfx_port_blit @ 10d0:08f1 (same rop
+         * family, same NOENT/BAD_DATA/RANGE/IO/UNSUPPORTED mapping; NULL
+         * rect = whole source, kept). No new device code here. */
+        return gfx_port_blit(dst, src, rect, dst_x, dst_y);
+    /* TODO: Orig same fill half (NULL src -> FILLRECT solid fill of rect
+     * at dst_x/dst_y). Fill brush/color has no param in this signature
+     * (orig brush via Gfx_MakeBrush @ 1098:00b5 path), so no fake color
+     * is invented here; SDL_RenderFillRect on the port INDEX8 TARGET via
+     * the borrowed ren stays TBD. */
     (void)rect;
     (void)dst_x;
     (void)dst_y;
-    if (!dst)
-        return CIV_ERR_NOENT;
-    /* TODO: Orig FUN_10c0_xxxx @ 10c0:xxxx -> GfxPort_FillOrCopy (between
-     * HMEMCPY @ 10b8:079d and BITBLT @ 10d0:0854/08f1; Anim_AdvanceFrames
-     * @ 10b0:0461 blit helper). NULL src -> FILLRECT, else BITBLT rop
-     * 0xcc0020 (SRCCOPY); SDL_RenderFillRect vs SDL_RenderTexture TBD. */
     return CIV_ERR_UNSUPPORTED;
 }
 

@@ -211,10 +211,13 @@ civ_error_t mainport_get_or_create(SDL_Renderer *ren, gfx_port_t **out);
  * (GfxPort_FillOrCopy). Sits between HMEMCPY @ 10b8:079d and BITBLT @
  * 10d0:0854/08f1; blit helper behind Anim_AdvanceFrames @ 10b0:0461.
  * Orig path: NULL src -> FILLRECT (solid fill of rect at dst_x/dst_y),
- * else BITBLT rop 0xcc0020 (SRCCOPY) from src. SDL3 TBD:
- * SDL_RenderFillRect vs SDL_RenderTexture. NULL dst reports NOENT
- * (NULL src = fill path, kept; NULL rect = full/origin, kept);
- * otherwise UNSUPPORTED. */
+ * else BITBLT rop 0xcc0020 (SRCCOPY) from src. SDL3: copy half is LIVE
+ * as a thin delegate to gfx_port_blit @ 10d0:08f1 (same rop, same
+ * mapping, NULL rect = whole source); fill half stays UNSUPPORTED (fill
+ * brush/color has no param here — orig via Gfx_MakeBrush @ 1098:00b5 —
+ * so no fake color; SDL_RenderFillRect on the port TARGET TBD). NULL
+ * dst reports NOENT (NULL src = fill path, kept; NULL rect =
+ * full/origin, kept). */
 civ_error_t gfx_port_fill_or_copy(gfx_port_t *dst, const gfx_port_t *src,
                                   const SDL_Rect *rect, int dst_x, int dst_y);
 

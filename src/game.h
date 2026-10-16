@@ -3184,4 +3184,63 @@ int game_status_pollution_count(int counter);
 int game_status_progress_index(int science, int difficulty, int base,
                                int trade, int year);
 
+/* --- Turn-loop gates + tech-icon budget + demo rows (2026-10-16) ---
+ * Anchors (civ.exe, x86:LE:16:Protected Mode):
+ *   Game_TurnLoopTick @ 1088:0000 disaster gate (g_nTurn @ 12d8:42fe >
+ *     0x32 -> 2x City_ProcessDisaster @ 1040:068e with Rng_Range @
+ *     11c8:003d 0x80 draws) + treasury<100 memory-warning branch
+ *     (Dialog_ShowMessage @ 1220:00d2 via FUN_11d0_01f7).
+ *   Status_DrawTechIcons @ 1088:1a82 budget gates (count <=
+ *     Util_Clamp(param2+3,3,0x24) @ 11c8:0063, height <= count/5, <= 3;
+ *     999-try cap + adjacency stay caller-side in the STUB).
+ *   Demo_ShowDemographics @ 1188:123a rows: Military ((3eee count*10)/pop),
+ *     Productivity (output*10/pop), Family Size ((food*0x28)/pop+0x14,
+ *     then x/10 + "." + x%10 + " children"), Life Expectancy
+ *     (Util_Clamp(impr,0x14,99) @ 11c8:0063).
+ * OS-free 1:1 on explicit params (no globals, no Win16, read-only, C17);
+ * GDI/dialog/city-state tails stay STUB with TODO Orig refs. No exit(). */
+
+/* Orig Game_TurnLoopTick @ 1088:0000 disaster gate -> game_turn_disaster_due.
+ * 1:1 g_nTurn > 0x32 fires the 2x City_ProcessDisaster @ 1040:068e pass.
+ * Returns nonzero (1) when disasters run. No globals. */
+int game_turn_disaster_due(int turn);
+
+/* Orig Game_TurnLoopTick @ 1088:0000 treasury branch ->
+ * game_turn_treasury_warn. 1:1 treasury < 100 takes the memory-warning
+ * branch (Dialog_ShowMessage @ 1220:00d2 via FUN_11d0_01f7 tail stays
+ * Win16 caller-side). Returns nonzero (1) when the warning fires. */
+int game_turn_treasury_warn(int treasury);
+
+/* Orig Status_DrawTechIcons @ 1088:1a82 budget gate -> status_tech_count_ok.
+ * 1:1 count <= Util_Clamp(progress+3,3,0x24) @ 11c8:0063 (inline here, no
+ * link; progress is param2). Returns nonzero (1) when the count fits.
+ * Negative counts never fit (-> 0). No globals. */
+int status_tech_count_ok(int count, int progress);
+
+/* Orig same height gate -> status_tech_height_ok. 1:1 height <= count/5
+ * && height <= 3 (count/5 truncates toward zero, same as x86 IDIV).
+ * Returns nonzero (1) when the height fits. Negative heights never fit.
+ * No globals. */
+int status_tech_height_ok(int height, int count);
+
+/* Orig Demo_ShowDemographics @ 1188:123a Military row -> demo_military_rate.
+ * 1:1 (count*10)/pop (count is the 3eee unit total). Returns the rate,
+ * -1 on pop <= 0 (orig divided live totals; caller sums 0x80 records).
+ * No globals. */
+int demo_military_rate(int count, int pop);
+
+/* Orig same Productivity row -> demo_productivity. 1:1 output*10/pop.
+ * Returns the rate, -1 on pop <= 0. No globals. */
+int demo_productivity(int output, int pop);
+
+/* Orig same Family Size row -> demo_family_raw. 1:1 (food*0x28)/pop+0x14
+ * (callers split x/10 + "." + x%10 + " children" for display).
+ * Returns the raw value, -1 on pop <= 0. No globals. */
+int demo_family_raw(int food, int pop);
+
+/* Orig same Life Expectancy row -> demo_life_clamp. 1:1
+ * Util_Clamp(impr,0x14,99) @ 11c8:0063 (inline here, no link; impr is the
+ * improvement total). Always returns the clamped value. No globals. */
+int demo_life_clamp(int impr);
+
 #endif /* CIVLIN_GAME_H */

@@ -133,8 +133,20 @@ int dos_get_current_dir(int drive, char *buf, size_t cap);
  * DAT_1420_4e7a = 0xffff; param in [0, 0x59) passes through to
  * DAT_1420_4e7a with DAT_1420_0010 = byte table[param + 0x4e7c];
  * param >= 0x59 clamps to 0x57 first. Always returns 0xffff. Needs the
- * DGROUP errno words -> stub CIV_ERR_UNSUPPORTED. */
+ * DGROUP errno words -> stub CIV_ERR_UNSUPPORTED. The pure mapping
+ * kernel (no DGROUP writes) is dos_map_error_lookup below (LIVE). */
 civ_error_t dos_map_error(int dos_code);
+/* Orig Dos_MapError @ 1000:151a mapping kernel (decompiled 2026-10-16 +
+ * byte table @ 1420:4e7c read from civ.exe, 0x59 entries, all < 0x80 so
+ * the orig (int)*(char *) sign-extend is the identity): code in
+ * [-0x30, -1] -> e0010 = -code, e4e7a = 0xffff; else idx = code clamped
+ * to 0x57 when code <= -0x31 or >= 0x59 (the outer else-if is skipped
+ * for negative input, so control reaches `param_1 = 0x57`) ->
+ * e4e7a = idx, e0010 = table[idx]. Always returns 0xffff (orig AX).
+ * OS-free 1:1 on explicit out-params (DGROUP replaced by outs). NULL
+ * either out -> -1 without writing (orig faulted). No globals,
+ * no exit(). */
+int dos_map_error_lookup(int dos_code, int *out_e0010, int *out_e4e7a);
 /* Orig: FUN_1000_1566 @ 1000:1566, now Dos_IsCharDevice in Ghidra.
  * INT 21h AX=0x4400 (IOCTL get device info), BX=fd. Returns DX & 0x80
  * (1 = char device e.g. console, 0 = block file). Used to route the
@@ -184,8 +196,14 @@ civ_error_t dos_close(int fd);
  * DL & 0x80) -> 0; else 4201-tell / 4202-end / 4200-restore triple and
  * 1 iff end <= cur. Any CF=1 -> Dos_MapError. Needs DOS seeks ->
  * stub CIV_ERR_UNSUPPORTED. Returns 1 at EOF, 0 otherwise (via
- * CIV_OK + *out_eof to stay in the civ_error_t family). */
+ * CIV_OK + *out_eof to stay in the civ_error_t family). The pure tail
+ * compare (no seeks) is dos_eof_at_end below (LIVE). */
 civ_error_t dos_is_eof(int fd, int *out_eof);
+/* Orig Dos_IsEof @ 1000:201e final compare (decompiled 2026-10-16:
+ * 4201-tell cur / 4202-end / 4200-restore triple, then
+ * `cur_restored < end ? 0 : 1`). OS-free 1:1: 1 iff end <= cur
+ * (explicit cursor/end, no seeks). No DOS, no globals, no exit(). */
+int dos_eof_at_end(long cur, long end);
 /* Orig: FUN_1000_2aac @ 1000:2aac, now Dos_Create in Ghidra.
  * INT 21h AH=0x3c (create/truncate file): DS:DX=path [BP+6],
  * CX=attrs [BP+4]. CF=1 -> Dos_MapError(AX), else AX=new fd.
@@ -206,8 +224,21 @@ civ_error_t dos_truncate(int fd);
  * Success stores flags&0xb8ff|0x8000 into the 0x4e4e-table word and
  * returns the fd; CF=1 -> Dos_MapError. Called from File_Open @
  * 1000:2ad9. Live twin: save_file_open O_RDONLY. Raw primitive stays
- * stub CIV_ERR_UNSUPPORTED; NULL path -> NOENT. */
+ * stub CIV_ERR_UNSUPPORTED; NULL path -> NOENT. The pure mode/table
+ * kernels (no INT 21h, no table write) are dos_open_mode_map /
+ * dos_open_table_word below (LIVE). */
 civ_error_t dos_open(const char *path, int mode_flags);
+/* Orig Dos_Open @ 1000:2c4a mode derivation (disassembled 2026-10-16:
+ * MOV AL,1 / TEST CX,2 / JNZ take / MOV AL,2 / TEST CX,4 / JNZ take /
+ * MOV AL,0, then AL |= flags_low & 0xf0 for INT 21h AH=0x3d).
+ * OS-free 1:1 on an explicit flags word (bit 1 wins over bit 2):
+ * ((flags & 2) ? 1 : (flags & 4) ? 2 : 0) | (flags & 0xf0).
+ * No DOS, no globals, no exit(). */
+int dos_open_mode_map(int flags);
+/* Orig same-site 0x4e4e-table store (MOV AX,[BP+0xa] / AND AX,0xb8ff /
+ * OR AX,0x8000 into [BX+0x4e4e], BX = fd*2). OS-free 1:1:
+ * (flags & 0xb8ff) | 0x8000. No DOS, no globals, no exit(). */
+unsigned dos_open_table_word(int flags);
 /* Orig: FUN_1000_3fc4 @ 1000:3fc4, now Dos_Write in Ghidra.
  * INT 21h AH=0x40: BX=fd [BP+6], CX=count [BP+0x0c], DS:DX=buf [BP+8].
  * Guards: 0x4e4e-table bit 0 set -> errno 5 via Dos_MapError; hook
@@ -639,12 +670,21 @@ int util_emit_hex_word(char *out, unsigned v);
  * preserving DI, returns len without NUL. NULL -> 0 (orig faulted). */
 size_t util_vsprintf_strlen(const char *s);
 
-/* Orig: FUN_1000:4124 @ 1000:4124 -> Sys_FatalAbort (STUB).
- * Formats via Util_StrRChr @ 1000:37b2 (strrchr '\\' 0x5c on
- * DAT_1420_4f9a/4f9c) then Win16 GETDESKTOPWINDOW + MESSAGEBOX
- * (CALLF 1608:01a4/0080, style 0x1010). Needs window + DGROUP ->
- * stub CIV_ERR_UNSUPPORTED. NULL msg -> NOENT (orig faulted). */
+/* Orig: FUN_1000:4124 @ 1000:4124 -> Sys_FatalAbort (PARTIAL).
+ * Decompiled 2026-10-16: Util_StrRChr @ 1000:37b2 strrchr '\\' 0x5c over
+ * the module path @ DAT_1420_4f9a/4f9c (caption = past-backslash, else
+ * the whole path), then Win16 GETDESKTOPWINDOW + MESSAGEBOX style 0x1010;
+ * void, never returns in practice. Linux: best-effort dialog via
+ * win16_message_box(msg, NULL) (caption "CivLin"), then
+ * CIV_ERR_UNSUPPORTED — a lib never exits (see civ_common.h rules), the
+ * owner (main.c) exits. NULL msg -> NOENT (orig faulted). The pure
+ * caption kernel is sys_fatal_basename below (LIVE). */
 civ_error_t sys_fatal_abort(const char *msg);
+/* Orig Sys_FatalAbort @ 1000:4124 caption kernel (strrchr '\\' + 1,
+ * else whole path). OS-free 1:1 on an explicit path (orig far ptr @
+ * DAT_1420_4f9a/4f9c). NULL -> NULL (orig faulted). No globals,
+ * no exit(). */
+const char *sys_fatal_basename(const char *path);
 
 /* Orig: Float_ReportError @ 1000:1056 (PARTIAL/LIVE).
  * Borland matherr body: NULL doubles -> 0.0, filter, else snprintf
@@ -929,7 +969,15 @@ const char *file_temp_suffix(void);
  * getenv("TMP") -> "."; prefix NULL -> "". Zwraca znaki bez NUL,
  * -1 przy NULL dst / cap == 0 / obcieciu. */
 int file_build_temp_path(char *dst, size_t cap, const char *dir,
-                         const char *prefix, unsigned num);
+                          const char *prefix, unsigned num);
+/* Orig File_BuildUniqueTempPath @ 1000:16a5 counter step (decompiled
+ * 2026-10-16: *p == -1 (free slot, fd byte -1) ? *p += 2 : *p += 1,
+ * then File_BuildTempPath + Dos_GetFileAttr @ 1000:1210 INT 21h AH=0x43
+ * probe until missing). OS-free 1:1 step on an explicit counter:
+ * cur + (cur == -1 ? 2 : 1). The probe loop needs DOS attr (see
+ * dos_file_attr STUB); the format step is file_build_temp_path above
+ * (LIVE). No DOS, no globals, no exit(). */
+int file_temp_next_num(int cur);
 
 /* --- Chain 2026-10-16 (19): message-pump hierarchy (goals 1+5) ---
  * Orig (civ.exe, x86:LE:16:Protected Mode), decompiled this pass:
