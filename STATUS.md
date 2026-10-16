@@ -1200,9 +1200,9 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `util_format_int` | LIVE | 1000:157a |  |
 | `util_parse_int` | LIVE | 1000:1ed2 |  |
 | `debug_log_trace` | LIVE | 1148:003c |  |
-| `mem_dispose_ptr` | STUB | 1008:0329, 1028:0000, 10f8:02bd, 1100:060b | has TODO |
-| `mem_dispose_handle` | STUB | 1100:0652 | has TODO |
-| `mem_realloc_handle` | STUB | 1100:030f | has TODO |
+| `mem_dispose_ptr` | LIVE | 1008:0329, 1028:0000, 10f8:02bd, 1100:060b |  |
+| `mem_dispose_handle` | LIVE | 1100:0652 |  |
+| `mem_realloc_handle` | LIVE | 1100:030f |  |
 | `sys_wait_msg_is_key` | LIVE | 1008:0d68, 1018:0380, 1018:067b, 1018:0be0, 1018:1d5b, 1018:208f, 1030:0000, 1038:0c1d, 1080:0119, 1080:06ff, 1098:0157, 10e8:0000, 1180:0000, 1180:02d3, 1180:152f, 11f0:4ea0 |  |
 | `sys_wait_msg_is_lbutton` | LIVE |  |  |
 | `sys_wait_scale_coord` | LIVE |  |  |

@@ -730,21 +730,23 @@ int util_parse_int(const char *s);
  * literal only), no exit(). */
 const char *debug_log_trace(void);
 
-/* Orig: Mem_DisposePtr @ 1100:060b — dispose far pointer (STUB).
+/* Orig: Mem_DisposePtr @ 1100:060b — dispose far pointer (WONTFIX no-op).
  * GLOBALHANDLE(select) + GLOBALUNLOCK + GLOBALFREE with the
  * DisposPtr/mac.c trace; NULL/zero-select is a no-op in orig. Linux
- * owns no selectors -> stub CIV_ERR_UNSUPPORTED. NULL -> NOENT. */
+ * owns no selectors (caller-owned malloc/arena) -> explicit no-op
+ * CIV_OK, NULL included. No globals, no exit(). */
 civ_error_t mem_dispose_ptr(const void *p);
 
-/* Orig: Mem_DisposeHandle @ 1100:0652 — dispose handle (STUB).
+/* Orig: Mem_DisposeHandle @ 1100:0652 — dispose handle (WONTFIX no-op).
  * GLOBALUNLOCK + GLOBALFREE with the DisposeHandle/mac.c trace; 0 is
- * a no-op. Same stub contract (handle is an opaque int here). */
+ * a no-op in orig. Same no-op CIV_OK (opaque int handle). */
 civ_error_t mem_dispose_handle(int handle);
 
-/* Orig: Mem_ReallocHandle @ 1100:030f — realloc handle (STUB).
+/* Orig: Mem_ReallocHandle @ 1100:030f — realloc handle (WONTFIX no-op).
  * GLOBALSIZE + GLOBALALLOC + lock/move/unlock with the
  * HandToHand/mac.c trace; 0-size -> 0xff93, alloc fail -> 0xff94.
- * Same stub contract (handle in/out int here). */
+ * No selector move on Linux -> no-op CIV_OK, *handle untouched;
+ * NULL handle -> NOENT. */
 civ_error_t mem_realloc_handle(int *handle);
 
 /* Orig: FUN_1000:03bc @ 1000:03bc -> Float_ScanFloat (PARTIAL).

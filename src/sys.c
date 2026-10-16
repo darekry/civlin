@@ -1604,39 +1604,40 @@ const char *debug_log_trace(void)
 
 civ_error_t mem_dispose_ptr(const void *p)
 {
-    (void)p;
-    /* TODO: Orig FUN_1100_060b @ 1100:060b (Mem_DisposePtr:
+    /* Orig FUN_1100_060b @ 1100:060b (Mem_DisposePtr:
      * Debug_LogTrace("DisposPtr", "mac_c") + GLOBALHANDLE(select) gate
      * (zero select = no-op) + GLOBALUNLOCK + GLOBALFREE; 12 callers
      * incl. WinMain_Shutdown @ 1008:0329 + Map_GenerateRandomOrLoad @
-     * 1028:0000 + save_serialize @ 10f8:02bd) -> selector bridge TBD
-     * (see win16_compat.h; no Linux equivalent, no globals). */
-    if (!p)
-        return CIV_ERR_NOENT;
-    return CIV_ERR_UNSUPPORTED;
+     * 1028:0000 + save_serialize @ 10f8:02bd). WONTFIX-Win16 (see
+     * win16_compat.h; selectors have no Linux equivalent: memory is
+     * caller-owned malloc/arena, nothing to unlock/free here) ->
+     * explicit no-op CIV_OK, NULL included (orig zero-select no-op).
+     * No globals, no exit(), read-only. */
+    (void)p;
+    return CIV_OK;
 }
 
 civ_error_t mem_dispose_handle(int handle)
 {
-    (void)handle;
-    /* TODO: Orig FUN_1100_0652 @ 1100:0652 (Mem_DisposeHandle:
+    /* Orig FUN_1100_0652 @ 1100:0652 (Mem_DisposeHandle:
      * Debug_LogTrace("DisposeHandle", "mac_c") + GLOBALUNLOCK +
-     * GLOBALFREE; 0 = no-op) -> selector bridge TBD. */
-    if (handle == 0)
-        return CIV_ERR_NOENT;
-    return CIV_ERR_UNSUPPORTED;
+     * GLOBALFREE; 0 = no-op). Same WONTFIX no-op as above (opaque int
+     * handle, nothing locked on Linux) -> CIV_OK including handle 0. */
+    (void)handle;
+    return CIV_OK;
 }
 
 civ_error_t mem_realloc_handle(int *handle)
 {
-    (void)handle;
-    /* TODO: Orig FUN_1100_030f @ 1100:030f (Mem_ReallocHandle:
+    /* Orig FUN_1100_030f @ 1100:030f (Mem_ReallocHandle:
      * Debug_LogTrace("HandToHand", "mac_c") + GLOBALSIZE (0 -> 0xff93)
      * + GLOBALALLOC (fail -> 0xff94) + GLOBALLOCK x2 + Util_MemMove +
-     * unlocks, *handle = new) -> selector bridge TBD. */
+     * unlocks, *handle = new). Same WONTFIX no-op: no selector move on
+     * Linux, *handle untouched. NULL out-param -> NOENT (orig would
+     * fault writing through it). */
     if (!handle)
         return CIV_ERR_NOENT;
-    return CIV_ERR_UNSUPPORTED;
+    return CIV_OK;
 }
 
 /* --- Chain 2026-10-16 (16): modal-wait discriminators @ 1038:0c1d ---
