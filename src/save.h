@@ -102,8 +102,13 @@ civ_error_t save_save_dialog(char *out_path, size_t cap);
 /* Orig: FUN_1198_00a3 @ 1198:00a3, now Save_SaveGame in Ghidra.
  * Builds "civname+year" filename (Util_StrAppend @ 1000:363e +
  * Util_IntToDec @ 1000:2928 + suffix), prompts via Save_SaveDialog @
- * 1098:26d4, writes via save_serialize @ 10f8:02bd. Needs dialogs +
- * live ctx -> stub CIV_ERR_UNSUPPORTED. NULL path -> NOENT. */
+ * 1098:26d4, writes via save_serialize @ 10f8:02bd. Linux LIVE without
+ * dialogs: filename head is save_build_filename (civname filter + year +
+ * BC/AD, OS-free), prompts stay STUB (save_save_dialog @ 1098:26d4 and
+ * save_prompt_save @ 1130:0194 keep CIV_ERR_UNSUPPORTED), write delegates
+ * directly to save_serialize @ 10f8:02bd (real .sav file effect, zeros
+ * image until live ctx maps). NULL/empty path -> NOENT, else the
+ * serialize result (CIV_OK on real write). No globals, no exit(). */
 civ_error_t save_save_game(const char *path);
 /* Orig: FUN_1198_0000 @ 1198:0000, now Save_SanitizeFileName in Ghidra.
  * Filename sanitizer behind Save_SaveGame @ 1198:00a3 (also called
@@ -215,17 +220,28 @@ civ_error_t save_deserialize(const char *path);
  *   save_unpack  "RLLDecode ... load c"   Orig FUN_10f8_040a @ 10f8:040a
  * Tag byte: <0x80 = repeat next byte N times; >=0x80 = copy N-0x80 literals.
  * Wire sizes: canonical 0x1a2ba, alt 0x1a2b8 (cond word), small-map 0x18de0.
- * Packet N: save_pack/save_unpack are thin legacy wrappers over the ported
+ * Scratch 0xa2ba is the GLOBALALLOC RLL window in save_deserialize @
+ * 10f8:0000; chunk 0x8000 is the save_file_read/write @ 1140:019d/0245
+ * file chunking (not the RLL tag chunk, which is capped 0x7f).
+ * Packet N: save_pack/save_unpack are heap-owner wrappers over the ported
  *   save_rll_encode/save_rll_decode below (same tag scheme, same 0x7f chunk
- *   cap). Legacy signatures are kept for the RE map (out_image/out_len vs
- *   image/len); they carry no caller buffer for the native src/dst/cap
- *   triple, so no trivial delegate is possible until the marshal flat image
- *   + heap owner are wired — stubs document the wrapper relationship. */
+ *   cap). Legacy signatures carry no caller dst/cap, so each owns its heap:
+ *   save_pack builds the canonical 0x1a2ba flat (calloc zeros +
+ *   save_marshal_fields reservation, live ctx TODO zeros) then RLL-encodes
+ *   into a malloc'd wire (worst-case flat + flat/127 + 16); save_unpack
+ *   decodes the wire into a malloc'd 0x1a2ba flat, gates the decoded len
+ *   against 0x1a2ba/0x1a2b8/0x18de0, then validates via save_marshal_fields.
+ *   OS-free 1:1, no Win16, no globals, explicit heap outs only. */
 /* Orig: FUN_10f8_05da @ 10f8:05da, now save_pack (RLL encode, called from save_serialize).
- * Stub: NOENT on NULL out params, else UNSUPPORTED; read-only. */
+ * LIVE heap-owner wrapper: NOENT on NULL outs, NOMEM on alloc failure,
+ * else CIV_OK with malloc'd wire in *out_image (caller frees with free())
+ * and wire len in *out_len. */
 civ_error_t save_pack(const uint8_t **out_image, size_t *out_len);
 /* Orig: FUN_10f8_040a @ 10f8:040a, now save_unpack (RLL decode, called from save_deserialize).
- * Stub: NOENT on NULL image, else UNSUPPORTED; read-only. */
+ * LIVE validator: NOENT on NULL image, TRUNCATED on empty wire, BAD_DATA
+ * when the decoded len misses 0x1a2ba/0x1a2b8/0x18de0, else the marshal
+ * validation result (CIV_OK when the wire decodes and validates). Decoded
+ * flat is validated then freed (no dst out in the legacy signature). */
 civ_error_t save_unpack(const uint8_t *image, size_t len);
 
 /* Native RLL buffer twins (heading to full LIVE, Orig FUN_10f8_05da @
