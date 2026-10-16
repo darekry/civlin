@@ -89,10 +89,13 @@ civ_error_t map_init(void)
     /* WdwMap/WdwSmMap/WdwStatus_Open @ 1208:0af1/1210:025b/1218:0386.
      * HONEST STOP (fala H): no CREATEWINDOW/scroll-range/200 ms timer, no
      * 64 KB tile buffer carve (1420:b394/b396), no views/ports as SDL
-     * textures yet (owner: caller, U4) -> CIV_ERR_UNSUPPORTED. No globals,
-     * no exit(), read-only.
+     * textures yet (owner: caller, U4; ports wait on gfx_port_create @
+     * 10d0:0000 P3, see video.h + boot_open_windows, see boot.h) ->
+     * CIV_ERR_UNSUPPORTED. No globals, no exit(), read-only.
      * TODO: Orig WdwMap_Open @ 1208:0af1 + WdwSmMap_Open @ 1210:025b +
-     * WdwStatus_Open @ 1218:0386 (window/buffer/view owners, U4). */
+     * WdwStatus_Open @ 1218:0386 (window/buffer/view owners, U4; GfxPort P3
+     * decision per STATUS.md critical path). Ref unpacked/civ.exe read-only
+     * (NE Win3.x, 832512 B). */
     return CIV_ERR_UNSUPPORTED;
 }
 

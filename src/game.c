@@ -31,14 +31,124 @@ civ_error_t game_init(civ_game_t *g)
     return CIV_OK;
 }
 
+int game_new_difficulty_ok(int difficulty)
+{
+    /* Orig NewGame_Wizard @ 10e8:0000 step 0 (text 1420:2a5a "Difficulty
+     * Level..._Chieftain (easiest)_Warlord_Prince_King_Emperor (toughest)"
+     * via Dialog_MenuZ_Modal @ 1220:0156 -> g_nDifficulty @ 12d8:42f6):
+     * 0=Chieftain..4=Emperor. Twin of newgame_difficulty_from_index (range
+     * part) in newgame.h, parallel-owned; game-side copy keeps src/game.*
+     * decoupled. Ref unpacked/civ.exe read-only. */
+    return (difficulty >= 0 && difficulty <= 4) ? 1 : 0;
+}
+
+int game_new_civ_count_ok(int civ_count)
+{
+    /* Orig NewGame_Wizard @ 10e8:0000 step 1 (text 1420:2aa9 "Level of
+     * Competition..." + 1420:2ac1 "_"/2ac3 " Civilizations" via
+     * Dialog_MenuZ_Modal @ 1220:0156 -> g_nCivCount @ 12d8:3b9a = 6 - idx,
+     * clamped via Util_Clamp @ 11c8:0063 to 2..6): valid 2..6
+     * (CIV_NEWGAME_MIN/MAX_CIVS). Twin of newgame_civ_count_from_index /
+     * newgame_competition_resolve range in newgame.h. */
+    return (civ_count >= 2 && civ_count <= 6) ? 1 : 0;
+}
+
+int game_new_alive_mask(int civ_count)
+{
+    /* Orig NewGame_Wizard @ 10e8:0000 finalize tail (g_nCivAliveMask @
+     * 12d8:42f8 = 0xff >> (6 - count); count 2..6 -> 0x03..0xff). Twin of
+     * newgame_alive_mask in newgame.h, parallel-owned. OOR -> -1. */
+    if (civ_count < 2 || civ_count > 6)
+        return -1;
+    return 0xff >> (6 - civ_count);
+}
+
+unsigned game_new_start_year_raw(void)
+{
+    /* Orig NewGame_Wizard @ 10e8:0000 finalize tail (g_nYear @ 12d8:42fa =
+     * 0xF060, CIV_NEWGAME_START_YEAR). Twin of newgame_start_year_raw in
+     * newgame.h. */
+    return 0xf060u;
+}
+
+int game_new_start_year_signed(void)
+{
+    /* Orig same word as int16: 0xF060 = -4000 = 4000 BC (ujemne = BC via
+     * game_append_year_text @ 1088:1dd0, see game.h). Twin of
+     * newgame_start_year_signed in newgame.h. */
+    return (int)(int16_t)0xf060u;
+}
+
+int game_new_player_civ_ok(int player_civ)
+{
+    /* Orig NewGame_Wizard @ 10e8:0000 step 2 (text 1420:2ad2 "Pick your
+     * tribe..." + 1420:2ae5 "_Custom." + Res blob 0x94 two-column list via
+     * Res_GetStringCopy @ 11f8:0080 -> g_nPlayerCiv @ 12d8:4300, slot at
+     * 43b8+0x9c via newgame_player_civ_resolve p&7 in newgame.h): stored
+     * civ id 0..7. */
+    return (player_civ >= 0 && player_civ <= 7) ? 1 : 0;
+}
+
+int game_new_map_param(int menu_choice)
+{
+    /* Orig WorldGen_PrepareEarth @ 1108:01bc dispatch (g_nMenuChoice @
+     * 12d8:44e2 via MainMenu_WndProc @ 11e0:0221: 0=new,1=load,2=EARTH,
+     * 3=customize) to Map_GenerateRandomOrLoad @ 1028:0000 param
+     * (DAT_1308_0022): 0 -> 0 random passes, 2 -> 1 earth-preset (frame
+     * 0x89 via WorldGen_CopyPreset @ 10b8:079d HMEMCPY 64000B + tail
+     * Map_FillRect @ 1028:1d15 / Map_LabelContinents @ 1028:0a93), 3 -> 0
+     * custom/random; else -1 no map. Twin of worldgen_prepare_mode in
+     * worldgen.h, parallel-owned. */
+    if (menu_choice == 0)
+        return 0;
+    if (menu_choice == 2)
+        return 1;
+    if (menu_choice == 3)
+        return 0;
+    return -1;
+}
+
 civ_error_t game_new(civ_game_t *g)
 {
+    int mask;
+
     if (!g)
         return CIV_ERR_NOENT;
-    /* TODO: Orig NewGame_Wizard @ 10e8:0000 (newgame_wizard_run, see
-     * newgame.h) -> Map_GenerateRandomOrLoad @ 1028:0000 (see worldgen.h)
-     * -> start-of-game field fill (g_nDifficulty/CivCount/AliveMask/
-     * PlayerCiv/Year). Win16 dialog/map tails TBD. */
+    /* PARTIAL: OS-free entry defaults 1:1 (wizard-entry state before the
+     * modal steps, cf. newgame_wizard_run init in newgame.h: difficulty 0,
+     * civ_count 6, player 0): g_nQuitFlag @ 12d8:24ee = 0 (run),
+     * g_nTurn @ 12d8:42fe = 0 (WinMain @ 1008:0304 branches on ==0),
+     * g_nDifficulty @ 12d8:42f6 = 0 Chieftain, g_nCivCount @ 12d8:3b9a = 6,
+     * g_nCivAliveMask @ 12d8:42f8 = 0xff via game_new_alive_mask above,
+     * g_nPlayerCiv @ 12d8:4300 = 0, g_nYear @ 12d8:42fa = 0xF060/-4000 via
+     * game_new_start_year_* above; menu_choice (g_nMenuChoice @ 12d8:44e2)
+     * preserved for the WorldGen_PrepareEarth dispatch. Wizard modal tails
+     * (Dialog_MenuZ_Modal @ 1220:0156 / custom @ 1220:16fd + Ctrl_* @ 1058
+     * + Res blob + Sound_PlayId @ 1150:00c9) + map tails
+     * (Map_GenerateRandomOrLoad @ 1028:0000 via game_new_map_param above +
+     * WorldGen_CopyPreset @ 10b8:079d, map buffer via map.h) stay Win16.
+     * TODO: Orig NewGame_Wizard @ 10e8:0000 steps 0..5 modal picks ->
+     * Map_GenerateRandomOrLoad @ 1028:0000 (newgame_wizard_run + finalize in
+     * newgame.h, worldgen_generate_random/load_preset in worldgen.h,
+     * dialog_menuz/dlg_create_tracked in dialog.h, all parallel-owned). */
+    g->initialized = 1;
+    g->quit_flag = 0;
+    g->turn = 0;
+    g->difficulty = 0;
+    g->civ_count = 6;
+    mask = game_new_alive_mask(g->civ_count);
+    if (mask < 0)
+        return CIV_ERR_RANGE;
+    g->alive_mask = mask;
+    g->player_civ = 0;
+    g->year = game_new_start_year_signed();
+    /* Exercise OS-free gate linkage (results ignored until the modal/map
+     * tails land; keeps nm -g symbols wired without globals). */
+    (void)game_new_difficulty_ok(g->difficulty);
+    (void)game_new_civ_count_ok(g->civ_count);
+    (void)game_new_player_civ_ok(g->player_civ);
+    (void)game_new_map_param(g->menu_choice);
+    (void)game_new_start_year_raw();
     return CIV_ERR_UNSUPPORTED;
 }
 

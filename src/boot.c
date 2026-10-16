@@ -96,25 +96,46 @@ civ_error_t boot_init_palette(void)
     return palette_init();
 }
 
+int boot_key_remap_value(int idx)
+{
+    /* Orig Game_InitGlobalTables @ 11e8:0337 key-remap image (decompiled
+     * 2026-10-16, 16 B at DAT_12d8_45be..45cd; Init_UnitFontTables @
+     * 10e8:2d46 rewrites the same 16 B to the same values): 0,1,2,3,
+     * 4,5,6,7,f8,f9,fa,fb,fc,fd,fe,ff. OS-free 1:1 table (no Win16).
+     * -1 on OOR. */
+    static const int table[16] = {
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+        0xf8, 0xf9, 0xfa, 0xfb, 0xfc, 0xfd, 0xfe, 0xff
+    };
+
+    if (idx < 0 || idx >= 16)
+        return -1;
+    return table[idx];
+}
+
 civ_error_t boot_init_tables(void)
 {
     /* Orig: FUN_11e8_0337 @ 11e8:0337 -> Game_InitGlobalTables. Called
      * once from WinMain after Palette_Init @ 1090:0488, before
-     * Main_RunStartupSequence @ 11e0:0000. Orig shape: key-remap loop +
+     * Main_RunStartupSequence @ 11e0:0000. Orig shape: 16 B key-remap
+     * (DAT_12d8_45be..45cd = 0..7,f8..ff, see boot_key_remap_value;
+     * Init_UnitFontTables @ 10e8:2d46 rewrites the same 16 B) +
+     * Gfx_AllocIconBuffer(0x20,0x20) -> DAT_1420_aea2 +
      * mem_alloc_lock(64000) -> 1420:b394/b396 + Rng_Init @ 11c8:0000 +
-     * string tables via Tribe_GetNameList @ 11f8:0080 (see newgame.h).
-     * Linux: WONTFIX-Win16 lock selector; the 64 KB map buffer is carved
-     * from the 16 MB startup arena (win16_mem_init + arena_alloc, owner
-     * is map.c). No globals here; read-only; no exit(). */
-    uint8_t key_remap[256];
+     * Sys_GetDate + Rng_Seed + string tables via Tribe_GetNameList @
+     * 11f8:0080 (0x8f tribe x8, 0x90 ?, 0x91 ruler, 0x92 govt x13, 0x87
+     * tech x256; see newgame.h). Linux: WONTFIX-Win16 lock selector;
+     * the 64 KB map buffer is carved from the 16 MB startup arena
+     * (win16_mem_init + arena_alloc, owner is map.c). No globals here;
+     * read-only; no exit(). */
+    uint8_t key_remap[16];
     unsigned i;
     civ_error_t err;
 
-    /* 1) Key-remap loop (OS-free shape 1:1; exact remap pairs TBD from
-     * the 11e8:0337 dump, so identity skeleton for now). */
+    /* 1) Key-remap image 1:1 (decompiled 2026-10-16, not identity). */
     for (i = 0; i < sizeof(key_remap); i++)
-        key_remap[i] = (uint8_t)i;
-    (void)key_remap; /* consumed once the dump gives the remap pairs */
+        key_remap[i] = (uint8_t)boot_key_remap_value((int)i);
+    (void)key_remap; /* image consumed by the future key owner */
 
     /* 2) Rng_Init @ 11c8:0000 (live via sys.h). */
     rng_init();
@@ -141,13 +162,22 @@ civ_error_t boot_init_tables(void)
 
 civ_error_t boot_init_unit_font_tables(void)
 {
-    /* Orig: FUN_10e8_2d46 @ 10e8:2d46 -> Init_UnitFontTables. Sibling of
-     * NewGame_Wizard @ 10e8:0000; loads FIRSTMOVE/PILLAGE/font-map
-     * tables. Segment dump has no decoded table bytes yet, so no pure
-     * tables/memcpy port is possible -> stub CIV_ERR_UNSUPPORTED.
-     * Read-only; no globals; no exit().
-     * TODO: Orig FUN_10e8_2d46 @ 10e8:2d46 (FIRSTMOVE/PILLAGE/font-map
-     * table bytes TBD from the seg-10e8 dump; pure memcpy when decoded). */
+    /* Orig: FUN_10e8_2d46 @ 10e8:2d46 -> Init_UnitFontTables (decompiled
+     * 2026-10-16). Sibling of NewGame_Wizard @ 10e8:0000: Util_MemCopyFar
+     * 0x2a02 (6 B local_28) + 0x2a12 (64 B local_68) + GLOBALLOCK
+     * DAT_1420_b388 palette, then 8x FIRSTMOVE (idx 0..7) + 8x PILLAGE
+     * (idx 2..9) best-match loops over 0x40 entries via
+     * Gfx_CalcColorDistSq @ 10e8:2cc1 (LIVE in video.h/video.c: RGB
+     * squared distance) keeping the min, then the same 16 B key-remap
+     * as Game_InitGlobalTables @ 11e8:0337 (see boot_key_remap_value),
+     * then 16x font-map best-match when DAT_1420_17a8 == 0 else fixed
+     * 16 B (ff,fb,f9,1,5,4,fc,6,fa,2,3,fb,7,f8,f8,0), then 8x28 icon
+     * recolor via Gfx_ReplaceIconColor @ 11a8:022f + Sys_Yield @
+     * 1098:0157. OS-free distance half is LIVE; far-ptr + GLOBALLOCK +
+     * GDI recolor tails stay STUB -> CIV_ERR_UNSUPPORTED. Read-only; no
+     * globals; no exit().
+     * TODO: Orig FUN_10e8_2d46 @ 10e8:2d46 (0x2a02/0x2a12 target-table
+     * bytes + b388 palette carve + icon-recolor SDL bridge). */
     return CIV_ERR_UNSUPPORTED;
 }
 

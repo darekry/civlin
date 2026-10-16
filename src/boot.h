@@ -114,17 +114,23 @@ civ_error_t boot_init_palette(void);
  *
  * Orig: FUN_11e8_0337 @ 11e8:0337 -> Game_InitGlobalTables. Called once
  *   from WinMain after Palette_Init @ 1090:0488, before
- *   Main_RunStartupSequence @ 11e0:0000. Orig shape: key-remap loop +
- *   mem_alloc_lock(64000) -> 1420:b394/b396 + Rng_Init @ 11c8:0000
- *   (see sys.h rng_init) + string tables via Tribe_GetNameList @
- *   11f8:0080 (see newgame.h). Linux port: remap loop (identity
- *   skeleton, exact pairs TBD from dump) + rng_init() + malloc(64000)
- *   probe are live in boot.c; Win16 GLOBALALLOC lock selector semantics
+ *   Main_RunStartupSequence @ 11e0:0000. Orig shape (decompiled
+ *   2026-10-16): 16 B key-remap DAT_12d8_45be..45cd =
+ *   0,1,2,3,4,5,6,7,f8,f9,fa,fb,fc,fd,fe,ff (same 16 B rewritten by
+ *   Init_UnitFontTables @ 10e8:2d46) + Gfx_AllocIconBuffer(0x20,0x20)
+ *   + mem_alloc_lock(64000) -> 1420:b394/b396 + Rng_Init @ 11c8:0000
+ *   + Sys_GetDate + Rng_Seed + string tables via Tribe_GetNameList @
+ *   11f8:0080 (see newgame.h). Linux port: remap image LIVE via
+ *   boot_key_remap_value below + rng_init() + malloc(64000) probe are
+ *   live in boot.c; Win16 GLOBALALLOC lock selector semantics
  *   (-> 1420:b394/b396 far ptr) have no Linux equivalent -> overall
  *   CIV_ERR_UNSUPPORTED until the map-buffer owner (see map.h
  *   CIV_MAP_BUF_LEN) takes the persistent allocation. No globals here;
  *   no exit(). */
 civ_error_t boot_init_tables(void);
+/* Orig key-remap image DAT_12d8_45be..45cd (see above). OS-free 1:1
+ * table lookup, -1 on OOR. No Win16, no globals, no exit(). */
+int boot_key_remap_value(int idx);
 /* Orig: FUN_10e8_2d46 @ 10e8:2d46 -> Init_UnitFontTables. Sibling of
  *   NewGame_Wizard @ 10e8:0000; loads FIRSTMOVE/PILLAGE/font-map tables
  *   (exact table bytes/offsets TBD from segment dump; pure memcpy when

@@ -201,6 +201,73 @@ int gfx_color_table_kind(int color)
     return -1;
 }
 
+int gfx_calc_color_dist_sq(const uint8_t a[3], const uint8_t b[3])
+{
+    /* Orig Gfx_CalcColorDistSq @ 10e8:2cc1 (see video.h; sole caller
+     * Init_UnitFontTables @ 10e8:2d46 FIRSTMOVE/PILLAGE/font-map
+     * best-match: each of the 8+8+16 target triples scans 0x40 palette
+     * entries keeping the min). OS-free 1:1: (dr*dr + dg*dg + db*db)
+     * on unsigned bytes (orig uint diffs, int return). NULL -> -1. */
+    int dr;
+    int dg;
+    int db;
+
+    if (!a || !b)
+        return -1;
+    dr = (int)a[0] - (int)b[0];
+    dg = (int)a[1] - (int)b[1];
+    db = (int)a[2] - (int)b[2];
+    return dr * dr + dg * dg + db * db;
+}
+
+int video_driver_is_mono(unsigned raster_caps)
+{
+    /* Orig Video_CheckDriverCaps @ 1008:059a (see video.h):
+     * DAT_1420_17a6 = ((GETDEVICECAPS(0x26) & 0x100) == 0). */
+    return ((raster_caps & 0x100u) == 0u) ? 1 : 0;
+}
+
+int video_driver_needs_convert(int w, int h, int depth)
+{
+    /* Orig same (see video.h): DAT_1420_17a8 = (w*h == 4) ||
+     * (depth == 0x10 && w*h == 8). Long product avoids 16-bit wrap. */
+    long area = (long)w * (long)h;
+
+    if (area == 4L)
+        return 1;
+    if (depth == 0x10 && area == 8L)
+        return 1;
+    return 0;
+}
+
+int mainport_palette_handle(int stored, int headless_28fc)
+{
+    /* Orig MainPort_GetPaletteHandle @ 1098:1120 (see video.h; sole
+     * caller MainPort_GetOrCreate @ 1098:114a returns this into
+     * DAT_1420_1e9e when DAT_12d8_28fc == 0 else 0). */
+    if (headless_28fc != 0)
+        return 0;
+    return stored;
+}
+
+int gfx_stored_dc_uses_stored(int headless_28fc)
+{
+    /* Orig Gfx_GetStoredDcOrMainPort @ 1098:2687 (see video.h):
+     * DAT_12d8_28fc == 0 -> *(param+8), else MainPort_GetOrCreate. */
+    return (headless_28fc == 0) ? 1 : 0;
+}
+
+civ_error_t mem_alloc_with_hook(unsigned size)
+{
+    /* Orig Mem_AllocWithHook @ 1000:41e4 (see video.h; callers
+     * Sys_BuildCurrentDirPath @ 1000:2826 + File_SetBuffer @ 1000:3496
+     * via DAT_1420_0027 hook + heap 1000:46f1). 16-bit segmented heap
+     * has no Linux equivalent (malloc/arena own this) -> stub.
+     * TODO: Orig Mem_AllocWithHook @ 1000:41e4 (hook + heap bridge). */
+    (void)size;
+    return CIV_ERR_UNSUPPORTED;
+}
+
 civ_error_t gfx_port_create(SDL_Renderer *ren, int w, int h, gfx_port_t **out)
 {
     /* Orig GfxPort_Create @ 10d0:0000 -> GR_PortOpen (see video.h P4

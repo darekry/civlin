@@ -320,6 +320,18 @@ long help_hlp_topic(const uint8_t *data, size_t len, uint32_t topic_id);
  * no exit(), read-only. */
 const char *ctrl_class_names(int index);
 
+/* Orig Ctrl_RegisterCustomClasses @ 1058:0b4d REGISTERCLASS x4 count ->
+ * dialog_ctrl_class_count. 1:1 4 (strings "RanDoMRadio" @ 0xac6 file
+ * 0xb7ac6 / "RanDoMStatic" @ 0xad2 file 0xb7ad2 / "RanDoMUser" @ 0xadf
+ * file 0xb7adf / "Region" @ 0xaea file 0xb7aea in unpacked/civ.exe,
+ * read-only, no copy). No Win16, no globals. */
+int dialog_ctrl_class_count(void);
+
+/* Orig same index gate (0 <= index < 4 selects one REGISTERCLASS name) ->
+ * dialog_ctrl_class_valid. 1:1 nonzero (1) when 0 <= index < 4, 0
+ * otherwise. No Win16, no globals. */
+int dialog_ctrl_class_valid(int index);
+
 /* AH3: HLP PAGE header + B-tree find (2026-10-15).
  * HLP PAGE (Win 3.x help B-tree page inside unpacked civhelp.hlp 72787 B
  * read-only, never written; packed civ1win/CIVHELP.HLP EDILZSS2 rejected

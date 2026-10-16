@@ -109,6 +109,91 @@ int gfx_brush_is_solid(int color, int mono);
  * OS-free 1:1, no Win16, no globals, no exit(). */
 int gfx_color_table_kind(int color);
 
+/* WinMain @ 1008:0000 order chain (2026-10-16, decompiled in order).
+ * OS-free kernels below are LIVE 1:1 (no Win16, no globals, no exit());
+ * Win16 tails stay STUB with TODO Orig in video.c / boot.c / map.c.
+ * Order: Sys_CheckFreeMemory @ 11e8:0000 (GETFREESPACE + 1420:43b8 msg,
+ *   thresholds 2500000 + 0x23/0x23, see sys.h) -> Sys_GetCurrentDrive @
+ *   1000:11bb + Sys_BuildCurrentDirPath @ 1000:2826 ("D:\curdir" via
+ *   Dos_GetCurrentDriveIndex + Dos_GetCurrentDir, 0x100 cap, alloc via
+ *   Mem_AllocWithHook @ 1000:41e4) -> App_RegisterWindowClasses @
+ *   1098:06f8 (3x CREATESOLIDBRUSH + REGISTERCLASS x4 + Ctrl_Register +
+ *   GETSYSTEMMETRICS x7 + SETTIMER 16 ms -> DAT_12d8_460e) ->
+ *   SETTIMER 5 ms + LOADACCELERATORS + GETWINFLAGS + ADDFONTRESOURCE +
+ *   SENDMESSAGE -> Font_EnumFamiliesInit @ 1008:0e99 (GETDC +
+ *   GETDEVICECAPS x4 + ENUMFONTFAMILIES) -> ResMgr_LoadRsc @ 1190:0000
+ *   x5 (_LOPEN/_HREAD 0xE360 + type/record parse) ->
+ *   Video_CheckDriverCaps @ 1008:059a (GETDEVICECAPS 0x0c/0x0e/0x26/0x18;
+ *   mono + convert gates below) -> Art_MaybeConvertArtwork @ 10b8:0000
+ *   (DAT_1420_17a8 gate + convert loops) -> Config_LoadPrefs @ 1008:0b4a
+ *   (_LOPEN/_LREAD 0x1a civ.prf) -> Palette_Init @ 1090:0488 (LOGPALETTE
+ *   0x300 + 0xec entries) -> Game_InitGlobalTables @ 11e8:0337
+ *   (key-remap 16 B + 64 KB map buf + Rng_Init + string tables) ->
+ *   Main_RunStartupSequence @ 11e0:0000 (dialog 0x94 + Anim_OpenSequence
+ *   @ 10b0:008a + Anim_AdvanceFrames @ 10b0:0461 loop +
+ *   Anim_CloseSequence @ 10b0:0287 + Sound_PlayId @ 1150:00c9) ->
+ *   Init_UnitFontTables @ 10e8:2d46 (FIRSTMOVE/PILLAGE/font-map via
+ *   Gfx_CalcColorDistSq @ 10e8:2cc1 best-match) -> Sound_PlayId(1,1) ->
+ *   MainPort_GetOrCreate @ 1098:114a (via MainPort_GetPaletteHandle @
+ *   1098:1120) + GfxPort_Create @ 10d0:0000 + GfxPort_SetActive @
+ *   10d0:0956 + WdwMap_Open @ 1208:0af1 + WdwSmMap_Open @ 1210:025b +
+ *   WdwStatus_Open @ 1218:0386 -> Menu_InitMainBar @ 1048:0000
+ *   (CHECKMENUITEM x8 + MODIFYMENU) + Cursor_Set @ 1098:096c ->
+ *   while(!g_nQuitFlag) Game_TurnLoopTick @ 1088:0000 ->
+ *   WinMain_Shutdown @ 1008:0329. Next frontier: Anim_AdvanceFrames frame
+ *   opcode dispatch (10b0:0461 callees: Art_LoadFrameData @ 10b8:079d +
+ *   GfxPort_PresentRect @ 10d0:0854 + Palette_AnimateRange @ 1090:0376 +
+ *   Sound_PlayId) + Dlg_CreateTracked @ 1098:124f host (CREATEDIALOG +
+ *   palette tails) + shared Pic_PlayShared @ 1030:0000 (~31 KB, 16
+ *   callers). */
+
+/* Orig: Gfx_CalcColorDistSq @ 10e8:2cc1 (renamed 2026-10-16 from
+ * FUN_10e8_2cc1; sole caller Init_UnitFontTables @ 10e8:2d46).
+ * RGB squared distance: (r1-r2)^2 + (g1-g2)^2 + (b1-b2)^2 over the two
+ * 3-byte triples (orig byte ptrs param_1/param_2, far). Best-match core
+ * for FIRSTMOVE (8) / PILLAGE (8, idx 2..9) / font-map (16 when
+ * DAT_1420_17a8 == 0, else fixed 16 B) loops: each scans 0x40 palette
+ * entries via GLOBALLOCK(DAT_1420_b388) keeping the min. OS-free 1:1 on
+ * explicit triples (no far, no GLOBALLOCK here). NULL either -> -1
+ * (orig faulted). No globals, no exit(). */
+int gfx_calc_color_dist_sq(const uint8_t a[3], const uint8_t b[3]);
+
+/* Orig: Video_CheckDriverCaps @ 1008:059a mono gate (GETDEVICECAPS 0x26
+ * raster caps word; DAT_1420_17a6 = ((caps & 0x100) == 0)).
+ * OS-free 1:1: 1 when mono (bit clear), 0 otherwise. No Win16. */
+int video_driver_is_mono(unsigned raster_caps);
+
+/* Orig: same convert gate (w = GETDEVICECAPS 0x0c, h = 0x0e, depth =
+ * GETDEVICECAPS 0x18; DAT_1420_17a8 = (w*h == 4) || (depth == 0x10 &&
+ * w*h == 8)). OS-free 1:1 on explicit w/h/depth (orig int multiply;
+ * Linux uses long to avoid 16-bit wrap). 1 = convert artwork (orig
+ * Art_MaybeConvertArtwork @ 10b8:0000 convert loops), 0 = skip. */
+int video_driver_needs_convert(int w, int h, int depth);
+
+/* Orig: MainPort_GetPaletteHandle @ 1098:1120 (renamed 2026-10-16 from
+ * FUN_1098_1120; sole caller MainPort_GetOrCreate @ 1098:114a).
+ * Returns the stored palette handle (DAT_1420_9966 image, passed
+ * explicitly), or 0 when headless (DAT_12d8_28fc != 0). OS-free gate
+ * 1:1 (no Win16 handle here, just the int image). */
+int mainport_palette_handle(int stored, int headless_28fc);
+
+/* Orig: Gfx_GetStoredDcOrMainPort @ 1098:2687 (renamed 2026-10-16 from
+ * FUN_1098_2687; callers Anim_OpenSequence @ 10b0:008a +
+ * Anim_AdvanceFrames @ 10b0:0461 + Pic_PlayShared @ 1030:0000 +
+ * Status/Ship/Pedia/Replay paths). Branch predicate: 1 = use the
+ * stored DC (*(param+8) image, DAT_12d8_28fc == 0), 0 = use
+ * MainPort_GetOrCreate @ 1098:114a (headless). OS-free 1:1 on the
+ * explicit flag. The DC fetch itself stays STUB (Win16 HDC). */
+int gfx_stored_dc_uses_stored(int headless_28fc);
+
+/* Orig: Mem_AllocWithHook @ 1000:41e4 (renamed 2026-10-16 from
+ * FUN_1000_41e4; callers Sys_BuildCurrentDirPath @ 1000:2826 with the
+ * 0x100 path cap + File_SetBuffer @ 1000:3496). Sets the
+ * DAT_1420_0027 failure hook then heap-allocs via 1000:46f1. 16-bit
+ * segmented heap + hook have no Linux equivalent (malloc/arena own
+ * this) -> stub CIV_ERR_UNSUPPORTED. No globals, no exit(). */
+civ_error_t mem_alloc_with_hook(unsigned size);
+
 /* Palette_AnimateRange @ 1090:0376 (ported; range repaint via
  * SDL_SetPaletteColors staging on a temp 256-entry palette, no globals.
  * Orig copies RGB triples + flag byte then ANIMATEPALETTE; callers issue

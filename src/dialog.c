@@ -6,15 +6,77 @@
 
 civ_error_t dialog_init(void)
 {
-    /* DLGPROC layer (@ 1098:124f/16e2/1838, controls @ 1058:*; MenuZ @
-     * 1220:0156). HONEST STOP (fala H): MAKEPROCINSTANCE install for
-     * DLGPROC @ 1098:16e2 / CIVDIALOGPROC @ 1098:1838 + custom-control
-     * classes @ 1058:0b4d have no SDL equivalent yet (per-call SDL modal
-     * lands in U2) -> CIV_ERR_UNSUPPORTED. The pure-dispatch procs
-     * (dlg_proc / civ_dialog_proc below) stay callable. No globals,
-     * no exit(), read-only.
+    /* DLGPROC layer (@ 1098:124f/16e2/1838, controls @ 1058:0000/0b4d,
+     * MenuZ @ 1220:0156). PARTIAL dispatcher (fala H/U2): OS-free gates
+     * below are LIVE 1:1 (no Win16, no globals, read-only); the
+     * MAKEPROCINSTANCE install for DLGPROC @ 1098:16e2 / CIVDIALOGPROC @
+     * 1098:1838 + Ctrl_RegisterCustomClasses @ 1058:0b4d (REGISTERCLASS x4
+     * "RanDoMRadio" @ 0xac6 file 0xb7ac6 / "RanDoMStatic" @ 0xad2 file
+     * 0xb7ad2 / "RanDoMUser" @ 0xadf file 0xb7adf / "Region" @ 0xaea file
+     * 0xb7aea in unpacked/civ.exe, read-only, no copy) + shared GDI
+     * brushes/pens + per-call SDL modal tails stay CIV_ERR_UNSUPPORTED
+     * (never fake CIV_OK; SDL owner lands in U2). The pure-dispatch procs
+     * (dlg_proc / civ_dialog_proc below) stay callable. Refs verified
+     * read-only 1:1 vs unpacked/civ.exe (NE LE, no copy).
      * TODO: Orig FUN_1098_06f8 @ 1098:06f8 class half + MAKEPROCINSTANCE
-     * targets 1098:16e2/1838 (SDL dialog/modal owner, U2). */
+     * targets 1098:16e2/1838 + Ctrl_RegisterCustomClasses @ 1058:0b4d
+     * brushes/pens (SDL dialog/modal owner, U2) + MenuZ modal pump @
+     * 1220:0156 (SDL modal TBD). */
+    win16_msg_result_t d0;
+    win16_msg_result_t c0;
+    int nclass;
+    int valid0;
+    int valid_bad;
+    const char *n0;
+    const char *nbad;
+    int nradio;
+    int ridx;
+    int base;
+    int last;
+    int timer;
+    int cancel;
+    int ctx;
+    int pal;
+
+    d0 = dlg_proc(0, 0L, 0L);
+    c0 = civ_dialog_proc(0, 0L, 0L);
+    if (d0 != WIN16_MSG_DEFAULT || c0 != WIN16_MSG_DEFAULT)
+        return CIV_ERR_BAD_DATA;
+    nclass = dialog_ctrl_class_count();
+    if (nclass != CIV_CTRL_CLASS_COUNT)
+        return CIV_ERR_BAD_DATA;
+    valid0 = dialog_ctrl_class_valid(0);
+    valid_bad = dialog_ctrl_class_valid(CIV_CTRL_CLASS_COUNT);
+    if (valid0 != 1 || valid_bad != 0)
+        return CIV_ERR_BAD_DATA;
+    n0 = ctrl_class_names(0);
+    nbad = ctrl_class_names(CIV_CTRL_CLASS_COUNT);
+    if (!n0 || nbad)
+        return CIV_ERR_BAD_DATA;
+    nradio = dialog_ctrl_radio_count(CIV_DIALOG_MENUZ_BASE_ID,
+                                     CIV_DIALOG_MENUZ_BASE_ID + 2);
+    ridx = dialog_ctrl_radio_index(CIV_DIALOG_MENUZ_BASE_ID,
+                                   CIV_DIALOG_MENUZ_BASE_ID + 1);
+    if (nradio != 3 || ridx != 1)
+        return CIV_ERR_BAD_DATA;
+    base = dialog_menuz_base_id();
+    last = dialog_menuz_last_id(6);
+    timer = dialog_menuz_timer_ms();
+    cancel = dialog_menuz_cancel_code();
+    if (base != CIV_DIALOG_MENUZ_BASE_ID)
+        return CIV_ERR_BAD_DATA;
+    if (last != CIV_DIALOG_MENUZ_BASE_ID + 6 - 1)
+        return CIV_ERR_BAD_DATA;
+    if (timer != CIV_DLG_MENUZ_TIMER_MS)
+        return CIV_ERR_BAD_DATA;
+    if (cancel != CIV_DIALOG_MENUZ_CANCEL)
+        return CIV_ERR_BAD_DATA;
+    ctx = dlg_tracked_ctx_size();
+    pal = dlg_tracked_pal_count();
+    if (ctx != CIV_DLG_TRACKED_CTX_SIZE)
+        return CIV_ERR_BAD_DATA;
+    if (pal != CIV_DLG_TRACKED_PAL_COUNT)
+        return CIV_ERR_BAD_DATA;
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -142,9 +204,59 @@ civ_error_t dialog_menuz(const char *title, const char *items_text,
 civ_error_t dialog_ctrl_register(void)
 {
     /* Orig: FUN_1058_0b4d @ 1058:0b4d -> Ctrl_RegisterCustomClasses.
-     * TODO: REGISTERCLASS "RanDoMRadio" (str @ 0xac6), "RanDoMStatic"
-     * (@ 0xad2), "RanDoMUser" (@ 0xadf), "Region" (@ 0xaea) + shared
-     * brushes/pens. Win16 USER/GDI -> SDL3 widget bridge TBD. */
+     * PARTIAL dispatcher: OS-free register/ctl math below is LIVE 1:1 (no
+     * Win16, no globals, read-only); the REGISTERCLASS x4 + shared GDI
+     * brushes/pens install tails stay CIV_ERR_UNSUPPORTED (never fake
+     * CIV_OK). Refs verified read-only 1:1 vs unpacked/civ.exe (NE LE, no
+     * copy): "RanDoMRadio" @ 0xac6 file 0xb7ac6, "RanDoMStatic" @ 0xad2
+     * file 0xb7ad2, "RanDoMUser" @ 0xadf file 0xb7adf, "Region" @ 0xaea
+     * file 0xb7aea; paint bodies Ctrl_PaintCustomButton @ 1058:0000 +
+     * Ctrl_PaintRandomUser @ 1058:0440 + Ctrl_PaintRandomStatic @
+     * 1058:04f6 + Ctrl_RadioGroupSetSel @ 1058:0e7f (count/index LIVE in
+     * dialog_ctrl_radio_count/index). Win16 USER/GDI -> SDL3 widget bridge
+     * TBD.
+     * TODO: Orig FUN_1058_0b4d @ 1058:0b4d REGISTERCLASS x4 ("RanDoMRadio"
+     * str @ 0xac6, "RanDoMStatic" @ 0xad2, "RanDoMUser" @ 0xadf, "Region"
+     * @ 0xaea) + shared brushes/pens (DELETEOBJECT side in
+     * dialog_ctrl_free @ 1058:0d71) + owner-draw paint @ 1058:0000/0440/
+     * 04f6 -> SDL3 widget bridge TBD. */
+    int n;
+    int v0;
+    int v3;
+    int vbad_lo;
+    int vbad_hi;
+    const char *s0;
+    const char *s1;
+    const char *s2;
+    const char *s3;
+    const char *sbad;
+    int rcnt;
+    int ridx;
+
+    n = dialog_ctrl_class_count();
+    if (n != CIV_CTRL_CLASS_COUNT)
+        return CIV_ERR_BAD_DATA;
+    v0 = dialog_ctrl_class_valid(0);
+    v3 = dialog_ctrl_class_valid(CIV_CTRL_CLASS_COUNT - 1);
+    vbad_lo = dialog_ctrl_class_valid(-1);
+    vbad_hi = dialog_ctrl_class_valid(CIV_CTRL_CLASS_COUNT);
+    if (v0 != 1 || v3 != 1 || vbad_lo != 0 || vbad_hi != 0)
+        return CIV_ERR_BAD_DATA;
+    s0 = ctrl_class_names(0);
+    s1 = ctrl_class_names(1);
+    s2 = ctrl_class_names(2);
+    s3 = ctrl_class_names(3);
+    sbad = ctrl_class_names(CIV_CTRL_CLASS_COUNT);
+    if (!s0 || !s1 || !s2 || !s3 || sbad)
+        return CIV_ERR_BAD_DATA;
+    rcnt = dialog_ctrl_radio_count(CIV_DIALOG_MENUZ_BASE_ID,
+                                   CIV_DIALOG_MENUZ_BASE_ID + 2);
+    ridx = dialog_ctrl_radio_index(CIV_DIALOG_MENUZ_BASE_ID,
+                                   CIV_DIALOG_MENUZ_BASE_ID + 1);
+    if (rcnt != 3 || ridx != 1)
+        return CIV_ERR_BAD_DATA;
+    if (dialog_ctrl_radio_count(2, 1) != 0)
+        return CIV_ERR_BAD_DATA;
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -172,6 +284,24 @@ civ_error_t dialog_ctrl_radio_set(int first_id, int last_id, int selected_id)
     /* TODO: SendDlgItemMessage(hDlg, id in first..last, BM_SETCHECK,
      * selected ? 1 : 0) -> SDL3 radio-group bridge TBD. */
     return CIV_ERR_UNSUPPORTED;
+}
+
+int dialog_ctrl_class_count(void)
+{
+    /* Orig: FUN_1058_0b4d @ 1058:0b4d -> Ctrl_RegisterCustomClasses count
+     * half (REGISTERCLASS x4: "RanDoMRadio" @ 0xac6 file 0xb7ac6 /
+     * "RanDoMStatic" @ 0xad2 file 0xb7ad2 / "RanDoMUser" @ 0xadf file
+     * 0xb7adf / "Region" @ 0xaea file 0xb7aea in unpacked/civ.exe,
+     * read-only, no copy). OS-free 1:1, no Win16, no globals. */
+    return CIV_CTRL_CLASS_COUNT;
+}
+
+int dialog_ctrl_class_valid(int index)
+{
+    /* Orig same index gate (0 <= index < 4 selects one REGISTERCLASS name
+     * via ctrl_class_names; brushes/pens install stays Win16 -> caller
+     * STUB). OS-free 1:1, no Win16, no globals. */
+    return (index >= 0 && index < CIV_CTRL_CLASS_COUNT) ? 1 : 0;
 }
 
 int dialog_ctrl_radio_count(int first_id, int last_id)

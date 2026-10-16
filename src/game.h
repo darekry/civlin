@@ -71,10 +71,40 @@ typedef struct civ_game {
  * No globals, no exit(), read-only. */
 civ_error_t game_init(civ_game_t *g);
 /* Orig NewGame_Wizard @ 10e8:0000 + Map_GenerateRandomOrLoad @ 1028:0000
- * tail -> game_new. Fills start-of-game fields (see game_init list) via
- * newgame_wizard_run (see newgame.h) -> worldgen. Win16 dialog/map tails
- * TBD -> stub CIV_ERR_UNSUPPORTED; NULL -> NOENT. No globals, no exit(). */
+ * tail -> game_new. Entry to the turn loop (WinMain @ 1008:0304 shape:
+ * while(!g_nQuitFlag @ 12d8:24ee) Game_TurnLoopTick @ 1088:0000; TIMERPROC
+ * @ 1008:0d68 only ticks the 24f0 countdown, see boot.h chain-21).
+ * PARTIAL: OS-free entry defaults below are LIVE 1:1 on the caller-owned
+ * civ_game_t (wizard-entry state before the modal steps: difficulty 0,
+ * civ_count 6, alive_mask 0xff, player_civ 0, year 0xF060/-4000, turn 0,
+ * quit 0; menu_choice preserved for the WorldGen_PrepareEarth @ 1108:01bc
+ * dispatch); wizard modal tails (Dialog_MenuZ_Modal @ 1220:0156 steps 0..2
+ * + custom variant @ 1220:16fd steps 3/4, Ctrl_* @ 1058, Res blob 0x94 via
+ * 11f8:0080, Sound_PlayId @ 1150:00c9) + map tails (Map_GenerateRandomOrLoad
+ * @ 1028:0000 random/preset via WorldGen_CopyPreset @ 10b8:079d 64000B +
+ * Map_FillRect @ 1028:1d15 / Map_LabelContinents @ 1028:0a93, map buffer
+ * owned via map.h) stay CIV_ERR_UNSUPPORTED with TODO Orig in game.c.
+ * Owned-module helpers (newgame_wizard_run/newgame_finalize, worldgen_*
+ * in newgame.h/worldgen.h, parallel-owned) are documented, not linked, so
+ * the newgame/worldgen rewrites stay decoupled: game-side twins below keep
+ * the same 1:1 math without cross-module calls. Ref unpacked/civ.exe
+ * (832512 B EDI LZSS2 unpack from civ1win/CIV.EXE, 335182 B packed)
+ * read-only; civ1win/ untouched. NULL -> NOENT, bad entry mask ->
+ * RANGE. No globals, no exit(). */
 civ_error_t game_new(civ_game_t *g);
+/* OS-free new-game entry gates (Orig NewGame_Wizard @ 10e8:0000 finalize +
+ * WorldGen_PrepareEarth @ 1108:01bc -> Map_GenerateRandomOrLoad @ 1028:0000;
+ * ref unpacked/civ.exe read-only). Twins of the owned-module helpers
+ * (newgame_* in newgame.h, worldgen_* in worldgen.h, parallel-owned) so
+ * src/game.* stays decoupled: same 1:1 math, game_new_* names, no cross
+ * includes. No Win16, no globals, no exit(), read-only. */
+int game_new_difficulty_ok(int difficulty);
+int game_new_civ_count_ok(int civ_count);
+int game_new_alive_mask(int civ_count);
+unsigned game_new_start_year_raw(void);
+int game_new_start_year_signed(void);
+int game_new_player_civ_ok(int player_civ);
+int game_new_map_param(int menu_choice);
 /* Orig WinMain @ 1008:0304 loop body: while(!g_nQuitFlag @ 12d8:24ee)
  * Game_TurnLoopTick @ 1088:0000 (direct calls, NOT a timer callback:
  * TIMERPROC @ 1008:0d68 only ticks the 24f0 countdown, see boot.h
