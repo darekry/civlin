@@ -94,8 +94,16 @@ civ_error_t pic_read_header(const uint8_t *src, size_t len,
  * (cf. video.h). Returns CIV_ERR_UNSUPPORTED. */
 civ_error_t title_load_opening_frame(unsigned frame_index);
 
+/* Orig Title_PlayAnimLoop @ 1030:0000 skip poll (key/mouse/quit each frame;
+ * shared PIC/modal player Pic_PlayShared @ 1030:0000 shape, see above) ->
+ * title_event_is_skip. OS-free 1:1 predicate over the SDL3 event type:
+ * QUIT / KEY_DOWN / MOUSE_BUTTON_DOWN -> 1 (skip), else 0. No SDL calls,
+ * no globals, no exit(), C17. */
+int title_event_is_skip(uint32_t ev_type);
+
 /* 1 == user asked to skip (key/mouse), 0 == keep playing. Pure SDL3 event
- * poll helper used by the intro and the victory ceremony. */
+ * poll helper used by the intro and the victory ceremony (drains via
+ * title_event_is_skip above). */
 int title_poll_skip(void);
 
 /* SDL3 intro player (Title_PlayAnimLoop @ 1030:0000 shape): MPLOGO.BMP

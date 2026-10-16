@@ -14,11 +14,66 @@ civ_error_t mainmenu_run(civ_mainmenu_choice_t *out)
      *   raw choice = zero-based MenuZ index, i.e. 500-based button id minus
      *   CIV_DIALOG_MENUZ_BASE_ID via dialog_menuz_id_to_index) into
      *   g_nMenuChoice (12d8:44e2), then mainmenu_dispatch. Read-only stub:
-     *   validates out, reports NONE, no modal pumped. */
+     *   validates out, reports NONE, no modal pumped.
+     * TODO: Orig FUN_11e0_0221 @ 11e0:0221 SDL3 modal bridge TBD
+     * (Dialog_MenuZ_Modal @ 1220:0156 over CIV_MAINMENU_TEXT @ 1420:435b;
+     * OS-free '_' split already LIVE in mainmenu_item_count/at below). */
     if (!out)
         return CIV_ERR_NOENT;
     *out = CIV_MENU_NONE;
     return CIV_ERR_UNSUPPORTED;
+}
+
+int mainmenu_item_count(void)
+{
+    /* Orig packet-N split @ 11e0:0221 / 1420:435b (see mainmenu.h): count
+     * '_' separators after the leading one. Shipped text has 6 items. */
+    const char *t = CIV_MAINMENU_TEXT;
+    int n = 0;
+    int i = 0;
+
+    for (i = 0; t[i] != '\0'; i++) {
+        if (t[i] == '_' && i > 0)
+            n++;
+    }
+    return n;
+}
+
+civ_error_t mainmenu_item_at(int index, char *out, size_t cap)
+{
+    /* Orig same split: copy the index-th '_' field (0-based MenuZ index).
+     * Pure string scan, no Win16, no globals, no exit(). */
+    const char *t = CIV_MAINMENU_TEXT;
+    int cur = 0;
+    size_t start = 0;
+    size_t end = 0;
+    size_t len = 0;
+    size_t i = 0;
+
+    if (!out)
+        return CIV_ERR_NOENT;
+    if (cap == 0)
+        return CIV_ERR_RANGE;
+    if (index < 0 || index >= mainmenu_item_count())
+        return CIV_ERR_RANGE;
+    /* Skip to the index-th field: field 0 starts after t[0] == '_'. */
+    start = 1;
+    for (cur = 0; cur < index; cur++) {
+        while (t[start] != '\0' && t[start] != '_')
+            start++;
+        if (t[start] == '_')
+            start++;
+    }
+    end = start;
+    while (t[end] != '\0' && t[end] != '_')
+        end++;
+    len = end - start;
+    if (len + 1u > cap)
+        return CIV_ERR_RANGE;
+    for (i = 0; i < len; i++)
+        out[i] = t[start + i];
+    out[len] = '\0';
+    return CIV_OK;
 }
 
 civ_error_t mainmenu_dispatch(civ_mainmenu_choice_t choice)
@@ -146,7 +201,11 @@ civ_error_t menu_dispatch_command(int cmd)
     /* Orig Menu_DispatchCommand @ 1048:01cd: match -> indirect handler
      * (returns handler AX); miss -> 0. Lookup LIVE, handler bodies Win16
      * (CALLFs in mainmenu.h) -> STUB (skaner: STUB). Miss (orig 0) ->
-     * NOENT; match -> UNSUPPORTED until the SDL action bridge lands. */
+     * NOENT; match -> UNSUPPORTED until the SDL action bridge lands.
+     * TODO: Orig FUN_1048_01cd @ 1048:01cd handler bodies (CALLFs in
+     * mainmenu.h: 101 save-family @ 1198:00a3, 207/208 toggles @
+     * 1210:1134/1218:077d, 506 nation @ 1070:1f58, census family @ 1018)
+     * -> SDL action bridge TBD; stub CIV_ERR_UNSUPPORTED on match. */
     if (menu_dispatch_find(cmd) < 0)
         return CIV_ERR_NOENT;
     return CIV_ERR_UNSUPPORTED;

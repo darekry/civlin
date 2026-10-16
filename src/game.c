@@ -4604,3 +4604,121 @@ int unit_popup_has_pollution(unsigned occ_flags)
      * 0x08 @ 4828; 0x02 Irrigation @ 482f else 0x04 Mining @ 483c. */
     return (occ_flags & 0x40u) != 0u ? 1 : 0;
 }
+
+/* --- Packet 2026-10-16 (game-only): unit/city/demo/diplo OS-free kernels.
+ * See game.h packet block. LIVE 1:1 on explicit params (no globals, no
+ * Win16, no exit(), C17). Ref: unpacked/civ.exe read-only. */
+
+int unit_wait_blink_phase(int tick)
+{
+    /* Orig Unit_WaitForOrders @ 11f0:0ec2 modal blink-and-pump: alternates
+     * the unit sprite (1110:0448/0dba + 1210:07ae) vs "End of Turn/Press
+     * Return" (10d8:00e0 + 10d0:0854) on a Sys_GetTickScaled % 0x3c
+     * 0x1e-phase clock, pumping FUN_1108_0000 until 11e8:02fb input or
+     * 1328:0012 mode change (modal tail stays STUB in
+     * unit_wait_for_orders). */
+    unsigned phase;
+
+    if (tick < 0)
+        return 0;
+    phase = (unsigned)tick % 0x3cu;
+    return (phase < 0x1eu) ? 0 : 1;
+}
+
+int unit_should_center_view(int civ, int player_civ, unsigned seen_mask)
+{
+    /* Orig Unit_MaybeCenterView @ 11f0:44d4: calls 1110:1461 (reveal/center
+     * helper) only when the unit belongs to the player or is seen by the
+     * player (6305 bit). Caller: Civ_ProcessUnitMoves @ 11f0:030c. */
+    if (civ == player_civ)
+        return 1;
+    if (player_civ < 0 || player_civ > 31)
+        return 0;
+    return (seen_mask & (1u << ((unsigned)player_civ & 31u))) != 0u ? 1 : 0;
+}
+
+int unit_popup_has_railroad(unsigned occ_flags)
+{
+    /* Orig Unit_ShowInfoPopup @ 11f0:468c: 0x10 Railroad @ 1420:481d line
+     * (Map_GetOccupancyFlags @ 1110:199b; "(RailRoad)" verified in
+     * unpacked/civ.exe). Else-branch with 0x08 river stays caller-side. */
+    return (occ_flags & 0x10u) != 0u ? 1 : 0;
+}
+
+int unit_popup_has_river(unsigned occ_flags)
+{
+    /* Orig same: 0x08 river? @ 1420:4828 line (drawn when 0x10 clear). */
+    return (occ_flags & 0x08u) != 0u ? 1 : 0;
+}
+
+int unit_popup_has_irrigation(unsigned occ_flags)
+{
+    /* Orig same: 0x02 Irrigation @ 1420:482f line ("(Irrigation)" verified
+     * in unpacked/civ.exe). Else-branch with 0x04 mining stays
+     * caller-side. */
+    return (occ_flags & 0x02u) != 0u ? 1 : 0;
+}
+
+int unit_popup_has_mine(unsigned occ_flags)
+{
+    /* Orig same: 0x04 Mining @ 1420:483c line ("(Mining)"/" with Mining)"
+     * verified in unpacked/civ.exe; drawn when 0x02 clear). */
+    return (occ_flags & 0x04u) != 0u ? 1 : 0;
+}
+
+int diplomat_steal_blocked(unsigned city_flags)
+{
+    /* Orig Diplomat_CityAction @ 11b8:0000 case 2 steal-tech: Rng_Range @
+     * 11c8:003d 0x48 scan with the 5502 & 0x20 already-stolen gate (Res
+     * 0x82 names via Res_GetStringCopy @ 11f8:0080); dialog tail stays
+     * STUB in diplomat_city_action. */
+    return (city_flags & 0x20u) != 0u ? 1 : 0;
+}
+
+int city_revolt_score(int v00de, int v00e0, int dist)
+{
+    /* Orig City_DoRevolt @ 11b8:0f26: param_2 == -1 auto-picks the best
+     * foreign city by ((00de - 00e0) * 0x20 / dist) max; then seen-bit
+     * flips at x*0x32+y+10 + 0x14 diamond neighbours, near-unit moves via
+     * 1110:171f/1906 + 11c0:12c8, then Unit_DoMove(new_owner, city, 1) +
+     * message 1420:4168/4182 + Dialog_ShowMessage @ 1220:00d2 (tails stay
+     * STUB in city_do_revolt). */
+    long score;
+
+    if (dist <= 0)
+        return -1;
+    score = (long)(v00de - v00e0) * 0x20L;
+    score /= (long)dist;
+    if (score > 0x7fffffffL)
+        return 0x7fffffff;
+    if (score < (long)-0x80000000L)
+        return -0x80000000;
+    return (int)score;
+}
+
+int demo_pollution_index(int smoke, int pop)
+{
+    /* Orig Demo_ShowDemographics @ 1188:123a Pollution row: smoke totals
+     * minus smoke*10/pop (live city-record sums per civ over the 0x80 0x1c
+     * records @ 1420:5500, no LCG fake; GDI bar/text tail stays STUB in
+     * demo_show_demographics via Demo_RankRow @ 1188:220a). */
+    if (pop <= 0)
+        return -1;
+    return smoke - smoke * 10 / pop;
+}
+
+int unit_reveal_seen_or(int cur, int civ)
+{
+    /* Orig Unit_UpdateVisibility @ 11c0:0395 seen-byte OR (fog byte at
+     * x*0x32+y+10 via unit_seen_index |= 1 << civ via unit_seen_bit; same
+     * bytes City_DoRevolt @ 11b8:0f26 flips on revolt; minimap via
+     * Map_SetTile(x+0xf0, 1/2) via unit_reveal_minimap_value). */
+    int bit;
+
+    if (civ < 0 || civ > 31)
+        return -1;
+    bit = unit_seen_bit(civ);
+    if (bit < 0)
+        return -1;
+    return cur | bit;
+}

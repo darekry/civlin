@@ -143,6 +143,21 @@ civ_error_t HoF_Save(const civ_hof_entry_t slots[CIV_HOF_SLOTS]);
  * Needs dialog 0x94 bridge (see dialog.h). */
 civ_error_t HoF_Show(const civ_hof_entry_t slots[CIV_HOF_SLOTS]);
 
+/* Orig HoF_Show @ 1080:0435-0460 rating (IMUL then DIV 0x32, "%" @
+ * 1420:1589; verified in unpacked/civ.exe via "CIVILIZATION RATING: " @
+ * 0xb8573 neighbour) -> hof_rating_for. 1:1 score * (difficulty + 1) / 50.
+ * Returns the rating (>= 0), -1 on score < 0 or difficulty outside
+ * CIV_HOF_DIFFICULTY_MIN..MAX. NOTE: HoF_TryInsert @ 1080:0595 weighs
+ * score * (difficulty + 2) instead (verified @ 1080:05b0-05df) — different
+ * formula, different function (see hof_weighted_score in halloffame.c).
+ * No Win16, no globals, no exit(). */
+long hof_rating_for(int score, int difficulty);
+
+/* Orig HoF_Show @ 1080:0119 year sign-test (year < 0 -> "BC", else "AD";
+ * 1420:1522-ish era strings) -> hof_year_is_bc. 1:1 nonzero (1) when BC,
+ * 0 when AD. No Win16, no globals, no exit(). */
+int hof_year_is_bc(int year);
+
 /* Orig: FUN_1080_0119 @ 1080:0119 text-build half (HoF_Show per-slot line,
  * callees Text_DrawAligned @ 1098:0ed1 + City_FormatPopCount @ 11c8:03ac
  * + Text_DrawResString @ 1098:20f4 + Dialog_GetItemRect @ 1100:03ff).
@@ -150,13 +165,12 @@ civ_error_t HoF_Show(const civ_hof_entry_t slots[CIV_HOF_SLOTS]);
  * CIV_HOF_EMPTY_TEXT ("Empty" @ 1420:1502); filled slots render "N. <name>
  * of the <civ> (<difficulty>) - <year> BC/AD - Score <score> -
  * CIVILIZATION RATING: <rating>%" where <difficulty> is hof_diff_names
- * (names @ 1420:153e..1567, "Chieftan" typo kept), <year> uses the HoF
- * sign-test (year < 0 -> "BC" @ 1420:1522-ish, else "AD"), and <rating> =
- * score * (difficulty + 1) / 50 + "%" (HoF_Show @ 1080:0435-0460: IMUL
- * then DIV 0x32, "%" @ 1420:1589; note TryInsert weighs score *
- * (difficulty + 2), verified @ 1080:05b0-05df). NOENT on NULL e/out,
- * RANGE when cap == 0, index OOR, or the text (incl. NUL) does not fit.
- * No Win16, no globals, no exit(). */
+ * (names @ 1420:153e..1567, "Chieftan" typo kept), <year> uses
+ * hof_year_is_bc above, and <rating> = hof_rating_for above (HoF_Show @
+ * 1080:0435-0460: IMUL then DIV 0x32, "%" @ 1420:1589; note TryInsert
+ * weighs score * (difficulty + 2), verified @ 1080:05b0-05df). NOENT on
+ * NULL e/out, RANGE when cap == 0, index OOR, or the text (incl. NUL)
+ * does not fit. No Win16, no globals, no exit(). */
 civ_error_t hof_format_slot(const civ_hof_entry_t *e, int index, char *out,
                             size_t cap);
 

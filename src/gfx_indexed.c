@@ -2533,3 +2533,11 @@ int gfx_godpal_flag_for_mono(int mono)
      * DAT_1420_17a6 == 0 (color/VGA) ? 1 : 0 (mono/EGA clears). */
     return (mono == 0) ? 1 : 0;
 }
+
+int gfx_godpal_range_end(int first, int count)
+{
+    /* Orig Palette_AnimateRange @ 1090:0376 range end: first + capped
+     * count (ANIMATEPALETTE over [first, end); empty/OOR range -> first).
+     * OS-free 1:1 over gfx_godpal_range_len above. No SDL, no globals. */
+    return first + gfx_godpal_range_len(first, count);
+}

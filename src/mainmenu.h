@@ -96,6 +96,21 @@ typedef enum civ_mainmenu_choice {
  * mainmenu_dialog_y_offset. 1:1 0xb4 gdy color (flag == 0), 10 gdy mono. */
 int mainmenu_dialog_y_offset(int flag_28fc);
 
+/* Orig MainMenu_WndProc @ 11e0:0221 packet-N text split (Util_StrCopy @
+ * 1000:36b2 over CIV_MAINMENU_TEXT @ 1420:435b, verified in unpacked/civ.exe
+ * at file offset 0xbb35c: "_Start a New Game_..._Quit") feeding
+ * Dialog_MenuZ_Modal @ 1220:0156 -> mainmenu_item_count / mainmenu_item_at.
+ * OS-free 1:1 '_' split (leading '_' yields item 0 after it; no empty
+ * items): count = number of '_' separators after the leading one (6 for
+ * the shipped text). at() copies the index-th item (0-based MenuZ index,
+ * same numbering as the raw choice in mainmenu_run) NUL-terminated.
+ * NOENT on NULL out, RANGE on index OOR / cap == 0 / text does not fit.
+ * No Win16, no globals, no exit(), read-only. */
+int mainmenu_item_count(void);
+/* Orig same split @ 1420:435b (Util_StrCopy @ 1000:36b2, modal @ 1220:0156)
+ * -> mainmenu_item_at (field copy, see block above). */
+civ_error_t mainmenu_item_at(int index, char *out, size_t cap);
+
 /* Orig Menu_ToggleView1210/1218 +0x2c shape -> menu_toggle_show_cmd.
  * 1:1: hidden_flag == 0 -> 5 (SW_SHOW), inaczej 0 (SW_HIDE). */
 int menu_toggle_show_cmd(int hidden_flag);

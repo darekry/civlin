@@ -145,7 +145,9 @@ civ_error_t boot_init_unit_font_tables(void)
      * NewGame_Wizard @ 10e8:0000; loads FIRSTMOVE/PILLAGE/font-map
      * tables. Segment dump has no decoded table bytes yet, so no pure
      * tables/memcpy port is possible -> stub CIV_ERR_UNSUPPORTED.
-     * Read-only; no globals; no exit(). */
+     * Read-only; no globals; no exit().
+     * TODO: Orig FUN_10e8_2d46 @ 10e8:2d46 (FIRSTMOVE/PILLAGE/font-map
+     * table bytes TBD from the seg-10e8 dump; pure memcpy when decoded). */
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -980,7 +982,11 @@ civ_error_t main_run_startup_sequence(void)
      * NewGame_Wizard @ 10e8:0000; else DestroyTracked only. Dispatcher for
      * MainMenu_WndProc @ 11e0:0221 choices over CIV_MAINMENU_TEXT @
      * 1420:435b (see mainmenu.h). SDL modal/event bridge TBD -> stub
-     * CIV_ERR_UNSUPPORTED. No globals, no exit(), read-only. */
+     * CIV_ERR_UNSUPPORTED. No globals, no exit(), read-only.
+     * TODO: Orig FUN_11e0_0000 @ 11e0:0000 (SDL modal/event bridge for
+     * the Dlg/Anim/Sound order above). Live twins: main_startup_anim_loops
+     * / intro_sound / stop_sound / should_run_wizard / should_break (LIVE
+     * counters/gates below) + newgame_wizard_run (see newgame.h). */
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -1021,7 +1027,12 @@ const char *boot_video_caps_describe(int index)
 {
     /* Checklist meaning by entry index (NULL when out of range or not
      * yet dumped, same contract as tribe_get_name_list, see newgame.h).
-     * No entries decoded yet -> always NULL. */
+     * No entries decoded yet -> always NULL.
+     * TODO: Orig Video_CheckDriverCaps @ 1008:059a checklist @ 1420:0af4
+     * (GETDEVICECAPS entry bytes TBD from dump; WONTFIX per STATUS.md —
+     * no byte table is ported until decoded). Live twin: video_check_driver_caps
+     * (SDL renderer-caps mapping, see video.h); count side is
+     * boot_video_caps_count above (LIVE, 0 until dump). */
     (void)index;
     return NULL;
 }

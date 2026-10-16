@@ -175,6 +175,23 @@ civ_error_t HoF_Show(const civ_hof_entry_t slots[CIV_HOF_SLOTS])
     return CIV_ERR_UNSUPPORTED;
 }
 
+/* Orig HoF_Show @ 1080:0435-0460 rating + @ 1080:0119 year sign-test
+ * (OS-free kernels; see halloffame.h). No globals, no exit(). */
+long hof_rating_for(int score, int difficulty)
+{
+    if (score < 0)
+        return -1L;
+    if (difficulty < CIV_HOF_DIFFICULTY_MIN ||
+        difficulty > CIV_HOF_DIFFICULTY_MAX)
+        return -1L;
+    return (long)score * (long)(difficulty + 1) / 50L;
+}
+
+int hof_year_is_bc(int year)
+{
+    return (year < 0) ? 1 : 0;
+}
+
 /* Orig HoF_Show @ 1080:0119 text-build half (OS-free, no dialog/GDI). */
 civ_error_t hof_format_slot(const civ_hof_entry_t *e, int index, char *out,
                             size_t cap)
@@ -203,12 +220,14 @@ civ_error_t hof_format_slot(const civ_hof_entry_t *e, int index, char *out,
     diff = hof_diff_names(e->difficulty);
     if (!diff)
         return CIV_ERR_RANGE;
-    era = e->year < 0 ? "BC" : "AD";
-    abs_year = e->year < 0 ? -(long)e->year : (long)e->year;
-    /* HoF_Show rating: score * (difficulty + 1) / 50 + "%" (DIV 0x32 @
-     * 1080:0450; "%" @ 1420:1589). TryInsert ordering weighs score *
-     * (difficulty + 2) instead (verified @ 1080:05b0-05df). */
-    rating = (long)e->score * (long)(e->difficulty + 1) / 50L;
+    era = hof_year_is_bc(e->year) ? "BC" : "AD";
+    abs_year = hof_year_is_bc(e->year) ? -(long)e->year : (long)e->year;
+    /* HoF_Show rating: hof_rating_for above (DIV 0x32 @ 1080:0450; "%" @
+     * 1420:1589). TryInsert ordering weighs score * (difficulty + 2)
+     * instead (verified @ 1080:05b0-05df). */
+    rating = hof_rating_for(e->score, e->difficulty);
+    if (rating < 0)
+        return CIV_ERR_RANGE;
     n = snprintf(out, cap, "%d. %s of the %s (%s) - %ld %s - Score %d - %s%ld%%",
                  index + 1, e->name, e->civ, diff, abs_year, era, e->score,
                  CIV_HOF_RATING_LABEL, rating);

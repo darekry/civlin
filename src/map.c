@@ -340,8 +340,8 @@ civ_error_t map_reveal_center(int civ, int x, int y)
 {
     /* Orig FUN_1110_1461 @ 1110:1461 -> Map_RevealCenter
      * (reveal/center helper, called from unit_maybe_center_view @
-     * 11f0:44d4 when the 6305 seen bit says visible). Needs the SDL
-     * view/scroll state; stub CIV_ERR_UNSUPPORTED. */
+     * 11f0:44d4 when the 6305 seen bit says visible). TODO: SDL
+     * view/scroll state bridge TBD; stub CIV_ERR_UNSUPPORTED. */
     (void)civ;
     (void)x;
     (void)y;
@@ -352,8 +352,8 @@ civ_error_t map_spot_city(int civ, int x, int y)
 {
     /* Orig pair FUN_1110_180E @ 1110:180e + FUN_1110_16EE @ 1110:16ee
      * -> Map_SpotCity (city-spotting pair feeding 11c0:0000, via
-     * unit_update_visibility @ 11c0:0395). Needs city records +
-     * seen-bits + minimap layer; stub CIV_ERR_UNSUPPORTED. */
+     * unit_update_visibility @ 11c0:0395). TODO: city records +
+     * seen-bits + minimap layer bridge TBD; stub CIV_ERR_UNSUPPORTED. */
     (void)civ;
     (void)x;
     (void)y;
@@ -522,7 +522,7 @@ civ_error_t map_refresh_status(void)
 {
     /* Orig: FUN_1218_0801 @ 1218:0801 -> WdwStatus_Refresh. Dirty flag
      * +0x2c + Game_UpdateStatusPanel @ 1088:13d5 + Unit_ShowInfoPopup @
-     * 11f0:468c + blits 10d0:0854/09a2. Win16 USER/GDI -> SDL3 TBD; stub
+     * 11f0:468c + blits 10d0:0854/09a2. TODO: Win16 USER/GDI -> SDL3 TBD; stub
      * CIV_ERR_UNSUPPORTED. No globals, no exit(), read-only. */
     return CIV_ERR_UNSUPPORTED;
 }
@@ -530,8 +530,8 @@ civ_error_t map_refresh_status(void)
 civ_error_t map_center_on_tile(int civ, int x, int y)
 {
     /* Orig: FUN_1110_03ae @ 1110:03ae -> Map_CenterOnTile. Centers x/y
-     * (x - w/2, y - h/2) then Map_RefreshAllViews @ 1110:03e9. Needs the
-     * SDL view/scroll state; stub CIV_ERR_UNSUPPORTED. */
+     * (x - w/2, y - h/2) then Map_RefreshAllViews @ 1110:03e9. TODO: SDL
+     * view/scroll state bridge TBD; stub CIV_ERR_UNSUPPORTED. */
     (void)civ;
     (void)x;
     (void)y;
@@ -542,7 +542,7 @@ civ_error_t map_refresh_all_views(int civ)
 {
     /* Orig: FUN_1110_03e9 @ 1110:03e9 -> Map_RefreshAllViews. Civ bit ->
      * 1408:00cc + Game_UpdateStatusPanel @ 1088:13d5 + GETFREESPACE guard
-     * + 1208:17da + 1210:09b4. Win16 windowing -> SDL3 TBD; stub
+     * + 1208:17da + 1210:09b4. TODO: Win16 windowing -> SDL3 TBD; stub
      * CIV_ERR_UNSUPPORTED. */
     (void)civ;
     return CIV_ERR_UNSUPPORTED;
@@ -551,7 +551,7 @@ civ_error_t map_refresh_all_views(int civ)
 civ_error_t mainport_apply_palette(int first, int count)
 {
     /* Orig: FUN_1200_00a8 @ 1200:00a8 -> MainPort_ApplyPalette.
-     * GLOBALLOCK -> Palette_AnimateRange @ 1090:0376 (see video.h). Win16
+     * GLOBALLOCK -> Palette_AnimateRange @ 1090:0376 (see video.h). TODO: Win16
      * palette -> SDL3 TBD; stub CIV_ERR_UNSUPPORTED. */
     (void)first;
     (void)count;

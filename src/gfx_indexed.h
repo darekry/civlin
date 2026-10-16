@@ -922,4 +922,10 @@ int gfx_godpal_range_len(int first, int count);
  * (Zero always clears; Set follows mono). No globals. */
 int gfx_godpal_flag_for_mono(int mono);
 
+/* Orig Palette_AnimateRange @ 1090:0376 range end (first + capped count;
+ * ANIMATEPALETTE over [first, end)) -> gfx_godpal_range_end. 1:1 first +
+ * gfx_godpal_range_len(first, count) above (0 when the range is empty/
+ * OOR). No Win16, no SDL, no globals. */
+int gfx_godpal_range_end(int first, int count);
+
 #endif /* CIVLIN_GFX_INDEXED_H */

@@ -295,8 +295,8 @@ civ_error_t gfx_port_set_active(gfx_port_t *port)
      * gfx_port_clear_active). SDL3 equivalent is an SDL render-target
      * select onto the port INDEX8 TARGET backing store. NULL port ->
      * NOENT; unwired port (ren NULL from the pre-bridge Create, or tex
-     * NULL) -> UNSUPPORTED (no fake target); SDL target-set fail ->
-     * IO. */
+     * NULL) -> TODO: Orig ~0x20-word field map still TBD, keep UNSUPPORTED
+     * (no fake target); SDL target-set fail -> IO. */
     if (!port)
         return CIV_ERR_NOENT;
     if (!port->ren || !port->tex)

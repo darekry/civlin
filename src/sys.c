@@ -1199,7 +1199,10 @@ civ_error_t sys_fatal_abort(const char *msg)
      * "CivLin" default); the UNSUPPORTED tail stays because a lib never
      * exits — the owner (main.c) exits. Callers (float_report_error @
      * 1000:1056) ignore the code, like orig ignoring the MESSAGEBOX rc.
-     * NULL msg -> NOENT (orig faulted). */
+     * NULL msg -> NOENT (orig faulted).
+     * TODO: Orig FUN_1000_4124 @ 1000:4124 (GETDESKTOPWINDOW + MESSAGEBOX
+     * style 0x1010 Win16 tail). Live twins: sys_fatal_basename caption
+     * kernel above (LIVE) + win16_message_box dialog (PARTIAL). */
     if (!msg)
         return CIV_ERR_NOENT;
     (void)win16_message_box(msg, NULL);

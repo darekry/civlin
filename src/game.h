@@ -3308,4 +3308,70 @@ int city_spot_valid(int valid);
  * step tails stay in unit_show_info_popup, STUB). Returns 1/0. */
 int unit_popup_has_pollution(unsigned occ_flags);
 
+/* --- Packet 2026-10-16 (game-only): unit/city/demo/diplo OS-free kernels ---
+ * Parents stay STUB (Win16/GDI/dialog tails with TODO Orig in game.c);
+ * predicates below are LIVE 1:1 on explicit params (no globals, no Win16,
+ * no exit(), read-only, C17). Ref: unpacked/civ.exe read-only (strings
+ * "(RailRoad)"/"(Irrigation)"/"(Mining)"/"(Pollution)" + "00,000 citizens."
+ * verified via strings; never edited, civ1win/ untouched). */
+
+/* Orig Unit_WaitForOrders @ 11c0:0ec2 blink clock -> unit_wait_blink_phase.
+ * 1:1: Sys_GetTickScaled % 0x3c phase gate (0x1e split): 0 = sprite phase
+ * (Unit_DrawSingle @ 1110:0dba path), 1 = "End of Turn/Press Return" card
+ * phase (Text_DrawDirect @ 10d8:00e0 + GfxPort_PresentRect @ 10d0:0854).
+ * Takes the tick explicitly; negative ticks never occur in orig (guarded
+ * to phase 0 here). No globals. */
+int unit_wait_blink_phase(int tick);
+
+/* Orig Unit_MaybeCenterView @ 11f0:44d4 gate -> unit_should_center_view.
+ * 1:1: Map_RevealCenter @ 1110:1461 runs only when the unit belongs to
+ * the player (civ == player_civ) or is seen by the player (seen-by mask
+ * @ 6305 bit 1<<player set). seen_mask is the +8 seen-by byte; player
+ * outside 0..31 falls back to the civ-equality test only. Returns 1
+ * center / 0 skip. No globals. */
+int unit_should_center_view(int civ, int player_civ, unsigned seen_mask);
+
+/* Orig Unit_ShowInfoPopup @ 11f0:468c occupancy bits (Map_GetOccupancyFlags
+ * @ 1110:199b) -> unit_popup_has_railroad/river/irrigation/mine. 1:1 bit
+ * tests: 0x10 Railroad @ 1420:481d, 0x08 river? @ 1420:4828, 0x02
+ * Irrigation @ 1420:482f, 0x04 Mining @ 1420:483c ("(RailRoad)"/
+ * "(Irrigation)"/"(Mining)" strings verified in unpacked/civ.exe). The
+ * else-pairing (railroad else river, irrigation else mining) + DrawDirect
+ * + h-step tails stay caller-side in unit_show_info_popup (STUB).
+ * Returns 1 present / 0 absent. No globals. */
+int unit_popup_has_railroad(unsigned occ_flags);
+int unit_popup_has_river(unsigned occ_flags);
+int unit_popup_has_irrigation(unsigned occ_flags);
+int unit_popup_has_mine(unsigned occ_flags);
+
+/* Orig Diplomat_CityAction @ 11b8:0000 case 2 steal gate ->
+ * diplomat_steal_blocked. 1:1: city valid word @ 1420:5502 & 0x20 means
+ * tech already stolen from this city -> sabotage/steal path blocked.
+ * Returns 1 blocked / 0 allowed. No globals. */
+int diplomat_steal_blocked(unsigned city_flags);
+
+/* Orig City_DoRevolt @ 11b8:0f26 auto-pick scan -> city_revolt_score. 1:1:
+ * score = (v00de - v00e0) * 0x20 / dist (orig (00de-00e0)*0x20/dist max;
+ * -1 (auto) picks the best foreign city by this score). Caller runs the
+ * argmax + seen-bit flips (x*0x32+y+10 + 0x14 diamond) + Unit_DoMove tail
+ * (STUB in city_do_revolt). Returns the score, -1 on dist <= 0 (orig used
+ * positive dist; guard is a Linux-side addition). No globals. */
+int city_revolt_score(int v00de, int v00e0, int dist);
+
+/* Orig Demo_ShowDemographics @ 1188:123a Pollution row ->
+ * demo_pollution_index. 1:1: smoke - smoke*10/pop (smoke is the per-civ
+ * smoke total, pop the live City_CalcPopTotal @ 11c8:0334 sum; AI rows are
+ * live sums, not LCG fakes). Returns the index, -1 on pop <= 0 (orig
+ * divided live totals >= 1). No globals. */
+int demo_pollution_index(int smoke, int pop);
+
+/* Orig Unit_UpdateVisibility @ 11c0:0395 seen-bit OR (+ City_DoRevolt @
+ * 11b8:0f26 flips the same x*0x32+y+10 bytes) -> unit_reveal_seen_or.
+ * 1:1: cur | (1 << civ) (complements unit_seen_bit / unit_seen_index;
+ * minimap value via unit_reveal_minimap_value, far gate via
+ * unit_sight_far_allowed). Returns the new seen value, -1 on civ OOR
+ * 0..31 or cur outside 0..0xffffffff range guard (orig used byte game
+ * values). No globals. */
+int unit_reveal_seen_or(int cur, int civ);
+
 #endif /* CIVLIN_GAME_H */

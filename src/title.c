@@ -125,19 +125,31 @@ civ_error_t title_load_opening_frame(unsigned frame_index)
     return CIV_ERR_UNSUPPORTED;
 }
 
+int title_event_is_skip(uint32_t ev_type)
+{
+    /* Orig Title_PlayAnimLoop @ 1030:0000 per-frame skip check (key/mouse/
+     * quit; Pic_PlayShared @ 1030:0000 shape, see title.h). OS-free 1:1:
+     * QUIT / KEY_DOWN / MOUSE_BUTTON_DOWN -> skip. No SDL calls. */
+    if (ev_type == SDL_EVENT_QUIT)
+        return 1;
+    if (ev_type == SDL_EVENT_KEY_DOWN)
+        return 1;
+    if (ev_type == SDL_EVENT_MOUSE_BUTTON_DOWN)
+        return 1;
+    return 0;
+}
+
 int title_poll_skip(void)
 {
     /* Skippable-intro poll (orig Title_PlayAnimLoop checks key/mouse each
      * frame). 1 == user asked to skip (keydown/mousedown/quit), 0 == keep
-     * playing. Consumes the polled events (intro owns the loop). */
+     * playing. Consumes the polled events (intro owns the loop). Drains
+     * via title_event_is_skip above (kernel stays testable without SDL
+     * pump). */
     SDL_Event ev;
 
     while (SDL_PollEvent(&ev)) {
-        if (ev.type == SDL_EVENT_QUIT)
-            return 1;
-        if (ev.type == SDL_EVENT_KEY_DOWN)
-            return 1;
-        if (ev.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
+        if (title_event_is_skip(ev.type))
             return 1;
     }
     return 0;
