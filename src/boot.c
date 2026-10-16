@@ -1162,3 +1162,36 @@ int main_drain_should_continue(int pumped)
      * 1098:02d1 } while (!= 0) (potem 12b0:004c select). */
     return (pumped != 0) ? 1 : 0;
 }
+
+/* --- Chain 2026-10-16 (19): pump-quit/drain discriminators (goals 1+5) ---
+ * See boot.h block. OS-free 1:1 (no Win16, no globals, no exit()). */
+
+int main_pump_quit_should_continue(int phase_first, int flag_1d4c)
+{
+    /* Orig Main_PumpQuitLoop @ 1008:0f77: DAT_1420_1d4c = 0; while (== 0)
+     * Entry; while (!= 0) Entry. */
+    if (phase_first != 0)
+        return (flag_1d4c == 0) ? 1 : 0;
+    return (flag_1d4c != 0) ? 1 : 0;
+}
+
+int main_pump_msg_is_char(int msg)
+{
+    /* Orig Main_PumpMessage @ 1098:02d1: *(param+2) == 0x102 (WM_CHAR) ->
+     * Main_EnqueueResString @ 1008:0a8d direct. */
+    return (msg == 0x102) ? 1 : 0;
+}
+
+int main_pump_msg_is_keydown(int msg)
+{
+    /* Orig same: *(param+2) == 0x100 (WM_KEYDOWN) -> Main_KeyToResChar @
+     * 1208:0000 map (main_key_to_res_char LIVE) then Enqueue gdy != 0. */
+    return (msg == 0x100) ? 1 : 0;
+}
+
+int main_drain_tail_offset(int flag_004c)
+{
+    /* Orig Main_DrainMessages @ 11e8:02fb tail: DAT_12b0_004c == 0 ->
+     * ptr 1420:11f2+0xe, else +0xf. */
+    return (flag_004c == 0) ? 0x0e : 0x0f;
+}

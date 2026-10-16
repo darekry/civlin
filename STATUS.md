@@ -147,6 +147,10 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `main_quit_flag_requests_shutdown` | LIVE | 12d8:24ee |  |
 | `main_dispatch_quit_requests_shutdown` | LIVE | 1048:01cd |  |
 | `main_drain_should_continue` | LIVE | 1098:02d1, 11e8:02fb, 12b0:004c |  |
+| `main_pump_quit_should_continue` | LIVE | 1008:0f77 |  |
+| `main_pump_msg_is_char` | LIVE | 1008:0a8d, 1098:02d1 |  |
+| `main_pump_msg_is_keydown` | LIVE | 1208:0000 |  |
+| `main_drain_tail_offset` | LIVE | 11e8:02fb, 1420:11f2 |  |
 
 ### `src/civ_common.c`
 
@@ -505,6 +509,9 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `census_building_add` | LIVE |  |  |
 | `census_status_prod_kind` | LIVE | 1018:208f, 10d8:002d |  |
 | `census_status_shields_total` | LIVE |  |  |
+| `pic_pump_select_to_mode` | LIVE | 1030:0000, 1030:9aed, 1048:01cd |  |
+| `pic_pump_msg_is_command` | LIVE |  |  |
+| `pic_pump_msg_is_paint` | LIVE | 1030:900d |  |
 
 ### `src/gfx_indexed.c`
 
@@ -598,6 +605,14 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 |---|---|---|---|
 | `mainmenu_run` | STUB | 1000:36b2, 11e0:0221, 1220:0156, 1420:435b |  |
 | `mainmenu_dispatch` | PARTIAL | 1108:0243, 1130:000e | has TODO |
+| `menu_dispatch_count` | LIVE | 1048:01e4 |  |
+| `menu_dispatch_find` | LIVE | 1048:01cd |  |
+| `menu_dispatch_id_at` | LIVE |  |  |
+| `menu_dispatch_target_at` | LIVE |  |  |
+| `menu_command_group` | LIVE |  |  |
+| `menu_dispatch_command` | STUB | 1048:01cd |  |
+| `menu_toggle_show_cmd` | LIVE | 1210:1134, 1218:077d |  |
+| `menu_toggle_view_window` | LIVE | 1048:02af, 1208:0af1, 1210:025b, 1218:0386, 12b0:0004, 12b0:001c, 12b0:0034 |  |
 
 ### `src/map.c`
 
@@ -702,6 +717,10 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `newgame_customize_world` | STUB | 1058:06ab, 1058:081a, 1058:0921, 1058:09f6, 10e8:0000, 1220:0156, 1220:16fd | has TODO |
 | `newgame_custom_world_modal` | STUB | 1058:06ab, 1220:0156, 1220:16fd | has TODO |
 | `newgame_finalize` | PARTIAL | 1028:0000, 10e8:0000, 1150:00c9, 12d8:3b9a, 12d8:42f6, 12d8:42f8, 12d8:42fa, 12d8:4300 | has TODO |
+| `menu_prompt_nation_needed` | LIVE | 1070:1f58 |  |
+| `menu_prompt_nation_count` | LIVE | 11f8:0080, 12d8:03da |  |
+| `menu_prompt_nation_avail_mask` | LIVE |  |  |
+| `menu_prompt_nation_choice_valid` | LIVE | 1220:00d2 |  |
 | `newgame_wizard_run` | PARTIAL | 10e8:0000, 11e0:0000 |  |
 
 ### `src/rsc_loader.c`
@@ -955,6 +974,16 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `file_table_fd_off` | LIVE |  |  |
 | `file_entry_is_open` | LIVE | 1000:1f7c, 1000:1fa6, 1000:2098 |  |
 | `file_table_slot_rel` | LIVE | 1000:1fc6 |  |
+| `sys_path_guard_should_set` | LIVE | 1008:0bbf, 10b8:0aa8, 10b8:0c1c, 1150:00c9, 1228:0002 |  |
+| `sys_drive_ready_ok` | LIVE | 1000:1184 |  |
+| `sys_path_guard_abort` | LIVE | 1000:116a, 1008:0bbf, 1150:00c9 |  |
+| `dos_chdir_raw` | STUB | 1000:116a, 1000:151a, 1008:0bff, 1228:0004 | has TODO |
+| `dos_select_drive` | STUB | 1000:1184, 1000:1252, 1000:1266 | has TODO |
+| `file_temp_env_name` | LIVE | 1000:1648, 1420:4ed6, 1420:4eda |  |
+| `file_temp_suffix` | LIVE | 1000:363e, 1420:4eda |  |
+| `file_build_temp_path` | LIVE | 1000:1210, 1000:157a, 1000:1648, 1000:16a5, 1000:363e |  |
+| `sys_pump_mode_select` | LIVE | 1108:0000 |  |
+| `sys_pump_scale_coord` | LIVE | 1038:0c1d, 1108:0000 |  |
 
 ### `src/title.c`
 

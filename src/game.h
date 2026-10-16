@@ -2319,4 +2319,46 @@ int census_status_prod_kind(int prod);
  * 0x1a44 unit table, caller passes cost explicitly). */
 int census_status_shields_total(int shields, int cost);
 
+/* --- Chain 2026-10-16 (19): Pic_PumpMenuCommand mapping (goal 2) ---
+ * Orig Pic_PumpMenuCommand @ 1030:9aed (civ.exe, x86:LE:16:Protected
+ * Mode), decompiled this pass: DAT_12d8_0030 = 0; PEEKMESSAGE (0,0,0) ->
+ * gdy HIT (msg_win == 0 || == *param_1 || ISCHILD || == 12b0:0004 main)
+ * to TRANSLATEMESSAGE + DISPATCHMESSAGE; gdy DAT_1420_54e8 == 0xf
+ * (WM_PAINT) && DAT_1420_54e6 == *param_1 to Pic_PresentOnPaint @
+ * 1030:900d (renamed Pic_PresentOnPaint: SETRECT 0x140,0x200 +
+ * GfxPort_PresentRect 0x70 + FUN_1030_94d2 tail); switch DAT_12d8_0030:
+ * 0 -> *param_2 = 0; 1 -> 0x96; 2 -> 0x97; 3 -> 0x98 (bez default: inne
+ * wartosci zostawiaja *param_2 nietkniete); gdy DAT_1420_54e8 == 0x111
+ * (WM_COMMAND) to Menu_DispatchCommand(DAT_1420_54ea,0) @ 1048:01cd.
+ * Co to za mapowanie (menu kontekstowe miasta? skroty? mysz?):
+ *   DAT_12d8_0030 to selekt trybu miasta z dialogu miasta (buttony miasta
+ *   w Pic_PlayShared @ 1030:0000 city view: 1/2/3 = trzy przyciski trybu
+ *   produkcji/podgladu; 0 = brak wyboru). 0x96/0x97/0x98 to tryby PIC
+ *   (pic_mode_is_modal/sim w game.c: modal vs sim; 0x96/97/98 = tryby
+ *   podgladu miasta, nie skroty klawiszowe ani menu glowne). WM_COMMAND
+ *   0x111 to komendy paska menu w grze (Menu_DispatchCommand 68 wpisow,
+ *   zob. mainmenu.h) — przechodza obok, nie przez ten switch. Mysz:
+ *   ISCHILD + main-window gate decyduja czy DISPATCH wchodzi do dialogu
+ *   miasta; WM_PAINT 0xf to repaint miasta (PresentOnPaint).
+ * Zwiazek z Pic_PlayShared: sole caller (Pic_PumpMenuCommand wywolywany
+ *   z petli miasta w Pic_PlayShared; modal miasta kreci sie wokol
+ *   Sys_DrainInput @ 11f0:4ea0 (renamed Sys_DrainInput) + Sys_WaitForInput
+ *   @ 1038:0c1d, jak inne modale census/HoF/wizard/Replay).
+ * Port mapowania LIVE 1:1 na jawnych parametrach (no Win16, no globals);
+ * PEEKMESSAGE/TRANSLATE/DISPATCH ogon STUB (pic_play_shared UNSUPPORTED).
+ * No exit(). */
+
+/* Orig Pic_PumpMenuCommand @ 1030:9aed switch -> pic_pump_select_to_mode.
+ * 1:1: 0 -> 0, 1 -> 0x96, 2 -> 0x97, 3 -> 0x98, inaczej -1 (orig
+ * zostawia *param_2 nietkniete = brak mapowania). */
+int pic_pump_select_to_mode(int sel);
+
+/* Orig same WM_COMMAND branch (DAT_1420_54e8 == 0x111) ->
+ * pic_pump_msg_is_command. 1:1 msg == 0x111. */
+int pic_pump_msg_is_command(int msg);
+
+/* Orig same WM_PAINT branch (DAT_1420_54e8 == 0xf) ->
+ * pic_pump_msg_is_paint. 1:1 msg == 0x0f. */
+int pic_pump_msg_is_paint(int msg);
+
 #endif /* CIVLIN_GAME_H */

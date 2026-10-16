@@ -928,4 +928,70 @@ const char *file_temp_suffix(void);
 int file_build_temp_path(char *dst, size_t cap, const char *dir,
                          const char *prefix, unsigned num);
 
+/* --- Chain 2026-10-16 (19): message-pump hierarchy (goals 1+5) ---
+ * Orig (civ.exe, x86:LE:16:Protected Mode), decompiled this pass:
+ *   Sys_PumpMessages @ 1108:0000 (modalny pump: Gfx_GetCurrentDC +
+ *     Main_DispatchQuitEntry @ 1098:061a + DAT_1328_0010/000e = 0, potem
+ *     tryb DAT_1328_0012 z flag 1420:1d4c/1d50 (1d4c != 0 -> 1; else
+ *     1d50 == 0 -> 0, inaczej 2), potem routing kliku z 1420:1d44/1d46/
+ *     1d48: == 12b0:0004 (main) -> coords wprost; == 12b0:0034 (status)
+ *     -> tryb 0; == 12b0:001c (smmap) -> SmMap_CenterOnClick @ 1210:056e
+ *     (0x1c + DAT_1420_12b0 + coords) + Sys_DrainInput @ 11f0:4ea0
+ *     (renamed Sys_DrainInput) + tryb 0; == *DAT_1420_9948 (popup) ->
+ *     coords skalowane (v*10>>4, jak sys_wait_scale_coord); na koncu
+ *     Gfx_StoreDC. 5 callerow: FUN_1018_1221 / FUN_11c0_0ec2
+ *     (unit_wait_for_orders blink-and-pump) / FUN_11d8_0000/0bd2 /
+ *     Replay_PlayLog @ 1180:02d3. Callee: Sys_DrainInput (drain) w galezi
+ *     smmap + Main_DispatchQuitEntry head).
+ *   Main_PumpQuitLoop @ 1008:0f77 (kreci Entry wokol flagi 1420:1d4c:
+ *     DAT_1420_1d4c = 0; while (== 0) Main_DispatchQuitEntry; while
+ *     (!= 0) Main_DispatchQuitEntry; zero callerow wprost — petla
+ *     quit/init, nie gra; wywolywana z WinMain init/quit sciezek).
+ *   Main_PumpMessage @ 1098:02d1 (dyspozytor: PEEKMESSAGE @ 1608:0134
+ *     0x108/0x100 -> TRANSLATEACCELERATOR (12b0:0004 + DAT_1420_54f8) ->
+ *     TRANSLATEMESSAGE @ 1608:013c; WM_CHAR 0x102 -> Main_EnqueueResString
+ *     @ 1008:0a8d(wParam) direct; WM_KEYDOWN 0x100 -> Main_KeyToResChar @
+ *     1208:0000 (main_key_to_res_char LIVE) map then Enqueue gdy != 0;
+ *     else DISPATCHMESSAGE @ 1608:0140; quit via WinMain_Shutdown @
+ *     1008:0329 gdy g_nQuitFlag == 1. Sole caller Main_DrainMessages @
+ *     11e8:02fb. Callee TRANSLATEACCELERATOR skrotow przed Dispatch).
+ *   Main_DrainMessages @ 11e8:02fb (drain: do { Main_PumpMessage } while
+ *     (!= 0); potem select 12b0:004c == 0 -> ptr 1420:11f2+0xe, inaczej
+ *     +0xf. Sole caller? drain uzywany z Sys_DrainInput @ 11f0:4ea0
+ *     sciezek menu/button/turn (28 callerow Sys_DrainInput) + 11c0:0395
+ *     visibility tail).
+ *   Main_DispatchQuitEntry @ 1098:061a (czysta far-trampolina do
+ *     Main_DispatchQuit @ 1098:062f: MOV AX,DS + PUSH CS near CALL 062f;
+ *     zero warunkow. Quit ma wylacznie near-xref z Entry; Entry wola far:
+ *     Main_PumpQuitLoop, Sys_PumpMessages, Pic_PlayShared @ 1030:0000.
+ *     Nikt nie wola Quit wprost. Nie wymaga symbolu: logika kryta przez
+ *     main_dispatch_quit_requests_shutdown w boot.h; tu tylko doc).
+ * Kto kiedy ktora (modal vs modeless? quit-loop vs gra?):
+ *   modal (Sys_PumpMessages): unit_wait_for_orders blink-and-pump +
+ *     Replay/census modale — DispatchQuitEntry + coords + drain, tryb
+ *     1328:0012 mowi czy klik wchodzi do gry (1 main/popup, 0 status/
+ *     smmap-po-recenter, 2 drugi modal). Modeless (Main_PumpMessage/
+ *     Drain): glowna petla WinMain + menu skroty (ACCEL przed Dispatch)
+ *     + res-string queue. Quit-loop (Main_PumpQuitLoop): init/quit faza
+ *     wokol flagi 1d4c (przed/po starcie), nie tick gry (game_tick ->
+ *     game_turn_tick @ 1088:0000). Sys_DrainInput to czyszczenie
+ *     (1420:1d44..1d50 + 12b0:004c + PEEKMESSAGE drain 0x108/0x100 +
+ *     0x209/0x200), nie pompa (polate STUB sys_drain_input w game.h).
+ * Port logiki wyboru LIVE 1:1 na jawnych parametrach (no Win16, no
+ * globals); PEEKMESSAGE/TRANSLATE/DISPATCH ogony STUB (main_pump_message
+ * UNSUPPORTED). No exit(). */
+
+/* Orig Sys_PumpMessages @ 1108:0000 head -> sys_pump_mode_select.
+ * 1:1: flag_1d4c != 0 -> 1; else flag_1d50 == 0 -> 0, inaczej 2
+ * (DAT_1328_0012 wartosci: 0 status/smmap-po-recenter, 1 main/popup,
+ * 2 drugi modal). No globals. */
+int sys_pump_mode_select(int flag_1d4c, int flag_1d50);
+
+/* Orig Sys_PumpMessages @ 1108:0000 popup branch ((v*10)>>4, LOWORD/
+ * HIWORD DAT_1420_54ec -> DAT_1328_0010/000e) -> sys_pump_scale_coord.
+ * 1:1 (v*10)>>4 (ta sama co sys_wait_scale_coord @ 1038:0c1d; osobny
+ * symbol dla sciezki pompy). Guard v < 0 -> -1 (Linux-side, orig
+ * unsigned wrap na pixel coord). No globals. */
+int sys_pump_scale_coord(int v);
+
 #endif /* CIVLIN_SYS_H */

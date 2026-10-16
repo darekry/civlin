@@ -917,4 +917,37 @@ int main_dispatch_quit_requests_shutdown(int msg, int has_cmd,
  * az 0) -> main_drain_should_continue. 1:1: pumped != 0. No globals. */
 int main_drain_should_continue(int pumped);
 
+/* --- Chain 2026-10-16 (19): pump-quit/drain discriminators (goals 1+5) ---
+ * Orig (civ.exe, x86:LE:16:Protected Mode), decompiled this pass (zob.
+ * sys.h hierarchy block):
+ *   Main_PumpQuitLoop @ 1008:0f77 fazy: DAT_1420_1d4c = 0; while (== 0)
+ *     Main_DispatchQuitEntry @ 1098:061a; while (!= 0) Entry. Faza 0 =
+ *     init/quit-przed (flaga czyszczona), faza 1 = po (flaga ustawiona
+ *     przez Sys_DrainInput @ 11f0:4ea0 / Sys_PumpMessages @ 1108:0000
+ *     sciezki); tick gry (game_tick -> game_turn_tick @ 1088:0000) nie
+ *     bierze udzialu.
+ *   Main_PumpMessage @ 1098:02d1 kody: WM_CHAR 0x102 -> Enqueue direct;
+ *     WM_KEYDOWN 0x100 -> KeyToResChar map; ACCEL przed Dispatch.
+ *   Main_DrainMessages @ 11e8:02fb ogon: 12b0:004c == 0 -> 1420:11f2+0xe,
+ *     inaczej +0xf (offset w zwracanym far ptr).
+ *   Main_DispatchQuitEntry @ 1098:061a: czysta trampolina (MOV AX,DS +
+ *     PUSH CS near CALL Main_DispatchQuit @ 1098:062f); nie wymaga
+ *     symbolu — logika kryta przez main_dispatch_quit_requests_shutdown
+ *     (WM_QUIT 0x12 + has_cmd && quit_flag == 1); tu tylko doc, brak
+ *     nowego symbolu celowo.
+ * Port LIVE 1:1 na jawnych parametrach (no Win16, no globals). No exit(). */
+
+/* Orig Main_PumpQuitLoop @ 1008:0f77 fazy -> main_pump_quit_should_continue.
+ * 1:1: phase_first != 0 ? (flag_1d4c == 0) : (flag_1d4c != 0). */
+int main_pump_quit_should_continue(int phase_first, int flag_1d4c);
+
+/* Orig Main_PumpMessage @ 1098:02d1 gałęzie -> is_char / is_keydown.
+ * 1:1: msg == 0x102 (WM_CHAR) / msg == 0x100 (WM_KEYDOWN). */
+int main_pump_msg_is_char(int msg);
+int main_pump_msg_is_keydown(int msg);
+
+/* Orig Main_DrainMessages @ 11e8:02fb ogon -> main_drain_tail_offset.
+ * 1:1: flag_004c == 0 -> 0x0e, inaczej 0x0f. */
+int main_drain_tail_offset(int flag_004c);
+
 #endif /* CIVLIN_BOOT_H */

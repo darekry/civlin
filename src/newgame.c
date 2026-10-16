@@ -145,6 +145,38 @@ civ_error_t newgame_finalize(const civ_newgame_settings_t *settings)
     return CIV_ERR_UNSUPPORTED;
 }
 
+/* --- Chain 2026-10-16 (19): Menu_PromptNation discriminators (goal 4) ---
+ * See newgame.h block. OS-free 1:1 (no Win16, no globals, no exit()). */
+
+int menu_prompt_nation_needed(int flags_00b6)
+{
+    /* Orig Menu_PromptNation @ 1070:1f58 gate:
+     * if ((DAT_12d0_00b6 & 0xfe00) != 0) (launch-bits; 0 = brak ship
+     * do podgladu). */
+    return ((flags_00b6 & 0xfe00) != 0) ? 1 : 0;
+}
+
+int menu_prompt_nation_count(void)
+{
+    /* Orig same: for (iVar1 = 1; iVar1 < 8; iVar1++) 7 wpisow z
+     * 12d8:03da+i*0x20 (runtime tribe table via Tribe_GetNameList @
+     * 11f8:0080 / Res blob 0x94). */
+    return 7;
+}
+
+int menu_prompt_nation_avail_mask(int flags_00b6)
+{
+    /* Orig same: DAT_12d8_24da = (int)DAT_12d0_00b6 >> 9 ^ 0xff. */
+    return ((flags_00b6 >> 9) ^ 0xff) & 0xff;
+}
+
+int menu_prompt_nation_choice_valid(int ret_plus1)
+{
+    /* Orig same: iVar1 = Dialog_ShowMessage @ 1220:00d2 + 1;
+     * if (0 < iVar1) { DAT_1290_0114 = iVar1; Ship_* } . */
+    return (ret_plus1 > 0) ? 1 : 0;
+}
+
 civ_error_t newgame_wizard_run(civ_newgame_settings_t *out)
 {
     civ_error_t err;

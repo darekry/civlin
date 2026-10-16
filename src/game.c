@@ -3337,3 +3337,41 @@ int census_status_shields_total(int shields, int cost)
      * Res 0x83 0x1924 building table or Res 0x84 0x1a44 unit table). */
     return shields + cost * 10;
 }
+
+/* --- Chain 2026-10-16 (19): Pic_PumpMenuCommand mapping (goal 2) ---
+ * See game.h block. OS-free 1:1 (no Win16, no globals, no exit()). */
+
+int pic_pump_select_to_mode(int sel)
+{
+    /* Orig Pic_PumpMenuCommand @ 1030:9aed switch(DAT_12d8_0030):
+     * 0->0, 1->0x96, 2->0x97, 3->0x98 (city-mode buttons in the
+     * Pic_PlayShared @ 1030:0000 city view; WM_COMMAND 0x111 goes to
+     * Menu_DispatchCommand @ 1048:01cd beside this switch, not through
+     * it). Other values leave *param_2 untouched -> -1 here. */
+    switch (sel) {
+    case 0:
+        return 0;
+    case 1:
+        return 0x96;
+    case 2:
+        return 0x97;
+    case 3:
+        return 0x98;
+    default:
+        return -1;
+    }
+}
+
+int pic_pump_msg_is_command(int msg)
+{
+    /* Orig same: DAT_1420_54e8 == 0x111 (WM_COMMAND) ->
+     * Menu_DispatchCommand(DAT_1420_54ea,0). */
+    return (msg == 0x111) ? 1 : 0;
+}
+
+int pic_pump_msg_is_paint(int msg)
+{
+    /* Orig same: DAT_1420_54e8 == 0xf (WM_PAINT) && DAT_1420_54e6 ==
+     * *param_1 -> Pic_PresentOnPaint @ 1030:900d (renamed). */
+    return (msg == 0x0f) ? 1 : 0;
+}

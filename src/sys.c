@@ -1807,3 +1807,28 @@ int file_build_temp_path(char *dst, size_t cap, const char *dir,
         return -1;
     return n;
 }
+
+/* --- Chain 2026-10-16 (19): message-pump hierarchy (goals 1+5) ---
+ * See sys.h block. OS-free 1:1 (no Win16, no globals, no exit()). */
+
+int sys_pump_mode_select(int flag_1d4c, int flag_1d50)
+{
+    /* Orig Sys_PumpMessages @ 1108:0000: if (DAT_1420_1d4c == 0) {
+     *   if (DAT_1420_1d50 == 0) DAT_1328_0012 = 0; else 2; } else 1. */
+    if (flag_1d4c != 0)
+        return 1;
+    if (flag_1d50 == 0)
+        return 0;
+    return 2;
+}
+
+int sys_pump_scale_coord(int v)
+{
+    /* Orig Sys_PumpMessages @ 1108:0000 popup branch:
+     * DAT_1328_0010 = (DAT_1420_1d44 * 10) / 0x10 (LOWORD) i tak samo
+     * HIWORD -> 000e; warunek *DAT_1420_9948 == DAT_1420_1d48. Ta sama
+     * skala co sys_wait_scale_coord @ 1038:0c1d (v*10>>4). */
+    if (v < 0)
+        return -1;
+    return (v * 10) >> 4;
+}

@@ -143,6 +143,48 @@ civ_error_t newgame_customize_world(civ_newgame_settings_t *ctx);
 civ_error_t newgame_custom_world_modal(const civ_newgame_settings_t *ctx,
                                        int *out_action);
 
+/* --- Chain 2026-10-16 (19): Menu_PromptNation discriminators (goal 4) ---
+ * Orig Menu_PromptNation @ 1070:1f58 (civ.exe, x86:LE:16:Protected Mode),
+ * decompiled this pass (zob. tez mainmenu.h chain-19):
+ *   gate (DAT_12d0_00b6 & 0xfe00) != 0; Util_StrCopy Which-nation? @
+ *   1420:146d ("Which nation?"); for (i = 1; i < 8; i++) StrAppend "_"
+ *   @ 1420:147b + StrAppend 12d8:03da+i*0x20 (runtime tribe table 7 x
+ *   0x20, wypelniana przez Tribe_GetNameList @ 11f8:0080 / Res blob 0x94
+ *   + Res_GetStringCopy; 12d8 to DGROUP runtime, nie statyczny ROM —
+ *   stad zera w statycznym dumpie); DAT_12d8_24da = DAT_12d0_00b6>>9 ^
+ *   0xff; i = Dialog_ShowMessage @ 1220:00d2(0x24fa,100,0x50) + 1; jezeli
+ *   0 < i to DAT_1290_0114 = i + Ship_OpenView @ 1070:0000 (renamed) +
+ *   Ship_ShowView(i,0xffff,1) @ 1070:0327 + Ship_CloseView @ 1070:02b5.
+ * Kiedy (wybor nacji na starcie? NewGame_Wizard? debug?):
+ *   NIE startowy wybor (ten to NewGame_Wizard @ 10e8:0000 step 2 Pick
+ *   tribe przez newgame_pick_tribe + tribe_get_name_list STUB + text
+ *   1420:2ad2/2ae5) — to podglad spaceship wybranej nacji w grze
+ *   (wywoływany z menu 506/0x374 + Ship_LaunchAndShow @ 1070:2015 brat).
+ * Lista nacji (7 civow? barbarians?): petla 1..7 = 7 wpisow z 12d8:03da
+ *   (7 zywych civow; barbarians osobno poza petla, nie w tej liscie;
+ *   maska 12d8:24da = dostepne). Zwiazek z tribe_get_name_list (STUB w
+ *   newgame.c: to zrodlo nazw 12d8:03da przez Res blob 0x94) i
+ *   Text_FillResStringList @ 1098:1f4f (ogolny builder list res-string;
+ *   PromptNation to jego Which-nation instancja z Dialog_ShowMessage).
+ * Port listy/logiki LIVE 1:1 na jawnych parametrach (no Win16, no
+ * globals); Dialog_ShowMessage + Ship_* ogony STUB. No exit(). */
+
+/* Orig Menu_PromptNation @ 1070:1f58 gate -> menu_prompt_nation_needed.
+ * 1:1: (flags_00b6 & 0xfe00) != 0. */
+int menu_prompt_nation_needed(int flags_00b6);
+
+/* Orig same loop bound (i = 1; i < 8) -> menu_prompt_nation_count.
+ * 1:1: 7 wpisow. */
+int menu_prompt_nation_count(void);
+
+/* Orig same DAT_12d8_24da assign -> menu_prompt_nation_avail_mask.
+ * 1:1: (flags_00b6 >> 9) ^ 0xff (low 8 bitow; caller maskuje do 0xff). */
+int menu_prompt_nation_avail_mask(int flags_00b6);
+
+/* Orig same Dialog_ShowMessage+1 gate (0 < i) ->
+ * menu_prompt_nation_choice_valid. 1:1: ret_plus1 > 0. */
+int menu_prompt_nation_choice_valid(int ret_plus1);
+
 /* Orig: NewGame_Wizard @ 10e8:0000 step 5 (finalize tail) -> newgame_finalize.
  * Writes g_nDifficulty @ 12d8:42f6, g_nCivCount @ 12d8:3b9a,
  * g_nCivAliveMask @ 12d8:42f8 (= 0xff >> (6 - count), see
