@@ -75,10 +75,12 @@ civ_error_t game_init(civ_game_t *g);
  * newgame_wizard_run (see newgame.h) -> worldgen. Win16 dialog/map tails
  * TBD -> stub CIV_ERR_UNSUPPORTED; NULL -> NOENT. No globals, no exit(). */
 civ_error_t game_new(civ_game_t *g);
-/* Orig TIMERPROC @ 1008:0d68 body, pumped from the while(!g_nQuitFlag)
- * loop in WinMain @ 1008:0000 (200 ms SETTIMER installed by WdwMap_Open
- * @ 1208:0af1, torn down first by KILLTIMER in WinMain_Shutdown @
- * 1008:0329). Tick -> game_turn_tick @ 1088:0000 linkage: per-frame pump
+/* Orig WinMain @ 1008:0304 loop body: while(!g_nQuitFlag @ 12d8:24ee)
+ * Game_TurnLoopTick @ 1088:0000 (direct calls, NOT a timer callback:
+ * TIMERPROC @ 1008:0d68 only ticks the 24f0 countdown, see boot.h
+ * chain-21; the 200 ms map timer is a NULL-proc WM_TIMER, see map.h
+ * map_timer_interval_ms; KILLTIMER first in WinMain_Shutdown @ 1008:0329).
+ * Tick -> game_turn_tick @ 1088:0000 linkage: per-frame pump
  * here (Sys_PumpMessages @ 1108:0000 + Sys_Yield @ 1098:0157, see sys.h;
  * both live SDL_PumpEvents) then one Game_TurnLoopTick pass (stub tail).
  * Partial: pump live, turn TBD -> overall CIV_ERR_UNSUPPORTED; NULL ->

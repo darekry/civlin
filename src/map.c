@@ -134,12 +134,15 @@ win16_msg_result_t map_wndproc_status(int msg, long wparam, long lparam)
 
 civ_error_t map_timer_proc(void)
 {
-    /* Orig FUN_1008_0D68 @ 1008:0d68 -> TIMERPROC. 200 ms SETTIMER tick
-     * from WdwMap_Open @ 1208:0af1, pumped by WinMain @ 1008:0000;
-     * tick -> game_tick (see game.h) -> Game_TurnLoopTick @ 1088:0000 /
-     * game_turn_tick. TODO: SDL timer bridge (SDL_AddTimer) + frame
-     * pump; KILLTIMER teardown in WinMain_Shutdown @ 1008:0329. No
-     * globals, no exit(), read-only. */
+    /* Orig FUN_1008_0D68 @ 1008:0d68 -> TIMERPROC. ADRES-KOREKTA 2026-10-16:
+     * TIMERPROC is the 5 ms WinMain proc (if (DAT_12d8_24f0 != 0) flag--,
+     * see boot.h chain-21), NOT the 200 ms map timer: WdwMap_Open @
+     * 1208:0af1 installs SETTIMER(hwnd,1,0xC8,NULL) with a NULL proc =
+     * WM_TIMER messages to map_wndproc_main @ 1208:0054 (see
+     * map_timer_interval_ms below). The turn loop is WinMain @ 1008:0304
+     * direct Game_TurnLoopTick @ 1088:0000 calls (see game.h). TODO: SDL
+     * timer bridge (SDL_AddTimer) + frame pump; KILLTIMER teardown in
+     * WinMain_Shutdown @ 1008:0329. No globals, no exit(), read-only. */
     return CIV_ERR_UNSUPPORTED;
 }
 

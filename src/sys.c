@@ -532,6 +532,40 @@ int sys_pump_messages(void)
     return 0;
 }
 
+int sys_event_requests_quit(unsigned ev_type, int key)
+{
+    /* Kernel of sys_poll_quit below (same shape as title_event_is_skip in
+     * title.c: QUIT / KEY_DOWN / MOUSE_BUTTON_DOWN -> skip). Only QUIT and
+     * ESC request quit here (clicks belong to the future MenuZ/modal owner,
+     * not to the main-loop quit half). */
+    if (ev_type == (unsigned)SDL_EVENT_QUIT)
+        return 1;
+    if (ev_type == (unsigned)SDL_EVENT_KEY_DOWN &&
+        key == (int)SDLK_ESCAPE)
+        return 1;
+    return 0;
+}
+
+int sys_poll_quit(void)
+{
+    /* WinMain @ 1008:0304-0314 quit half (CMP g_nQuitFlag @ 12d8:24ee,0 /
+     * JZ loop; Main_DispatchQuit @ 1098:062f quits on WM_QUIT 0x12, see
+     * boot.h main_quit_msg_is_quit). SDL3 drain: every pending event is
+     * consumed, quit sticks (1) once seen. No globals, no exit(). */
+    SDL_Event ev;
+    int quit = 0;
+
+    while (SDL_PollEvent(&ev)) {
+        int key = 0;
+
+        if (ev.type == SDL_EVENT_KEY_DOWN)
+            key = (int)ev.key.key;
+        if (sys_event_requests_quit((unsigned)ev.type, key))
+            quit = 1;
+    }
+    return quit;
+}
+
 civ_error_t sys_wait_for_input(void)
 {
     /* TODO: Orig FUN_1038_0c1d @ 1038:0c1d -> Sys_WaitForInput (see sys.h:

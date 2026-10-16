@@ -330,6 +330,18 @@ void sys_yield(void);
  * queue was empty. Distinct from sys_yield (Anim pump @ 10b0:0000) and
  * sys_drain_input (state clear + queue drain, see game.h). */
 int sys_pump_messages(void);
+/* Orig: none (Linux-port helper; WinMain @ 1008:0304 quit half:
+ * while(!g_nQuitFlag @ 12d8:24ee) Game_TurnLoopTick @ 1088:0000, quit via
+ * Main_DispatchQuit @ 1098:062f on WM_QUIT 0x12, see boot.h
+ * main_quit_msg_is_quit). Drains SDL_PollEvent; 1 when the user asked to
+ * quit (window close, or ESC key as a Linux-port stand-in until the MenuZ
+ * modal @ 1220:0156 owns keys in U2), else 0. Other events are dropped
+ * (modal/event bridge TBD). No globals, no exit(). */
+int sys_poll_quit(void);
+/* Orig: none (testable kernel of sys_poll_quit above). ev_type is the
+ * SDL_Event type, key the SDL_Keycode for KEY_DOWN (else 0). OS-free 1:1,
+ * no SDL calls, no globals, no exit(). */
+int sys_event_requests_quit(unsigned ev_type, int key);
 /* Orig: FUN_1038_0c1d @ 1038:0c1d -> Sys_WaitForInput.
  * Modal PEEKMESSAGE wait (no timeout, click-or-key): Cursor_Set(0x81) +
  * sys_drain_input @ 11f0:4ea0 prologue, then loop PEEKMESSAGE: WM_CHAR

@@ -1,7 +1,9 @@
 /* Game state. Turn logic mirrors Game_TurnLoopTick @ 1088:0000.
- * Y1 boot loop + tick: game_tick is the TIMERPROC @ 1008:0d68 body pumped
- * from while(!g_nQuitFlag) in WinMain @ 1008:0000; SDL pump via
- * Sys_PumpMessages @ 1108:0000 + Sys_Yield @ 1098:0157 (see sys.h). */
+ * U1 boot loop + tick: game_tick feeds the while(!g_nQuitFlag @ 12d8:24ee)
+ * loop in WinMain @ 1008:0304 (direct turn calls, not a timer callback;
+ * TIMERPROC @ 1008:0d68 only ticks the 24f0 countdown, see boot.h
+ * chain-21); SDL pump via Sys_PumpMessages @ 1108:0000 + Sys_Yield @
+ * 1098:0157 (see sys.h). */
 #include "game.h"
 
 #include "map.h"
@@ -44,19 +46,21 @@ civ_error_t game_tick(civ_game_t *g)
 {
     if (!g)
         return CIV_ERR_NOENT;
-    /* Orig TIMERPROC @ 1008:0d68 body, pumped from the while(!g_nQuitFlag)
-     * loop in WinMain @ 1008:0000 (200 ms SETTIMER installed by WdwMap_Open
-     * @ 1208:0af1, KILLTIMER first in WinMain_Shutdown @ 1008:0329). Tick
-     * -> game_turn_tick @ 1088:0000 linkage below: per-frame SDL pump is
-     * live, turn pass stays stubbed -> overall CIV_ERR_UNSUPPORTED. No
-     * globals, no exit(), read-only (pump only). */
+    /* Orig WinMain @ 1008:0304 loop body: while(!g_nQuitFlag @ 12d8:24ee)
+     * Game_TurnLoopTick @ 1088:0000 (direct calls, NOT a timer callback:
+     * TIMERPROC @ 1008:0d68 only ticks the 24f0 countdown, see boot.h
+     * chain-21; the 200 ms map timer is a NULL-proc WM_TIMER, see map.h
+     * map_timer_interval_ms). Tick -> game_turn_tick @ 1088:0000 linkage
+     * below: per-frame SDL pump is live, turn pass stays stubbed ->
+     * overall CIV_ERR_UNSUPPORTED. No globals, no exit(), read-only
+     * (pump only). */
     if (g->quit_flag)
         return CIV_OK;
     /* Live pump: Sys_PumpMessages @ 1108:0000 (SDL_PumpEvents, 1 = message,
      * 0 = empty) + Sys_Yield @ 1098:0157 (Anim pump @ 10b0:0000). */
     (void)sys_pump_messages();
     sys_yield();
-    /* TODO: TIMERPROC body -> Game_TurnLoopTick @ 1088:0000
+    /* TODO: WinMain @ 1008:0304 loop tail -> Game_TurnLoopTick @ 1088:0000
      * (game_turn_tick below; Civ_ProcessUnitMoves @ 11f0:0000, year steps,
      * scoring every 0x32 via game_calc_progress_threshold, HoF endings).
      * Exercised for linkage; result ignored until the per-civ loop lands. */

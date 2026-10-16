@@ -66,8 +66,9 @@
  * drive/path (Sys_GetCurrentDrive @ 1000:11bb + Sys_BuildCurrentDirPath @
  *   1000:2826, live via boot_setup_paths) -> memory (Sys_CheckFreeMemory @
  *   11e8:0000, stub) -> classes (App_RegisterWindowClasses @ 1098:06f8,
- *   stub) -> timer/accel/font (200 ms SETTIMER for TIMERPROC @ 1008:0d68 +
- *   accelerators + Font_EnumFamiliesInit @ 1008:0e99, stub) -> 5x RSC
+ *   stub) -> timer/accel/font (5 ms SETTIMER TIMERPROC @ 1008:0d68 (24f0
+ *   countdown) + 16 ms app timer + accelerators +
+ *   Font_EnumFamiliesInit @ 1008:0e99, stub) -> 5x RSC
  *   (ResMgr_LoadRsc @ 1190:0000 CivData0..4.rsc, stub) -> video caps
  *   (Video_CheckDriverCaps @ 1008:059a, stub) -> artwork
  *   (Art_MaybeConvertArtwork @ 10b8:0000, stub) -> prefs (Config_LoadPrefs
@@ -77,9 +78,9 @@
  *   10e8:2d46 stub) -> ports/map windows (boot_open_windows below) ->
  *   menu bar (boot_init_menu below) -> cursor (Cursor_Set @ 1098:096c,
  *   void stub) -> event/turn loop caller-owned (while(!g_nQuitFlag) +
- *   TIMERPROC body via game_tick -> game_turn_tick @ 1088:0000, see
- *   game.h; main.c owns the loop, SDL window/renderer are caller-created
- *   and borrowed, never owned here). Wiring: CIV_OK where OS-free
+ *   Game_TurnLoopTick @ 1088:0000 via game_tick, see game.h; main.c owns
+ *   the loop, SDL window/renderer are caller-created and borrowed, never
+ *   owned here). Wiring: CIV_OK where OS-free
  *   (boot_setup_paths live, tables partial but overall UNSUPPORTED until
  *   the Win16 selector bridge lands), otherwise CIV_ERR_UNSUPPORTED stub;
  *   first non-OK step short-circuits. No globals, no exit(), read-only. */
@@ -996,6 +997,24 @@ int main_pump_timer_tick(int flag);
 /* Orig WinMain @ 1008:0000 SETTIMER-interval dla TIMERPROC @ 1008:0d68 ->
  * boot_timer_proc_interval_ms. 1:1 5 (ms). */
 int boot_timer_proc_interval_ms(void);
+
+/* --- Chain 2026-10-16 (U1): pozostale SETTIMER orig (fala uruchomieniowa).
+ * Anchors (civ.exe, x86:LE:16:Protected Mode), decompiled 2026-10-16 via
+ * xrefs to the SETTIMER @ 1608:008c thunk (4 sites total; 5 ms + 200 ms
+ * sa w chain-21 powyzej, map_timer_interval_ms w map.h). Oba NULL-proc =
+ * WM_TIMER do okna, nie callback. LIVE interwaly (no Win16, no globals). */
+
+/* Orig App_RegisterWindowClasses @ 1098:06f8 tail: SETTIMER(0,0,0x10,NULL)
+ * (1098:0948-0952; id -> DAT_12d8_460e, KILLTIMER w WinMain_Shutdown @
+ * 1008:0329 obok 12d8:28fa) -> app_timer_interval_ms. 1:1 16 (ms). */
+int app_timer_interval_ms(void);
+
+/* Orig Dialog_MenuZ_Modal @ 1220:0156: SETTIMER(hwnd,2,0x64,NULL)
+ * (1220:0202-0210; id -> [BP-0x46], fail = 'Can't initialize timer in
+ * MenuZ' @ 1420:4a41 via FUN_1098_28e4, KILLTIMER(hwnd,id) @ 1220:0cfd) ->
+ * menuz_timer_interval_ms. 1:1 100 (ms). Modalny tick menu (petla 0aa0:
+ * Main_DrainMessages @ 11e8:02fb + PEEKMESSAGE @ 1608:0134). */
+int menuz_timer_interval_ms(void);
 
 /* --- Chain 2026-10-16 (22): Main_RunStartupSequence + Pic pump caller
  * (goal 5) ---

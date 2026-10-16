@@ -8,23 +8,48 @@
  *   mainmenu_run/dispatch (Main_RunStartupSequence @ 11e0:0000 dispatcher
  *   for MainMenu_WndProc @ 11e0:0221 over CIV_MAINMENU_TEXT @ 1420:435b;
  *   see mainmenu.h) -> game loop caller-owned (while(!g_nQuitFlag) +
- *   TIMERPROC @ 1008:0d68 body via game_tick -> game_turn_tick @
- *   1088:0000; see game.h; SDL pump via Sys_PumpMessages @ 1108:0000 +
- *   sys_yield) -> boot_shutdown (WinMain_Shutdown @ 1008:0329 order:
+ *   Game_TurnLoopTick @ 1088:0000 via game_tick; see game.h; SDL pump via
+ *   Sys_PumpMessages @ 1108:0000 + sys_yield; quit via sys_poll_quit)
+ *   -> boot_shutdown (WinMain_Shutdown @ 1008:0329 order:
  *   KILLTIMER for TIMERPROC / FREEPROCINSTANCE for DLGPROC @ 1098:16e2 +
  *   CIVDIALOGPROC @ 1098:1838 / DESTROYWINDOW for main/map/status windows
  *   / REMOVEFONTRESOURCE for CIV_FONT_FILE; delegates to video/map/dialog/
  *   audio shutdown, then window/renderer destroy here).
- * Y1: boot_run + menu + tick are best-effort (UNSUPPORTED stubs logged,
- *   never fatal); the loop runs one pump until the turn tail lands. No
- *   exit() in libs (this main may return). No globals. C17, SDL3 only. */
+ * U1: boot_run (live) -> intro (MPLOGO.BMP + OPENING.wav, skippable,
+ *   tick-driven SDL stand-in for Main_RunStartupSequence @ 11e0:0000 loop#1
+ *   until the Anim opcode engine lands) -> menu/game best-effort stubs
+ *   (logged, never fatal) -> live tick loop (WinMain @ 1008:0304 shape:
+ *   while(!g_nQuitFlag) on the original 60ths clock, window close / ESC
+ *   quits) -> shutdown. No exit() in libs (this main may return). No
+ *   globals. C17, SDL3 only. */
 #include <SDL3/SDL.h>
+
+#include <stdlib.h>
 
 #include "boot.h"
 #include "civ_common.h"
 #include "game.h"
 #include "mainmenu.h"
+#include "sys.h"
+#include "title.h"
+#include "video.h"
 #include "win16.h"
+
+/* CIVLIN_MAX_TICKS>0 caps main-loop iterations (headless smoke only;
+ * unset/0 = interactive until window close / ESC). */
+static unsigned long main_max_ticks(void)
+{
+    const char *env = getenv("CIVLIN_MAX_TICKS");
+    char *end = NULL;
+    long v;
+
+    if (!env || env[0] == '\0')
+        return 0;
+    v = strtol(env, &end, 10);
+    if (end == env || v < 0)
+        return 0;
+    return (unsigned long)v;
+}
 
 int main(int argc, char *argv[])
 {
@@ -33,6 +58,9 @@ int main(int argc, char *argv[])
     civ_game_t game;
     civ_mainmenu_choice_t choice = CIV_MENU_NONE;
     civ_error_t err;
+    unsigned long last = 0;
+    unsigned long ticks = 0;
+    unsigned long max_ticks = 0;
 
     (void)argc;
     (void)argv;
@@ -71,12 +99,14 @@ int main(int argc, char *argv[])
     err = boot_run(win, ren);
     SDL_Log("boot: %s", civ_strerror(err));
 
-    /* Main_RunStartupSequence @ 11e0:0000: intro (Anim_OpenSequence @
-     * 10b0:008a + loop Anim_AdvanceFrames @ 10b0:0461 over dialog 0x94)
-     * first, menu dispatch after. STUB until the Anim engine lands;
-     * direct mainmenu_run below keeps the tail visible meanwhile. */
-    err = main_run_startup_sequence();
-    SDL_Log("startup: %s", civ_strerror(err));
+    /* Main_RunStartupSequence @ 11e0:0000 loop#1 shape (intro over dialog
+     * 0x94: Anim_OpenSequence @ 10b0:008a + Anim_AdvanceFrames @ 10b0:0461
+     * loop + Anim_CloseSequence @ 10b0:0287 + Sound_PlayId 3/1). U1 SDL
+     * stand-in until the Anim opcode engine decodes the script (P0):
+     * MPLOGO.BMP + OPENING.wav via title_play_intro_sdl (skippable,
+     * tick-driven); the STUB RE-map entry stays in boot.c. */
+    err = title_play_intro_sdl(win, ren);
+    SDL_Log("intro: %s", civ_strerror(err));
 
     /* MainMenu_WndProc @ 11e0:0221 (best-effort until SDL modal). */
     err = mainmenu_run(&choice);
@@ -94,14 +124,37 @@ int main(int argc, char *argv[])
         SDL_Log("game_new: %s", civ_strerror(err));
     }
 
-    /* Caller-owned event/turn loop: while(!g_nQuitFlag) game_tick ->
-     * game_turn_tick @ 1088:0000 (TIMERPROC @ 1008:0d68 body). Y1 runs a
-     * single pump; the turn tail stays UNSUPPORTED so one pass then out. */
-    while (game.quit_flag == 0) {
-        err = game_tick(&game);
-        SDL_Log("tick: %s", civ_strerror(err));
-        break;
+    /* Caller-owned event/turn loop: WinMain @ 1008:0304 shape,
+     * while(!g_nQuitFlag @ 12d8:24ee) Game_TurnLoopTick @ 1088:0000
+     * (TIMERPROC @ 1008:0d68 only ticks the 24f0 countdown, see boot.h
+     * chain-21; the 200 ms map timer is a NULL-proc WM_TIMER, not the
+     * turn driver). U1: loop is alive and gated on the original 60ths
+     * clock (Sys_GetTickScaled @ 1100:02e1); game_tick stays best-effort
+     * until the menu (U2) and turn (P3) tails land. The backbuffer keeps
+     * the last intro frame (no invented pixels); re-present keeps the
+     * window painted. Quit: window close / ESC (sys_poll_quit). */
+    err = game_tick(&game);
+    SDL_Log("tick: %s (frontier)", civ_strerror(err));
+    last = sys_get_tick_scaled();
+    max_ticks = main_max_ticks();
+    for (;;) {
+        unsigned long now;
+
+        if (sys_poll_quit())
+            break;
+        now = sys_get_tick_scaled();
+        if (now == last) {
+            SDL_Delay(1);
+            continue;
+        }
+        last = now;
+        (void)game_tick(&game);
+        (void)video_present(ren);
+        ticks++;
+        if (max_ticks > 0 && ticks >= max_ticks)
+            break;
     }
+    SDL_Log("loop: %lu ticks", ticks);
 
     /* WinMain_Shutdown @ 1008:0329 order via boot_shutdown (timers/ports/
      * palette/font), then caller-owned window/renderer teardown. */

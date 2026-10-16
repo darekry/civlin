@@ -875,8 +875,9 @@ civ_error_t boot_run(SDL_Window *win, SDL_Renderer *ren)
      * (boot_check_memory stub via Sys_CheckFreeMemory @ 11e8:0000) ->
      * classes (boot_register_classes stub via App_RegisterWindowClasses @
      * 1098:06f8) -> timer/accel/font (boot_load_fonts stub via
-     * Font_EnumFamiliesInit @ 1008:0e99; 200 ms SETTIMER for TIMERPROC @
-     * 1008:0d68 installed later by WdwMap_Open @ 1208:0af1) -> 5x RSC
+     * Font_EnumFamiliesInit @ 1008:0e99; 5 ms SETTIMER TIMERPROC @
+     * 1008:0d68 (24f0 countdown, see chain-21 in boot.h; 200 ms map
+     * WM_TIMER installed later by WdwMap_Open @ 1208:0af1) -> 5x RSC
      * (boot_load_resources stub via ResMgr_LoadRsc @ 1190:0000 CivData0..4)
      * -> video caps (boot_check_video stub via Video_CheckDriverCaps @
      * 1008:059a) -> artwork (boot_maybe_convert_artwork stub via
@@ -887,7 +888,7 @@ civ_error_t boot_run(SDL_Window *win, SDL_Renderer *ren)
      * windows (boot_open_windows partial: video_init + map_init live) ->
      * menu bar (boot_init_menu partial: cursor live, menu/dialog stub) ->
      * cursor (Cursor_Set @ 1098:096c void) -> event/turn loop caller-owned
-     * (while(!g_nQuitFlag) + TIMERPROC body via game_tick ->
+     * (while(!g_nQuitFlag) Game_TurnLoopTick via game_tick ->
      * game_turn_tick @ 1088:0000, see game.h; main.c owns it). Wiring:
      * CIV_OK where OS-free (setup_paths live, tables partial but overall
      * UNSUPPORTED), otherwise CIV_ERR_UNSUPPORTED stub; first non-OK
@@ -927,10 +928,10 @@ civ_error_t boot_run(SDL_Window *win, SDL_Renderer *ren)
 void boot_shutdown(void)
 {
     /* Orig: FUN_1008_0329 @ 1008:0329 -> WinMain_Shutdown. Win16 teardown
-     * order reproduced against the SDL3 owners: KILLTIMER for TIMERPROC
-     * @ 1008:0d68 (200 ms SETTIMER installed by WdwMap_Open @ 1208:0af1,
-     * pumped from the WinMain @ 1008:0000 message loop, impl map_timer_proc
-     * -> game_tick, see map.h/game.h; SDL timer bridge TBD) first, then
+     * order reproduced against the SDL3 owners: KILLTIMER for the Win16
+     * timers first (5 ms TIMERPROC @ 1008:0d68 id 12d8:28fa + 16 ms app
+     * timer id 12d8:460e + 200 ms map WM_TIMER id 1, see boot.h chain-21
+     * + map.h map_timer_interval_ms; SDL timer bridge TBD), then
      * FREEPROCINSTANCE for the DLGPROC @ 1098:16e2 / CIVDIALOGPROC @
      * 1098:1838 MAKEPROCINSTANCE targets (see dialog.h dlg_proc /
      * civ_dialog_proc via Dlg_CreateTracked @ 1098:124f), DESTROYWINDOW
@@ -1250,6 +1251,24 @@ int boot_timer_proc_interval_ms(void)
      * implementacji (patrz boot.h decyzja: HWND-bound pump vs watek SDL;
      * mostek TBD caller-side w map_timer_proc STUB). */
     return 5;
+}
+
+/* --- Chain 2026-10-16 (U1): pozostale SETTIMER orig (see boot.h).
+ * OS-free 1:1 LIVE (no Win16, no globals, no exit()). */
+
+int app_timer_interval_ms(void)
+{
+    /* Orig App_RegisterWindowClasses @ 1098:06f8 tail SETTIMER(0,0,0x10,
+     * NULL) (1098:0948-0952 via the SETTIMER @ 1608:008c thunk; id ->
+     * DAT_12d8_460e). */
+    return 16;
+}
+
+int menuz_timer_interval_ms(void)
+{
+    /* Orig Dialog_MenuZ_Modal @ 1220:0156 SETTIMER(hwnd,2,0x64,NULL)
+     * (1220:0202-0210 via the SETTIMER @ 1608:008c thunk). */
+    return 100;
 }
 
 /* --- Chain 2026-10-16 (22): Main_RunStartupSequence + Pic pump caller
