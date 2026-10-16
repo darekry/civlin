@@ -65,6 +65,7 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 
 | Function | State | Orig addr | Note |
 |---|---|---|---|
+| `audio_resolve_path` | LIVE |  |  |
 | `audio_stop_stream` | LIVE |  |  |
 | `sound_mci_open` | LIVE | 1000:1184, 1150:001c, 1150:0066, 1150:00a0 |  |
 | `sound_mci_close` | LIVE | 1150:0066 |  |
@@ -73,8 +74,10 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `audio_init` | LIVE | 1150:001c |  |
 | `audio_play` | LIVE | 1150:00a0 |  |
 | `sound_normalize_id` | LIVE | 1150:014f |  |
+| `sound_map_id_to_wav` | LIVE | 1150:019e, 1150:025b, 1420:3080 |  |
 | `audio_gap_is_silent` | LIVE | 1150:00c9, 1150:019e, 1150:025b, 1150:0266, 1420:3080 |  |
 | `audio_leader_count` | LIVE | 1150:019e, 1150:0266, 1420:3080 |  |
+| `audio_leader_names` | LIVE |  |  |
 | `audio_play_id` | LIVE | 1000:1184, 1150:00c9, 12d0:0064 |  |
 | `audio_is_playing` | LIVE | 1030:0000 |  |
 | `audio_shutdown` | LIVE | 1150:0066 |  |
@@ -106,6 +109,7 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `font_fon_u32le` | LIVE |  |  |
 | `font_fon_parse` | LIVE | 1008:0e99, 1420:00a4 |  |
 | `font_face_count` | LIVE | 1008:0e99 |  |
+| `font_face_list` | LIVE | 1008:0e99 |  |
 | `font_fnt_parse` | LIVE | 1008:0e99 |  |
 | `font_face_bitmap` | PARTIAL | 1008:0e99 | has TODO |
 | `font_fnt_char_entry` | PARTIAL | 1008:0e99 | has TODO |
@@ -114,6 +118,7 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `font_text_width` | LIVE | 1098:0dda, 11f8:0278 |  |
 | `font_text_height` | LIVE | 1098:0dda |  |
 | `menu_strings_count` | LIVE | 1048:0000, 1420:435b, 14b0:0010, 14b0:0092, 14d0:0028 |  |
+| `menu_string_at` | LIVE |  |  |
 | `config_load_prefs` | STUB | 1008:0b4a | has TODO |
 | `config_save_prefs` | STUB | 1000:116a, 1000:1184, 1008:0bbf | has TODO |
 | `boot_run` | PARTIAL | 1000:11bb, 1000:2826, 1008:0000, 1008:059a, 1008:0b4a, 1008:0d68, 1008:0e99, 1088:0000, 1090:0488, 1098:06f8, 1098:096c, 10b8:0000, 10e8:2d46, 1190:0000, 11e8:0000, 11e8:0337 |  |
@@ -123,14 +128,30 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `config_prefs_defaults` | LIVE | 1008:0b4a, 1008:0bbf, 1150:00c9, 12d0:0064 |  |
 | `config_prefs_sounds_on` | LIVE |  |  |
 | `boot_video_caps_count` | LIVE | 1008:059a, 1420:0af4 |  |
+| `boot_video_caps_describe` | LIVE |  |  |
 
 ### `src/civ_common.c`
 
 | Function | State | Orig addr | Note |
 |---|---|---|---|
+| `civ_strerror` | PARTIAL |  |  |
+| `util_str_copy` | LIVE | 1000:363e, 1000:36b2 |  |
+| `util_str_append` | LIVE | 1000:363e |  |
+| `util_int_to_dec` | LIVE | 1000:2928, 1088:1dd0, 12d8:24fa |  |
 | `util_to_lower` | LIVE | 1000:1978, 1190:0e72 |  |
+| `util_mem_copy_far` | LIVE | 1000:137f, 1008:0bbf, 1080:0607, 1098:0d43, 1218:0956 |  |
+| `util_mem_set_core` | LIVE | 1000:29c4 |  |
+| `util_mem_set` | LIVE | 1000:29c4, 1000:29ea, 1130:0075, 11e0:0221, 12d8:4334 |  |
+| `util_mem_copy` | LIVE | 1000:137f, 1000:299e, 1000:2e85 |  |
+| `util_mem_move_core` | LIVE | 1000:2a30 |  |
+| `util_mem_move` | LIVE | 1000:2a30, 1000:2a89 |  |
+| `util_str_copy_nul` | LIVE | 1140:040e |  |
+| `util_pascal_to_c` | LIVE | 1100:0053, 1100:078a, 1198:00a3 |  |
+| `util_byte_swap16` | LIVE | 1000:04b5, 1140:04b5 |  |
+| `util_swap_high16` | LIVE | 1140:045c |  |
 | `util_strip_trailing_zeros` | LIVE | 0221:03aa, 1000:01fe, 1000:0221 |  |
 | `util_format_float` | STUB | 1000:01fe, 1000:0221, 1000:0754, 1420:4ad6, 1420:50cb | has TODO |
+| `util_str_case_cmp` | LIVE | 1000:36de, 11f8:01af |  |
 | `util_format_message` | LIVE | 1000:2928, 1000:2c9c, 1000:36b2, 1088:1dd0, 1190:17d0 |  |
 
 ### `src/dialog.c`
@@ -161,6 +182,7 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `help_hlp_parse` | LIVE |  |  |
 | `help_hlp_system` | LIVE |  |  |
 | `help_hlp_topic` | LIVE |  |  |
+| `ctrl_class_names` | LIVE | 1058:0b4d |  |
 | `help_hlp_page` | LIVE |  |  |
 | `help_hlp_btree_find` | LIVE |  |  |
 | `help_hlp_btree_root` | LIVE |  |  |
@@ -179,6 +201,14 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `ui_draw_end_turn_prompt` | STUB | 10d0:0854, 10d8:00e0, 1110:0448, 11c0:0ec2, 1210:07ae | has TODO |
 | `dialog_menuz_id_to_index` | LIVE | 1220:0156 |  |
 | `dialog_menuz_index_to_id` | LIVE | 1220:0156 |  |
+| `text_align_x` | LIVE | 1098:0e0b, 1098:0ed1 |  |
+| `text_center_y` | LIVE | 1098:0dda, 1098:0ed1 |  |
+| `dialog_dlgunits_to_pixels` | LIVE | 1098:0d43, 1100:03ff |  |
+| `dialog_client_rect` | LIVE | 1100:03ff |  |
+| `dlg_center_rect` | LIVE | 11f8:0000 |  |
+| `text_draw_aligned` | STUB | 1098:0ed1, 1098:20f4 | has TODO |
+| `dialog_get_item_rect` | STUB | 1098:0d43, 1100:03ff, 1220:0156 | has TODO |
+| `dialog_show_message` | STUB | 1040:068e, 1098:124f, 1098:1612, 1220:00d2, 1220:0156, 1220:0eb8, 12b0:0004 | has TODO |
 
 ### `src/game.c`
 
@@ -200,7 +230,8 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `game_pick_wonder_for_ai` | LIVE | 1088:1e32, 1170:3181 |  |
 | `civ_process_unit_moves` | LIVE | 1078:1480, 1128:0000, 11c0:0395, 11c0:0ec2, 11c0:16a4, 11f0:0000, 11f0:44d4, 1420:62fc |  |
 | `status_draw_tech_icons` | STUB | 1088:1a82, 11a8:0cb1 | has TODO |
-| `game_append_year_text` | STUB | 1018:015d, 1088:1dd0, 1138:0000, 11b0:0000, 11b8:14e5, 12d8:24fa, 1420:173c, 1420:1740 | has TODO |
+| `game_append_year_text` | LIVE | 1000:18d4, 1000:1ed2, 1000:2928, 1000:363e, 1000:377e, 1000:386e, 1000:3ba0, 1000:3d90, 1018:015d, 1088:13d5, 1088:1dd0, 1138:0000, 1198:00a3, 11b0:0000, 11b8:14e5, 12d8:24fa, 1420:173c, 1420:1740 |  |
+| `year_suffix` | LIVE | 1000:2928, 1088:1dd0, 12d8:24fa, 1420:173c, 1420:1740 |  |
 | `gfx_draw_tech_icon` | STUB | 1088:1a82, 11a8:0cb1 | has TODO |
 | `status_font_height` | LIVE | 1088:1460, 1098:0dda, 1138:0269, 11f0:4754, 1220:0b88 |  |
 | `unit_choose_order` | LIVE | 1078:1480, 11c0:16a4, 11c0:1bc3, 11c8:02ec, 1420:5500 |  |
@@ -229,6 +260,7 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `unit_order_is_fail` | LIVE | 11f0:0000 |  |
 | `unit_order_is_no_path` | LIVE | 1128:0000, 11f0:0000 |  |
 | `unit_notify_wonder` | STUB | 1088:1e32, 1170:3181 | has TODO |
+| `unit_type_name` | LIVE | 1420:62ff |  |
 | `unit_type_count` | LIVE |  |  |
 | `city_get_field` | LIVE |  |  |
 | `city_get_x` | LIVE |  |  |
@@ -246,13 +278,20 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `city_get_prod` | LIVE | 1420:5500 |  |
 | `unit_move_attack_step` | LIVE | 1110:1c4b, 1110:1dbd, 1128:0000, 1128:081c, 1420:17d4 |  |
 | `unit_attack_resolve` | LIVE | 1078:1480, 11c0:1bc3, 11c8:003d |  |
+| `tech_names` | LIVE | 1088:108a, 1170:3181 |  |
+| `wonder_names` | LIVE | 1088:1e32, 1170:3181 |  |
 | `terrain_cost_table` | LIVE | 1420:17d4 |  |
 | `game_shutdown` | LIVE |  |  |
+| `city_format_pop_count` | LIVE | 11c8:03ac, 12d8:42ec, 1420:172b |  |
+| `city_calc_pop_total` | LIVE | 11c8:0334, 1420:5500, 1420:5502, 1420:5503, 1420:5507 |  |
+| `city_format_name` | LIVE | 1048:0101, 11f8:014a |  |
 
 ### `src/gfx_indexed.c`
 
 | Function | State | Orig addr | Note |
 |---|---|---|---|
+| `gfx_indexed_to_surface` | LIVE | 10d0:0854, 1190:0a29 |  |
+| `gfx_indexed_to_texture` | LIVE |  |  |
 | `gfx_probe_rsc_image` | LIVE | 1190:0a29 |  |
 | `gfx_probe_head_hex` | LIVE | 1000:2928, 1190:0a29 |  |
 | `gfx_decode_rle` | LIVE | 10f8:040a, 10f8:05da |  |
@@ -260,6 +299,8 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `gfx_decode_raw` | LIVE |  |  |
 | `gfx_godpal_count` | LIVE |  |  |
 | `gfx_godpal_get` | STUB | 1090:0376, 1090:0488, 1200:00a8, 1420:9966 | has TODO |
+| `gfx_try_fail_str` | LIVE |  |  |
+| `gfx_expand_method_str` | LIVE |  |  |
 | `gfx_try_rll` | LIVE | 10f8:040a, 10f8:05da |  |
 | `gfx_try_rll_inv` | LIVE | 10f8:040a |  |
 | `gfx_try_lzss_edi` | LIVE |  |  |
@@ -281,21 +322,29 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `gfx_bmp_parse` | PARTIAL |  |  |
 | `gfx_bmp_to_indexed` | PARTIAL |  |  |
 | `gfx_bmp_load_indexed` | LIVE |  |  |
+| `font_glyph_to_surface` | LIVE | 1008:0e99 |  |
 | `gfx_try_custom_stub` | LIVE |  |  |
 
 ### `src/halloffame.c`
 
 | Function | State | Orig addr | Note |
 |---|---|---|---|
+| `hof_get_u16le` | LIVE |  |  |
+| `hof_put_u16le` | LIVE |  |  |
+| `hof_name_len` | LIVE |  |  |
 | `hof_weighted_score` | LIVE |  |  |
+| `hof_diff_names` | LIVE |  |  |
 | `HoF_Clear` | LIVE | 1080:0000 |  |
-| `HoF_Load` | STUB | 1080:0023, 1420:14e8 | has TODO |
-| `HoF_Save` | STUB | 1080:0092, 1420:14f5 | has TODO |
-| `HoF_Show` | STUB | 1080:0119, 1420:1502, 1420:153e, 1420:1572 | has TODO |
-| `HoF_TryInsert` | LIVE | 1080:0595 |  |
+| `HoF_Load` | LIVE | 1080:0023, 1420:14e8 |  |
+| `HoF_Save` | LIVE | 1080:0092, 1420:14f5 |  |
+| `HoF_Show` | STUB | 1080:0119, 1098:0ed1, 1098:20f4, 1420:1502, 1420:153e, 1420:1572 | has TODO |
+| `hof_format_slot` | LIVE | 1080:0119, 1080:0435, 1080:05b0, 1098:0ed1, 1098:20f4, 1100:03ff, 11c8:03ac, 1420:1502, 1420:1522, 1420:153e, 1420:1589 |  |
+| `HoF_TryInsert` | LIVE | 1080:0595, 1080:05b0 |  |
+| `hof_encode` | LIVE |  |  |
+| `hof_decode` | LIVE |  |  |
 | `HoF_VictoryCeremony` | STUB | 1080:06ff, 10d0:0854, 1150:019e | has TODO |
 | `City_ShowTopFive` | STUB | 1080:099b, 1420:159c, 1420:5500 | has TODO |
-| `Hof_CalcInterimScore` | LIVE | 1030:0000, 1040:1137, 1080:0595, 1088:108a |  |
+| `Hof_CalcInterimScore` | LIVE | 1030:0000, 1040:1137, 1080:0595, 1080:05b0, 1088:108a |  |
 | `Hof_CalcFinalScore` | STUB | 1040:1137, 1088:0b6d | has TODO |
 | `Hof_PlayEndAnimation` | STUB | 1088:0b6d, 1188:07ad | has TODO |
 | `Hof_ShowEndDialog` | STUB | 1088:0b6d, 1180:0000 | has TODO |
@@ -323,6 +372,7 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 
 | Function | State | Orig addr | Note |
 |---|---|---|---|
+| `map_buffer` | LIVE |  |  |
 | `map_buffer_len` | LIVE |  |  |
 | `map_in_bounds` | LIVE | 11e8:0dcf, 11e8:0e19 |  |
 | `map_get_tile` | LIVE | 11e8:0dcf |  |
@@ -359,6 +409,7 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `map_center_on_tile` | STUB | 1110:03ae, 1110:03e9 |  |
 | `map_refresh_all_views` | STUB | 1088:13d5, 1110:03e9, 1208:17da, 1210:09b4, 1408:00cc |  |
 | `mainport_apply_palette` | STUB | 1090:0376, 1200:00a8 |  |
+| `tile_type_name` | LIVE | 1110:16c0, 11e8:0dcf |  |
 | `tile_move_cost` | LIVE | 1128:0000, 1420:17d4 |  |
 
 ### `src/newgame.c`
@@ -370,6 +421,7 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `newgame_civ_count_from_index` | LIVE | 12d8:3b9a |  |
 | `newgame_alive_mask` | LIVE | 12d8:42f8 |  |
 | `newgame_pick_tribe` | STUB | 10e8:0000, 11f8:0080, 1220:0156, 12d8:4300, 1420:2ad2, 1420:2ae5 | has TODO |
+| `tribe_get_name_list` | LIVE | 10e8:2d46, 11f8:0080 |  |
 | `newgame_customize_world` | STUB | 1058:06ab, 1058:081a, 1058:0921, 1058:09f6, 10e8:0000, 1220:0156, 1220:16fd | has TODO |
 | `newgame_custom_world_modal` | STUB | 1058:06ab, 1220:0156, 1220:16fd | has TODO |
 | `newgame_finalize` | PARTIAL | 1028:0000, 10e8:0000, 1150:00c9, 12d8:3b9a, 12d8:42f6, 12d8:42f8, 12d8:42fa, 12d8:4300 | has TODO |
@@ -379,6 +431,7 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 
 | Function | State | Orig addr | Note |
 |---|---|---|---|
+| `rsc_strerror` | PARTIAL |  |  |
 | `is_cvd_tag` | LIVE |  |  |
 | `is_rsed_tag` | LIVE |  |  |
 | `rd_u32le` | LIVE |  |  |
@@ -393,6 +446,7 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `rsc_open` | LIVE |  |  |
 | `rsc_close` | LIVE |  |  |
 | `rsc_size` | LIVE |  |  |
+| `rsc_path` | LIVE |  |  |
 | `rsc_record_count` | LIVE |  |  |
 | `rsc_record_info` | LIVE |  |  |
 | `rsc_be16` | LIVE |  |  |
@@ -419,10 +473,21 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `rsc_gdat_detail` | STUB | 1420:12b8, 1420:12bc, 1420:17d6, 1420:17d8 |  |
 | `rsc_kdat_detail` | STUB |  |  |
 | `rsc_string_lookup` | PARTIAL | 1190:1533, 1420:2a5a, 1420:435b |  |
+| `rsc_get_blob_string` | LIVE | 1048:0101, 10e8:03c6, 1100:0053, 1100:078a, 1190:09ed, 1190:0aea, 1190:1953, 1198:00a3, 11e0:0221, 11f8:0080, 11f8:00c5, 11f8:014a |  |
+| `rsc_mgr_new` | LIVE | 1420:b2bc |  |
 | `rsc_free_res_list` | LIVE | 1190:0c92, 1190:10e6 |  |
-| `rsc_mgr_dispose` | LIVE | 1190:10e6, 1190:113f |  |
+| `rsc_mgr_dispose` | LIVE | 1190:0c92, 1190:10e6, 1190:113f |  |
 | `rsc_mgr_free` | LIVE | 1190:0c92 |  |
+| `rsc_add_file` | LIVE | 1190:1692 |  |
+| `rsc_add_type` | LIVE | 1190:13a8, 1190:1533 |  |
+| `rsc_new_resource` | LIVE | 1190:12ee |  |
+| `rsc_find_file` | LIVE | 1190:1180 |  |
+| `rsc_find_type` | LIVE | 1190:121d, 1190:1533 |  |
+| `rsc_find_by_handle` | LIVE | 1190:0ee5 |  |
 | `rsc_get_type_count` | LIVE | 1190:0978 |  |
+| `rsc_get_res_indexed` | LIVE | 1190:0a29 |  |
+| `rsc_get_by_id` | LIVE | 1190:0aea |  |
+| `rsc_get_by_name` | LIVE | 1190:0bbe, 1190:0e72 |  |
 | `rsc_load_to_mem` | LIVE | 1000:272a, 1190:0ee5, 1190:0fda |  |
 | `rsc_table_name` | LIVE |  |  |
 | `rsc_dir_needs_streaming` | LIVE | 1000:272a, 1190:0501 |  |
@@ -434,6 +499,7 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `rsc_read_u16_disk` | LIVE | 1000:272a, 1190:1953, 1190:1abe, 1420:3d00 |  |
 | `rsc_read_u16_disk2` | LIVE | 1190:1b47 |  |
 | `rsc_read_u32_disk` | LIVE | 1190:1a3f, 1190:1bcb |  |
+| `rsc_add_file_disk` | LIVE | 1000:272a, 1190:1570, 1190:1692 |  |
 | `rsc_dump_stats` | LIVE | 1000:2c9c, 1190:17d0 |  |
 | `rsc_dispose_manager` | LIVE | 1000:1f7c, 1190:0c92 |  |
 | `rsc_cvpc_head_off` | LIVE |  |  |
@@ -444,10 +510,17 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `rsc_cvpc_is_compressed` | LIVE |  |  |
 | `rsc_slice_len` | LIVE | 1190:0000 |  |
 | `rsc_text_stats` | PARTIAL | 1420:2a5a, 1420:435b |  |
+| `rsc_gdat_row` | LIVE | 1028:0fb4, 1420:12b8, 1420:12bc, 1420:17d6, 1420:17d8 |  |
+| `rsc_kdat_row` | LIVE |  |  |
 | `rsc_text_get_all` | PARTIAL |  |  |
 | `rsc_text_search_all` | PARTIAL |  |  |
 | `rsc_gdat_decode_row` | LIVE | 1028:0fb4, 1190:1953, 1420:12b8, 1420:12bc, 1420:17d6, 1420:17d8 |  |
 | `rsc_kdat_decode_row` | LIVE |  |  |
+| `res_append_pascal` | LIVE | 1048:0101, 1100:078a, 11f8:014a |  |
+| `res_compare_pascal` | LIVE | 11f8:0207 |  |
+| `res_copy_pascal` | LIVE | 11f8:00fc |  |
+| `res_get_string_copy` | STUB | 1100:0053, 11f8:0080 | has TODO |
+| `res_get_string_raw` | STUB | 11f8:00c5 | has TODO |
 
 ### `src/save.c`
 
@@ -455,17 +528,26 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 |---|---|---|---|
 | `save_prompt_open` | STUB | 1130:0075 | has TODO |
 | `save_prompt_save` | STUB | 1130:0194 | has TODO |
+| `save_init_filespec` | LIVE | 1000:36b2, 1000:3722, 1080:0023, 1080:0092, 1140:0095, 1420:14e8, 1420:14f5 |  |
+| `save_load_dialog` | STUB | 10b0:0000, 10f8:0000, 1130:000e, 1130:0075, 11e0:0221 | has TODO |
+| `save_save_dialog` | STUB | 1098:26d4, 1130:0194, 1180:0000, 1198:00a3 | has TODO |
+| `save_save_game` | STUB | 1000:2928, 1000:363e, 1098:26d4, 10f8:02bd, 1198:00a3 | has TODO |
+| `save_sanitize_filename` | LIVE | 1000:36b2, 1180:0000, 1198:0000, 1198:00a3 |  |
 | `save_file_open` | LIVE | 1000:2ad9, 10f8:0000, 10f8:02bd, 1140:0139 |  |
 | `save_file_size` | LIVE | 10f8:0000, 1140:0295 |  |
 | `save_file_read` | LIVE | 1080:0023, 10f8:0000, 1140:019d |  |
 | `save_file_write` | LIVE | 10f8:02bd, 1140:0245 |  |
 | `save_file_close` | LIVE | 1000:1f7c, 1140:037c |  |
+| `file_open_wrapper` | LIVE | 1000:2ad9, 1140:0139 |  |
 | `file_close_wrapper` | LIVE | 1000:1f7c, 1140:037c |  |
 | `file_seek_wrapper` | LIVE | 1000:1f7c, 1000:272a, 1000:2ad9, 1140:0295, 1190:0fda |  |
 | `save_serialize` | LIVE | 10f8:02bd, 10f8:090c, 1420:2cac |  |
 | `save_deserialize` | LIVE | 1028:162c, 10f8:0000, 1140:0139, 1140:019d, 1140:0295 |  |
 | `save_pack` | STUB | 10f8:02bd, 10f8:05da |  |
 | `save_unpack` | STUB | 10f8:0000, 10f8:040a |  |
+| `save_pack_buffer` | LIVE | 10f8:0000, 10f8:02bd, 10f8:040a, 10f8:05da |  |
+| `save_unpack_buffer` | LIVE | 10f8:0000, 10f8:02bd, 10f8:040a, 10f8:05da |  |
+| `save_build_filename` | LIVE | 1000:2928, 1000:363e, 1000:36b2, 1080:0119, 1198:0000, 1198:00a3, 1420:173c |  |
 | `save_rll_encode` | LIVE |  |  |
 | `save_rll_decode` | LIVE |  |  |
 | `marshal_seek` | LIVE |  |  |
@@ -477,6 +559,7 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `save_xfer_strided` | LIVE | 10f8:10bd |  |
 | `civ_save_ctx_init` | LIVE |  |  |
 | `civ_save_ctx_add` | LIVE |  |  |
+| `save_ctx_find` | LIVE |  |  |
 | `save_live_check` | LIVE |  |  |
 | `save_live_copy_one` | LIVE |  |  |
 | `save_xfer_words_live` | LIVE | 10f8:0f40, 1310:0008 |  |
@@ -494,14 +577,33 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `rng_range` | LIVE | 11c8:003d |  |
 | `rng_init` | LIVE | 11c8:0000 |  |
 | `util_clamp` | LIVE | 11c8:0063 |  |
-| `util_progress` | LIVE | 1000:29ea |  |
-| `debug_print` | LIVE | 1000:2c9c, 1190:17d0 |  |
+| `util_progress` | LIVE |  |  |
+| `debug_print` | LIVE | 1000:19d8, 1000:1a3c, 1000:2c9c, 1000:2e85, 1190:17d0, 1420:4cd0 |  |
+| `debug_print_line` | LIVE | 1000:2cd8, 1000:2e85, 1000:3088, 1000:3722, 1190:17d0, 1420:4cd0 |  |
+| `file_write_buffered` | STUB | 1000:2c9c, 1000:2cba, 1000:2e85, 1000:3fc4, 1420:4cd0 | has TODO |
+| `file_put_char_buffered` | STUB | 1000:2152, 1000:2cd8, 1000:3fc4, 1420:4cd0 | has TODO |
+| `file_emit_char` | STUB | 1000:2cba, 1000:2cd8, 1000:2e85 | has TODO |
+| `dos_map_error` | STUB | 1000:151a, 1420:4e7c | has TODO |
+| `dos_is_char_device` | STUB | 1000:1566, 1000:1750, 1000:3fc4, 1420:4fc4, 1420:4fc8 | has TODO |
+| `dos_seek` | STUB | 1000:161c | has TODO |
+| `dos_read` | STUB | 1000:1750, 1000:33c0, 1140:019d, 1420:4fc4 | has TODO |
+| `dos_unlink` | STUB | 1000:19a6 | has TODO |
+| `dos_file_attr` | STUB | 1000:1f5c, 1000:2ad9 | has TODO |
+| `dos_close` | STUB | 1000:1f7c, 1000:1fa6 | has TODO |
+| `dos_is_eof` | STUB | 1000:201e | has TODO |
+| `dos_create` | STUB | 1000:2aac, 1000:2ad9 | has TODO |
+| `dos_truncate` | STUB | 1000:2ac7, 1000:2ad9 | has TODO |
+| `dos_open` | STUB | 1000:2ad9, 1000:2c4a | has TODO |
+| `dos_write` | STUB | 1000:3e70, 1000:3fc4, 1140:0245, 1420:4fc8 | has TODO |
+| `dos_ioctl` | STUB | 1000:4252 | has TODO |
 | `dos_get_current_drive` | LIVE | 1000:1252 |  |
 | `dos_get_current_drive_index` | LIVE | 1000:13e6 |  |
 | `dos_get_current_dir` | LIVE | 1000:139c |  |
 | `sys_get_tick_scaled` | LIVE | 1100:02e1 |  |
+| `sys_build_current_dir_path` | LIVE | 1000:2826 |  |
 | `sys_init_paths` | LIVE | 1228:0002, 1228:0004 |  |
 | `sys_current_drive` | LIVE | 1228:0002 |  |
+| `sys_base_path` | LIVE | 1228:0004 |  |
 | `sys_yield` | LIVE | 1098:0157, 10b0:0000 |  |
 | `sys_pump_messages` | LIVE | 10b0:0000, 1108:0000, 11c0:0ec2, 11e8:02fb, 1328:0012 |  |
 | `sys_get_client_rect` | STUB | 1000:137f, 1218:0956, 1218:0a06 | has TODO |
@@ -528,6 +630,7 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `float_convert_extended_to_bcd` | LIVE | 1000:096a, 1000:0988 |  |
 | `float_log2` | LIVE | 1000:0c03 |  |
 | `float_exp2` | LIVE | 1000:0c7d, 1000:0c7e |  |
+| `float_matherr_name` | LIVE | 1420:4aae, 1420:4aca |  |
 | `float_matherr_filter` | LIVE | 1000:0e2e |  |
 | `util_sprintf` | LIVE | 1000:0221, 1000:1056, 1000:19d8, 1000:1a3c, 1000:2c9c, 1000:35f6, 1000:42d3, 1130:0075, 1420:4eeb |  |
 | `sys_fatal_abort` | STUB | 1000:35f6, 1000:37b2, 1000:4124, 1608:01a4 | has TODO |
@@ -543,6 +646,11 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `util_emit_hex_word` | LIVE | 1000:19c0 |  |
 | `util_vsprintf_strlen` | LIVE | 1000:19f2 |  |
 | `util_format_int` | LIVE | 1000:157a |  |
+| `util_parse_int` | LIVE | 1000:1ed2 |  |
+| `debug_log_trace` | LIVE | 1148:003c |  |
+| `mem_dispose_ptr` | STUB | 1008:0329, 1028:0000, 10f8:02bd, 1100:060b | has TODO |
+| `mem_dispose_handle` | STUB | 1100:0652 | has TODO |
+| `mem_realloc_handle` | STUB | 1100:030f | has TODO |
 
 ### `src/title.c`
 
@@ -555,6 +663,7 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `pic_read_header` | STUB | 10d0:0956, 1140:019d, 1420:2300, 1420:2372 | has TODO |
 | `title_load_opening_frame` | STUB | 1030:0000, 10d0:0956, 1190:0000 | has TODO |
 | `title_poll_skip` | LIVE |  |  |
+| `title_resolve_asset` | LIVE |  |  |
 | `title_max_ms` | LIVE |  |  |
 | `title_play_intro_sdl` | LIVE | 1030:0000 |  |
 | `title_mplogo_show` | PARTIAL |  |  |
@@ -586,6 +695,8 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `palette_apply_to_port` | LIVE | 1080:0119, 1080:06ff, 1090:0376, 10b0:0461, 10d0:0854, 1200:00a8 |  |
 | `video_shutdown_display` | NOOP | 1008:0329, 1008:0e99, 10d0:0854, 10d0:08f1, 10d0:0cfa, 1420:00a4 |  |
 | `font_blit_glyph` | LIVE | 1008:0e99, 10d0:0854, 10d0:08f1 |  |
+| `art_progress_fill_x` | LIVE | 10b8:062d |  |
+| `art_load_frame` | STUB | 10b8:079d, 10b8:0aa8, 10b8:0e00, 10b8:0e36, 10b8:11bc, 10b8:158c, 10d0:0000, 10f8:040a | has TODO |
 
 ### `src/worldgen.c`
 
@@ -595,7 +706,9 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `worldgen_dir_dy_at` | LIVE |  |  |
 | `worldgen_generate_random` | STUB | 1028:0000, 1028:066a, 1028:0a93, 1028:0fb4, 1028:12c6, 11c8:003d | has TODO |
 | `worldgen_load_preset` | STUB | 1028:0a93, 1028:1d15, 10b8:079d | has TODO |
-| `worldgen_load_earth` | STUB | 1028:0a93, 1028:1d15, 10b8:079d, 1108:0243, 11e0:0221 | has TODO |
+| `worldgen_load_earth` | STUB | 1028:0a93, 1028:1d15, 10b8:079d, 10b8:0e00, 10e0:0000, 1100:03ff, 1108:0243, 11e0:0221, 1420:2e28, 1420:2e34 | has TODO |
+| `worldgen_dialog_id_to_cell` | LIVE | 10e0:0000, 1108:0243, 1420:2e28, 1420:2e34 |  |
+| `worldgen_custom_apply` | LIVE | 10e0:0000, 1100:03ff, 1108:0243, 1420:2e28, 1420:2e34 |  |
 | `worldgen_prepare_earth` | STUB | 1108:01bc, 1108:0243 | has TODO |
 | `worldgen_copy_preset` | LIVE | 1028:0000, 10b8:0000, 10b8:079d, 1420:20a9 |  |
 | `worldgen_customize` | STUB |  | has TODO |

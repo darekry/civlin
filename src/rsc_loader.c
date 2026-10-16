@@ -955,6 +955,54 @@ rsc_error_t rsc_string_lookup(const uint8_t tag[4], const uint8_t *data,
     return RSC_ERR_UNSUPPORTED;
 }
 
+/* Orig ResMgr_GetString @ 1100:078a blob entry reader (id 0x2da8 via
+ * ResMgr_GetById @ 1190:0aea + ResMgr_DisposeHandle @ 1190:09ed). */
+rsc_error_t rsc_get_blob_string(const uint8_t *data, size_t size,
+                                unsigned index, uint8_t *out, size_t cap,
+                                size_t *out_len)
+{
+    uint16_t count = 0;
+    const uint8_t *p = NULL;
+    size_t remaining = 0;
+    unsigned i = 0;
+
+    if (out_len)
+        *out_len = 0;
+    if (!data || !out)
+        return RSC_ERR_NOENT;
+    if (size < 2)
+        return RSC_ERR_TRUNCATED;
+    /* BE count (CONCAT11(first, second) in orig == first*0x100+second,
+     * same descending mult-table as ResMgr_ReadU16 @ 1190:1953). */
+    count = (uint16_t)((uint16_t)data[0] * 0x100u + (uint16_t)data[1]);
+    if ((unsigned)index >= (unsigned)count)
+        return RSC_ERR_NOENT;
+    p = data + 2;
+    remaining = size - 2;
+    for (i = 0; i <= (unsigned)index; i++) {
+        uint8_t slen = 0;
+
+        if (remaining < 1)
+            return RSC_ERR_TRUNCATED;
+        slen = *p;
+        if ((size_t)slen + 1u > remaining)
+            return RSC_ERR_TRUNCATED;
+        if (i == (unsigned)index) {
+            if ((size_t)slen + 1u > cap)
+                return RSC_ERR_RANGE;
+            out[0] = slen;
+            if (slen > 0)
+                memcpy(out + 1, p + 1, (size_t)slen);
+            if (out_len)
+                *out_len = (size_t)slen + 1u;
+            return RSC_OK;
+        }
+        p += (size_t)slen + 1u;
+        remaining -= (size_t)slen + 1u;
+    }
+    return RSC_ERR_NOENT;
+}
+
 /* --- Packet E: ResMgr list manager (segment 1190, OS-free 1:1) --- */
 
 rsc_mgr_t *rsc_mgr_new(void)
@@ -1697,7 +1745,7 @@ rsc_error_t rsc_load_rsc_disk(rsc_mgr_t *mgr, const char *path)
 {
     /* ResMgr_LoadRscDisk @ 1190:0501: streaming twin of LoadRsc (taken when
      * GLOBALCOMPACT < 1500000; Z1 len-to-EOF + duality unified, no 0xE360
-     * cap). Same BE walk via File_ReadChunk (FUN_1000_272a): 16-B header
+     * cap). Same BE walk via File_ReadChunk (File_ReadChunk @ 1000:272a): 16-B header
      * (magic + U32Disk x3 variant-tolerant BE, LE only if BE invalid) +
      * 14-B extra + types (tag via fread + count/unk via ReadU16Disk) +
      * 12-B records (id via ReadU16Disk, name-off via ReadU16Disk2,
@@ -2226,7 +2274,7 @@ rsc_error_t rsc_load_rsc_auto(rsc_mgr_t *mgr, const char *path)
 uint16_t rsc_read_u16_disk(FILE *fp)
 {
     /* ResMgr_ReadU16Disk @ 1190:1abe: 2-byte BE fetch via File_ReadChunk
-     * (FUN_1000_272a @ 1000:272a). Descending mult table @ 1420:3d00
+     * (File_ReadChunk @ 1000:272a). Descending mult table @ 1420:3d00
      * (fixed W2, was LE). 0 on NULL fp / short read (mirrors the
      * truncated-cursor 0 in rsc_read_u16le). */
     uint8_t buf[2];
@@ -2268,7 +2316,7 @@ rsc_dir_t *rsc_add_file_disk(rsc_mgr_t *mgr, FILE *fp)
 {
     /* ResMgr_AddFileDisk @ 1190:1570 (disk AddRFile): reads the 10-byte
      * file header (u32 unk0 + u32 unk1 + u16 type-dir count) via
-     * File_ReadChunk (FUN_1000_272a @ 1000:272a; fread equiv) and delegates
+     * File_ReadChunk (File_ReadChunk @ 1000:272a; fread equiv) and delegates
      * node alloc/link to rsc_add_file (ResMgr_AddFile @ 1190:1692).
      * BE (fixed W2, was LE). Consumes exactly 10 bytes on success; NULL
      * on bad mgr/fp, short read (truncated header), or NOMEM. */
@@ -2878,4 +2926,110 @@ rsc_error_t rsc_kdat_decode_row(const uint8_t *data, size_t size,
                                (uint16_t)row[2u * k + 1u]);
     }
     return RSC_OK;
+}
+
+rsc_error_t res_append_pascal(uint8_t *dst, size_t cap,
+                              const uint8_t *src)
+{
+    /* Orig FUN_11f8_014a @ 11f8:014a -> Res_AppendPascal.
+     * Decompiler: b = *src; src++; dst_end = dst + *dst + 1; *dst += b;
+     * then copy b bytes. Callee of City_FormatName @ 1048:0101 x2 +
+     * ResMgr_GetString @ 1100:078a blob walk. OS-free 1:1 on caller
+     * buffers (no Win16, no globals). */
+    unsigned dl = 0;
+    unsigned sl = 0;
+    unsigned i = 0;
+
+    if (!dst || !src)
+        return RSC_ERR_NOENT;
+    if (cap == 0)
+        return RSC_ERR_RANGE;
+    dl = dst[0];
+    sl = src[0];
+    if (dl + sl > 255u)
+        return RSC_ERR_RANGE;
+    if ((size_t)dl + (size_t)sl + 1u > cap)
+        return RSC_ERR_RANGE;
+    for (i = 0; i < sl; i++)
+        dst[1u + dl + i] = src[1u + i];
+    dst[0] = (uint8_t)(dl + sl);
+    return RSC_OK;
+}
+
+int res_compare_pascal(const uint8_t *a, const uint8_t *b)
+{
+    /* Orig FUN_11f8_0207 @ 11f8:0207 -> Res_ComparePascal.
+     * Decompiler: la = *a++; lb = *b++; n = min(la, lb); memcmp n
+     * bytes, first diff (unsigned) decides; else la - lb. NULL treated
+     * as empty (len 0) so the helper stays total. OS-free 1:1. */
+    unsigned la = a ? a[0] : 0u;
+    unsigned lb = b ? b[0] : 0u;
+    unsigned n = la < lb ? la : lb;
+    unsigned i = 0;
+
+    for (i = 0; i < n; i++) {
+        unsigned ca = a ? a[1u + i] : 0u;
+        unsigned cb = b ? b[1u + i] : 0u;
+
+        if (ca != cb)
+            return (int)ca - (int)cb;
+    }
+    return (int)la - (int)lb;
+}
+
+rsc_error_t res_copy_pascal(uint8_t *dst, size_t cap,
+                            const uint8_t *src)
+{
+    /* Orig FUN_11f8_00fc @ 11f8:00fc -> Res_CopyPascal.
+     * Decompiler: *dst = *src (len byte), then copy len bytes + NUL
+     * walk shape (len+1 total incl. the len byte loop). OS-free 1:1. */
+    unsigned sl = 0;
+    unsigned i = 0;
+
+    if (!dst || !src)
+        return RSC_ERR_NOENT;
+    if (cap == 0)
+        return RSC_ERR_RANGE;
+    sl = src[0];
+    if ((size_t)sl + 1u > cap)
+        return RSC_ERR_RANGE;
+    dst[0] = src[0];
+    for (i = 0; i < sl; i++)
+        dst[1u + i] = src[1u + i];
+    return RSC_OK;
+}
+
+rsc_error_t res_get_string_copy(unsigned table, unsigned entry,
+                                char *out, size_t cap)
+{
+    (void)table;
+    (void)entry;
+    /* TODO: Orig FUN_11f8_0080 @ 11f8:0080 (Res_GetStringCopy:
+     * DAT_13f8_0000 = 0 + ResMgr_GetString(table, entry + 1 into the
+     * shared static @ DAT_13f8_0000) + Util_PascalToCStr @ 1100:0053;
+     * returns the shared static pointer, overwritten by the next
+     * GetString call — caller must copy immediately; see rsc_loader.h
+     * ownership note) -> Linux has no shared static (no globals), so
+     * the blob fetch (rsc_get_blob_string @ 1100:078a, LIVE) + copy
+     * wiring stays TBD. */
+    if (!out)
+        return RSC_ERR_NOENT;
+    if (cap > 0)
+        out[0] = '\0';
+    return RSC_ERR_UNSUPPORTED;
+}
+
+rsc_error_t res_get_string_raw(unsigned table, unsigned entry,
+                               uint8_t *out, size_t cap)
+{
+    (void)table;
+    (void)entry;
+    /* TODO: Orig FUN_11f8_00c5 @ 11f8:00c5 (Res_GetStringRaw: same as
+     * copy above but WITHOUT Util_PascalToCStr — Pascal length byte
+     * kept; same shared static @ DAT_13f8_0000 ownership) -> same TBD. */
+    if (!out)
+        return RSC_ERR_NOENT;
+    if (cap > 0)
+        out[0] = 0;
+    return RSC_ERR_UNSUPPORTED;
 }

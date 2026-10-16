@@ -90,4 +90,66 @@ civ_error_t util_format_float(char *out, size_t cap, double val,
  * exit(), read-only vs sources. */
 void *util_mem_copy_far(void *dst, const void *src, size_t n);
 
+/* Orig: FUN_1000_29c4 @ 1000:29c4, now Util_MemSetCore in Ghidra.
+ * Memset core (odd-address head byte, then CONCAT11 fill word loop via
+ * SHR CX,1 REP MOVSW, then odd tail byte). OS-free 1:1 port: memset
+ * semantics (fill byte c over n bytes). NULL dst -> NULL (orig faulted);
+ * n == 0 returns dst untouched. No Win16, no globals, no exit(). */
+void *util_mem_set_core(void *dst, int c, size_t n);
+/* Orig: FUN_1000_29ea @ 1000:29ea, now Util_MemSet in Ghidra.
+ * Memset wrapper (far dst + len + fill passthrough to Util_MemSetCore @
+ * 1000:29c4, returns dst). Zeroes the OPENFILENAME struct in
+ * save_prompt_open/save @ 1130:0075/0194 and 12d8:4334 (0x100 B) in
+ * MainMenu_WndProc @ 11e0:0221. OS-free 1:1 port: same contract as the
+ * core (thin delegate). No Win16, no globals, no exit(). */
+void *util_mem_set(void *dst, int c, size_t n);
+/* Orig: FUN_1000_299e @ 1000:299e, now Util_MemCopy in Ghidra.
+ * Memcpy word loop (SHR CX,1 REP MOVSW + odd MOVSB; complement to
+ * Util_MemCopyFar @ 1000:137f). Used by File_WriteBuffered @ 1000:2e85.
+ * OS-free 1:1 port: memcpy semantics with the same NULL/n==0 contract
+ * as util_mem_copy_far. No Win16, no globals, no exit(). */
+void *util_mem_copy(void *dst, const void *src, size_t n);
+/* Orig: FUN_1000_2a30 @ 1000:2a30, now Util_MemMoveCore in Ghidra.
+ * Memmove core (overlap-aware direction pick dst<src, then word loop
+ * forward/backward + odd byte). OS-free 1:1 port: memmove semantics.
+ * Same NULL/n==0 contract. No Win16, no globals, no exit(). */
+void *util_mem_move_core(void *dst, const void *src, size_t n);
+/* Orig: FUN_1000_2a89 @ 1000:2a89, now Util_MemMove in Ghidra.
+ * Memmove wrapper over Util_MemMoveCore @ 1000:2a30 (returns dst).
+ * Same contract. No Win16, no globals, no exit(). */
+void *util_mem_move(void *dst, const void *src, size_t n);
+/* Orig: FUN_1140_040e @ 1140:040e, now Util_StrCopyNul in Ghidra.
+ * Strcpy incl. NUL (copies *src then loops while the copied byte != 0;
+ * no callers left in this binary — orphan helper). OS-free 1:1 port:
+ * strcpy semantics, returns dst, NULL either -> NULL (orig faulted).
+ * No Win16, no globals, no exit(). */
+char *util_str_copy_nul(char *dst, const char *src);
+/* Orig: FUN_1100_0053 @ 1100:0053, now Util_PascalToCStr in Ghidra.
+ * Pascal->C string in place behind Save_SaveGame @ 1198:00a3 (follows
+ * ResMgr_GetString @ 1100:078a fetching the default name from BLOB
+ * 0x2da8): shifts bytes [1..len] down by one and NUL-terminates
+ * (len = original byte 0). OS-free 1:1 port on the caller's buffer;
+ * returns dst, NULL on NULL (orig faulted). No Win16, no globals,
+ * no exit(). */
+char *util_pascal_to_c(char *pstr);
+/* Orig: FUN_1140_04b5 @ 1140:04b5, now Util_ByteSwap16 in Ghidra.
+ * 16-bit byte swap ((x>>8 & 0xff) + x*0x100). Orphan helper (no xrefs).
+ * OS-free 1:1 port. No Win16, no globals, no exit(). */
+uint16_t util_byte_swap16(uint16_t x);
+/* Orig: FUN_1140_045c @ 1140:045c, now Util_SwapHigh16 in Ghidra.
+ * High-word byte fold ((v>>0x18 & 0xff) + ((v>>8) & 0xff00); i.e. swap
+ * of the top two bytes (0xAABBCCDD -> 0xBBAA). Orphan helper (no xrefs).
+ * OS-free 1:1 port preserving the exact expression incl. 32->int
+ * truncation. No Win16, no globals, no exit(). */
+int util_swap_high16(uint32_t v);
+
+/* Orig: FUN_1000_36de @ 1000:36de -> Util_StrCaseCmp.
+ * Case-insensitive C-string compare behind Res_CompareStringsCI @
+ * 11f8:01af (far-ptr wrapper). Decompiler: byte loop while *a != 0 and
+ * *a == *b (raw), else fold a-z (0x60 < c < 0x7b) via -0x20 each and
+ * compare folded; returns unfolded/folded diff (u - v). NULL either ->
+ * treated as empty ("") so the helper stays total; both NULL -> 0.
+ * OS-free 1:1, no Win16, no globals, no exit(). */
+int util_str_case_cmp(const char *a, const char *b);
+
 #endif /* CIVLIN_COMMON_H */

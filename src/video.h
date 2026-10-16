@@ -295,6 +295,48 @@ civ_error_t font_blit_glyph(SDL_Window *win, SDL_Renderer *ren,
  * IO/NOMEM. */
 civ_error_t palette_apply_to_port(gfx_port_t *port, int first, int count);
 
+/* --- Artwork frame chain (segment 10b8, 2026-10-16) ---
+ * Anchors (civ.exe, x86:LE:16:Protected Mode):
+ *   Art_LoadFrame @ 10b8:0e00 (Art_LoadFrameData @ 10b8:079d with
+ *     0x14-param + Art_PortDataToBitmap @ 10b8:0e36; 10 callers incl.
+ *     HoF_Show @ 1080:0119 + NewGame_Wizard @ 10e8:0000 +
+ *     WorldGen_LoadEarth @ 1108:0243 + FUN_11d8_0000/087f).
+ *   Art_LoadFrameData @ 10b8:079d (Art_LoadDiskFile @ 10b8:0aa8 disk
+ *     path via _LOPEN/_HREAD + save_unpack when DAT_1420_17a8 != 0,
+ *     else Art_LoadResPaletted @ 10b8:11bc RSC path via ResMgr_GetById
+ *     + palette expand to 0xec + Art_DecodeLZW @ 10b8:158c, then
+ *     Art_SaveConvertedFrame @ 10b8:0c1c when GOV != 1, then
+ *     GfxPort_Create @ 10d0:0000 + Gfx_StoreDC @ 1098:1104).
+ *   Art_PortDataToBitmap @ 10b8:0e36 (GR_PortDataToBitmap/log string:
+ *     even-width BITBLT path vs odd-width pad via DAT_1420_17a6 vs
+ *     CREATECOMPATIBLEDC + SETBITMAPBITS + BITBLT 0xcc0020 rows, then
+ *     SELECTOBJECT/DELETEOBJECT + SETRECT clip; driver-dependent).
+ *   Art_DecodeLZW @ 10b8:158c (GIF-style LZW: 2 << bits clear/eoi,
+ *     dict via GLOBALALLOC 0x2000/0x4000 tables; sibling of
+ *     gfx_lzw_decode @ 1420:2372/23ce, see gfx_indexed.h — decode
+ *     core stays there, no duplicate here).
+ *   Art_DrawProgressFill @ 10b8:062d (SETRECT fill-width math + FILLRECT;
+ *     callee of the Art_MaybeConvertArtwork @ 10b8:0000 convert loop
+ *     via Art_PumpConvertCancel @ 10b8:06a0 + Art_PreviewFrame @
+ *     10b8:076a + Art_CheckDiskSpace @ 10b8:04df 9 MB gate).
+ * OS-free fill-width math below is LIVE 1:1 (no Win16, no globals);
+ * bitmap/driver conversion stays STUB with TODO Orig. */
+
+/* Orig: Art_DrawProgressFill @ 10b8:062d fill-width math — progress bar
+ * segment width. 1:1: fill_w = (bar_w * done) / total (orig SETRECT
+ * right = left + (long)(w * done) / total, then FILLRECT). Returns the
+ * fill width, 0 when total <= 0 or done <= 0 (orig DIV would fault;
+ * guarded here). No globals, no exit(). */
+int art_progress_fill_x(int bar_w, int done, int total);
+
+/* Orig: Art_LoadFrame @ 10b8:0e00 + Art_LoadFrameData @ 10b8:079d +
+ * Art_PortDataToBitmap @ 10b8:0e36 — frame load + driver convert
+ * (GLOBALALLOC/LOCK + ResMgr/palette/LZW decode + GfxPort_Create @
+ * 10d0:0000 + BITBLT 0xcc0020 present). SDL3 indexed-texture bridge
+ * TBD (see gfx_port_load_rsc_frame above + gfx_lzw_decode in
+ * gfx_indexed.h for the LZW core). */
+civ_error_t art_load_frame(int frame_id, gfx_port_t **out);
+
 /* Orig: FUN_1008_0329 @ 1008:0329 WinMain_Shutdown video-only tail ->
  * video_shutdown_display. DESTROYWINDOW for the display ports/windows
  * plus REMOVEFONTRESOURCE(CIV_FONT_FILE "civfonts.fon" @ 1420:00a4/00fe,

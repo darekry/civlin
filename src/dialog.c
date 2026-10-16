@@ -986,3 +986,142 @@ int dialog_menuz_index_to_id(int index)
         return -1;
     return CIV_DIALOG_MENUZ_BASE_ID + index;
 }
+
+int text_align_x(int left, int right, int text_w, int format)
+{
+    /* Orig FUN_1098_0ed1 @ 1098:0ed1 -> Text_DrawAligned horizontal math.
+     * Decompiler: uVar1 = param_4 & 0xf; 1 -> *rect + ((rect[2]-*rect) -
+     * text_w) / 2; 2 -> *rect; 3 -> rect[2] - text_w; else early return
+     * (no draw). format is the full Orig param_4 word here; only the low
+     * nibble selects (0x30 shadow bits + color word handled by the
+     * Text_SetColor @ 1098:0e0b + TEXTOUT tail, see text_draw_aligned
+     * STUB below). OS-free 1:1, no Win16, no globals, no exit(). */
+    int slot = format & 0x0f;
+
+    if (slot == 1)
+        return left + ((right - left) - text_w) / 2;
+    if (slot == 2)
+        return left;
+    if (slot == 3)
+        return right - text_w;
+    return -1;
+}
+
+int text_center_y(int top, int bottom, int text_h)
+{
+    /* Orig FUN_1098_0ed1 @ 1098:0ed1 -> Text_DrawAligned vertical math.
+     * Decompiler: iVar3 = rect[1] + ((rect[3]-rect[1]) - tmHeight) / 2
+     * (tmHeight via GETTEXTMETRICS, see Text_GetFontHeight @ 1098:0dda /
+     * status_font_height). OS-free 1:1, no Win16, no globals. */
+    return top + ((bottom - top) - text_h) / 2;
+}
+
+civ_error_t dialog_dlgunits_to_pixels(const dlg_rect_t *in, int base_x,
+                                      int base_y, dlg_rect_t *out)
+{
+    /* Orig FUN_1098_0d43 @ 1098:0d43 -> Dialog_DlgUnitsToPixels.
+     * Decompiler: GETDIALOGBASEUNITS x2 (low = baseX, high = baseY),
+     * Util_MemCopyFar rect in, then x axes (left/right) (v << 2) / baseX
+     * and y axes (top/bottom) (v << 3) / baseY, MemCopyFar rect out.
+     * Caller: Dialog_GetItemRect @ 1100:03ff when param_7 != 0 (unit
+     * rect -> pixel rect before MOVEWINDOW). OS-free 1:1 on explicit
+     * rects (no Win16, no globals, read-only in). */
+    if (!in || !out)
+        return CIV_ERR_NOENT;
+    if (base_x <= 0 || base_y <= 0)
+        return CIV_ERR_RANGE;
+    out->left = (in->left << 2) / base_x;
+    out->right = (in->right << 2) / base_x;
+    out->top = (in->top << 3) / base_y;
+    out->bottom = (in->bottom << 3) / base_y;
+    return CIV_OK;
+}
+
+civ_error_t dialog_client_rect(int scr_l, int scr_t, int scr_r, int scr_b,
+                               int org_x, int org_y, dlg_rect_t *out)
+{
+    /* Orig FUN_1100_03ff @ 1100:03ff -> Dialog_GetItemRect client math.
+     * Decompiler: GETDLGITEM + GETWINDOWRECT -> screen rect, then
+     * SCREENTOCLIENT x2 (top-left pair, then bottom-right pair) against
+     * the dialog origin. Pure subtract here (handles in the STUB below).
+     * OS-free 1:1, no Win16, no globals. */
+    if (!out)
+        return CIV_ERR_NOENT;
+    out->left = scr_l - org_x;
+    out->top = scr_t - org_y;
+    out->right = scr_r - org_x;
+    out->bottom = scr_b - org_y;
+    return CIV_OK;
+}
+
+civ_error_t dlg_center_rect(const dlg_rect_t *outer, const dlg_rect_t *inner,
+                            dlg_rect_t *out)
+{
+    /* Orig FUN_11f8_0000 @ 11f8:0000 -> Dlg_CenterRect.
+     * Decompiler: *inner_out = (outer[2]+outer[0] - (w)) >> 1 etc.,
+     * keeping inner size (same shape as dlg_center_window, which stays
+     * PARTIAL for the SETWINDOWPOS tail; this helper returns CIV_OK so
+     * the pure math is testable). OS-free 1:1, no Win16, no globals. */
+    int w;
+    int h;
+
+    if (!outer || !inner || !out)
+        return CIV_ERR_NOENT;
+    w = inner->right - inner->left;
+    h = inner->bottom - inner->top;
+    out->left = ((outer->right + outer->left) - w) >> 1;
+    out->top = ((outer->bottom + outer->top) - h) >> 1;
+    out->right = out->left + w;
+    out->bottom = out->top + h;
+    return CIV_OK;
+}
+
+civ_error_t text_draw_aligned(const char *text, const dlg_rect_t *rect,
+                              int format, int color)
+{
+    (void)text;
+    (void)rect;
+    (void)format;
+    (void)color;
+    /* TODO: Orig FUN_1098_0ed1 @ 1098:0ed1 (Text_DrawAligned: SELECTOBJECT
+     * font via DAT_1420_5484/DAT_12d8_0024 + GETTEXTMETRICS/GETTEXTEXTENT
+     * measure + text_align_x/text_center_y above + SETBKMODE(1)/
+     * SETTEXTALIGN(0) + shadow TEXTOUT x3 when DAT_12d8_28fc == 0 and
+     * format & 0x30 via Text_SetColor @ 1098:0e0b + final TEXTOUT) and
+     * FUN_1098_20f4 @ 1098:20f4 (Text_DrawResString: ResMgr_GetString +
+     * Util_PascalToCStr @ 1100:0053 + DrawAligned; callers 1068:06af +
+     * WorldGen_LoadEarth @ 1108:0243) -> SDL_ttf bridge TBD. */
+    if (!text || !rect)
+        return CIV_ERR_NOENT;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t dialog_get_item_rect(int dlg_id, int item_id, dlg_rect_t *out)
+{
+    (void)dlg_id;
+    (void)item_id;
+    /* TODO: Orig FUN_1100_03ff @ 1100:03ff (Dialog_GetItemRect: GETDLGITEM
+     * + GETWINDOWRECT + SCREENTOCLIENT x2, see dialog_client_rect above,
+     * + optional Dialog_DlgUnitsToPixels @ 1098:0d43 + MOVEWINDOW when
+     * param_7 != 0; 12 callers incl. Dialog_MenuZ_Modal @ 1220:0156)
+     * -> SDL3 widget geometry TBD. Math part is LIVE above. */
+    if (!out)
+        return CIV_ERR_NOENT;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t dialog_show_message(const char *text, int *out_choice)
+{
+    (void)text;
+    /* TODO: Orig FUN_1220_00d2 @ 1220:00d2 (Dialog_ShowMessage: 0x88 vs
+     * 0x91 dialog id via DAT_1418_0008 + Dlg_CreateTracked @ 1098:124f +
+     * Dialog_MenuZ_Modal @ 1220:0156 + Dlg_DestroyTracked @ 1098:1612 +
+     * Dialog_RefreshViews @ 1220:0eb8 SENDMESSAGE 0xf to 12b0:0004/001c/
+     * 0034; 40+ callers incl. City_ProcessDisaster @ 1040:068e) -> SDL3
+     * modal TBD. */
+    if (out_choice)
+        *out_choice = -1;
+    if (!text || !out_choice)
+        return CIV_ERR_NOENT;
+    return CIV_ERR_UNSUPPORTED;
+}

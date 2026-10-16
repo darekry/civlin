@@ -19,7 +19,7 @@
  *   ResMgr_ReadU16b     @ 1190:19c9  (identical twin, name-offset slot)
  *   ResMgr_ReadU32      @ 1190:1a3f  (buffer cursor u32 LE; 1,100,10000..)
  *   ResMgr_ReadU16Disk  @ 1190:1abe / ResMgr_ReadU16Disk2 @ 1190:1b47 /
- *   ResMgr_ReadU32Disk  @ 1190:1bcb  (disk variants via FUN_1000_272a)
+ *   ResMgr_ReadU32Disk  @ 1190:1bcb  (disk variants via File_ReadChunk @ 1000:272a)
  *   ResMgr_CmpType      @ 1190:1533  (4-byte tag equality)
  *   ResMgr_CmpName      @ 1190:0e72  (case-insensitive via 1000:1978,
  *                         0x1f chars max + NUL/NUL stop)
@@ -512,10 +512,36 @@ rsc_error_t rsc_string_lookup(const uint8_t tag[4], const uint8_t *data,
                               size_t size, unsigned index,
                               const uint8_t **str, size_t *len);
 
+/* Orig: FUN_1100_078a @ 1100:078a -> ResMgr_GetString (blob entry N).
+ * Blob 0x2da8 structure (from the ResMgr_GetString walk: GLOBALLOCK the
+ * ResMgr_GetById @ 1190:0aea handle for id 0x2da8, then ResMgr_DisposeHandle
+ * @ 1190:09ed): u16 BE entry count @ +0 (first two bytes via
+ * CONCAT11(*ptr, *(ptr+1)), same BE as rsc_read_u16le via ResMgr_ReadU16
+ * @ 1190:1953), then count Pascal strings (u8 len + len bytes) @ +2.
+ * Entry N is 1-based (N < 1 -> Empty; count < N -> Empty); the walk skips
+ * N-1 entries via p += *p + 1, then copies len + bytes ((*dst = len,
+ * memcpy(dst+1, p+1, len)) via Util_MemCopy @ 1000:xxxx +
+ * Res_AppendPascal @ 11f8:014a shape). Readers (14 xrefs): civ leader/civ
+ * names (12d8:civ*0x20+0x1da/0x2da via Res_GetStringCopy @ 11f8:0080
+ * 0x8c/0x94/0x95 + Util_PascalToCStr @ 1100:0053, e.g. NewGame_Wizard @
+ * 10e8:03c6 tribe/tech lists), year/tech/wonder strings (Res_GetStringRaw
+ * @ 11f8:00c5), menu text (MainMenu_WndProc @ 11e0:0221), save filename
+ * (Save_SaveGame @ 1198:00a3), status rows (City_FormatName @ 1048:0101
+ * 0x88,4/5 + Res_AppendPascal). OS-free 1:1 below on the borrowed blob
+ * slice (valid while the container lives, same as rsc_strlist_get; index
+ * is 0-based here, N = index+1 in orig terms). NOENT on NULL
+ * data/out/out_len (or index OOR vs BE count), TRUNCATED when size < 2
+ * or any visited entry overruns, RANGE when the entry (len+1) does not
+ * fit cap, else RSC_OK with *out_len = len+1 (len byte + chars). No SDL,
+ * no exit, no globals, C17. */
+rsc_error_t rsc_get_blob_string(const uint8_t *data, size_t size,
+                                unsigned index, uint8_t *out, size_t cap,
+                                size_t *out_len);
+
 /* --- Packet E: ResMgr list manager (segment 1190, OS-free 1:1) ---
  * Win16 imports behind this layer (KERNEL):
  *   _LOPEN/_LCLOSE  -> file_open_wrapper/file_close_wrapper (save.h)
- *   _LREAD/_HREAD   -> file_read_chunk (above, FUN_1000_272a @ 1000:272a)
+ *   _LREAD/_HREAD   -> file_read_chunk (above, File_ReadChunk @ 1000:272a)
  *   _LWRITE/_HWRITE -> file_write_chunk (sys.h, fwrite equiv)
  *   _LLSEEK         -> file_seek_wrapper (save.h, fseek/ftell equiv)
  *   LOADRESOURCE/FINDRESOURCE/LOCKRESOURCE/UNLOCKRESOURCE/FREERESOURCE
@@ -725,7 +751,7 @@ rsc_error_t rsc_load_rsc(rsc_mgr_t *mgr, const char *path);
 /* Orig: FUN_1190_0501 @ 1190:0501 -> ResMgr_LoadRscDisk.
  * IMPLEMENTED (W2, streaming twin of ResMgr_LoadRsc @ 1190:0000; Z1
  * len-to-EOF + duality unified): same directory walk but streams via the
- * File_ReadChunk path (FUN_1000_272a @ 1000:272a, _HREAD/_LREAD on the
+ * File_ReadChunk path (File_ReadChunk @ 1000:272a, _HREAD/_LREAD on the
  * resource handle) instead of one 0xE360 buffered read; taken when
  * GLOBALCOMPACT reports < 1500000 bytes free. Linux: fopen(rb) + ftell
  * size + 16-B header via file_read_chunk (variant-tolerant BE32, LE only
@@ -766,7 +792,7 @@ rsc_error_t rsc_load_rsc_auto(rsc_mgr_t *mgr, const char *path);
 rsc_dir_t *rsc_add_file_disk(rsc_mgr_t *mgr, FILE *fp);
 
 /* Orig: FUN_1190_1abe @ 1190:1abe -> ResMgr_ReadU16Disk.
- * IMPLEMENTED via File_ReadChunk (FUN_1000_272a @ 1000:272a): fread 2
+ * IMPLEMENTED via File_ReadChunk (File_ReadChunk @ 1000:272a): fread 2
  * bytes, assemble BE (byte0 * 0x100 + byte1, descending mult table @
  * 1420:3d00 as ResMgr_ReadU16 @ 1190:1953; fixed W2, was LE). Returns 0
  * on NULL fp or short read. */
@@ -792,7 +818,7 @@ uint32_t rsc_read_u32_disk(FILE *fp);
 rsc_error_t rsc_dump_stats(const rsc_mgr_t *mgr, FILE *out);
 
 /* Orig: FUN_1190_0c92 @ 1190:0c92 -> ResMgr_Dispose (CDisposeResourceMgr).
- * IMPLEMENTED via rsc_mgr_free + File_CloseWrapper (FUN_1000_1f7c @
+ * IMPLEMENTED via rsc_mgr_free + File_CloseWrapper (File_CloseWrapper @
  * 1000:1f7c, _LCLOSE equiv): if pfp && *pfp, fclose + clear to NULL;
  * if pmgr && *pmgr, rsc_mgr_free + clear to NULL. Fully NULL-safe
  * (NULL pmgr/pfp, NULL *pmgr / *pfp are no-ops). Payload free + node free
@@ -1076,5 +1102,57 @@ rsc_error_t rsc_gdat_decode_row(const uint8_t *data, size_t size,
  * RSC_OK. Borrowed slice, no SDL/exit/globals, C17, no decode fake. */
 rsc_error_t rsc_kdat_decode_row(const uint8_t *data, size_t size,
                                 unsigned index, rsc_kdat_row_dec_t *out);
+
+/* --- Pascal-string chain (segment 11f8, OS-free) ---
+ * Anchors (civ.exe, x86:LE:16:Protected Mode):
+ *   Res_AppendPascal @ 11f8:014a (dst[0] += src[0] + byte copy; callee
+ *     of City_FormatName @ 1048:0101 + ResMgr_GetString @ 1100:078a
+ *     blob walk).
+ *   Res_CopyPascal @ 11f8:00fc (dst[0] = src[0] + byte copy).
+ *   Res_ComparePascal @ 11f8:0207 (min-len memcmp + len diff).
+ *   Res_CompareStringsCI @ 11f8:01af (case-insensitive C compare via
+ *     Util_StrCaseCmp @ 1000:36de, a-z -0x20 fold; see civ_common.h).
+ *   Res_ComparePascalRefs @ 11f8:01db (far-ptr wrapper over
+ *     Res_ComparePascal).
+ *   Res_GetStringCopy @ 11f8:0080 (ResMgr_GetString into DAT_13f8_0000
+ *     + Util_PascalToCStr @ 1100:0053; shared static buffer) vs
+ *   Res_GetStringRaw @ 11f8:00c5 (ResMgr_GetString only, Pascal kept).
+ * Ownership (critical): BOTH GetString helpers return a pointer to the
+ * shared static buffer @ DAT_13f8_0000 (DAT_13f8_0000 = 0 gate in both
+ * decompiles), overwritten by the next call — caller must copy before
+ * the next GetString. Linux has no such static (no globals per rules),
+ * so the raw/copy entry points stay STUB below with this ownership
+ * documented; pure pascal ops above are LIVE on caller buffers. */
+
+/* Orig: Res_AppendPascal @ 11f8:014a — append pascal src onto dst.
+ * 1:1: dst[0] += src[0], then copy src[1..len] after dst end. NULL
+ * either -> NOENT; dst_len + src_len > 255 -> RANGE (length byte);
+ * dst_len + src_len + 1 > cap -> RANGE. No globals, no exit(). */
+rsc_error_t res_append_pascal(uint8_t *dst, size_t cap,
+                              const uint8_t *src);
+
+/* Orig: Res_ComparePascal @ 11f8:0207 — pascal compare.
+ * 1:1: compare min(len_a, len_b) bytes, first diff decides (unsigned),
+ * else len_a - len_b. NULL either -> 0? NO: returns len diff with NULL
+ * as empty (NULL == len 0) so callers stay total; both NULL -> 0. */
+int res_compare_pascal(const uint8_t *a, const uint8_t *b);
+
+/* Orig: Res_CopyPascal @ 11f8:00fc — copy pascal src to dst.
+ * 1:1: dst[0] = src[0], then copy bytes. NULL either -> NOENT;
+ * src_len + 1 > cap -> RANGE. No globals, no exit(). */
+rsc_error_t res_copy_pascal(uint8_t *dst, size_t cap,
+                            const uint8_t *src);
+
+/* Orig: Res_GetStringCopy @ 11f8:0080 — STUB (shared-static owner).
+ * ResMgr_GetString into DAT_13f8_0000 + Util_PascalToCStr; returns a
+ * pointer to the shared static (overwritten next call). No globals on
+ * Linux -> stub RSC_ERR_UNSUPPORTED. NULL out -> NOENT. */
+rsc_error_t res_get_string_copy(unsigned table, unsigned entry,
+                                char *out, size_t cap);
+
+/* Orig: Res_GetStringRaw @ 11f8:00c5 — STUB (same shared static, Pascal
+ * length byte kept, no PascalToCStr). Same contract as copy. */
+rsc_error_t res_get_string_raw(unsigned table, unsigned entry,
+                               uint8_t *out, size_t cap);
 
 #endif /* CIVLIN_RSC_LOADER_H */

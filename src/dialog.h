@@ -584,4 +584,74 @@ int dialog_menuz_id_to_index(int button_id);
  * Returns 500 + index, or -1 when index < 0. */
 int dialog_menuz_index_to_id(int index);
 
+/* --- Text + dialog-rect chain (2026-10-16) ---
+ * Anchors (civ.exe, x86:LE:16:Protected Mode):
+ *   Text_DrawAligned @ 1098:0ed1 (centered TEXTOUT; callers HoF_Show @
+ *     1080:0119 + Anim_AdvanceFrames @ 10b0:0461 + Text_DrawResString @
+ *     1098:20f4; callees Text_SetColor @ 1098:0e0b + GETTEXTMETRICS/
+ *     GETTEXTEXTENT + SETBKMODE/SETTEXTALIGN + TEXTOUT + SELECTOBJECT).
+ *   Text_DrawResString @ 1098:20f4 (ResMgr_GetString + Util_PascalToCStr @
+ *     1100:0053 + Text_DrawAligned; callers 1068:06af + WorldGen_LoadEarth
+ *     @ 1108:0243).
+ *   Text_SetColor @ 1098:0e0b (Gfx_LookupColor @ 1098:01b0 + SETTEXTCOLOR +
+ *     CREATEPEN + Gfx_MakeBrush @ 1098:00b5).
+ *   Dialog_DlgUnitsToPixels @ 1098:0d43 (GETDIALOGBASEUNITS + x*4/baseX +
+ *     y*8/baseY; callee of Dialog_GetItemRect @ 1100:03ff).
+ *   Dialog_GetItemRect @ 1100:03ff (GETDLGITEM + GETWINDOWRECT +
+ *     SCREENTOCLIENT x2 + optional Dialog_DlgUnitsToPixels + MOVEWINDOW;
+ *     12 callers incl. Dialog_MenuZ_Modal @ 1220:0156 + Dlg_CreateTracked
+ *     @ 1098:124f + NewGame_Wizard @ 10e8:0000).
+ *   Dialog_ShowMessage @ 1220:00d2 (0x88 vs 0x91 via DAT_1418_0008 +
+ *     Dlg_CreateTracked + Dialog_MenuZ_Modal + Dlg_DestroyTracked +
+ *     Dialog_RefreshViews @ 1220:0eb8; 40+ callers).
+ *   Text_GetFontHeight @ 1098:0dda (GETTEXTMETRICS tmHeight; alias of
+ *     status_font_height in game.h, same Orig).
+ * OS-free rect/text math below is LIVE 1:1 on explicit params (no Win16,
+ * no globals, read-only); GDI handle tails stay STUB with TODO Orig. */
+
+/* Orig: Text_DrawAligned @ 1098:0ed1 horizontal math — alignment slot.
+ * format low nibble: 1 = center, 2 = left, 3 = right (other -> -1).
+ * Returns the text x origin: left + (w - text_w) / 2 (center), left
+ * (left), right - text_w (right). No globals, no exit(). */
+int text_align_x(int left, int right, int text_w, int format);
+
+/* Orig: Text_DrawAligned @ 1098:0ed1 vertical math — centered line.
+ * Returns top + (h - text_h) / 2. No globals, no exit(). */
+int text_center_y(int top, int bottom, int text_h);
+
+/* Orig: Dialog_DlgUnitsToPixels @ 1098:0d43 — dialog-unit scale.
+ * x*4/base_x, y*8/base_y per axis (GETDIALOGBASEUNITS low = base_x,
+ * high = base_y in orig). base_x/base_y <= 0 -> RANGE. No Win16. */
+civ_error_t dialog_dlgunits_to_pixels(const dlg_rect_t *in, int base_x,
+                                      int base_y, dlg_rect_t *out);
+
+/* Orig: Dialog_GetItemRect @ 1100:03ff client-offset math — screen rect
+ * minus the dialog origin (SCREENTOCLIENT x2 in orig). Pure subtract:
+ * out = (scr_l - org_x, scr_t - org_y, scr_r - org_x, scr_b - org_y).
+ * NULL out -> NOENT. No Win16 handles. */
+civ_error_t dialog_client_rect(int scr_l, int scr_t, int scr_r, int scr_b,
+                               int org_x, int org_y, dlg_rect_t *out);
+
+/* Orig: Dlg_CenterRect @ 11f8:0000 — center inner rect inside outer,
+ * keeping inner size (same math as dlg_center_window, but CIV_OK on
+ * success so tests can assert it). NULL -> NOENT. No Win16. */
+civ_error_t dlg_center_rect(const dlg_rect_t *outer, const dlg_rect_t *inner,
+                            dlg_rect_t *out);
+
+/* Orig: Text_DrawAligned @ 1098:0ed1 + Text_DrawResString @ 1098:20f4 —
+ * GDI text-out tail (SELECTOBJECT font + SETBKMODE/SETTEXTALIGN +
+ * TEXTOUT + shadow via Text_SetColor). SDL_ttf bridge TBD. */
+civ_error_t text_draw_aligned(const char *text, const dlg_rect_t *rect,
+                              int format, int color);
+
+/* Orig: Dialog_GetItemRect @ 1100:03ff — handle tail (GETDLGITEM +
+ * GETWINDOWRECT + SCREENTOCLIENT + MOVEWINDOW). Math part lives in
+ * dialog_client_rect/dialog_dlgunits_to_pixels above (LIVE). */
+civ_error_t dialog_get_item_rect(int dlg_id, int item_id, dlg_rect_t *out);
+
+/* Orig: Dialog_ShowMessage @ 1220:00d2 — modal message (0x88 vs 0x91
+ * via DAT_1418_0008 + Dlg_CreateTracked + Dialog_MenuZ_Modal +
+ * Dlg_DestroyTracked + Dialog_RefreshViews @ 1220:0eb8). SDL modal TBD. */
+civ_error_t dialog_show_message(const char *text, int *out_choice);
+
 #endif /* CIVLIN_DIALOG_H */

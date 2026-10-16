@@ -53,6 +53,36 @@
 #define CIV_HOF_SLOTS 6
 #define CIV_HOF_FILE "famehall.civ"
 
+/* famehall.civ raw format (decomposed 2026-10-16 from HoF_Load @
+ * 1080:0023 / HoF_Save @ 1080:0092 disassembly: save_file_read/write
+ * 0x1d4 = 468 B at DAT_1420_52a8; HoF_TryInsert @ 1080:0595 stride
+ * 0x27 words = 0x4e B per slot):
+ *   file = 6 slots x 78 B, little-endian, no header, no checksum.
+ *   per slot (all u16 LE unless noted):
+ *     +0x00 score      (0xffff = Empty sentinel, set by HoF_Clear;
+ *                        note Clear writes ONLY this word per slot)
+ *     +0x02 difficulty (0..4, names @ 1420:153e..1567)
+ *     +0x04 aux        (DAT_12d8_42ee copy; semantics TBD)
+ *     +0x06 year       (i16; HoF_Show sign-tests it for BC/AD;
+ *                        source DAT_12d8_42fa)
+ *     +0x08 unk        (DAT_1420_516c copy; semantics TBD)
+ *     +0x0a unk        (DAT_1420_516a copy; semantics TBD)
+ *     +0x0c pop/civ    (FUN_11c8_0334(g_nPlayerCiv @ 12d8:4300);
+ *                        HoF_Show formats it via FUN_11c8_03ac; TBD)
+ *     +0x0e leader name, 32 B NUL-terminated (from 12d8:civ*0x20+0x1da)
+ *     +0x2e civ name,    32 B NUL-terminated (from 12d8:civ*0x20+0x2da)
+ *   TryInsert weight (verified @ 1080:05b0-05df, signed IMUL after
+ *   ADD DX,2 on BOTH sides): weight = score * (difficulty + 2).
+ *   Insert when slot_w < new_w; slot 5 always takes (replaces last),
+ *   so the -1 "no qualify" path is unreachable in orig. Shift-down
+ *   copies slot[DI-1] -> slot[DI] (DI = 5..idx+1, 0x4e B via
+ *   Util_MemCopyFar @ 1000:137f, dst DI*0x4e+0x52a8 = src + 0x4e).
+ * Codec below maps the known fields; unknown header words (w2/w4/w5/w6)
+ * encode as 0 and are ignored on decode (semantics TBD, see above). */
+#define CIV_HOF_RAW_SIZE 468u
+#define CIV_HOF_SLOT_RAW 78u
+#define CIV_HOF_NAME_RAW 32u
+
 /* Raw-table Empty sentinel: HoF_Clear memsets each slot word to 0xffff. */
 #define CIV_HOF_EMPTY_SCORE (-1)
 #define CIV_HOF_DIFFICULTY_MIN 0
@@ -93,14 +123,18 @@ typedef struct civ_hof_entry {
 civ_error_t HoF_Clear(civ_hof_entry_t slots[CIV_HOF_SLOTS]);
 
 /* Orig: FUN_1080_0023 @ 1080:0023 -> HoF_Load.
- * Stub: famehall.civ via save_file_open (1420:14e8, OF_READ) /
- * save_file_read / save_file_close. Needs save_file_* wiring (see save.h).
- * Returns CIV_ERR_UNSUPPORTED. */
+ * LIVE: HoF_Clear first (as in orig), then save_file_open(CIV_HOF_FILE,
+ * O_READ) + save_file_read 468 B + save_file_close. Missing file =
+ * empty table (CIV_OK, orig falls through the same way); short read =
+ * CIV_ERR_IO (table left cleared); bad image = CIV_ERR_BAD_DATA.
+ * Decode via hof_decode below. No Win16, no globals, no exit(). */
 civ_error_t HoF_Load(civ_hof_entry_t slots[CIV_HOF_SLOTS]);
 
 /* Orig: FUN_1080_0092 @ 1080:0092 -> HoF_Save.
- * Stub: save_file_open x2 + save_file_write + save_file_close
- * (mode string @ 1420:14f5). Needs save_file_* wiring. */
+ * LIVE: hof_encode to 468 B, then save_file_open(CIV_HOF_FILE,
+ * O_WRITE|O_CREAT|O_TRUNC — covers orig's double-open 0x8004/0x8102) +
+ * save_file_write + save_file_close. CIV_OK or CIV_ERR_IO. No Win16,
+ * no globals, no exit(). */
 civ_error_t HoF_Save(const civ_hof_entry_t slots[CIV_HOF_SLOTS]);
 
 /* Orig: FUN_1080_0119 @ 1080:0119 -> HoF_Show.
@@ -109,16 +143,44 @@ civ_error_t HoF_Save(const civ_hof_entry_t slots[CIV_HOF_SLOTS]);
  * Needs dialog 0x94 bridge (see dialog.h). */
 civ_error_t HoF_Show(const civ_hof_entry_t slots[CIV_HOF_SLOTS]);
 
+/* Orig: FUN_1080_0119 @ 1080:0119 text-build half (HoF_Show per-slot line,
+ * callees Text_DrawAligned @ 1098:0ed1 + City_FormatPopCount @ 11c8:03ac
+ * + Text_DrawResString @ 1098:20f4 + Dialog_GetItemRect @ 1100:03ff).
+ * OS-free 1:1 of the string assembly (no dialog/GDI): Empty slots render
+ * CIV_HOF_EMPTY_TEXT ("Empty" @ 1420:1502); filled slots render "N. <name>
+ * of the <civ> (<difficulty>) - <year> BC/AD - Score <score> -
+ * CIVILIZATION RATING: <rating>%" where <difficulty> is hof_diff_names
+ * (names @ 1420:153e..1567, "Chieftan" typo kept), <year> uses the HoF
+ * sign-test (year < 0 -> "BC" @ 1420:1522-ish, else "AD"), and <rating> =
+ * score * (difficulty + 1) / 50 + "%" (HoF_Show @ 1080:0435-0460: IMUL
+ * then DIV 0x32, "%" @ 1420:1589; note TryInsert weighs score *
+ * (difficulty + 2), verified @ 1080:05b0-05df). NOENT on NULL e/out,
+ * RANGE when cap == 0, index OOR, or the text (incl. NUL) does not fit.
+ * No Win16, no globals, no exit(). */
+civ_error_t hof_format_slot(const civ_hof_entry_t *e, int index, char *out,
+                            size_t cap);
+
 /* Orig: FUN_1080_0595 @ 1080:0595 -> HoF_TryInsert.
- * Partial: OS-free ordering core is implemented (weighted score scan +
- * shift-down insert, 1:1 with decompiler shape); tail calling HoF_Show is
- * still a stub. Weight = score * (difficulty + 1); exact bias/addend TBD
- * from 1080:0595 decompile (task notes "score*(diff+..)"). Empty slots
- * (present==0 or score<0) sort last with weight -1. On success copies
- * *result into the hole and stores the index via out_index; -1 when the
- * score does not qualify. Always attempts the HoF_Show tail best-effort. */
+ * Ordering core ported 1:1 (linear weighted scan + shift down via
+ * memmove + copy, then the HoF_Show tail best-effort). Weight =
+ * score * (difficulty + 2) on BOTH sides (verified @ 1080:05b0-05df:
+ * ADD DX,2 before each IMUL); empty slots weigh -1 and sort last.
+ * Like orig, slot 5 always takes when reached (replaces the worst),
+ * so out_index is always 0..5 here (orig's -1 is unreachable).
+ * NOENT on NULL slots/result/out_index, RANGE on out-of-range
+ * difficulty or negative score. */
 civ_error_t HoF_TryInsert(civ_hof_entry_t slots[CIV_HOF_SLOTS],
                           const civ_hof_entry_t *result, int *out_index);
+
+/* Raw famehall.civ codec (OS-free, 1:1 with the format block above).
+ * hof_encode packs slots into 468 B LE (unknown header words as 0,
+ * names NUL-padded to 32 B); hof_decode unpacks (0xffff score word =
+ * Empty slot). NOENT on NULL args, RANGE when a present slot's score
+ * does not fit u16, else CIV_OK. No Win16, no globals, no exit(). */
+civ_error_t hof_encode(const civ_hof_entry_t slots[CIV_HOF_SLOTS],
+                        uint8_t out[CIV_HOF_RAW_SIZE]);
+civ_error_t hof_decode(const uint8_t raw[CIV_HOF_RAW_SIZE],
+                        civ_hof_entry_t slots[CIV_HOF_SLOTS]);
 
 /* Orig: FUN_1080_06ff @ 1080:06ff -> HoF_VictoryCeremony.
  * Stub: Sound_PlayId(0x22)=WINTUNE (see audio.h) + pyramid frames +
@@ -140,9 +202,10 @@ civ_error_t Hof_CalcFinalScore(int base_score, int difficulty, int *out_score);
 /* Orig: FUN_1038_xxxx @ 1038:xxxx -> Hof_CalcInterimScore.
  * OS-free pure score math 1:1 v1 (implemented, no Win16, no globals,
  * read-only; game_calc_power_score @ 1088:108a shape): interim =
- * base_score * (difficulty + 1) (Chieftain x1 .. Emperor x5, matching the
- * HoF_TryInsert @ 1080:0595 weight). Exact bias/addend TBD vs 1038
- * decompile; sits between Title_PlayAnimLoop @ 1030:0000 and
+ * base_score * (difficulty + 1) (Chieftain x1 .. Emperor x5).
+ * NOTE: HoF_TryInsert @ 1080:0595 weighs score*(difficulty+2) (verified
+ * @ 1080:05b0-05df); whether interim shares the +2 bias is TBD vs the
+ * 1038 decompile. Sits between Title_PlayAnimLoop @ 1030:0000 and
  * Hof_CalcFinalScore @ 1040:1137. Returns -1 on base_score < 0 or
  * difficulty outside CIV_HOF_DIFFICULTY_MIN..MAX. */
 int Hof_CalcInterimScore(int base_score, int difficulty);

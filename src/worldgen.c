@@ -58,18 +58,67 @@ civ_error_t worldgen_load_preset(const uint8_t *image, size_t len)
 
 civ_error_t worldgen_load_earth(void)
 {
-    /* TODO: Orig FUN_1108_0243 @ 1108:0243 (WorldGen_LoadEarth, choice 3 Play
-     * on EARTH from MainMenu_WndProc @ 11e0:0221). Preset 64000B via
+    /* TODO: Orig WorldGen_LoadEarth @ 1108:0243 (choice 3 Play on EARTH
+     * from MainMenu_WndProc @ 11e0:0221; dialog 0x8f with 4 rows x 3
+     * cols + help col, IDs from 0x323, help texts Temperature @
+     * 1420:2e28 / Climate @ 1420:2e34 / 0x2e23 / 0x2e3c via NewGame
+     * customize @ 10e0:0000, item rects via Dialog_GetItemRect @
+     * 1100:03ff, frames via Art_LoadFrame @ 10b8:0e00). Preset 64000B via
      * WorldGen_CopyPreset @ 10b8:079d + tail 1028:1d15/0a93. Preset image
      * source TBD (RSC entry vs file read); takes no caller buffer. Win16
-     * resource/file load -> stub. */
+     * resource/file load -> stub. The OS-free ID->cell math lives in
+     * worldgen_dialog_id_to_cell / worldgen_custom_apply below. */
     return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t worldgen_dialog_id_to_cell(int dialog_id, int *row_out,
+                                       int *col_out)
+{
+    /* Orig WorldGen_LoadEarth @ 1108:0243 ID math: row = (id - 0x323) / 4,
+     * col = (id - 0x323) % 4 (4 rows: landmass/temperature/climate/age
+     * hypothesis; 3 choice cols + col 3 = help via 10e0:0000). Caller
+     * passes DAT_1328_0004 (dialog result ID); 0x65/0x66 are OK/Cancel
+     * (handled by the dialog pump, not here). NOENT on NULL outs, RANGE
+     * when id < 0x323 or row outside 0..3. No Win16, no globals. */
+    int rel = 0;
+
+    if (!row_out || !col_out)
+        return CIV_ERR_NOENT;
+    if (dialog_id < 0x323)
+        return CIV_ERR_RANGE;
+    rel = dialog_id - 0x323;
+    *row_out = rel / 4;
+    *col_out = rel % 4;
+    if (*row_out < 0 || *row_out > 3 || *col_out < 0 || *col_out > 3)
+        return CIV_ERR_RANGE;
+    return CIV_OK;
+}
+
+civ_error_t worldgen_custom_apply(int *settings, int row, int col)
+{
+    /* Orig WorldGen_LoadEarth @ 1108:0243 choice write: when col < 3 the
+     * dialog stores col into settings[row] (int array at
+     * s_found_the_city_of_1420_38f1 + 3, 4 entries x 2 B, preset to 1);
+     * col == 3 is the help column (Temperature/Climate/0x2e23/0x2e3c via
+     * NewGame customize @ 10e0:0000 + Dialog_GetItemRect @ 1100:03ff) and
+     * leaves settings untouched. NOENT on NULL settings, RANGE on
+     * row/col outside 0..3, else CIV_OK. No Win16, no globals. */
+    if (!settings)
+        return CIV_ERR_NOENT;
+    if (row < 0 || row > 3 || col < 0 || col > 3)
+        return CIV_ERR_RANGE;
+    if (col < 3)
+        settings[row] = col;
+    return CIV_OK;
 }
 
 civ_error_t worldgen_prepare_earth(void)
 {
-    /* TODO: Orig neighbour @ 1108:01bc (WorldGen_PrepareEarth), adjacent to
-     * FUN_1108_0243. Exact role TBD from decompile near 1108:0243
+    /* TODO: Orig WorldGen_PrepareEarth @ 1108:01bc, adjacent to
+     * WorldGen_LoadEarth @ 1108:0243 in the same 1108 segment (dispatch
+     * by g_nMenuChoice: 0 -> Map_GenerateRandomOrLoad(0), 2 ->
+     * Map_GenerateRandomOrLoad(1), 3 -> Earth path; Cursor_Set 0x84 +
+     * Sound_PlayId(1)). Exact role TBD from decompile near 1108:0243
      * (presumed setup/prompt around the EARTH load). Win16 -> stub. */
     return CIV_ERR_UNSUPPORTED;
 }

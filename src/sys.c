@@ -63,10 +63,10 @@ int util_clamp(int v, int lo, int hi)
 
 int util_progress(int done, int total)
 {
-    /* Orig: FUN_1000_29ea @ 1000:29ea -> Util_Progress. OS-free 1:1 port
-     * of the counter/total percent behind the continent-link progress
-     * (orig bar range 0x1248; Linux reports 0..100 percent). No Win16, no
-     * globals, no exit(), read-only. */
+    /* Generic progress percent (see sys.h: the seg-1000 memset wrapper
+     * is Util_MemSet, not this helper). Continent-link progress-bar UI
+     * scales the counter to the 0x1248 bar range; Linux reports 0..100
+     * percent. No Win16, no globals, no exit(), read-only. */
     long pct;
 
     if (total <= 0 || done <= 0)
@@ -95,6 +95,178 @@ int debug_print(const char *fmt, ...)
     n = vfprintf(stdout, fmt, ap);
     va_end(ap);
     return n;
+}
+
+int debug_print_line(const char *s)
+{
+    /* Orig: FUN_1000_3088 @ 1000:3088 -> Debug_PrintLine. OS-free 1:1 of
+     * the puts-to-1420:4cd0 path (Util_StrLen @ 1000:3722 + write via
+     * File_WriteBuffered @ 1000:2e85 + '\n' via File_PutCharBuffered @
+     * 1000:2cd8): NULL seg:off returns 0, short write or newline failure
+     * returns -1 (orig 0xffff), else 10. No globals, no exit(). */
+    if (!s)
+        return 0;
+    if (fputs(s, stdout) == EOF)
+        return -1;
+    if (fputc('\n', stdout) == EOF)
+        return -1;
+    return 10;
+}
+
+civ_error_t file_write_buffered(const uint8_t *src, size_t len)
+{
+    (void)src;
+    (void)len;
+    /* TODO: Orig FUN_1000_2e85 @ 1000:2e85 (File_WriteBuffered: Borland
+     * buffered fwrite with 0x4e4e fd flags, 1420:4cd0 FILE struct, DOS
+     * write via Dos_Write @ 1000:3fc4 INT 21h, overflow via File_EmitChar @
+     * 1000:2cba). Needs DOS fd table + stream struct. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t file_put_char_buffered(int c)
+{
+    (void)c;
+    /* TODO: Orig FUN_1000_2cd8 @ 1000:2cd8 (File_PutCharBuffered: flag
+     * 8/0x90/0x200 dispatch, flush via File_Flush @ 1000:2152, DOS via
+     * Dos_Write @ 1000:3fc4). Needs 1420:4cd0 stream + DOS. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t file_emit_char(char c)
+{
+    (void)c;
+    /* TODO: Orig FUN_1000_2cba @ 1000:2cba (File_EmitChar: count -1 then
+     * File_PutCharBuffered @ 1000:2cd8; overflow path of
+     * File_WriteBuffered @ 1000:2e85). Same stream/DOS dependency. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+/* --- DOS-file primitives (raw INT 21h; all STUB, contracts in sys.h) --- */
+
+civ_error_t dos_map_error(int dos_code)
+{
+    (void)dos_code;
+    /* TODO: Orig FUN_1000_151a @ 1000:151a (Dos_MapError: errno mapper to
+     * DAT_1420_0010/DAT_1420_4e7a, always returns 0xffff). Needs the
+     * DGROUP errno words + table @ 1420:4e7c. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t dos_is_char_device(int fd)
+{
+    (void)fd;
+    /* TODO: Orig FUN_1000_1566 @ 1000:1566 (Dos_IsCharDevice: INT 21h
+     * AX=0x4400, BX=fd -> DX & 0x80). No DOS ioctls on Linux. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t dos_seek(int fd, long offset, int origin)
+{
+    (void)fd;
+    (void)offset;
+    (void)origin;
+    /* TODO: Orig FUN_1000_161c @ 1000:161c (Dos_Seek: INT 21h AH=0x42,
+     * AL=origin, CX:DX=offset; live twin file_seek_wrapper in save.c). */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t dos_read(int fd, void *buf, unsigned len)
+{
+    (void)fd;
+    if (!buf)
+        return CIV_ERR_NOENT;
+    /* TODO: Orig FUN_1000_1750 @ 1000:1750 (Dos_Read: INT 21h AH=0x3f;
+     * live twin save_file_read @ 1140:019d in save.c). */
+    (void)len;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t dos_unlink(const char *path)
+{
+    if (!path)
+        return CIV_ERR_NOENT;
+    /* TODO: Orig FUN_1000_19a6 @ 1000:19a6 (Dos_Unlink: INT 21h AH=0x41,
+     * DS:DX=path). */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t dos_file_attr(const char *path, int func, int attrs)
+{
+    if (!path)
+        return CIV_ERR_NOENT;
+    /* TODO: Orig FUN_1000_1f5c @ 1000:1f5c (Dos_FileAttr: INT 21h AH=0x43,
+     * AL=func, CX=attrs). */
+    (void)func;
+    (void)attrs;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t dos_close(int fd)
+{
+    (void)fd;
+    /* TODO: Orig FUN_1000_1fa6 @ 1000:1fa6 (Dos_Close: INT 21h AH=0x3e +
+     * 0x4e4e-table clear; live twin save_file_close in save.c). */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t dos_is_eof(int fd, int *out_eof)
+{
+    (void)fd;
+    if (!out_eof)
+        return CIV_ERR_NOENT;
+    *out_eof = 0;
+    /* TODO: Orig FUN_1000_201e @ 1000:201e (Dos_IsEof: 4400-device gate +
+     * 4201/4202/4200 tell/end/restore probe). Needs DOS seeks. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t dos_create(const char *path, int attrs)
+{
+    if (!path)
+        return CIV_ERR_NOENT;
+    /* TODO: Orig FUN_1000_2aac @ 1000:2aac (Dos_Create: INT 21h AH=0x3c,
+     * CX=attrs; live twin save_file_open O_CREAT in save.c). */
+    (void)attrs;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t dos_truncate(int fd)
+{
+    (void)fd;
+    /* TODO: Orig FUN_1000_2ac7 @ 1000:2ac7 (Dos_Truncate: INT 21h AH=0x40
+     * CX=0 zero-write at cursor; sole caller File_Open @ 1000:2ad9). */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t dos_open(const char *path, int mode_flags)
+{
+    if (!path)
+        return CIV_ERR_NOENT;
+    /* TODO: Orig FUN_1000_2c4a @ 1000:2c4a (Dos_Open: INT 21h AH=0x3d,
+     * AL=mode from flags; live twin save_file_open O_RDONLY in save.c). */
+    (void)mode_flags;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t dos_write(int fd, const void *buf, unsigned len)
+{
+    (void)fd;
+    if (!buf)
+        return CIV_ERR_NOENT;
+    /* TODO: Orig FUN_1000_3fc4 @ 1000:3fc4 (Dos_Write: INT 21h AH=0x40;
+     * live twin save_file_write @ 1140:0245 in save.c). */
+    (void)len;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t dos_ioctl(int fd, int func)
+{
+    (void)fd;
+    (void)func;
+    /* TODO: Orig FUN_1000_4252 @ 1000:4252 (Dos_Ioctl: INT 21h AH=0x44
+     * subfunction dispatch with verr() gate). Console/device only. */
+    return CIV_ERR_UNSUPPORTED;
 }
 
 int dos_get_current_drive(void)
@@ -1329,4 +1501,86 @@ int util_format_int(char *out, size_t cap, uint32_t v, int is_signed,
         out[i++] = tmp[--n];
     out[i] = '\0';
     return i;
+}
+
+int util_parse_int(const char *s)
+{
+    /* Orig FUN_1000_1ed2 @ 1000:1ed2 -> Util_ParseInt (see sys.h).
+     * Decompiler: isspace skip via ctype [c+0x4baf] & 1, sign on the
+     * first non-space byte (0x2b '+' skip, 0x2d '-' neg), digit run
+     * with unsigned wrap (orig 16-bit carry fast path + 32-bit tail;
+     * Linux single uint32_t accumulator, same wrap), stop at the first
+     * non-digit (trailing bytes ignored, no endptr). OS-free 1:1. */
+    const unsigned char *p = NULL;
+    unsigned char c = 0;
+    uint32_t acc = 0;
+    int neg = 0;
+
+    if (!s)
+        return 0;
+    p = (const unsigned char *)s;
+    do {
+        c = *p++;
+    } while (float_scan_is_space((int)c));
+    if (c == (unsigned char)'+') {
+        c = *p++;
+    } else if (c == (unsigned char)'-') {
+        neg = 1;
+        c = *p++;
+    }
+    for (;;) {
+        if (c < (unsigned char)'0' || c > (unsigned char)'9')
+            break;
+        acc = acc * 10u + (uint32_t)(unsigned char)(c - (unsigned char)'0');
+        c = *p++;
+    }
+    if (neg)
+        acc = 0u - acc;
+    return (int)acc;
+}
+
+const char *debug_log_trace(void)
+{
+    /* Orig FUN_1148_003c @ 1148:003c -> Debug_LogTrace (see sys.h).
+     * Release no-op: the decompiler body is just "return static_base"
+     * (the trace-file/line prefix the 40+ callers push is dropped in
+     * this build). Returns a read-only empty string. */
+    return "";
+}
+
+civ_error_t mem_dispose_ptr(const void *p)
+{
+    (void)p;
+    /* TODO: Orig FUN_1100_060b @ 1100:060b (Mem_DisposePtr:
+     * Debug_LogTrace("DisposPtr", "mac_c") + GLOBALHANDLE(select) gate
+     * (zero select = no-op) + GLOBALUNLOCK + GLOBALFREE; 12 callers
+     * incl. WinMain_Shutdown @ 1008:0329 + Map_GenerateRandomOrLoad @
+     * 1028:0000 + save_serialize @ 10f8:02bd) -> selector bridge TBD
+     * (see win16_compat.h; no Linux equivalent, no globals). */
+    if (!p)
+        return CIV_ERR_NOENT;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t mem_dispose_handle(int handle)
+{
+    (void)handle;
+    /* TODO: Orig FUN_1100_0652 @ 1100:0652 (Mem_DisposeHandle:
+     * Debug_LogTrace("DisposeHandle", "mac_c") + GLOBALUNLOCK +
+     * GLOBALFREE; 0 = no-op) -> selector bridge TBD. */
+    if (handle == 0)
+        return CIV_ERR_NOENT;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t mem_realloc_handle(int *handle)
+{
+    (void)handle;
+    /* TODO: Orig FUN_1100_030f @ 1100:030f (Mem_ReallocHandle:
+     * Debug_LogTrace("HandToHand", "mac_c") + GLOBALSIZE (0 -> 0xff93)
+     * + GLOBALALLOC (fail -> 0xff94) + GLOBALLOCK x2 + Util_MemMove +
+     * unlocks, *handle = new) -> selector bridge TBD. */
+    if (!handle)
+        return CIV_ERR_NOENT;
+    return CIV_ERR_UNSUPPORTED;
 }

@@ -95,6 +95,99 @@ void *util_mem_copy_far(void *dst, const void *src, size_t n)
     return memcpy(dst, src, n);
 }
 
+void *util_mem_set_core(void *dst, int c, size_t n)
+{
+    /* Orig: FUN_1000_29c4 @ 1000:29c4 -> Util_MemSetCore. OS-free 1:1
+     * (odd head + word fill + odd tail == memset). */
+    if (!dst)
+        return NULL;
+    if (n == 0)
+        return dst;
+    return memset(dst, c, n);
+}
+
+void *util_mem_set(void *dst, int c, size_t n)
+{
+    /* Orig: FUN_1000_29ea @ 1000:29ea -> Util_MemSet (wrapper over
+     * Util_MemSetCore @ 1000:29c4). Thin delegate. */
+    return util_mem_set_core(dst, c, n);
+}
+
+void *util_mem_copy(void *dst, const void *src, size_t n)
+{
+    /* Orig: FUN_1000_299e @ 1000:299e -> Util_MemCopy (word loop +
+     * odd byte == memcpy). */
+    if (!dst)
+        return NULL;
+    if (n == 0)
+        return dst;
+    if (!src)
+        return NULL;
+    return memcpy(dst, src, n);
+}
+
+void *util_mem_move_core(void *dst, const void *src, size_t n)
+{
+    /* Orig: FUN_1000_2a30 @ 1000:2a30 -> Util_MemMoveCore
+     * (overlap-aware direction + word loop == memmove). */
+    if (!dst)
+        return NULL;
+    if (n == 0)
+        return dst;
+    if (!src)
+        return NULL;
+    return memmove(dst, src, n);
+}
+
+void *util_mem_move(void *dst, const void *src, size_t n)
+{
+    /* Orig: FUN_1000_2a89 @ 1000:2a89 -> Util_MemMove (wrapper over
+     * Util_MemMoveCore @ 1000:2a30). Thin delegate. */
+    return util_mem_move_core(dst, src, n);
+}
+
+char *util_str_copy_nul(char *dst, const char *src)
+{
+    /* Orig: FUN_1140_040e @ 1140:040e -> Util_StrCopyNul (copies *src
+     * then loops while copied byte != 0 == strcpy incl. NUL). */
+    if (!dst || !src)
+        return NULL;
+    return strcpy(dst, src);
+}
+
+char *util_pascal_to_c(char *pstr)
+{
+    /* Orig: FUN_1100_0053 @ 1100:0053 -> Util_PascalToCStr: B = *pstr
+     * (length byte), then pstr[i] = pstr[i+1] for i in 0..B-1,
+     * pstr[B] = 0. In-place, returns the same buffer. */
+    unsigned char len;
+    int i;
+
+    if (!pstr)
+        return NULL;
+    len = (unsigned char)pstr[0];
+    for (i = 0; i < (int)len; i++)
+        pstr[i] = pstr[i + 1];
+    pstr[len] = '\0';
+    return pstr;
+}
+
+uint16_t util_byte_swap16(uint16_t x)
+{
+    /* Orig: FUN_1140_04b5 @ 1000:04b5 -> Util_ByteSwap16
+     * ((x>>8 & 0xff) + x*0x100 == byte swap). */
+    return (uint16_t)(((uint16_t)(x >> 8) & 0x00ffu) |
+        (uint16_t)((uint16_t)(x << 8) & 0xff00u));
+}
+
+int util_swap_high16(uint32_t v)
+{
+    /* Orig: FUN_1140_045c @ 1140:045c -> Util_SwapHigh16
+     * ((byte)(v>>0x18) + ((v>>8) & 0xff00)). Exact 1:1 incl. narrowing
+     * to int return. */
+    return (int)(((v >> 24u) & 0xffu) + ((v >> 8u) & 0xff00u));
+}
+
 size_t util_strip_trailing_zeros(char *buf, size_t len, size_t cap,
                                  int is_g_format)
 {
@@ -131,6 +224,41 @@ civ_error_t util_format_float(char *out, size_t cap, double val,
     if (out && cap > 0)
         out[0] = '\0';
     return CIV_ERR_UNSUPPORTED;
+}
+
+int util_str_case_cmp(const char *a, const char *b)
+{
+    /* Orig FUN_1000_36de @ 1000:36de -> Util_StrCaseCmp (see civ_common.h).
+     * Wraps the decompiler loop: raw byte equality fast path, else
+     * lowercase fold for a-z on each side before compare. */
+    const unsigned char *pa = (const unsigned char *)a;
+    const unsigned char *pb = (const unsigned char *)b;
+    unsigned ca = 0;
+    unsigned cb = 0;
+
+    if (!pa)
+        pa = (const unsigned char *)"";
+    if (!pb)
+        pb = (const unsigned char *)"";
+    for (;;) {
+        ca = *pa;
+        cb = *pb;
+        if (ca == 0)
+            return (int)ca - (int)cb;
+        if (ca != cb) {
+            unsigned fa = ca;
+            unsigned fb = cb;
+
+            if (fa > 0x60u && fa < 0x7bu)
+                fa -= 0x20u;
+            if (fb > 0x60u && fb < 0x7bu)
+                fb -= 0x20u;
+            if (fa != fb)
+                return (int)fa - (int)fb;
+        }
+        pa++;
+        pb++;
+    }
 }
 
 int util_format_message(char *dst, size_t cap, const char *fmt, ...)

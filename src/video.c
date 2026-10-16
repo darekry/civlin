@@ -630,3 +630,43 @@ civ_error_t font_blit_glyph(SDL_Window *win, SDL_Renderer *ren,
     SDL_DestroyTexture(tmp);
     return CIV_OK;
 }
+
+int art_progress_fill_x(int bar_w, int done, int total)
+{
+    /* Orig FUN_10b8_062d @ 10b8:062d -> Art_DrawProgressFill width math.
+     * Decompiler: SETRECT(right = left + (long)((rect[2] - *rect) *
+     * param_5) / param_4, ...) then FILLRECT brush param_6. Guarded
+     * here (orig DIV faulted on total == 0). OS-free 1:1, no Win16. */
+    if (total <= 0 || done <= 0 || bar_w <= 0)
+        return 0;
+    if (done >= total)
+        return bar_w;
+    return (int)(((long)bar_w * (long)done) / (long)total);
+}
+
+civ_error_t art_load_frame(int frame_id, gfx_port_t **out)
+{
+    (void)frame_id;
+    /* TODO: Orig FUN_10b8_0e00 @ 10b8:0e00 (Art_LoadFrame:
+     * Art_LoadFrameData @ 10b8:079d with 0x14-kind param: disk path via
+     * Art_LoadDiskFile @ 10b8:0aa8 (_LOPEN/_HREAD + save_unpack @
+     * 10f8:040a when DAT_1420_17a8 != 0) else RSC path via
+     * Art_LoadResPaletted @ 10b8:11bc (ResMgr_GetById + 0xec palette
+     * expand + Art_DecodeLZW @ 10b8:158c, cf. gfx_lzw_decode @
+     * 1420:2372/23ce in gfx_indexed.h, no duplicate) + optional
+     * Art_SaveConvertedFrame @ 10b8:0c1c (_LCREAT/_HWRITE + save_pack @
+     * 10f8:05da), then GfxPort_Create @ 10d0:0000 + Gfx_StoreDC @
+     * 1098:1104; then Art_PortDataToBitmap @ 10b8:0e36
+     * (GR_PortDataToBitmap: even-width direct vs odd-width pad via
+     * DAT_1420_17a6 vs compatible-DC + SETBITMAPBITS + BITBLT 0xcc0020
+     * rows); progress via Art_DrawProgressFill @ 10b8:062d +
+     * Art_PumpConvertCancel @ 10b8:06a0 + Art_PreviewFrame @ 10b8:076a +
+     * Art_CheckDiskSpace @ 10b8:04df 9 MB gate in Art_MaybeConvertArtwork
+     * @ 10b8:0000, see boot.h art_maybe_convert_artwork) -> SDL3
+     * INDEX8 texture bridge TBD (see gfx_port_load_rsc_frame). */
+    if (out)
+        *out = NULL;
+    if (!out)
+        return CIV_ERR_NOENT;
+    return CIV_ERR_UNSUPPORTED;
+}

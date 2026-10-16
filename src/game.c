@@ -257,10 +257,52 @@ civ_error_t status_draw_tech_icons(int civ, int progress, int x, int y)
     return CIV_ERR_UNSUPPORTED;
 }
 
-civ_error_t game_append_year_text(void)
+civ_error_t game_append_year_text(int year, char *out, size_t cap)
 {
-    /* TODO: FUN_1088_1dd0 @ 1088:1dd0 (abs(year) + BC/AD onto 12d8:24fa). */
-    return CIV_ERR_UNSUPPORTED;
+    /* Orig FUN_1088_1dd0 @ 1088:1dd0 (game year <-> text; the true chain,
+     * not the 1000:386e Date_Convert / 1000:3ba0 Float_ParseFormat /
+     * 1000:3d90 Date_CheckValid C-runtime date chain via Sys_GetDate @
+     * 1000:18d4): abs(year) via Util_IntToDec @ 1000:2928 (...,10, sign
+     * only for base 10) + " BC" (year < 0, 1420:173c) / " AD" (else,
+     * 1420:1740) appended to the line buffer (orig 12d8:24fa). OS-free
+     * 1:1 on explicit out/cap with the orig leading space before the era
+     * (year_suffix below returns the spaceless literal). NOENT on NULL
+     * out, RANGE when cap == 0 or the text does not fit. No globals. */
+    long abs_year = year < 0 ? -(long)year : (long)year;
+    const char *era = year < 0 ? " BC" : " AD";
+    char num[12];
+    int nlen = 0;
+    size_t need = 0;
+
+    if (!out)
+        return CIV_ERR_NOENT;
+    if (cap == 0)
+        return CIV_ERR_RANGE;
+    if (abs_year == 0) {
+        num[0] = '0';
+        nlen = 1;
+    } else {
+        char rev[12];
+        int rn = 0;
+
+        while (abs_year > 0) {
+            rev[rn++] = (char)('0' + abs_year % 10);
+            abs_year /= 10;
+        }
+        nlen = rn;
+        for (int k = 0; k < rn; k++)
+            num[k] = rev[rn - 1 - k];
+    }
+    need = (size_t)nlen + 3u + 1u; /* digits + " BC"/" AD" + NUL */
+    if (need > cap)
+        return CIV_ERR_RANGE;
+    for (int k = 0; k < nlen; k++)
+        out[k] = num[k];
+    out[nlen] = era[0];
+    out[nlen + 1] = era[1];
+    out[nlen + 2] = era[2];
+    out[nlen + 3] = '\0';
+    return CIV_OK;
 }
 
 const char *year_suffix(int year)
@@ -1195,4 +1237,135 @@ void game_shutdown(civ_game_t *g)
 {
     if (g)
         g->initialized = 0;
+}
+
+civ_error_t city_format_pop_count(int pop, const char *sep_thousands,
+                                  const char *pad_zero, const char *suffix,
+                                  char *out, size_t cap)
+{
+    /* Orig FUN_11c8_03ac @ 11c8:03ac -> City_FormatPopCount.
+     * Decompiler: if (99 < pop) { q = pop / 100; Util_IntToDec(q) +
+     * StrAppend; StrAppend(0x42ec); if (pop % 100 < 10)
+     * StrAppend(0x42ee); } r = pop % 100; Util_IntToDec(r) + StrAppend;
+     * StrAppend(0x42f0). Separators live in DGROUP (12d8:42ec/42ee/42f0,
+     * image-zero, runtime-filled; "," / "0" / suffix hypothesis from the
+     * "00,000 citizens." @ 1420:172b neighbour, exact bytes TBD), so
+     * they arrive as caller params here (no globals). Negative pop is
+     * treated as 0 (orig compared signed 99 < pop, then %/div; game
+     * totals are non-negative). OS-free 1:1, no Win16, no exit(). */
+    char num[16];
+    size_t pos = 0;
+    size_t k = 0;
+    int r = 0;
+
+    if (!out || !sep_thousands || !pad_zero || !suffix)
+        return CIV_ERR_NOENT;
+    if (cap == 0)
+        return CIV_ERR_RANGE;
+    out[0] = '\0';
+    if (pop < 0)
+        pop = 0;
+    if (pop > 99) {
+        int q = pop / 100;
+
+        (void)util_int_to_dec(num, q, 10);
+        for (k = 0; num[k] != '\0'; k++) {
+            if (pos + 1u >= cap)
+                return CIV_ERR_RANGE;
+            out[pos++] = num[k];
+        }
+        for (k = 0; sep_thousands[k] != '\0'; k++) {
+            if (pos + 1u >= cap)
+                return CIV_ERR_RANGE;
+            out[pos++] = sep_thousands[k];
+        }
+        if (pop % 100 < 10) {
+            for (k = 0; pad_zero[k] != '\0'; k++) {
+                if (pos + 1u >= cap)
+                    return CIV_ERR_RANGE;
+                out[pos++] = pad_zero[k];
+            }
+        }
+    }
+    r = pop % 100;
+    (void)util_int_to_dec(num, r, 10);
+    for (k = 0; num[k] != '\0'; k++) {
+        if (pos + 1u >= cap)
+            return CIV_ERR_RANGE;
+        out[pos++] = num[k];
+    }
+    for (k = 0; suffix[k] != '\0'; k++) {
+        if (pos + 1u >= cap)
+            return CIV_ERR_RANGE;
+        out[pos++] = suffix[k];
+    }
+    out[pos] = '\0';
+    return CIV_OK;
+}
+
+int city_calc_pop_total(const int *owner_of, const int *valid_of,
+                        const int *size_of, int n, int owner)
+{
+    /* Orig FUN_11c8_0334 @ 11c8:0334 -> City_CalcPopTotal.
+     * Decompiler: for i in 0..0x80 with city[i].owner (+7 @ 1420:5507)
+     * == civ and city[i].valid (+2 @ 1420:5502) != -1, for s in
+     * 1..city[i].size (+3 @ 1420:5503) total += s; then
+     * City_FormatPopCount(total) (format tail lives in
+     * city_format_pop_count above; this helper returns the raw total).
+     * Size <= 0 contributes 0 (inner loop skipped). OS-free 1:1 on
+     * explicit arrays (no globals, no 0x80 hardcode beyond the caller
+     * n). */
+    int total = 0;
+    int i = 0;
+    int s = 0;
+
+    if (!owner_of || !valid_of || !size_of || n <= 0)
+        return -1;
+    for (i = 0; i < n; i++) {
+        if (owner_of[i] == owner && valid_of[i] != -1) {
+            for (s = 1; s <= size_of[i]; s++)
+                total += s;
+        }
+    }
+    return total;
+}
+
+civ_error_t city_format_name(const uint8_t *p1, const uint8_t *p2,
+                             uint8_t *dst, size_t cap)
+{
+    /* Orig FUN_1048_0101 @ 1048:0101 -> City_FormatName join tail +
+     * FUN_11f8_014a @ 11f8:014a -> Res_AppendPascal (see rsc_loader.h
+     * res_append_pascal). Decompiler: *name = 0, then
+     * Res_AppendPascal(name, res_string_0x88_4) + Res_AppendPascal(name,
+     * local_10c copy) with the 0x88,5 conditional via the FUN_1008_0d93
+     * + GLOBALLOCK gate (handle tail stays Win16). Pure join here:
+     * dst[0] = 0 then append p1/p2 length-prefixed (u8 len + bytes).
+     * OS-free 1:1, no Win16, no globals. */
+    size_t len = 0;
+    size_t n = 0;
+    size_t i = 0;
+
+    if (!dst || cap == 0)
+        return CIV_ERR_NOENT;
+    dst[0] = 0;
+    len = 0;
+    const uint8_t *parts[2] = { p1, p2 };
+
+    for (n = 0; n < 2u; n++) {
+        const uint8_t *src = parts[n];
+        unsigned sl = 0;
+
+        if (!src)
+            continue;
+        sl = src[0];
+        if (len + sl > 255u)
+            return CIV_ERR_RANGE;
+        if (len + sl + 1u > cap)
+            return CIV_ERR_RANGE;
+        for (i = 0; i < sl; i++)
+            dst[1u + len + i] = src[1u + i];
+        len += sl;
+        dst[0] = (uint8_t)len;
+    }
+    return CIV_OK;
 }

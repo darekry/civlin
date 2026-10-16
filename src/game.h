@@ -224,10 +224,22 @@ int civ_process_unit_moves(int civ);
 civ_error_t status_draw_tech_icons(int civ, int progress, int x, int y);
 
 /* Orig: FUN_1088_1dd0 @ 1088:1dd0 -> game_append_year_text.
- * Appends abs(g_nYear) via FUN_1000_2928(...,10) plus 1420:173c ("BC"
- * when year<0) / 1420:1740 ("AD") to the 12d8:24fa line buffer.
- * 5 callers (status panel, 1018:015d, 1138:0000, 11b0:0000, 11b8:14e5). */
-civ_error_t game_append_year_text(void);
+ * Appends abs(year) via Util_IntToDec @ 1000:2928 (...,10) plus " BC"
+ * (year < 0, 1420:173c) / " AD" (else, 1420:1740) to the caller's line
+ * buffer (orig 12d8:24fa via Util_StrAppend @ 1000:363e). OS-free 1:1 on
+ * explicit out/cap: "<abs> BC" or "<abs> AD" with the orig leading space
+ * before the era (spaceless "BC"/"AD" is the filename form, see
+ * save_build_filename @ 1198:00a3). The 1000:386e/3ba0/3d90 neighbours
+ * (Date_Convert @ 1000:386e + Float_ParseFormat @ 1000:3ba0 +
+ * Date_CheckValid @ 1000:3d90 via Sys_GetDate @ 1000:18d4, using
+ * Util_StrCopyN @ 1000:377e + Util_ParseInt @ 1000:1ed2) are the C-runtime
+ * date/float chain, NOT the game-year chain: they were misread as
+ * DOS-file helpers next to the qsort/string thunks, but the true
+ * year<->text path is this function + year_suffix below (5 callers:
+ * status panel @ 1088:13d5, 1018:015d, 1138:0000, 11b0:0000, 11b8:14e5).
+ * NOENT on NULL out, RANGE when cap == 0 or the text (incl. NUL) does
+ * not fit, else CIV_OK. No globals, no exit(). */
+civ_error_t game_append_year_text(int year, char *out, size_t cap);
 
 /* AG2: year suffix (1420:173c "BC" when year<0 / 1420:1740 "AD").
  * OS-free 1:1 port (year<0 ? "BC" : "AD"); complements game_append_year_text
@@ -804,5 +816,54 @@ const char *wonder_names(int wonder);
 int terrain_cost_table(int tile);
 
 void game_shutdown(civ_game_t *g);
+
+/* --- City pop/name chain (2026-10-16) ---
+ * Anchors (civ.exe, x86:LE:16:Protected Mode):
+ *   City_FormatPopCount @ 11c8:03ac (pop -> "1,230" style via
+ *     Util_IntToDec @ 1000:2928 + Util_StrAppend @ 1000:363e with DGROUP
+ *     separators @ 12d8:42ec/42ee/42f0; callers City_CalcPopTotal @
+ *     11c8:0334 + 1030:8b39 + 1180:02d3 + HoF_Show @ 1080:0119).
+ *   City_CalcPopTotal @ 11c8:0334 (triangular sum over the 0x80 0x1c
+ *     city records @ 1420:5500: owner @ +7 == civ and valid @ +2 != -1,
+ *     sum 1..size @ +3, then City_FormatPopCount; 5 callers incl.
+ *     Game_TurnLoopTick @ 1088:0000 + Game_UpdateStatusPanel @ 1088:13d5
+ *     + HoF_TryInsert @ 1080:0595).
+ *   City_FormatName @ 1048:0101 (ResMgr_GetString 0x88,4/5 via
+ *     FUN_1008_0d93 gate + GLOBALLOCK/UNLOCK + Res_GetStringCopy tail +
+ *     Res_AppendPascal @ 11f8:014a x2; sole caller Menu_InitMainBar @
+ *     1048:0000).
+ * OS-free number/name math below is LIVE 1:1 on explicit params (no
+ * Win16, no globals, read-only); DGROUP separator bytes stay caller
+ * params (exact 42ec/42ee/42f0 literals TBD vs runtime dump). */
+
+/* Orig: City_FormatPopCount @ 11c8:03ac — pop-count text.
+ * 1:1 shape: if pop > 99 { q = pop / 100; append dec(q); append
+ * thousands sep; if pop % 100 < 10 append zero pad; } append
+ * dec(pop % 100); append suffix. Separators are caller params (orig
+ * DGROUP @ 12d8:42ec "," / 42ee "0" / 42f0 suffix hypothesis from the
+ * "00,000 citizens." @ 1420:172b neighbour; exact bytes TBD, never
+ * hardcoded here beyond the caller test). Returns CIV_OK, NOENT on
+ * NULL out/sep, RANGE when cap == 0 or the text (incl. NUL) overflows.
+ * No globals, no exit(). */
+civ_error_t city_format_pop_count(int pop, const char *sep_thousands,
+                                  const char *pad_zero, const char *suffix,
+                                  char *out, size_t cap);
+
+/* Orig: City_CalcPopTotal @ 11c8:0334 — triangular pop total.
+ * Sum over i in 0..n-1 with owner_of[i] == owner and valid_of[i] != -1
+ * of (1 + ... + size_of[i]). owner/valid/size arrays are the 0x1c
+ * record fields (+7 owner, +2 valid, +3 size @ 1420:5500). NULL arrays
+ * or n <= 0 -> -1 (orig faulted). No globals, no exit(). */
+int city_calc_pop_total(const int *owner_of, const int *valid_of,
+                        const int *size_of, int n, int owner);
+
+/* Orig: City_FormatName @ 1048:0101 + Res_AppendPascal @ 11f8:014a —
+ * pascal city-name join (dst[0] = 0, then append p1 + p2, each
+ * length-prefixed u8 + bytes). p1/p2 NULL = skip that part (orig
+ * always had both via 0x88,4/5 + Res_GetStringCopy tail). Returns
+ * CIV_OK, NOENT on NULL dst, RANGE when cap < 1 or the join (len byte
+ * + chars) overflows cap-1. No globals, no exit(). */
+civ_error_t city_format_name(const uint8_t *p1, const uint8_t *p2,
+                             uint8_t *dst, size_t cap);
 
 #endif /* CIVLIN_GAME_H */

@@ -69,6 +69,20 @@ civ_error_t worldgen_load_preset(const uint8_t *image, size_t len);
  * stub CIV_ERR_UNSUPPORTED. */
 civ_error_t worldgen_load_earth(void);
 
+/* OS-free customize-dialog cell math behind WorldGen_LoadEarth @
+ * 1108:0243 (4 rows x 3 choice cols + help col; dialog IDs from 0x323:
+ * row = (id - 0x323) / 4, col = (id - 0x323) % 4; col < 3 picks the
+ * option, col == 3 opens the help text via NewGame customize @ 10e0:0000
+ * with Temperature @ 1420:2e28 / Climate @ 1420:2e34 / 0x2e23 / 0x2e3c).
+ * worldgen_dialog_id_to_cell maps the dialog control ID to (row, col);
+ * worldgen_custom_apply writes settings[row] = col for choice cols
+ * (help col leaves settings untouched, still CIV_OK). NOENT on NULL
+ * outs/settings, RANGE on id below 0x323, row/col outside 0..3, else
+ * CIV_OK. No Win16, no globals, no exit(). */
+civ_error_t worldgen_dialog_id_to_cell(int dialog_id, int *row_out,
+                                       int *col_out);
+civ_error_t worldgen_custom_apply(int *settings, int row, int col);
+
 /* Orig: FUN_1108_01bc @ 1108:01bc -> worldgen_prepare_earth
  * (WorldGen_PrepareEarth). Adjacent routine immediately before
  * WorldGen_LoadEarth @ 1108:0243 in the same 1108 segment; exact role TBD

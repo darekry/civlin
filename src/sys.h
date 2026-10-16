@@ -60,19 +60,51 @@ void rng_init(void);
 /* Util_Clamp @ 11c8:0063. */
 int util_clamp(int v, int lo, int hi);
 
-/* Orig: FUN_1000_29ea @ 1000:29ea -> Util_Progress.
- * Continent-link progress percent (orig scales the counter to the 0x1248
- * progress-bar range). OS-free 1:1 port: done * 100 / total, clamped to
- * 0..100; 0 when total <= 0 or done <= 0, 100 when done >= total. Pure
- * counter/total calc, no Win16, no globals, no exit(). */
+/* Generic progress percent helper (continent-link progress-bar UI scales the
+ * counter to the 0x1248 bar range; Linux reports 0..100 percent). NOTE:
+ * earlier revisions mis-attributed the seg-1000 memset wrapper here —
+ * verified 2026-10-16 that wrapper is Util_MemSet (zeroes the OPENFILENAME
+ * struct in the seg-1130 save prompts, see civ_common.h util_mem_set).
+ * No Orig address claimed for this helper; pure counter/total calc, no
+ * Win16, no globals, no exit(). */
 int util_progress(int done, int total);
 
-/* Orig: FUN_1000_2c9c @ 1000:2c9c -> Debug_Print.
- * Debug-dump print behind ResMgr_DumpStats @ 1190:17d0. OS-free 1:1 port:
- * fprintf wrapper (vfprintf of fmt to stdout, stderr when fmt is NULL-safe
- * guarded). Returns bytes written, -1 on NULL fmt or output error. No
- * globals, no exit(), never writes game assets. */
+/* Orig: FUN_1000_2c9c @ 1000:2c9c, now Debug_Print in Ghidra.
+ * Debug-dump print behind ResMgr_DumpStats @ 1190:17d0. Orig pushes emit
+ * File_WriteBuffered @ 1000:2e85 + stream 1420:4cd0 into Util_Vsprintf @
+ * 1000:19d8 -> Util_VsprintfCore @ 1000:1a3c. OS-free 1:1 port: fprintf
+ * wrapper (vfprintf of fmt to stdout). Returns bytes written, -1 on NULL
+ * fmt or output error. No globals, no exit(), never writes game assets. */
 int debug_print(const char *fmt, ...);
+
+/* Orig: FUN_1000_3088 @ 1000:3088, now Debug_PrintLine in Ghidra.
+ * Puts-to-debug-stream behind ResMgr_DumpStats @ 1190:17d0 (bare calls
+ * are newline separators between dump rows). Orig: NULL (seg:off 0)
+ * returns 0; else Util_StrLen @ 1000:3722 then File_WriteBuffered @
+ * 1000:2e85 the bytes to stream 1420:4cd0, then File_PutCharBuffered @
+ * 1000:2cd8 '\n' (0x0a). OS-free 1:1 port on stdout: fputs + fputc('\n').
+ * Returns 10 on success, 0 when s is NULL, -1 on output error. No
+ * globals, no exit(), never writes game assets. */
+int debug_print_line(const char *s);
+
+/* Orig: FUN_1000_2e85 @ 1000:2e85, now File_WriteBuffered in Ghidra.
+ * Buffered fwrite emit behind Debug_Print @ 1000:2c9c / Util_Vsprintf
+ * (flag 8 direct vs 0x40/buffered paths, fd via 0x4e4e table, DOS write
+ * via Dos_Write @ 1000:3fc4 INT 21h, overflow via File_EmitChar @ 1000:2cba).
+ * Needs the Borland FILE struct at 1420:4cd0 + DOS fd table -> stub
+ * CIV_ERR_UNSUPPORTED. No globals, no exit(). */
+civ_error_t file_write_buffered(const uint8_t *src, size_t len);
+/* Orig: FUN_1000_2cd8 @ 1000:2cd8, now File_PutCharBuffered in Ghidra.
+ * Buffered fputc core (flag 8/0x90/0x200 dispatch, \n 0x0a / \r 0x0d
+ * handling, flush via File_Flush @ 1000:2152, DOS via Dos_Write @
+ * 1000:3fc4). Needs the 1420:4cd0 stream + DOS -> stub
+ * CIV_ERR_UNSUPPORTED. */
+civ_error_t file_put_char_buffered(int c);
+/* Orig: FUN_1000_2cba @ 1000:2cba, now File_EmitChar in Ghidra.
+ * Thin wrapper over File_PutCharBuffered @ 1000:2cd8 (count -1 then
+ * emit one char). Overflow path of File_WriteBuffered @ 1000:2e85.
+ * Same DOS/stream dependency -> stub CIV_ERR_UNSUPPORTED. */
+civ_error_t file_emit_char(char c);
 
 /* --- DOS drive/dir (adapted; see header note) --- */
 
@@ -83,6 +115,115 @@ int dos_get_current_drive_index(void);
 /* Dos_GetCurrentDir @ 1000:139c. getcwd() without the leading '/',
  * drive ignored. 0 on success, -1 on error (buf too small etc.). */
 int dos_get_current_dir(int drive, char *buf, size_t cap);
+
+/* --- DOS-file primitives (raw INT 21h layer; all STUB) ---
+ * Renamed 2026-10-16 from FUN_1000_* (Orig addr kept per-function).
+ * Every primitive ends in INT 21h with CF=1 mapped through Dos_MapError
+ * @ 1000:151a (sets DAT_1420_0010/DAT_1420_4e7a, returns 0xffff), so on
+ * Linux they stay CIV_ERR_UNSUPPORTED with the full register contract
+ * below (registers -> params). The live file path does NOT go through
+ * them: save_file_open/read/write/close @ 1140:0139/019d/0245/037c use
+ * POSIX open/read/write/lseek/close (see save.h), and the RSC streaming
+ * reads use file_read_chunk (fread twin of File_ReadChunk @ 1000:272a,
+ * see rsc_loader.h). No exit() in any of them. */
+
+/* Orig: FUN_1000_151a @ 1000:151a, now Dos_MapError in Ghidra.
+ * DOS errno mapper behind every CF=1 path above. Contract: param < 0
+ * with (-param == 0x30 or -param < 0x30) -> DAT_1420_0010 = -param,
+ * DAT_1420_4e7a = 0xffff; param in [0, 0x59) passes through to
+ * DAT_1420_4e7a with DAT_1420_0010 = byte table[param + 0x4e7c];
+ * param >= 0x59 clamps to 0x57 first. Always returns 0xffff. Needs the
+ * DGROUP errno words -> stub CIV_ERR_UNSUPPORTED. */
+civ_error_t dos_map_error(int dos_code);
+/* Orig: FUN_1000_1566 @ 1000:1566, now Dos_IsCharDevice in Ghidra.
+ * INT 21h AX=0x4400 (IOCTL get device info), BX=fd. Returns DX & 0x80
+ * (1 = char device e.g. console, 0 = block file). Used to route the
+ * Dos_Read @ 1000:1750 / Dos_Write @ 1000:3fc4 hook vectors
+ * (1420:4fc4 / 1420:4fc8) for console handles. No Linux equivalent at
+ * this layer (isatty lives one level up) -> stub CIV_ERR_UNSUPPORTED. */
+civ_error_t dos_is_char_device(int fd);
+/* Orig: FUN_1000_161c @ 1000:161c, now Dos_Seek in Ghidra.
+ * INT 21h AH=0x42 (LSEEK): BX=fd, AL=origin ([BP+0x0c]: 0 SET / 1 CUR /
+ * 2 END), CX:DX=offset ([BP+0x0a]/[BP+8]). Clears 0x4e4e-table bit 0x200
+ * first; CF=1 -> Dos_MapError(AX). Live twin: file_seek_wrapper
+ * (fseek/ftell, see save.h). Raw primitive stays stub
+ * CIV_ERR_UNSUPPORTED. */
+civ_error_t dos_seek(int fd, long offset, int origin);
+/* Orig: FUN_1000_1750 @ 1000:1750, now Dos_Read in Ghidra.
+ * INT 21h AH=0x3f: BX=fd, CX=count [BP+0x0c], DS:DX=buf [BP+8].
+ * Guards: 0x4e4e-table bit 1 set -> errno 5 via Dos_MapError; hook vec
+ * 1420:4fc4 + Dos_IsCharDevice nonzero -> indirect read. Text-mode
+ * (0x4000) CRLF/0x1a handling lives one level up in File_ReadBuffered
+ * @ 1000:33c0. Live twin: save_file_read (POSIX, chunked 0x8000).
+ * Raw primitive stays stub CIV_ERR_UNSUPPORTED. */
+civ_error_t dos_read(int fd, void *buf, unsigned len);
+/* Orig: FUN_1000_19a6 @ 1000:19a6, now Dos_Unlink in Ghidra.
+ * INT 21h AH=0x41 (delete file): DS:DX=path [BP+6]. CF=1 ->
+ * Dos_MapError(AX), else 0. NULL path -> NOENT (orig faulted). Raw
+ * primitive stays stub CIV_ERR_UNSUPPORTED (Linux twin would be
+ * unlink()). */
+civ_error_t dos_unlink(const char *path);
+/* Orig: FUN_1000_1f5c @ 1000:1f5c, now Dos_FileAttr in Ghidra.
+ * INT 21h AH=0x43 (get/set file attributes): AL=func [BP+0x0a] (0 get /
+ * 1 set), DS:DX=path [BP+6], CX=attrs [BP+0x0c] (set only). Returns
+ * attrs (get) or CX passthrough (set); CF=1 -> Dos_MapError. Used by
+ * File_Open @ 1000:2ad9 to probe existence (func 0) and restore
+ * read-only (func 1, arg 1). Raw primitive stays stub
+ * CIV_ERR_UNSUPPORTED. */
+civ_error_t dos_file_attr(const char *path, int func, int attrs);
+/* Orig: FUN_1000_1fa6 @ 1000:1fa6, now Dos_Close in Ghidra.
+ * INT 21h AH=0x3e: BX=fd [BP+6]. Success clears the 0x4e4e-table word
+ * (fd*2+0x4e4e = 0); CF=1 -> Dos_MapError. Wrapped by
+ * File_CloseWrapper @ 1000:1f7c (table pre-clear + EBADF guard).
+ * Live twin: save_file_close (close()). Raw primitive stays stub
+ * CIV_ERR_UNSUPPORTED. */
+civ_error_t dos_close(int fd);
+/* Orig: FUN_1000_201e @ 1000:201e, now Dos_IsEof in Ghidra.
+ * EOF probe with no cursor side effects: 0x4e4e-table bit 0x200 set ->
+ * 1 (EOF); fd >= DAT_1420_4e4c -> errno 6; char device (AX=0x4400 +
+ * DL & 0x80) -> 0; else 4201-tell / 4202-end / 4200-restore triple and
+ * 1 iff end <= cur. Any CF=1 -> Dos_MapError. Needs DOS seeks ->
+ * stub CIV_ERR_UNSUPPORTED. Returns 1 at EOF, 0 otherwise (via
+ * CIV_OK + *out_eof to stay in the civ_error_t family). */
+civ_error_t dos_is_eof(int fd, int *out_eof);
+/* Orig: FUN_1000_2aac @ 1000:2aac, now Dos_Create in Ghidra.
+ * INT 21h AH=0x3c (create/truncate file): DS:DX=path [BP+6],
+ * CX=attrs [BP+4]. CF=1 -> Dos_MapError(AX), else AX=new fd.
+ * Called from File_Open @ 1000:2ad9 (create path). Live twin:
+ * save_file_open O_WRONLY|O_CREAT|O_TRUNC. Raw primitive stays stub
+ * CIV_ERR_UNSUPPORTED; NULL path -> NOENT. */
+civ_error_t dos_create(const char *path, int attrs);
+/* Orig: FUN_1000_2ac7 @ 1000:2ac7, now Dos_Truncate in Ghidra.
+ * INT 21h AH=0x40 with CX=0, DX=0 (zero-byte write at the cursor =
+ * truncate there): BX=fd [BP+4]. Single caller File_Open @ 1000:2ad9
+ * (O_TRUNC-style flag 0x200 on non-char handles). Returns nothing
+ * (orig pops BP, CF ignored). Raw primitive stays stub
+ * CIV_ERR_UNSUPPORTED. */
+civ_error_t dos_truncate(int fd);
+/* Orig: FUN_1000_2c4a @ 1000:2c4a, now Dos_Open in Ghidra.
+ * INT 21h AH=0x3d: DS:DX=path [BP+6], AL=mode derived from flags
+ * [BP+0x0a] (bit1 -> 1, else bit2 -> 2, else 0) OR'd with flags&0xf0.
+ * Success stores flags&0xb8ff|0x8000 into the 0x4e4e-table word and
+ * returns the fd; CF=1 -> Dos_MapError. Called from File_Open @
+ * 1000:2ad9. Live twin: save_file_open O_RDONLY. Raw primitive stays
+ * stub CIV_ERR_UNSUPPORTED; NULL path -> NOENT. */
+civ_error_t dos_open(const char *path, int mode_flags);
+/* Orig: FUN_1000_3fc4 @ 1000:3fc4, now Dos_Write in Ghidra.
+ * INT 21h AH=0x40: BX=fd [BP+6], CX=count [BP+0x0c], DS:DX=buf [BP+8].
+ * Guards: 0x4e4e-table bit 0 set -> errno 5 via Dos_MapError; hook
+ * vec 1420:4fc8 + Dos_IsCharDevice nonzero -> indirect write returning
+ * count. Success sets table bit 0x1000, returns AX=bytes written;
+ * CF=1 -> Dos_MapError(AX). Text-mode twin File_WriteText @ 1000:3e70
+ * (LF->CRLF when 0x4000). Live twin: save_file_write (POSIX). Raw
+ * primitive stays stub CIV_ERR_UNSUPPORTED. */
+civ_error_t dos_write(int fd, const void *buf, unsigned len);
+/* Orig: FUN_1000_4252 @ 1000:4252, now Dos_Ioctl in Ghidra.
+ * INT 21h AH=0x44 dispatcher: funcs 0/6/7/8/9/10/0xe/0xf pass straight
+ * through, others require DAT_1420_0012 != 0 + verr() or fail with
+ * errno 0x13 via Dos_MapError. Func 0 returns the high word
+ * (DX:AX >> 16). Console/device control only -> stub
+ * CIV_ERR_UNSUPPORTED. */
+civ_error_t dos_ioctl(int fd, int func);
 
 /* --- system --- */
 
@@ -140,15 +281,18 @@ civ_error_t sys_check_runtime_memory(void);
 civ_error_t sys_check_free_memory(void);
 
 /* --- Packet E: Win16 file/resource imports (KERNEL) ---
- * File map (with save.h + rsc_loader.h):
- *   _LOPEN  -> file_open_wrapper  (save.h, FUN_1000_2ad9 @ 1000:2ad9)
- *   _LCLOSE -> file_close_wrapper (save.h, FUN_1000_1f7c @ 1000:1f7c)
- *   _LLSEEK -> file_seek_wrapper  (save.h, FUN_1000_xxxx @ 1000:xxxx)
- *   _LREAD/_HREAD   -> file_read_chunk  (rsc_loader.h, FUN_1000_272a
+ * File map (with save.h + rsc_loader.h), Ghidra names after the
+ * 2026-10-16 DOS-file rename pass:
+ *   _LOPEN  -> file_open_wrapper  (save.h, File_Open @ 1000:2ad9)
+ *   _LCLOSE -> file_close_wrapper (save.h, File_CloseWrapper @ 1000:1f7c)
+ *   _LLSEEK -> file_seek_wrapper  (save.h, Dos_Seek @ 1000:161c raw)
+ *   _LREAD/_HREAD   -> file_read_chunk  (rsc_loader.h, File_ReadChunk
  *     @ 1000:272a; streaming read behind ResMgr_ReadU16Disk @ 1190:1abe /
- *     U16Disk2 @ 1190:1b47 / U32Disk @ 1190:1bcb)
+ *     U16Disk2 @ 1190:1b47 / U32Disk @ 1190:1bcb; block twin
+ *     File_ReadBuffered @ 1000:33c0 behind save_file_read @ 1140:019d)
  *   _LWRITE/_HWRITE -> file_write_chunk (below; streaming write behind
- *     save_file_write @ 1140:0245 chunked path)
+ *     save_file_write @ 1140:0245 chunked path; raw twin Dos_Write @
+ *     1000:3fc4, text-mode twin File_WriteText @ 1000:3e70)
  * Resource map (KERNEL resource funcs -> rsc_loader.h ResMgr layer):
  *   FINDRESOURCE  -> rsc_find_type / rsc_get_by_id / rsc_get_by_name
  *   LOADRESOURCE  -> rsc_load_to_mem (stub @ 1190:0fda; _LLSEEK+_HREAD)
@@ -512,6 +656,57 @@ double float_exp2_checked(double x);
  * float_exp2_checked(y * float_log2(x)); 1190 callers are false
  * merges and are IGNORED. Exact FISTP/ROR bit path TBD. */
 double float_pow(double x, double y);
+
+/* --- Chain ports (2026-10-16) ---
+ * Anchors (civ.exe, x86:LE:16:Protected Mode):
+ *   Util_ParseInt @ 1000:1ed2 (manual atoi: ctype isspace @ +0x4baf & 1
+ *     skip, +/- sign, digit loop with carry overflow wrap, trailing
+ *     non-digit stop; callers: date/float chain 1000:386e/3ba0/3d90).
+ *   Debug_LogTrace @ 1148:003c (release no-op: ignores file/line args,
+ *     returns the static empty-string base; 40+ callers incl.
+ *     Mem_DisposePtr @ 1100:060b + Art_LoadFrameData @ 10b8:079d).
+ *   Mem_DisposePtr @ 1100:060b (GLOBALHANDLE + GLOBALUNLOCK + GLOBALFREE
+ *     with the DisposPtr/mac.c trace; 12 callers incl. WinMain_Shutdown
+ *     @ 1008:0329 + save_serialize @ 10f8:02bd).
+ *   Mem_DisposeHandle @ 1100:0652 (GLOBALUNLOCK + GLOBALFREE by handle
+ *     with the DisposeHandle/mac.c trace).
+ *   Mem_ReallocHandle @ 1100:030f (GLOBALSIZE + GLOBALALLOC + GLOBALLOCK
+ *     x2 + Util_MemMove + unlocks; HandToHand/mac.c trace).
+ * OS-free ParseInt/LogTrace below are LIVE 1:1 on explicit params (no
+ * Win16, no globals, read-only); GLOBAL* handle tails stay STUB with
+ * TODO Orig (see win16_compat.h: selectors have no Linux equivalent). */
+
+/* Orig: Util_ParseInt @ 1000:1ed2 — manual atoi.
+ * 1:1: skip isspace (orig ctype table @ +0x4baf & 1), optional +/-
+ * (only the first non-space char), digit run with unsigned wrap
+ * (orig 16-bit carry path + 32-bit tail; Linux uses uint32_t wrap),
+ * stop at the first non-digit (no errno, no endptr). NULL -> 0 (orig
+ * faulted). No globals, no exit(). */
+int util_parse_int(const char *s);
+
+/* Orig: Debug_LogTrace @ 1148:003c — release trace no-op.
+ * Returns a read-only empty string (orig returns the static base the
+ * file/line trace strings hang off; release build logs nowhere).
+ * Ignores its args (none on Linux). Never NULL. No globals (string
+ * literal only), no exit(). */
+const char *debug_log_trace(void);
+
+/* Orig: Mem_DisposePtr @ 1100:060b — dispose far pointer (STUB).
+ * GLOBALHANDLE(select) + GLOBALUNLOCK + GLOBALFREE with the
+ * DisposPtr/mac.c trace; NULL/zero-select is a no-op in orig. Linux
+ * owns no selectors -> stub CIV_ERR_UNSUPPORTED. NULL -> NOENT. */
+civ_error_t mem_dispose_ptr(const void *p);
+
+/* Orig: Mem_DisposeHandle @ 1100:0652 — dispose handle (STUB).
+ * GLOBALUNLOCK + GLOBALFREE with the DisposeHandle/mac.c trace; 0 is
+ * a no-op. Same stub contract (handle is an opaque int here). */
+civ_error_t mem_dispose_handle(int handle);
+
+/* Orig: Mem_ReallocHandle @ 1100:030f — realloc handle (STUB).
+ * GLOBALSIZE + GLOBALALLOC + lock/move/unlock with the
+ * HandToHand/mac.c trace; 0-size -> 0xff93, alloc fail -> 0xff94.
+ * Same stub contract (handle in/out int here). */
+civ_error_t mem_realloc_handle(int *handle);
 
 /* Orig: FUN_1000:03bc @ 1000:03bc -> Float_ScanFloat (PARTIAL).
  * ~780 B strtod core with get/unget callbacks: isspace skip via

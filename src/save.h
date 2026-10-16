@@ -19,7 +19,7 @@
  *     Orig: FUN_10f8_0000 @ 10f8:0000 -> save_deserialize
  *       GLOBALALLOC 0xa2ba scratch, + save_file_* in + save_unpack
  *     Orig: FUN_1140_0139 @ 1140:0139 -> save_file_open
- *       wraps _LOPEN via FUN_1000_2ad9
+ *       wraps _LOPEN via File_Open @ 1000:2ad9
  *     Orig: FUN_1140_0245 @ 1140:0245 -> save_file_write
  *       chunked via thunk _HWRITE/_LWRITE
  *     Orig: FUN_1140_0295 @ 1140:0295 -> save_file_size
@@ -27,7 +27,7 @@
  *     Orig: FUN_1140_019d @ 1140:019d -> save_file_read
  *       chunked 0x8000 via _HREAD/_LREAD
  *     Orig: FUN_1140_037c @ 1140:037c -> save_file_close
- *       wraps _LCLOSE via FUN_1000_1f7c
+ *       wraps _LCLOSE via File_CloseWrapper @ 1000:1f7c
  *     Orig: FUN_10f8_05da @ 10f8:05da -> save_pack (called from save_serialize)
  *     Orig: FUN_10f8_040a @ 10f8:040a -> save_unpack (called from save_deserialize)
  *
@@ -77,6 +77,44 @@ civ_error_t save_prompt_open(civ_save_dialog_t *out);
 /* Orig: FUN_1130_0194 @ 1130:0194, now save_prompt_save in Ghidra */
 civ_error_t save_prompt_save(civ_save_dialog_t *out);
 
+/* Orig: FUN_1140_0095 @ 1140:0095, now Save_InitFileSpec in Ghidra.
+ * File-spec init behind HoF_Load @ 1080:0023 ("famehall.civ" @
+ * 1420:14e8) + HoF_Save @ 1080:0092 (@ 1420:14f5). Orig: Util_StrCopy @
+ * 1000:36b2 the filename at spec+8 then Util_StrLen @ 1000:3722 into
+ * spec+6, returns 0. OS-free 1:1 port on explicit caller buffers (no
+ * Win16 far, no DGROUP): copies src into dst (cap incl. NUL) and
+ * reports the strlen via out_len (NULL out_len skips the store).
+ * NOENT on NULL src/dst, RANGE when cap == 0 or src does not fit,
+ * else CIV_OK. No globals, no exit(). */
+civ_error_t save_init_filespec(const char *src, char *dst, size_t cap,
+                               size_t *out_len);
+/* Orig: FUN_1130_000e @ 1130:000e, now Save_LoadDialog in Ghidra.
+ * Modal load behind MainMenu_WndProc @ 11e0:0221 choice 1: save_prompt
+ * _open @ 1130:0075 then save_deserialize @ 10f8:0000 (+ Anim/Cursor).
+ * Needs COMMDLG + live ctx -> stub CIV_ERR_UNSUPPORTED. NULL out_path
+ * -> NOENT (orig faulted). No globals, no exit(). */
+civ_error_t save_load_dialog(char *out_path, size_t cap);
+/* Orig: FUN_1098_26d4 @ 1098:26d4, now Save_SaveDialog in Ghidra.
+ * Modal save wrapper over save_prompt_save @ 1130:0194 (callers: replay
+ * path @ 1180:0000 + Save_SaveGame @ 1198:00a3). Needs COMMDLG ->
+ * stub CIV_ERR_UNSUPPORTED. NULL out_path -> NOENT. */
+civ_error_t save_save_dialog(char *out_path, size_t cap);
+/* Orig: FUN_1198_00a3 @ 1198:00a3, now Save_SaveGame in Ghidra.
+ * Builds "civname+year" filename (Util_StrAppend @ 1000:363e +
+ * Util_IntToDec @ 1000:2928 + suffix), prompts via Save_SaveDialog @
+ * 1098:26d4, writes via save_serialize @ 10f8:02bd. Needs dialogs +
+ * live ctx -> stub CIV_ERR_UNSUPPORTED. NULL path -> NOENT. */
+civ_error_t save_save_game(const char *path);
+/* Orig: FUN_1198_0000 @ 1198:0000, now Save_SanitizeFileName in Ghidra.
+ * Filename sanitizer behind Save_SaveGame @ 1198:00a3 (also called
+ * from the replay path @ 1180:0000): keeps [0-9A-Za-z] only, drops all
+ * other bytes, copies the filtered form back over the input (orig via
+ * a 16 B stack buffer + Util_StrCopy @ 1000:36b2). OS-free 1:1 port on
+ * the caller's NUL-terminated buffer (in-place, no length cap — orig
+ * would overflow past 15 chars, Linux does not). NOENT on NULL, else
+ * CIV_OK. No Win16, no globals, no exit(). */
+civ_error_t save_sanitize_filename(char *path);
+
 /* --- low-level file layer (KERNEL _LOPEN/_LREAD/_LWRITE/_LLSEEK/_LCLOSE) ---
  * Packet L: Ghidra display (PascalCase) <-> C name (snake_case, canonical):
  *   Save_FileOpen  @ 1140:0139 <-> save_file_open
@@ -111,13 +149,13 @@ int save_file_write(win16_handle h, const uint8_t *src, unsigned long len,
  * Wraps _LCLOSE via File_CloseWrapper @ 1000:1f7c (fclose NULL-safe twin). */
 void save_file_close(win16_handle h);
 
-/* Orig: FUN_1000_2ad9 @ 1000:2ad9 -> File_OpenWrapper.
+/* Orig: FUN_1000_2ad9 @ 1000:2ad9, now File_Open in Ghidra -> File_OpenWrapper.
  * Thin _LOPEN wrapper used by save_file_open @ 1140:0139. Linux
  * equivalent: fopen(path, write_mode ? "wb" : "rb"); write_mode 0 =
  * OF_READ, nonzero = OF_WRITE/OFCREATE (exact OF_ flag mapping TBD, see
  * Ghidra). Returns the stream, NULL on bad args or fopen failure. */
 FILE *file_open_wrapper(const char *path, int write_mode);
-/* Orig: FUN_1000_1f7c @ 1000:1f7c -> File_CloseWrapper.
+/* Orig: FUN_1000_1f7c @ 1000:1f7c, now File_CloseWrapper in Ghidra.
  * Thin _LCLOSE wrapper used by save_file_close @ 1140:037c. Linux
  * equivalent: fclose(fp); NULL-safe no-op. */
 void file_close_wrapper(FILE *fp);
@@ -189,6 +227,33 @@ civ_error_t save_pack(const uint8_t **out_image, size_t *out_len);
 /* Orig: FUN_10f8_040a @ 10f8:040a, now save_unpack (RLL decode, called from save_deserialize).
  * Stub: NOENT on NULL image, else UNSUPPORTED; read-only. */
 civ_error_t save_unpack(const uint8_t *image, size_t len);
+
+/* Native RLL buffer twins (heading to full LIVE, Orig FUN_10f8_05da @
+ * 10f8:05da / FUN_10f8_040a @ 10f8:040a cores via save_rll_encode/decode).
+ * Unlike the legacy save_pack/save_unpack wrappers above (which carry no
+ * caller dst/cap), these take the explicit native src/dst/cap triple, so
+ * save_serialize @ 10f8:02bd / save_deserialize @ 10f8:0000 can delegate
+ * 1:1. NOENT on NULL src/dst, TRUNCATED on empty wire (unpack) or dst
+ * overrun, else CIV_OK with *out_len (NULL out_len skips the store).
+ * OS-free, no Win16, no globals, no exit(). */
+civ_error_t save_pack_buffer(const uint8_t *src, size_t src_len,
+                             uint8_t *dst, size_t dst_cap, size_t *out_len);
+civ_error_t save_unpack_buffer(const uint8_t *src, size_t src_len,
+                               uint8_t *dst, size_t dst_cap,
+                               size_t *out_len);
+
+/* Orig: FUN_1198_00a3 @ 1198:00a3, now Save_SaveGame (filename builder).
+ * OS-free 1:1 of the "civname+year" filename head: filters civname to
+ * [0-9A-Za-z] (same keep-alnum rule as save_sanitize_filename @
+ * 1198:0000, orig via a 16 B stack buffer + Util_StrCopy @ 1000:36b2),
+ * appends abs(year) decimal (Util_IntToDec @ 1000:2928) + "BC" when
+ * year < 0 else "AD" (Save_SaveGame suffix 0x3efe/0x3f00; HoF_Show @
+ * 1080:0119 uses " BC"/" AD" @ 1420:173c/1740 with a leading space for
+ * the status line, filenames use the spaceless form). NOENT on NULL
+ * civname/out, RANGE when cap == 0 or the result (incl. NUL) does not
+ * fit, else CIV_OK. No Win16, no globals, no exit(). */
+civ_error_t save_build_filename(const char *civname, int year, char *out,
+                                size_t cap);
 
 /* --- RLL codec, native form (new API, implemented next) --- */
 

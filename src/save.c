@@ -44,6 +44,92 @@ civ_error_t save_prompt_save(civ_save_dialog_t *out)
     return CIV_ERR_UNSUPPORTED;
 }
 
+civ_error_t save_init_filespec(const char *src, char *dst, size_t cap,
+                               size_t *out_len)
+{
+    /* Orig: FUN_1140_0095 @ 1140:0095 -> Save_InitFileSpec. OS-free 1:1
+     * of the StrCopy @ 1000:36b2 + StrLen @ 1000:3722 pair (spec+8 path,
+     * spec+6 len, returns 0). Linux on explicit buffers: copy + strlen.
+     * NOENT on NULL src/dst, RANGE when cap == 0 or src (incl. NUL)
+     * does not fit, else CIV_OK. No Win16, no globals, no exit(). */
+    size_t n;
+
+    if (out_len)
+        *out_len = 0;
+    if (!src || !dst)
+        return CIV_ERR_NOENT;
+    if (cap == 0)
+        return CIV_ERR_RANGE;
+    n = strlen(src) + 1u;
+    if (n > cap)
+        return CIV_ERR_RANGE;
+    memcpy(dst, src, n);
+    if (out_len)
+        *out_len = n - 1u;
+    return CIV_OK;
+}
+
+civ_error_t save_load_dialog(char *out_path, size_t cap)
+{
+    if (!out_path)
+        return CIV_ERR_NOENT;
+    if (cap > 0)
+        out_path[0] = '\0';
+    /* TODO: Orig FUN_1130_000e @ 1130:000e (Save_LoadDialog: modal load
+     * via save_prompt_open @ 1130:0075 + save_deserialize @ 10f8:0000 +
+     * Anim_PumpIfActive @ 10b0:0000 / Cursor_Set 0x84; caller
+     * MainMenu_WndProc @ 11e0:0221 choice 1). Needs COMMDLG + live ctx. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t save_save_dialog(char *out_path, size_t cap)
+{
+    if (!out_path)
+        return CIV_ERR_NOENT;
+    if (cap > 0)
+        out_path[0] = '\0';
+    /* TODO: Orig FUN_1098_26d4 @ 1098:26d4 (Save_SaveDialog: modal save
+     * wrapper over save_prompt_save @ 1130:0194; callers replay @
+     * 1180:0000 + Save_SaveGame @ 1198:00a3). Needs COMMDLG. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t save_save_game(const char *path)
+{
+    if (!path)
+        return CIV_ERR_NOENT;
+    /* TODO: Orig FUN_1198_00a3 @ 1198:00a3 (Save_SaveGame: "civname+year"
+     * filename via Util_StrAppend @ 1000:363e + Util_IntToDec @
+     * 1000:2928, prompt via Save_SaveDialog @ 1098:26d4, write via
+     * save_serialize @ 10f8:02bd). Needs dialogs + live ctx. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t save_sanitize_filename(char *path)
+{
+    /* Orig: FUN_1198_0000 @ 1198:0000 -> Save_SanitizeFileName. OS-free
+     * 1:1 of the keep-alnum filter (0x30-0x39 / 0x41-0x5a / 0x61-0x7a)
+     * + copy-back: orig accumulates into a 16 B stack buffer then
+     * Util_StrCopy @ 1000:36b2 over the input; Linux filters in place
+     * (read cursor != write cursor), so overlong names stay safe.
+     * NOENT on NULL (orig faulted). No Win16, no globals, no exit(). */
+    size_t r = 0;
+    size_t w = 0;
+
+    if (!path)
+        return CIV_ERR_NOENT;
+    while (path[r] != '\0') {
+        char c = path[r];
+
+        if ((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') ||
+            (c >= 'a' && c <= 'z'))
+            path[w++] = c;
+        r++;
+    }
+    path[w] = '\0';
+    return CIV_OK;
+}
+
 win16_handle save_file_open(const char *path, int write_mode)
 {
     /* Save_FileOpen, Orig FUN_1140_0139 @ 1140:0139: wraps _LOPEN via
@@ -390,6 +476,100 @@ civ_error_t save_unpack(const uint8_t *image, size_t len)
     if (len == 0)
         return CIV_ERR_TRUNCATED;
     return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t save_pack_buffer(const uint8_t *src, size_t src_len,
+                             uint8_t *dst, size_t dst_cap, size_t *out_len)
+{
+    /* Orig FUN_10f8_05da @ 10f8:05da (save_pack RLL core, called from
+     * save_serialize @ 10f8:02bd via Debug_LogTrace "RLLEncode ... load c"
+     * + GLOBALALLOC wire sizing len+len/0x80+5). Native 1:1 delegate to
+     * save_rll_encode (<0x80 repeat / 0x80|n literal, 0x7f chunk cap).
+     * NOENT on NULL src/dst (out_len NULL skips the store, same as the
+     * codec below). No Win16, no globals, no exit(). */
+    if (!src || !dst)
+        return CIV_ERR_NOENT;
+    return save_rll_encode(src, src_len, dst, dst_cap, out_len);
+}
+
+civ_error_t save_unpack_buffer(const uint8_t *src, size_t src_len,
+                               uint8_t *dst, size_t dst_cap,
+                               size_t *out_len)
+{
+    /* Orig FUN_10f8_040a @ 10f8:040a (save_unpack RLL core, called from
+     * save_deserialize @ 10f8:0000 via Debug_LogTrace "RLLDecode ... load
+     * c"). Native 1:1 delegate to save_rll_decode. TRUNCATED on empty
+     * wire (matches the legacy save_unpack gate), NOENT on NULL src/dst.
+     * No Win16, no globals, no exit(). */
+    if (!src || !dst)
+        return CIV_ERR_NOENT;
+    if (src_len == 0) {
+        if (out_len)
+            *out_len = 0;
+        return CIV_ERR_TRUNCATED;
+    }
+    return save_rll_decode(src, src_len, dst, dst_cap, out_len);
+}
+
+civ_error_t save_build_filename(const char *civname, int year, char *out,
+                                size_t cap)
+{
+    /* Orig Save_SaveGame @ 1198:00a3 filename head ("civname+year" via
+     * Util_StrAppend @ 1000:363e + Util_IntToDec @ 1000:2928 + suffix
+     * 0x3efe/0x3f00 by year sign, sanitized via Save_SanitizeFileName @
+     * 1198:0000). OS-free 1:1 on explicit buffers: keep [0-9A-Za-z] from
+     * civname, append abs(year) decimal, append "BC" (year < 0) else "AD"
+     * (spaceless filename form; status lines use " BC"/" AD" @ 1420:173c /
+     * 1420:1740 with a leading space, see game_append_year_text @
+     * 1088:1dd0). NOENT on NULL civname/out, RANGE when cap == 0 or the
+     * result (incl. NUL) does not fit. No Win16, no globals, no exit(). */
+    size_t w = 0;
+    size_t i = 0;
+    long abs_year;
+    char num[12];
+    int nlen = 0;
+    const char *suffix;
+
+    if (!civname || !out)
+        return CIV_ERR_NOENT;
+    if (cap == 0)
+        return CIV_ERR_RANGE;
+    while (civname[i] != '\0') {
+        char c = civname[i];
+
+        if ((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') ||
+            (c >= 'a' && c <= 'z')) {
+            if (w + 1 >= cap)
+                return CIV_ERR_RANGE;
+            out[w++] = c;
+        }
+        i++;
+    }
+    abs_year = year < 0 ? -(long)year : (long)year;
+    if (abs_year == 0) {
+        num[0] = '0';
+        nlen = 1;
+    } else {
+        char rev[12];
+        int rn = 0;
+
+        while (abs_year > 0) {
+            rev[rn++] = (char)('0' + abs_year % 10);
+            abs_year /= 10;
+        }
+        nlen = rn;
+        for (int k = 0; k < rn; k++)
+            num[k] = rev[rn - 1 - k];
+    }
+    suffix = year < 0 ? "BC" : "AD";
+    if (w + (size_t)nlen + 2u + 1u > cap)
+        return CIV_ERR_RANGE;
+    for (int k = 0; k < nlen; k++)
+        out[w++] = num[k];
+    out[w++] = suffix[0];
+    out[w++] = suffix[1];
+    out[w] = '\0';
+    return CIV_OK;
 }
 
 /* RLL as in save_pack @ 10f8:05da: runs >=3 -> (count, value) with

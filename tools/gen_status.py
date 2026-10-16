@@ -15,8 +15,51 @@ import glob
 import re
 
 ADDR = re.compile(r"\b[0-9A-Fa-f]{4}:[0-9A-Fa-f]{4}\b")
-FUNC = re.compile(r"^(?:static\s+)?(?:[\w\*]+\s+)+(\w+)\s*\([^;]*?\)\s*\{\s*$", re.M)
-DECL = re.compile(r"^(?:static\s+)?(?:[\w\*]+\s+)+(\w+)\s*\([^;]*?\)\s*;\s*$", re.M)
+SIG = re.compile(r"^(?:static\s+)?[ \t\w\*]*?\b(\w+)\s*\(", re.M)
+KEYWORDS = ("if", "for", "while", "switch", "return", "sizeof")
+
+
+def sig_end(text, paren_idx, bound=2000):
+    """From index of '(' find matching ')' then '{' (def) or ';' (decl).
+
+    Params may span lines; only whitespace may sit between ')' and the
+    terminator. Returns (kind, idx) or None. Single-line prefix (SIG)
+    keeps comment words from matching across lines.
+    """
+    depth = 0
+    j = paren_idx
+    end = min(len(text), paren_idx + bound)
+    while j < end:
+        ch = text[j]
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth == 0:
+                k = j + 1
+                while k < len(text) and text[k] in " \t\r\n":
+                    k += 1
+                if k < len(text) and text[k] == "{":
+                    return ("def", k)
+                if k < len(text) and text[k] == ";":
+                    return ("decl", k)
+                return None
+        elif ch == "{" and depth > 0:
+            return None
+        j += 1
+    return None
+
+
+def iter_sigs(text, kind):
+    """Yield (name, match_start, term_idx) for definitions/decls."""
+    for m in SIG.finditer(text):
+        name = m.group(1)
+        if name in KEYWORDS:
+            continue
+        r = sig_end(text, m.end() - 1)
+        if r is None or r[0] != kind:
+            continue
+        yield name, m.start(), r[1]
 
 
 def body_of(src, start):
@@ -146,17 +189,14 @@ def header_addrs(hpath):
     except OSError:
         return {}
     out = {}
-    for m in DECL.finditer(hsrc):
-        name = m.group(1)
-        if name in ("if", "for", "while", "switch", "return"):
-            continue
-        pend = hsrc.rfind("*/", 0, m.start())
+    for name, mstart, _ in iter_sigs(hsrc, "decl"):
+        pend = hsrc.rfind("*/", 0, mstart)
         if pend == -1:
             continue
         cstart = hsrc.rfind("/*", 0, pend)
         if cstart == -1:
             continue
-        pre = hsrc[cstart : m.start()]
+        pre = hsrc[cstart:mstart]
         if re.search(r"\w+\s*\(.*\)\s*;", strip_comments(pre)):
             continue  # code between comment and decl: not its header
         addrs = sorted(set(ADDR.findall(pre)))
@@ -174,16 +214,12 @@ for path in sorted(glob.glob("src/*.c")):
     print(f"\n### `{path}`\n")
     print("| Function | State | Orig addr | Note |")
     print("|---|---|---|---|")
-    for m in FUNC.finditer(src):
-        name = m.group(1)
-        if name in ("if", "for", "while", "switch", "return"):
-            continue
-        start = m.end() - 1
-        body = body_of(src, start)
+    for name, mstart, brace_idx in iter_sigs(src, "def"):
+        body = body_of(src, brace_idx)
         # immediately preceding comment block only (after last */)
-        pend = src.rfind("*/", 0, m.start())
-        cstart = src.rfind("/*", pend if pend != -1 else 0, m.start())
-        pre = src[cstart : m.start()] if cstart != -1 else ""
+        pend = src.rfind("*/", 0, mstart)
+        cstart = src.rfind("/*", pend if pend != -1 else 0, mstart)
+        pre = src[cstart:mstart] if cstart != -1 else ""
         if re.search(r"\w+\s*\(.*\)\s*;", strip_comments(pre)):
             pre = ""  # code between comment and function: not its header
         addrs = sorted(set(ADDR.findall(pre + body[:400])) | hmap.get(name, set()))
