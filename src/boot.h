@@ -1292,10 +1292,30 @@ int main_startup_event_is_dismiss(uint32_t sdl_type);
  * (sticky: already-1 stays 1; DAT_13e0_001e image for loop#2); noise
  * events are dropped like ISDIALOGMESSAGE-non-dialog msgs. NULL
  * break_flag -> NOENT (untouched); else CIV_OK after draining (0 events
- * is still OK, caller keeps pumping while modal_is_done == 0). Safe
+ * is still OK, caller keeps pumping while modal_is_done == 0 and paces
+ * ticks caller-side via main_startup_tick_is_due below). Safe
  * before SDL_Init (SDL_PollEvent reports none). TODO: Orig
- * FUN_11e0_0000 @ 11e0:0000 (100 ms MenuZ timer tick via
- * menuz_timer_interval_ms + Sys_GetTickScaled pacing TBD caller-side). */
+ * FUN_11e0_0000 @ 11e0:0000 (CREATEDIALOG + MAKEPROCINSTANCE +
+ * GETDC/SELECTPALETTE/REALIZEPALETTE + 0xec palette + tracked-stack tails
+ * live in dlg_create_tracked @ 1098:124f, STUB there; GfxPort textures /
+ * RSC decode tails STUB in main_run_startup_sequence above; never fake
+ * CIV_OK). */
 civ_error_t main_startup_pump_events(int *break_flag);
+
+/* Orig Dialog_MenuZ_Modal @ 1220:0156 SETTIMER(hwnd,2,0x64,NULL) tick (@
+ * 1220:0202, KILLTIMER @ 1220:0cfd; fail = 'Can''t initialize timer in
+ * MenuZ' @ 1420:4a41, ref unpacked/civ.exe file offset 0xbba41, windows.c;
+ * shared with the MainMenu_WndProc @ 11e0:0221 modal, same 100 ms via
+ * menuz_timer_interval_ms) paced caller-side via Sys_GetTickScaled @
+ * 1100:02e1 (GETTICKCOUNT * 60 / 1000, see sys_tick_scaled_from in sys.h)
+ * -> main_startup_tick_is_due. 1:1 due when (now_scaled - last_scaled) >=
+ * sys_tick_scaled_from(100 ms) (100 ms = 6 scaled ticks; unsigned
+ * subtraction, so a 32-bit wrap still measures the elapsed span). Pure
+ * predicate on explicit scaled ticks (no SDL, no Win16, no globals, no
+ * exit(), read-only); the caller drains via main_startup_pump_events
+ * above once per due tick (loop#2 DAT_13e0_001e image). Twin of
+ * mainmenu_tick_is_due (see mainmenu.h; same Orig, owned here per the
+ * startup loop#2 scope). */
+int main_startup_tick_is_due(unsigned long last_scaled, unsigned long now_scaled);
 
 #endif /* CIVLIN_BOOT_H */

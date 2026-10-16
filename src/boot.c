@@ -1083,6 +1083,20 @@ civ_error_t main_run_startup_sequence(void)
     pre_ok = dialog_menuz_preselect_ok(-1, 6);
     if (timer_ms != menuz_timer_interval_ms() || cancel != CIV_DIALOG_MENUZ_CANCEL)
         return CIV_ERR_BAD_DATA;
+    /* OS-free 1:1 MenuZ 100 ms pacing @ 1220:0202 (SETTIMER 0x64 = 100 ms;
+     * Sys_GetTickScaled @ 1100:02e1 = GETTICKCOUNT * 60 / 1000, so 100 ms
+     * = 6 scaled ticks via sys_tick_scaled_from in sys.h; fail = 'Can''t
+     * initialize timer in MenuZ' @ 1420:4a41, ref unpacked/civ.exe file
+     * offset 0xbba41). Caller drains via main_startup_pump_events once
+     * per due tick (KILLTIMER @ 1220:0cfd on modal exit). Read-only. */
+    if (sys_tick_scaled_from((unsigned long)timer_ms) != 6u)
+        return CIV_ERR_BAD_DATA;
+    if (main_startup_tick_is_due(0u, 6u) != 1)
+        return CIV_ERR_BAD_DATA;
+    if (main_startup_tick_is_due(0u, 5u) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (main_startup_tick_is_due(0u, 0u) != 0)
+        return CIV_ERR_BAD_DATA;
     if (btn_id != CIV_DIALOG_MENUZ_BASE_ID || back != 0 || valid == 0)
         return CIV_ERR_BAD_DATA;
     if (dis != 0 || pre_ok != 0)
@@ -1737,13 +1751,17 @@ civ_error_t main_startup_pump_events(int *break_flag)
 {
     /* Orig Main_RunStartupSequence @ 11e0:0000 modal pump + Dialog_MenuZ_
      * Modal @ 1220:0156 PEEKMESSAGE/ISDIALOGMESSAGE drain (100 ms SETTIMER
-     * @ 1220:0202 via menuz_timer_interval_ms; pacing via Sys_GetTickScaled
-     * @ 1100:02e1 TBD caller-side). SDL3 drain bridge: SDL_PollEvent loop
+     * @ 1220:0202 via menuz_timer_interval_ms; pacing LIVE caller-side via
+     * main_startup_tick_is_due on Sys_GetTickScaled @ 1100:02e1 ticks,
+     * probed in main_run_startup_sequence above). SDL3 drain bridge: SDL_PollEvent loop
      * (borrowed queue, no window owned here); dismiss events (see
      * main_startup_event_is_dismiss) set the DAT_13e0_001e image sticky.
-     * TODO: Orig FUN_11e0_0000 @ 11e0:0000 (MenuZ 100 ms timer tick +
-     * tick-paced AdvanceFrames still go through the anim_open_sequence /
-     * art_load_frame device tails, STUB above; never fake CIV_OK). */
+     * TODO: Orig FUN_11e0_0000 @ 11e0:0000 (CREATEDIALOG + MAKEPROCINSTANCE
+     * + GETDC/SELECTPALETTE/REALIZEPALETTE + 0xec palette + tracked-stack
+     * tails live in dlg_create_tracked @ 1098:124f, STUB there; MenuZ 100 ms
+     * timer tick + tick-paced AdvanceFrames still go through the
+     * anim_open_sequence / art_load_frame device tails, STUB above; never
+     * fake CIV_OK). */
     SDL_Event ev;
 
     if (!break_flag)
@@ -1753,4 +1771,20 @@ civ_error_t main_startup_pump_events(int *break_flag)
             *break_flag = 1;
     }
     return CIV_OK;
+}
+
+int main_startup_tick_is_due(unsigned long last_scaled, unsigned long now_scaled)
+{
+    /* Orig Dialog_MenuZ_Modal @ 1220:0156 SETTIMER(hwnd,2,0x64,NULL) tick
+     * (@ 1220:0202, KILLTIMER @ 1220:0cfd; fail = 'Can''t initialize timer
+     * in MenuZ' @ 1420:4a41, ref unpacked/civ.exe file offset 0xbba41)
+     * paced caller-side via Sys_GetTickScaled @ 1100:02e1 (GETTICKCOUNT *
+     * 60 / 1000, see sys_tick_scaled_from in sys.h; 100 ms = 6 ticks;
+     * shared with the MainMenu_WndProc @ 11e0:0221 modal, same 100 ms via
+     * menuz_timer_interval_ms; twin of mainmenu_tick_is_due in mainmenu.c).
+     * Unsigned span handles the 32-bit wrap. No SDL, no Win16. */
+    unsigned long period;
+
+    period = sys_tick_scaled_from((unsigned long)menuz_timer_interval_ms());
+    return ((now_scaled - last_scaled) >= period) ? 1 : 0;
 }

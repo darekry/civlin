@@ -199,7 +199,8 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `main_startup_port_pair_ok` | LIVE | 1098:124f, 10b0:008a, 10d0:0000, 11e0:0000 |  |
 | `main_startup_modal_is_done` | LIVE | 10b0:0461, 11e0:0000, 11e0:0221 |  |
 | `main_startup_event_is_dismiss` | LIVE | 1220:0156 |  |
-| `main_startup_pump_events` | LIVE | 1100:02e1, 11e0:0000, 1220:0156, 1220:0202 |  |
+| `main_startup_pump_events` | LIVE | 1098:124f, 1100:02e1, 11e0:0000, 1220:0156, 1220:0202 |  |
+| `main_startup_tick_is_due` | LIVE | 1100:02e1, 11e0:0221, 1220:0156, 1220:0202, 1220:0cfd, 1420:4a41 |  |
 
 ### `src/civ_common.c`
 
@@ -938,7 +939,8 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `mainmenu_needs_rsc_frame` | LIVE | 1190:0a29, 1190:0fda |  |
 | `mainmenu_event_is_dismiss` | LIVE | 11e0:0000, 1220:0156 |  |
 | `mainmenu_modal_is_done` | LIVE | 11e0:0000, 11e0:0221 |  |
-| `mainmenu_pump_events` | LIVE | 1100:02e1, 1220:0156, 1220:0202 |  |
+| `mainmenu_pump_events` | LIVE | 1098:124f, 1100:02e1, 1220:0156, 1220:0202 |  |
+| `mainmenu_tick_is_due` | LIVE | 1100:02e1, 1220:0156, 1220:0202, 1220:0cfd, 1420:435b, 1420:4a41 |  |
 
 ### `src/map.c`
 
@@ -1526,9 +1528,9 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `gfx_icon_registry_group_count` | LIVE |  |  |
 | `gfx_icon_registry_total` | LIVE |  |  |
 | `gfx_icon_registry_free` | LIVE | 1008:062f, 1008:075b |  |
-| `gfx_store_dc` | STUB | 1098:1104, 1100:09a9 | has TODO |
-| `gfx_dc_push` | STUB |  | has TODO |
-| `gfx_dc_pop` | STUB | 10d0:0854, 10d0:09a2 | has TODO |
+| `gfx_store_dc` | PARTIAL | 1030:0000, 1098:1104, 1098:124f, 10b0:0461, 10d0:0854, 10d0:09a2, 1100:09a9, 1208:0af1, 1210:025b, 1220:0156 | has TODO |
+| `gfx_dc_push` | PARTIAL | 1030:0000, 1098:1104, 1098:124f, 10b0:0461, 1220:0156 | has TODO |
+| `gfx_dc_pop` | PARTIAL | 1098:1104, 10d0:0854, 10d0:09a2 | has TODO |
 | `gfx_store_tick_needs_save` | LIVE | 10b0:0461 |  |
 | `gfx_store_modal_needs_save` | LIVE | 1030:0000, 1098:124f, 1208:0af1, 1210:025b, 1220:0156 |  |
 | `gfx_store_order_is_save_first` | LIVE | 1098:00b5, 10d0:0854 |  |

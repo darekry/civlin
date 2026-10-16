@@ -6,6 +6,7 @@
 #include "halloffame.h"
 #include "newgame.h"
 #include "save.h"
+#include "sys.h"
 #include "worldgen.h"
 
 civ_error_t mainmenu_run(civ_mainmenu_choice_t *out)
@@ -125,7 +126,12 @@ civ_error_t mainmenu_run(civ_mainmenu_choice_t *out)
     /* OS-free 1:1 tracked-host gates @ 1098:124f for the modal host
      * (intro dialog 0x94/0x41 via main_startup_intro_dialog_id/flags in
      * boot.h; preset 0x200x0x140 + 0x18 ctx + 0xec palette + push slot +
-     * ctl 0x65-0x6e init + 0x8f earth-extra 0x323-0x332 shape). */
+     * ctl 0x65-0x6e init + 0x8f earth-extra 0x323-0x332 shape; OS-free
+     * halves only — CREATEDIALOG + MAKEPROCINSTANCE(DLGPROC @ 1098:16e2 /
+     * CIVDIALOGPROC @ 1098:1838) + GETDC/SELECTPALETTE/REALIZEPALETTE +
+     * 0xec palette copy via Palette_CopyRange @ 1098:201d + tracked-stack
+     * storage @ 1420:1ea0/1ec8 stay STUB in dlg_create_tracked @ 1098:124f,
+     * see dialog.h, per AGENTS.md Win16 triage). */
     intro_id = main_startup_intro_dialog_id();
     intro_flags = main_startup_intro_dialog_flags();
     center = dlg_create_should_center((unsigned)intro_flags);
@@ -183,14 +189,30 @@ civ_error_t mainmenu_run(civ_mainmenu_choice_t *out)
      * dialog_menuz PARTIAL dispatcher (UNSUPPORTED tail expected, *out
      * preset to cancel -1) + live SDL_PollEvent drain (PEEKMESSAGE
      * replacement: dismiss sets the DAT_12b0_00a0 / DAT_1418_0004 break
-     * image, noise dropped; 100 ms pacing via Sys_GetTickScaled TBD
-     * caller-side) + loop-done shape. Proves the modal wiring without
+     * image, noise dropped; 100 ms pacing LIVE caller-side via
+     * mainmenu_tick_is_due below on Sys_GetTickScaled @ 1100:02e1 ticks)
+     * + loop-done shape. Proves the modal wiring without
      * pumping the Win16 pump or faking a choice. Read-only. */
     mz_idx = CIV_DIALOG_MENUZ_CANCEL;
     mz_rc = dialog_menuz("", CIV_MAINMENU_TEXT, -1, &mz_idx);
     if (mz_rc != CIV_ERR_UNSUPPORTED)
         return CIV_ERR_BAD_DATA;
     if (mz_idx != CIV_DIALOG_MENUZ_CANCEL)
+        return CIV_ERR_BAD_DATA;
+    /* OS-free 1:1 MenuZ 100 ms pacing @ 1220:0202 (SETTIMER 0x64 = 100 ms
+     * via menuz_timer_interval_ms / dialog_menuz_timer_ms, probed above;
+     * Sys_GetTickScaled @ 1100:02e1 = GETTICKCOUNT * 60 / 1000, so 100 ms
+     * = 6 scaled ticks via sys_tick_scaled_from in sys.h; ref
+     * unpacked/civ.exe file offset 0xbba41 fail string). Caller drains
+     * via mainmenu_pump_events once per due tick (KILLTIMER @ 1220:0cfd
+     * stops the tick on modal exit). Read-only. */
+    if (sys_tick_scaled_from((unsigned long)timer_ms) != 6u)
+        return CIV_ERR_BAD_DATA;
+    if (mainmenu_tick_is_due(0u, 6u) != 1)
+        return CIV_ERR_BAD_DATA;
+    if (mainmenu_tick_is_due(0u, 5u) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (mainmenu_tick_is_due(0u, 0u) != 0)
         return CIV_ERR_BAD_DATA;
     if (mainmenu_pump_events(NULL) != CIV_ERR_NOENT)
         return CIV_ERR_BAD_DATA;
@@ -614,14 +636,16 @@ civ_error_t mainmenu_pump_events(int *break_flag)
 {
     /* Orig Dialog_MenuZ_Modal @ 1220:0156 modal pump +
      * PEEKMESSAGE/ISDIALOGMESSAGE drain per 100 ms SETTIMER @ 1220:0202
-     * (via menuz_timer_interval_ms / dialog_menuz_timer_ms; pacing via
-     * Sys_GetTickScaled @ 1100:02e1 TBD caller-side). SDL3 drain bridge:
+     * (via menuz_timer_interval_ms / dialog_menuz_timer_ms; pacing LIVE
+     * caller-side via mainmenu_tick_is_due on Sys_GetTickScaled @
+     * 1100:02e1 ticks, probed in mainmenu_run above). SDL3 drain bridge:
      * SDL_PollEvent loop (borrowed queue, SDL headers via boot.h, no
      * window owned here); dismiss events (see mainmenu_event_is_dismiss)
      * set the DAT_12b0_00a0 / DAT_1418_0004 break image sticky.
-     * TODO: Orig Dialog_MenuZ_Modal @ 1220:0156 (100 ms MenuZ timer tick +
-     * tick-paced pump still goes through the dlg_create_tracked /
-     * gfx device tails, STUB in mainmenu_run above; never fake CIV_OK). */
+     * TODO: Orig Dialog_MenuZ_Modal @ 1220:0156 (CREATEDIALOG +
+     * MAKEPROCINSTANCE + GETDC/SELECTPALETTE/REALIZEPALETTE + 0xec palette
+     * + tracked-stack tails live in dlg_create_tracked @ 1098:124f, STUB
+     * there; never fake CIV_OK). */
     SDL_Event ev;
 
     if (!break_flag)
@@ -631,4 +655,18 @@ civ_error_t mainmenu_pump_events(int *break_flag)
             *break_flag = 1;
     }
     return CIV_OK;
+}
+
+int mainmenu_tick_is_due(unsigned long last_scaled, unsigned long now_scaled)
+{
+    /* Orig Dialog_MenuZ_Modal @ 1220:0156 SETTIMER(hwnd,2,0x64,NULL) tick
+     * (@ 1220:0202, KILLTIMER @ 1220:0cfd; fail = 'Can''t initialize timer
+     * in MenuZ' @ 1420:4a41, ref unpacked/civ.exe file offset 0xbba41)
+     * paced caller-side via Sys_GetTickScaled @ 1100:02e1 (GETTICKCOUNT *
+     * 60 / 1000, see sys_tick_scaled_from in sys.h; 100 ms = 6 ticks).
+     * Unsigned span handles the 32-bit wrap. No SDL, no Win16. */
+    unsigned long period;
+
+    period = sys_tick_scaled_from((unsigned long)menuz_timer_interval_ms());
+    return ((now_scaled - last_scaled) >= period) ? 1 : 0;
 }

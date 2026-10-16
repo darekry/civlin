@@ -294,11 +294,16 @@ int mainmenu_needs_rsc_frame(void);
  * 0xbb35b, 6 items, RanDoMRadio 500+i fan-out). SDL mapping (no Win16, no
  * globals, read-only except the explicit break out): SDL_PollEvent drain
  * replaces PEEKMESSAGE, dismiss events set the break image (loop re-prompt
- * via mainmenu_should_loop / dialog_menuz_should_loop), 100 ms pacing via
- * menuz_timer_interval_ms + Sys_GetTickScaled TBD caller-side. Helpers below
- * are LIVE 1:1 on explicit params; the device tails (CREATEDIALOG/palette/
- * RSC decode via rsc_get_indexed @ 1190:0a29) stay STUB in mainmenu_run
- * above with TODO Orig 1220:0156, never fake CIV_OK. No exit(), C17. */
+ * via mainmenu_should_loop / dialog_menuz_should_loop), 100 ms pacing LIVE
+ * caller-side via mainmenu_tick_is_due below (menuz_timer_interval_ms +
+ * Sys_GetTickScaled @ 1100:02e1, ref unpacked/civ.exe). Helpers below
+ * are LIVE 1:1 on explicit params; the device tails (CREATEDIALOG +
+ * MAKEPROCINSTANCE(DLGPROC @ 1098:16e2 / CIVDIALOGPROC @ 1098:1838) +
+ * GETDC/SELECTPALETTE/REALIZEPALETTE + 0xec palette via Palette_CopyRange @
+ * 1098:201d + tracked-stack storage @ 1420:1ea0/1ec8 + RSC decode via
+ * rsc_get_indexed @ 1190:0a29) stay STUB in dlg_create_tracked @ 1098:124f
+ * (see dialog.h) and in mainmenu_run above with TODO Orig 1220:0156 /
+ * 1098:124f, never fake CIV_OK. No exit(), C17. */
 
 /* Orig same dismiss shape (button/ESC/close vs motion/window noise) ->
  * mainmenu_event_is_dismiss. 1:1 1 for the SDL dismiss family
@@ -323,11 +328,27 @@ int mainmenu_modal_is_done(int break_flag);
  * already-1 stays 1; DAT_12b0_00a0 / DAT_1418_0004 image). Noise events
  * are dropped like ISDIALOGMESSAGE-non-dialog msgs. NULL break_flag ->
  * NOENT (untouched); else CIV_OK after draining (0 events is still OK,
- * caller keeps pumping while mainmenu_modal_is_done == 0). Safe before
+ * caller keeps pumping while mainmenu_modal_is_done == 0 and paces ticks
+ * caller-side via mainmenu_tick_is_due below). Safe before
  * SDL_Init (SDL_PollEvent reports none). TODO: Orig Dialog_MenuZ_Modal @
- * 1220:0156 (100 ms MenuZ timer tick via menuz_timer_interval_ms +
- * Sys_GetTickScaled pacing TBD caller-side). */
+ * 1220:0156 (CREATEDIALOG + MAKEPROCINSTANCE + GETDC/SELECTPALETTE/
+ * REALIZEPALETTE + 0xec palette + tracked-stack tails live in
+ * dlg_create_tracked @ 1098:124f, STUB there; never fake CIV_OK). */
 civ_error_t mainmenu_pump_events(int *break_flag);
+
+/* Orig Dialog_MenuZ_Modal @ 1220:0156 SETTIMER(hwnd,2,0x64,NULL) tick (@
+ * 1220:0202, id -> [BP-0x46], KILLTIMER @ 1220:0cfd; fail = 'Can''t
+ * initialize timer in MenuZ' @ 1420:4a41, ref unpacked/civ.exe file offset
+ * 0xbba41, windows.c; menu text @ 1420:435b, file offset 0xbb35b) paced
+ * caller-side via Sys_GetTickScaled @ 1100:02e1 (GETTICKCOUNT * 60 / 1000,
+ * see sys_tick_scaled_from in sys.h) -> mainmenu_tick_is_due. 1:1 due when
+ * (now_scaled - last_scaled) >= sys_tick_scaled_from(100 ms) (100 ms =
+ * 6 scaled ticks; unsigned subtraction, so a 32-bit wrap still measures
+ * the elapsed span). Pure predicate on explicit scaled ticks (no SDL, no
+ * Win16, no globals, no exit(), read-only); the caller drains via
+ * mainmenu_pump_events above once per due tick and re-prompts via
+ * mainmenu_should_loop / dialog_menuz_should_loop. */
+int mainmenu_tick_is_due(unsigned long last_scaled, unsigned long now_scaled);
 
 /* Orig CX = 0x44: liczba wpisow (68). */
 int menu_dispatch_count(void);

@@ -1614,29 +1614,88 @@ civ_error_t gfx_icon_registry_free(int *slots, int n)
 }
 
 /* --- Chain 2026-10-16 (22): Gfx_StoreDC pattern (goal 4). See video.h.
- * LIVE order/gates + STUB calls (no Win16, no globals, no exit()). */
+ * LIVE order/gates + PARTIAL calls (no Win16, no globals, no exit()). */
 
 civ_error_t gfx_store_dc(void)
 {
-    /* Orig Gfx_StoreDC @ 1098:1104 -> Gfx_SetCurrentDC @ 1100:09a9.
-     * TODO: SDL bridge (borrowed renderer as DC + TARGET backing via
-     * gfx_port_* above; restore via PresentRect + ClearActive). */
+    /* Orig Gfx_StoreDC @ 1098:1104 -> Gfx_SetCurrentDC @ 1100:09a9 (thin
+     * wrapper saving the current port/DC; 28 callers incl. Anim frame-pump
+     * @ 10b0:0461, Pic_PlayShared @ 1030:0000, MenuZ_Modal @ 1220:0156,
+     * Dlg_CreateTracked @ 1098:124f, map opens @ 1208:0af1/1210:025b).
+     * Ref unpacked/civ.exe read-only (NE Win3.x): anchor 1098:1104 +
+     * sole callee 1100:09a9; no handle guessed, no fake. OS-free 1:1
+     * pattern probe below (no Win16, no globals): save-first order +
+     * tick/modal gates must hold; mismatch is a corrupt RE map
+     * (BAD_DATA), never a stub pass. SDL_Texture bridge lives in the
+     * gfx_port_* LIVE pair above (INDEX8 TARGET backing via
+     * gfx_port_alloc_bitmap @ 10d0:0cfa + render-target select via
+     * gfx_port_set_active @ 10d0:0956, restore via gfx_port_present_rect
+     * @ 10d0:0854 + gfx_port_clear_active @ 10d0:09a2); the borrowed
+     * renderer-as-DC save itself needs the caller port, so the device
+     * tail stays UNSUPPORTED. */
+    if (gfx_store_order_is_save_first() != 1)
+        return CIV_ERR_BAD_DATA;
+    if (gfx_store_tick_needs_save(0L) != 1 ||
+        gfx_store_tick_needs_save(1L) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (gfx_store_modal_needs_save(1) != 1 ||
+        gfx_store_modal_needs_save(0) != 0)
+        return CIV_ERR_BAD_DATA;
+    /* TODO: Orig FUN_1098_1104 @ 1098:1104 -> Gfx_StoreDC () ->
+     * Gfx_SetCurrentDC @ 1100:09a9 bridge. Borrowed renderer as DC +
+     * TARGET backing via gfx_port_create @ 10d0:0000 / set_active @
+     * 10d0:0956, restore via present_rect @ 10d0:0854 + clear_active @
+     * 10d0:09a2 + SELECTOBJECT-restore + VALIDATERECT no-op on SDL3.
+     * Returning the probe as CIV_OK now would fake the device half. */
     return CIV_ERR_UNSUPPORTED;
 }
 
 civ_error_t gfx_dc_push(void)
 {
     /* Orig push half of the save -> draw -> restore pattern (see video.h
-     * chain block; 28 StoreDC callers incl. Anim frame-pump, Pic_PlayShared,
-     * MenuZ_Modal, Dlg_CreateTracked, map opens, UpdateStatusPanel,
-     * ShowInfoPopup). TODO: SDL renderer-target push TBD. */
+     * chain block; same 1098:1104 save behind the Anim frame-pump tick
+     * gate @ 10b0:0461 + modal entries @ 1030:0000/1220:0156/1098:124f).
+     * Ref unpacked/civ.exe read-only (NE Win3.x): anchor 1098:1104 save
+     * half. OS-free probe as in gfx_store_dc above (order + gates);
+     * SDL renderer-target push needs the caller port (see
+     * gfx_port_set_active @ 10d0:0956 LIVE), so the device tail stays
+     * UNSUPPORTED with no fake. */
+    if (gfx_store_order_is_save_first() != 1)
+        return CIV_ERR_BAD_DATA;
+    if (gfx_store_tick_needs_save(0L) != 1 ||
+        gfx_store_tick_needs_save(7L) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (gfx_store_modal_needs_save(1) != 1 ||
+        gfx_store_modal_needs_save(0) != 0)
+        return CIV_ERR_BAD_DATA;
+    /* TODO: Orig push half @ 1098:1104 -> SDL renderer-target push
+     * (SDL_SetRenderTarget onto the port INDEX8 TARGET backing from
+     * gfx_port_alloc_bitmap @ 10d0:0cfa, borrowed ren via gfx_port_create
+     * @ 10d0:0000). No caller port in this signature, so no target is
+     * guessed here. */
     return CIV_ERR_UNSUPPORTED;
 }
 
 civ_error_t gfx_dc_pop(void)
 {
     /* Orig pop half (PresentRect @ 10d0:0854 + ClearActive @ 10d0:09a2 +
-     * SELECTOBJECT-restore + VALIDATERECT no-op). TODO: SDL restore TBD. */
+     * SELECTOBJECT-restore + VALIDATERECT no-op). Ref unpacked/civ.exe
+     * read-only (NE Win3.x): restore anchors 10d0:0854/09a2 behind the
+     * 1098:1104 save. OS-free probe (save-first order must hold; the
+     * restore pair itself is LIVE in gfx_port_present_rect /
+     * gfx_port_clear_active above). SDL restore needs the caller port,
+     * so this tail stays UNSUPPORTED with no fake. */
+    if (gfx_store_order_is_save_first() != 1)
+        return CIV_ERR_BAD_DATA;
+    if (gfx_store_tick_needs_save(0L) != 1 ||
+        gfx_store_tick_needs_save(1L) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (gfx_store_modal_needs_save(1) != 1 ||
+        gfx_store_modal_needs_save(0) != 0)
+        return CIV_ERR_BAD_DATA;
+    /* TODO: Orig pop half @ 1098:1104 -> SDL restore (SDL_SetRenderTarget
+     * restore + PresentRect @ 10d0:0854 + ClearActive @ 10d0:09a2 slots
+     * caller-side + VALIDATERECT no-op on SDL3). */
     return CIV_ERR_UNSUPPORTED;
 }
 

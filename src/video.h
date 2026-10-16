@@ -1262,19 +1262,27 @@ int palette_handle_is_live(int handle);
  *   Present/Text) -> restore (SetActive/PresentRect/ClearActive +
  *   SELECTOBJECT-restore + VALIDATERECT no-op). Poniżej LIVE kolejność
  *   (save-first) + tick/modal gates (no Win16, no globals); same wołania
- *   (StoreDC/push/pop) zostają STUB z TODO Orig aż mostek SDL (borrowed
+ *   (StoreDC/push/pop) są PARTIAL z TODO Orig: OS-free sondy order/gates
+ *   1:1 (BAD_DATA przy niezgodności) + mostek SDL (borrowed
  *   renderer jako DC, TARGET texture jako backing) wyląduje w
  *   gfx_port_create/set_active/present_rect/blit powyżej.
  * No exit(), C17. */
 
 /* Orig Gfx_StoreDC @ 1098:1104 -> gfx_store_dc. Thin wrapper over
- * Gfx_SetCurrentDC @ 1100:09a9 (borrowed renderer/DC save). SDL bridge
- * TBD (renderer borrow + TARGET backing, see gfx_port_* above). */
+ * Gfx_SetCurrentDC @ 1100:09a9 (borrowed renderer/DC save). PARTIAL
+ * SDL_Texture probe bridge (see video.c): OS-free save-first order +
+ * tick/modal gates probed 1:1 (BAD_DATA on mismatch, no fake CIV_OK);
+ * device tail (borrowed renderer as DC + TARGET backing via gfx_port_*
+ * LIVE above, restore via present_rect @ 10d0:0854 + clear_active @
+ * 10d0:09a2) stays UNSUPPORTED until the caller port is wired in.
+ * Ref unpacked/civ.exe read-only (anchor 1098:1104 + callee 1100:09a9). */
 civ_error_t gfx_store_dc(void);
 
 /* Orig push/pop generalization (save -> draw -> restore) -> gfx_dc_push /
- * gfx_dc_pop. STUB pair keeping the pairing for RE-map fidelity (SDL3
- * renderer borrow needs no real push; the order itself is LIVE in
+ * gfx_dc_pop. PARTIAL pair keeping the pairing for RE-map fidelity (OS-free
+ * order/gate probes as in gfx_store_dc, BAD_DATA on mismatch; SDL3
+ * renderer borrow needs the caller port, so the target push/restore stays
+ * UNSUPPORTED with TODO Orig, no fake). The order itself is LIVE in
  * gfx_store_order_is_save_first below). */
 civ_error_t gfx_dc_push(void);
 civ_error_t gfx_dc_pop(void);
