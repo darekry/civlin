@@ -171,14 +171,46 @@ int file_is_text_mode(unsigned flags)
 
 /* --- DOS-file primitives (raw INT 21h; all STUB, contracts in sys.h) --- */
 
+/* DAT_1420_0010 / DAT_1420_4e7a images (odblokowanie 2026-10-16):
+ * DOS errno words written by Dos_MapError @ 1000:151a on every CF=1 path.
+ * Module-static with Orig addr annotation per AGENTS.md (process-global
+ * in orig, overwritten by the next dos_map_error call). */
+static int s_dos_e0010 = 0;
+static int s_dos_e4e7a = 0;
+
+int dos_errno_e0010(void)
+{
+    return s_dos_e0010;
+}
+
+int dos_errno_e4e7a(void)
+{
+    return s_dos_e4e7a;
+}
+
 civ_error_t dos_map_error(int dos_code)
 {
-    (void)dos_code;
-    /* TODO: Orig FUN_1000_151a @ 1000:151a (Dos_MapError: errno mapper to
-     * DAT_1420_0010/DAT_1420_4e7a, always returns 0xffff). Needs the
-     * DGROUP errno words + table @ 1420:4e7c. Pure kernel:
-     * dos_map_error_lookup below (LIVE, explicit outs). */
-    return CIV_ERR_UNSUPPORTED;
+    /* Orig Dos_MapError @ 1000:151a 1:1 (decompiled):
+     *   if (code < 0 && (code == -0x30 || -code < 0x30)) { e0010 = -code;
+     *     e4e7a = 0xffff; return 0xffff; }
+     *   if (code >= 0 && code < 0x59) goto store;
+     *   code = 0x57;
+     * store: e4e7a = code; e0010 = (int)*(signed char *)(code + 0x4e7c);
+     *   return 0xffff.
+     * Table @ 1420:4e7c is 0x59 bytes, all < 0x80, so the sign-extend is
+     * the identity (see dos_map_error_lookup below, same table). Linux
+     * delegates to the lookup kernel then stages into the static words;
+     * CIV_OK = effect achieved (words set, orig always returned 0xffff).
+     * No DOS INT, no exit(). */
+    int e0010 = 0;
+    int e4e7a = 0;
+    int rc = dos_map_error_lookup(dos_code, &e0010, &e4e7a);
+
+    if (rc != 0xffff)
+        return CIV_ERR_NOENT;
+    s_dos_e0010 = e0010;
+    s_dos_e4e7a = e4e7a;
+    return CIV_OK;
 }
 
 int dos_map_error_lookup(int dos_code, int *out_e0010, int *out_e4e7a)

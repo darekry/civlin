@@ -2025,9 +2025,17 @@ void text_sync_font_tail(void);
 
 /* Orig Dlg_CenterTrackedWindow @ 1098:0b33 (renamed 2026-10-16 from
  * FUN_1098_0b33; flags&1 path of Dlg_CreateTracked @ 1098:124f).
- * Centers via Dlg_CenterRect (LIVE as dlg_center_rect) + MOVEWINDOW +
- * GETWINDOWRECT. Win16 MOVEWINDOW tail -> stub CIV_ERR_UNSUPPORTED. */
-civ_error_t dlg_center_tracked_window(void);
+ * OS-free 1:1 port of the GETWINDOWRECT + Dlg_CenterRect @ 11f8:0000 +
+ * MOVEWINDOW shape on explicit rects: the Win16 HWND lookups (GETWINDOWRECT
+ * for the parent/dialog pair) and the MOVEWINDOW application stay
+ * caller-side (handles mapped to explicit dlg_rect_t offsets/sizes, no
+ * __far/segments, no globals); the centering math itself is LIVE via
+ * dlg_center_rect above (same kept inner size). NULL parent/dlg/out ->
+ * NOENT, else CIV_OK with *out set. Refs verified read-only 1:1 vs
+ * unpacked/civ.exe (NE LE, no copy). */
+civ_error_t dlg_center_tracked_window(const dlg_rect_t *parent,
+                                      const dlg_rect_t *dlg,
+                                      dlg_rect_t *out);
 
 /* Orig Dlg_InitPaletteWord @ 1098:1196 (renamed 2026-10-16 from
  * FUN_1098_1196; tail of Dlg_CreateTracked @ 1098:124f palette copy).

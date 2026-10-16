@@ -198,24 +198,29 @@ civ_error_t worldgen_customize_dialog(void);
  * no globals). Direction table below is static const (see worldgen.c). */
 
 /* Orig: FUN_1028_0945 @ 1028:0945 -> worldgen_seed_one_island.
- * Scratch Map_FillRect clear + Map_GenPaintBlob scatter + island-copy math:
- * copy scratch +0xa0 -> main with +1 (land increment), counting via
- * 1248:0002. Caller: worldgen_generate_random param==0 loop. Win16
- * scratch segment TBD -> stub CIV_ERR_UNSUPPORTED. */
-civ_error_t worldgen_seed_one_island(void);
+ * Scratch Map_FillRect(0xa0,0,0x50,0x32,0) clear + single
+ * Map_GenPaintBlob(Rng_Range(0x48)+4, Rng_Range(0x22)+8) scatter +
+ * island-copy math: scratch +0xa0 -> main with +1 (land increment),
+ * Sys_Yield per x row. DAT_1248_0002 counter is an explicit required
+ * out-param (NULL -> NOENT). Caller: worldgen_generate_random param==0
+ * loop. LIVE 1:1 on the map buffer (no segment, no Win16, no exit()). */
+civ_error_t worldgen_seed_one_island(int *count_out);
 
 /* Orig: FUN_1028_09ef @ 1028:09ef -> worldgen_paint_blob.
- * Random-walk painting 0x0f: steps = Rng_Range(0x40)+1, each step writes
- * 0x0f at (x,y) via Map_SetTile then steps by dx[8],dy[8] (dir =
- * Rng_Range(8)). Direction table TBD (orig bytes); Linux uses 8-dir
- * N-clockwise stub table (see worldgen_dir_dx/dy). OS-free 1:1 port. */
+ * Scratch-local (x,y) random walk, steps = Rng_Range(0x40)+1: each step
+ * writes an L-tromino 0x0f at (x+0xa0,y)/(x+0xa1,y)/(x+0xa0,y+1), then
+ * steps by the dedicated 4-dir tables (dx @ 12c8 odd words {0,+1,0,-1},
+ * dy @ 12d0 odd words {-1,0,+1,0} = N/E/S/W; dir = Rng_Range(4)).
+ * Stops when steps run out or (x,y) leaves (2,0x4d)x(2,0x2e).
+ * OS-free 1:1 port (see worldgen.c). */
 civ_error_t worldgen_paint_blob(int x, int y);
 
-/* 8-dir step table for paint_blob + rivers (shared random-walk geometry).
- * Orig direction-table bytes TBD from decompile near 1028:09ef/066a;
- * Linux stub is 8-dir N-clockwise: N(0,-1) NE(1,-1) E(1,0) SE(1,1) S(0,1)
+/* 8-dir step table for rivers (random-walk geometry).
+ * Orig direction-table bytes TBD from decompile near 1028:066a; Linux
+ * stub is 8-dir N-clockwise: N(0,-1) NE(1,-1) E(1,0) SE(1,1) S(0,1)
  * SW(-1,1) W(-1,0) NW(-1,-1). OS-free static const port (read-only,
- * no globals mutated, no exit()). Index 0..7 via Rng_Range(8). */
+ * no globals mutated, no exit()). Index 0..7 via Rng_Range(8).
+ * NOTE: paint_blob above does NOT use this table (own 4-dir N/E/S/W). */
 extern const int worldgen_dir_dx[8];
 extern const int worldgen_dir_dy[8];
 /* Accessors (bounds-checked: OOB dir -> 0 step). */

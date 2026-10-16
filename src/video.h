@@ -1641,7 +1641,13 @@ int art_port_frees_bits(int free_flag);
  * 10f8:040a, Art_LoadResPaletted @ 10b8:11bc ResMgr_GetById + 0xec expand +
  * Art_DecodeLZW @ 10b8:158c, Art_SaveConvertedFrame @ 10b8:0c1c, GfxPort_
  * Create @ 10d0:0000 + Gfx_StoreDC @ 1098:1104) stays UNSUPPORTED.
- * frame_id < 0 -> RANGE (orig faulted). Ref unpacked/civ.exe read-only. */
+ * frame_id < 0 -> RANGE (orig faulted). rsc_dump 2026-10-16 vs real frames
+ * (read-only): all images_strict=0 (civdata0 454 / CvD1 14 / CvD2 31 / CvD3
+ * 144 / CvD4 1); CvD1 rec[1] BB DF 06 45... len 86857 expand FAIL
+ * (RLL/INV/LZSS TAG_OVERRUN, best NONE, RAW bad data); godpal anchor miss.
+ * Bez FUN_1198_xxxx body compare dekoder 1198 RLE/tagged-frame
+ * niepotwierdzony (zasada H, no fake, *out untouched). Ref unpacked/civ.exe
+ * read-only (832512 B NE Win3.x, no bytes copied). */
 civ_error_t art_load_frame_data(int frame_id, int convert_flag, int res_ok,
                                 int gov_9980);
 

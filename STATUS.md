@@ -404,7 +404,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `anim_slot_should_step` | LIVE | 10a8:00fc, 10a8:018e |  |
 | `anim_scroll_sync_tick` | LIVE | 1008:0df0, 10b0:0461 |  |
 | `text_sync_font_tail` | NOOP | 1008:09d3, 10b0:0461, 1100:0a4a |  |
-| `dlg_center_tracked_window` | PARTIAL | 1098:0b33, 1098:124f, 11f8:0000 | has TODO |
+| `dlg_center_tracked_window` | LIVE | 1098:0b33, 1098:124f, 11f8:0000 |  |
 | `dlg_init_palette_word_writes` | LIVE | 1098:1184, 1098:1196, 1098:124f |  |
 | `gfx_get_zero_palette_word` | LIVE | 1098:1184, 1098:11c8 |  |
 | `anim_pal_src_for` | LIVE | 10b0:0461 |  |
@@ -1009,8 +1009,8 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `map_timer_proc` | STUB | 1008:0000, 1008:0329, 1008:0d68, 1088:0000, 1208:0054, 1208:0af1 | has TODO |
 | `map_timer_interval_ms` | LIVE | 1008:0000, 1008:0329, 1208:0054, 1208:0af1, 1208:0e7b |  |
 | `map_shutdown` | NOOP |  |  |
-| `wdwstatus_calc_upper_rect` | STUB | 1088:1479, 1218:0956 | has TODO |
-| `wdwstatus_calc_lower_rect` | STUB | 1088:1536, 1218:0a06 | has TODO |
+| `wdwstatus_calc_upper_rect` | LIVE | 1000:137f, 1088:1479, 1218:0956 |  |
+| `wdwstatus_calc_lower_rect` | LIVE | 1088:1536, 1218:0a06 |  |
 | `wdwstatus_is_dirty` | LIVE | 1218:063e, 1218:0801 |  |
 | `wdwstatus_frame_metrics` | LIVE | 1218:0956 |  |
 | `path_find_corridor` | LIVE | 1128:0000, 1128:10de, 1420:62fc |  |
@@ -1269,8 +1269,8 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `res_get_string_raw_from_blob` | LIVE | 1100:0053, 1100:078a |  |
 | `res_copy_static_cstr` | LIVE |  |  |
 | `res_raw_static_pascal` | LIVE |  |  |
-| `res_get_string_copy` | PARTIAL | 1000:299e, 1100:078a, 11f8:0080, 13f8:0000 |  |
-| `res_get_string_raw` | PARTIAL | 11f8:00c5 |  |
+| `res_get_string_copy` | PARTIAL | 1000:299e, 1100:078a, 1190:09ed, 1190:0aea, 11f8:0080, 13f8:0000 | has TODO |
+| `res_get_string_raw` | PARTIAL | 1100:078a, 1190:0aea, 11f8:00c5, 13f8:0000 | has TODO |
 | `res_blob_entry_kind` | LIVE | 1100:078a |  |
 
 ### `src/save.c`
@@ -1351,7 +1351,9 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `file_emit_char` | STUB | 1000:2cba, 1000:2cd8, 1000:2e85 | has TODO |
 | `file_buffered_is_direct` | LIVE | 1000:2152, 1000:2cd8, 1000:2e85, 1420:4cd0 |  |
 | `file_is_text_mode` | LIVE | 1000:1750, 1000:33c0, 1000:3e70, 1000:3fc4 |  |
-| `dos_map_error` | STUB | 1000:151a, 1420:4e7c | has TODO |
+| `dos_errno_e0010` | LIVE |  |  |
+| `dos_errno_e4e7a` | LIVE |  |  |
+| `dos_map_error` | LIVE | 1000:151a, 1420:4e7c |  |
 | `dos_map_error_lookup` | LIVE | 1000:151a, 1420:4e7c |  |
 | `dos_is_char_device` | STUB | 1000:1566, 1000:1750, 1000:3fc4, 1420:4fc4, 1420:4fc8 | has TODO |
 | `dos_is_char_device_bit` | LIVE | 1000:1566, 1000:1750, 1000:3fc4, 1420:4fc4 |  |
@@ -1675,7 +1677,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `worldgen_copy_preset` | LIVE | 1028:0000, 10b8:0000, 10b8:079d, 1420:20a9 |  |
 | `worldgen_customize` | STUB |  | has TODO |
 | `worldgen_customize_dialog` | STUB | 1058:06ab, 1058:081a, 1058:0921, 1058:09f6, 1058:0b4d, 1098:124f, 1098:1612 | has TODO |
-| `worldgen_seed_one_island` | STUB | 1028:0945, 1248:0002 | has TODO |
+| `worldgen_seed_one_island` | LIVE | 1028:0945 |  |
 | `worldgen_paint_blob` | LIVE | 1028:09ef |  |
 | `worldgen_label_continents` | STUB | 1028:0a93, 1028:12c6, 1028:1ca7, 1028:1d15 | has TODO |
 | `worldgen_gen_rivers` | STUB | 1028:066a, 1028:06c1 | has TODO |

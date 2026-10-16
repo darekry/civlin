@@ -3115,14 +3115,21 @@ const uint8_t *res_raw_static_pascal(void)
 rsc_error_t res_get_string_copy(unsigned table, unsigned entry,
                                 char *out, size_t cap)
 {
-    /* Orig Res_GetStringCopy @ 11f8:0080:
+    /* Orig Res_GetStringCopy @ 11f8:0080 — PARTIAL:
      *   DAT_13f8_0000 = 0;
      *   ResMgr_GetString(13f8:0000, table, N=entry+1);
      *   Util_PascalToCStr(13f8:0000); return 13f8:0000.
-     * Linux stages into s_res_static (DAT_13f8_0000 image) then copies C
-     * to out. Known tables 0x94/0x8c/0x95 from verified dumps; other
-     * tables via res_get_string_copy_from_blob (UNSUPPORTED here, *out
-     * untouched, no fake). */
+     * Linux stages into s_res_static (DAT_13f8_0000 image @ 13f8:0000/
+     * DGROUP, overwritten by the next copy/raw call) then copies C
+     * to out. Known tables 0x94/0x8c/0x95 from verified dumps (BE count +
+     * Pascal walk ref unpacked/civ.exe + rsc_dump civdata0, e.g. rec[3]
+     * 0x0F+"The Corporation"); other tables via
+     * res_get_string_copy_from_blob (UNSUPPORTED here, *out untouched,
+     * no fake).
+     * TODO: Orig 11f8:0080 + 1100:078a + 1190:0aea/09ed — wire the
+     * container tail (rsc_mgr/file GetById type 0x2da8 + GLOBALLOCK +
+     * DisposeHandle into DAT_13f8_0000) once the 0x2da8 blob container
+     * is confirmed; until then PARTIAL. */
     const char *s = NULL;
     size_t slen = 0;
     size_t need = 0;
@@ -3158,7 +3165,13 @@ rsc_error_t res_get_string_copy(unsigned table, unsigned entry,
 rsc_error_t res_get_string_raw(unsigned table, unsigned entry,
                                uint8_t *out, size_t cap)
 {
-    /* Orig Res_GetStringRaw @ 11f8:00c5: same staging without PascalToC. */
+    /* Orig Res_GetStringRaw @ 11f8:00c5 — PARTIAL: same staging without
+     * PascalToC (DAT_13f8_0000 image @ 13f8:0000/DGROUP, overwrite
+     * semantics); container tail UNSUPPORTED, same BE/string 1:1 ref
+     * (unpacked/civ.exe + rsc_dump civdata0) as copy.
+     * TODO: Orig 11f8:00c5 + 1100:078a + 1190:0aea/09ed — same container
+     * tail as copy (GetById/GLOBALLOCK/DisposeHandle into DAT_13f8_0000);
+     * until then PARTIAL. */
     const char *s = NULL;
     size_t slen = 0;
     size_t need = 0;

@@ -114,18 +114,25 @@ typedef struct civ_rect {
 } civ_rect_t;
 
 /* Orig: FUN_1218_0956 @ 1218:0956 -> wdwstatus_calc_upper_rect.
- * Derives a centered frame from the status-port client rect
- * (GLOBALLOCK + FUN_1000_137f): cx = ((w)-0x8c)/2, cy =
- * clamp(((h)-0xf0)/4,0,10); SETRECT(cy+0x1e, ...) then INFLATERECT(-1,-1).
+ * Centered frame from the status-port client spans (GLOBALLOCK +
+ * Util_MemCopyFar @ 1000:137f in orig; explicit client_w/h here,
+ * client-local origin 0,0): cx = (w-0x8c)/2, cy = clamp((h-0xf0)/4,0,10)
+ * (head shared with wdwstatus_frame_metrics); SETRECT(cx-1, cy, w-cx,
+ * cy+0x1e) + INFLATERECT(-1,-1) -> { cx, cy+1, w-cx-1, cy+0x1d }.
+ * GLOBALLOCK/window-origin tails stay caller-side (no Win16 here).
  * Sole caller Game_UpdateStatusPanel @ 1088:1479; result feeds
- * FUN_11f8_0278(..., DAT_12d8_45f4) (first text row). */
-civ_error_t wdwstatus_calc_upper_rect(civ_rect_t *out);
+ * FUN_11f8_0278(..., DAT_12d8_45f4) (first text row). NULL out -> NOENT.
+ * LIVE 1:1, no exit(). */
+civ_error_t wdwstatus_calc_upper_rect(int client_w, int client_h,
+                                      civ_rect_t *out);
 
 /* Orig: FUN_1218_0a06 @ 1218:0a06 -> wdwstatus_calc_lower_rect.
- * Same derivation, second frame at cy*2+0x46/0x1e. Sole caller
+ * Same head; SETRECT(cx-1, cy*2+0x1e, w-cx, cy*2+0x46) + INFLATERECT
+ * -> { cx, cy*2+0x1f, w-cx-1, cy*2+0x45 }. Sole caller
  * Game_UpdateStatusPanel @ 1088:1536; feeds FUN_11f8_0278(...,
- * DAT_12d8_45fb) (second text row). */
-civ_error_t wdwstatus_calc_lower_rect(civ_rect_t *out);
+ * DAT_12d8_45fb) (second text row). NULL out -> NOENT. LIVE 1:1. */
+civ_error_t wdwstatus_calc_lower_rect(int client_w, int client_h,
+                                      civ_rect_t *out);
 
 /* --- status dirty-flag + frame metrics (2026-10-16) ---
  * Orig (civ.exe, x86:LE:16:Protected Mode):

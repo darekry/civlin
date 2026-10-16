@@ -163,28 +163,62 @@ void map_shutdown(void)
 {
 }
 
-civ_error_t wdwstatus_calc_upper_rect(civ_rect_t *out)
+civ_error_t wdwstatus_calc_upper_rect(int client_w, int client_h,
+                                        civ_rect_t *out)
 {
-    /* TODO: Orig FUN_1218_0956 @ 1218:0956 (client-rect -> centered frame,
-     * cy+0x1e variant; INFLATERECT -1,-1; see map.h). OS-free cx/cy head
-     * is LIVE in wdwstatus_frame_metrics below; the SETRECT field order
-     * + GLOBALLOCK rect fetch stay Win16 until decoded. Ref
-     * unpacked/civ.exe read-only (NE Win3.x, 832512 B): anchor 1218:0956.
-     * NULL out -> NOENT (orig faulted on a bad far pointer). */
+    /* Orig WdwStatus_CalcUpperRect @ 1218:0956 1:1 (disassembly):
+     *   8-B client rect via GLOBALLOCK(DAT_1420_4964)+Util_MemCopyFar @
+     *   1000:137f (spans w = right-left, h = bottom-top);
+     *   cx = (w - 0x8c)/2, cy = clamp((h - 0xf0)/4, 0, 10) (same head as
+     *   wdwstatus_frame_metrics below, reused here);
+     *   SETRECT(left = cx-1, top = cy, right = w-cx, bottom = cy+0x1e)
+     *   (Win16 far-pascal push order: rect seg/off, cx-1, cy, w-cx,
+     *   cy+0x1e; SETRECT @ 1608:0100);
+     *   INFLATERECT(-1,-1) (@ 1608:010c: left+1, top+1, right-1,
+     *   bottom-1); GLOBALUNLOCK when DAT_1420_4964 != 0.
+     * Linux takes the spans explicitly (client-local origin 0,0; the
+     * GLOBALLOCK fetch + window origin stay caller-side, no Win16 here):
+     * final = { cx, cy+1, w-cx-1, cy+0x1d }. NULL out -> NOENT (orig
+     * faulted on a bad far pointer). No exit(). */
+    civ_error_t fr;
+    int cx = 0;
+    int cy = 0;
+
     if (!out)
         return CIV_ERR_NOENT;
-    return CIV_ERR_UNSUPPORTED;
+    fr = wdwstatus_frame_metrics(client_w, client_h, &cx, &cy);
+    if (fr != CIV_OK)
+        return fr;
+    out->left = cx;
+    out->top = cy + 1;
+    out->right = client_w - cx - 1;
+    out->bottom = cy + 0x1d;
+    return CIV_OK;
 }
 
-civ_error_t wdwstatus_calc_lower_rect(civ_rect_t *out)
+civ_error_t wdwstatus_calc_lower_rect(int client_w, int client_h,
+                                        civ_rect_t *out)
 {
-    /* TODO: Orig FUN_1218_0a06 @ 1218:0a06 (cy*2+0x46/0x1e variant; same head
-     * as above, LIVE in wdwstatus_frame_metrics). Ref unpacked/civ.exe
-     * read-only (NE Win3.x, 832512 B): anchor 1218:0a06. NULL out ->
-     * NOENT (orig faulted on a bad far pointer). */
+    /* Orig WdwStatus_CalcLowerRect @ 1218:0a06 1:1: same head as above;
+     * SETRECT(left = cx-1, top = cy*2+0x1e, right = w-cx,
+     * bottom = cy*2+0x46) + INFLATERECT(-1,-1); GLOBALUNLOCK when the
+     * handle is nonzero. Explicit spans, client-local origin:
+     * final = { cx, cy*2+0x1f, w-cx-1, cy*2+0x45 }. NULL out -> NOENT.
+     * No Win16, no exit(). */
+    civ_error_t fr;
+    int cx = 0;
+    int cy = 0;
+
     if (!out)
         return CIV_ERR_NOENT;
-    return CIV_ERR_UNSUPPORTED;
+    fr = wdwstatus_frame_metrics(client_w, client_h, &cx, &cy);
+    if (fr != CIV_OK)
+        return fr;
+    out->left = cx;
+    out->top = cy * 2 + 0x1f;
+    out->right = client_w - cx - 1;
+    out->bottom = cy * 2 + 0x45;
+    return CIV_OK;
 }
 
 /* --- status dirty-flag + frame metrics (2026-10-16): OS-free 1:1. --- */

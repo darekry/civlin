@@ -2132,6 +2132,14 @@ civ_error_t art_load_frame_data(int frame_id, int convert_flag, int res_ok,
      * OS-free gates below are LIVE 1:1 (mismatch = corrupt RE map,
      * BAD_DATA); the disk/RSC/LZW/port tails need Win16 handles, so the
      * device tail stays UNSUPPORTED with no fake bytes.
+     * rsc_dump 2026-10-16 vs real frames (read-only, no writes): civdata0
+     * 454 slices / CvD1 14 / CvD2 31 / CvD3 144 / CvD4 1, all
+     * images_strict=0 (raw INDEX8 gate fails = tagged/RLE, not raw); CvD1
+     * rec[1] BB DF 06 45... len 86857 expand FAIL (RLL/INV/LZSS
+     * TAG_OVERRUN, best NONE, RAW bad data via gfx_rle_expand_best_ex);
+     * godpal anchor 00 03 EC 00 miss. Bez porownania z FUN_1198_xxxx body
+     * dekoder 1198 RLE/tagged-frame niepotwierdzony (zasada H: nie
+     * zgadujemy, *out untouched).
      * TODO: Orig Art_LoadFrameData @ 10b8:079d device tail -> SDL bridge.
      * Art_LoadDiskFile @ 10b8:0aa8 (_LOPEN/_HREAD + save_unpack @ 10f8:040a
      * when DAT_1420_17a8 != 0) else Art_LoadResPaletted @ 10b8:11bc
@@ -2139,8 +2147,9 @@ civ_error_t art_load_frame_data(int frame_id, int convert_flag, int res_ok,
      * cf. gfx_lzw_decode @ 1420:2372/23ce, no duplicate) + optional
      * Art_SaveConvertedFrame @ 10b8:0c1c (_LCREAT/_HWRITE + save_pack @
      * 10f8:05da) when art_frame_saves_converted(gov) == 1, then
-     * GfxPort_Create @ 10d0:0000 + Gfx_StoreDC @ 1098:1104. Ref
-     * unpacked/civ.exe read-only. */
+     * GfxPort_Create @ 10d0:0000 + Gfx_StoreDC @ 1098:1104. Needs
+     * FUN_1198_xxxx body compare first (Ghidra CivLin.gpr civ.exe). Ref
+     * unpacked/civ.exe read-only (832512 B NE Win3.x, no bytes copied). */
     if (frame_id < 0)
         return CIV_ERR_RANGE;
     if (art_frame_id_ok(frame_id) != 1)

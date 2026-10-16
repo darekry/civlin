@@ -9,10 +9,10 @@
 #include "map.h"
 #include "sys.h"
 
-/* 8-dir step table for paint_blob + rivers (Orig direction-table bytes TBD
- * near 1028:09ef/066a). Linux stub: 8-dir N-clockwise, shared by
- * worldgen_paint_blob (dir = rng_range(8)) and the river walk. Static
- * const port (read-only). */
+/* 8-dir step table for rivers (Orig direction-table bytes TBD near
+ * 1028:066a). Linux stub: 8-dir N-clockwise for the river walk.
+ * Static const port (read-only). NOTE: paint_blob has its own 4-dir
+ * N/E/S/W tables (12c8/12d0 odd words, see below), not this one. */
 const int worldgen_dir_dx[8] = { 0, 1, 1, 1, 0, -1, -1, -1 };
 const int worldgen_dir_dy[8] = { -1, -1, 0, 1, 1, 1, 0, -1 };
 
@@ -198,34 +198,94 @@ civ_error_t worldgen_customize_dialog(void)
     return CIV_ERR_UNSUPPORTED;
 }
 
-civ_error_t worldgen_seed_one_island(void)
+civ_error_t worldgen_seed_one_island(int *count_out)
 {
-    /* TODO: Map_GenSeedOneIsland @ 1028:0945: scratch Map_FillRect clear
-     * + Map_GenPaintBlob scatter + island-copy math (copy scratch +0xa0
-     * -> main with +1 land increment, counting via 1248:0002). Caller:
-     * worldgen_generate_random param==0 loop. Scratch segment TBD. */
-    return CIV_ERR_UNSUPPORTED;
+    /* Orig Map_GenSeedOneIsland @ 1028:0945 1:1 (decompiled):
+     *   Map_FillRect(0xa0, 0, 0x50, 0x32, 0);
+     *   x = Rng_Range(0x48); y = Rng_Range(0x22);
+     *   Map_GenPaintBlob(x + 4, y + 8);            (single pass)
+     *   for (x = 0; x < 0x50; x++) { Sys_Yield();
+     *     for (y = 0; y < 0x32; y++)
+     *       if (Map_GetTile(x + 0xa0, y) != 0) {
+     *         Map_SetTile(x, y, Map_GetTile(x, y) + 1);
+     *         DAT_1248_0002++;
+     *       }
+     *   }
+     * Scratch lives at x+0xa0 inside the 0x140 x 200 tile buffer (see
+     * map.h: game map 0x50 x 0x32 at origin, island copy at +0xa0).
+     * Linux uses map_fill_rect / worldgen_paint_blob / map_get/set_tile
+     * + rng_range / sys_yield directly (no segment). DAT_1248_0002 is
+     * an explicit out-param (required; NULL -> NOENT). OOB reads return
+     * the map_get_tile sentinel (-1 != 0, counted like orig nonzero).
+     * No Win16, no exit(). */
+    int x;
+    int y;
+    int count = 0;
+
+    if (!count_out)
+        return CIV_ERR_NOENT;
+    map_fill_rect(0xa0, 0, 0x50u, 0x32u, 0);
+    {
+        int sx = (int)rng_range(0x48);
+        int sy = (int)rng_range(0x22);
+
+        worldgen_paint_blob(sx + 4, sy + 8);
+    }
+    for (x = 0; x < 0x50; x++) {
+        sys_yield();
+        for (y = 0; y < 0x32; y++) {
+            if (map_get_tile(x + 0xa0, y) != 0) {
+                /* Main-map (x,y) is always in-bounds here, so the
+                 * get_tile sentinel never fires; (uint8_t) wrap matches
+                 * the orig char +1. */
+                map_set_tile(x, y, (uint8_t)(map_get_tile(x, y) + 1));
+                count++;
+            }
+        }
+    }
+    *count_out = count;
+    return CIV_OK;
 }
 
 civ_error_t worldgen_paint_blob(int x, int y)
 {
-    /* Orig FUN_1028_09ef @ 1028:09ef -> Map_GenPaintBlob: steps =
-     * Rng_Range(0x40)+1 random walk painting 0x0f, stepping by the 8-dir
-     * dx/dy table (dir = Rng_Range(8)). Direction-table bytes TBD; Linux
-     * uses the static const 8-dir stub above. OS-free 1:1 port via
-     * map_set_tile + rng_range; OOB steps fall out via map_set_tile. */
+    /* Orig Map_GenPaintBlob @ 1028:09ef 1:1 (disassembly):
+     *   steps = Rng_Range(0x40)+1;
+     *   loop { Map_SetTile(x+0xa0, y, 0xf); Map_SetTile(x+0xa1, y, 0xf);
+     *     Map_SetTile(x+0xa0, y+1, 0xf);            (L-tromino, scratch)
+     *     r = Rng_Range(4); i = r*2+1;               (odd word index)
+     *     x += dx[i]; y += dy[i];                   (word tables below)
+     *     if (--steps == 0) return;
+     *     if (x <= 2 || x >= 0x4d) return;
+     *     if (y <= 2 || y >= 0x2e) return; }
+     * Direction words (read from unpacked/civ.exe): dx @ 12c8:0000 odd
+     * words {0,+1,0,-1}, dy @ 12d0:0000 odd words {-1,0,+1,0} = 4-dir
+     * N/E/S/W clockwise. Coords are scratch-local (paint adds +0xa0 to x
+     * only); sole caller is worldgen_seed_one_island above. OOB tiles
+     * fall out via map_set_tile. No Win16, no exit(). */
+    static const int s_dx[4] = { 0, 1, 0, -1 };   /* 12c8 odd words */
+    static const int s_dy[4] = { -1, 0, 1, 0 };   /* 12d0 odd words */
     unsigned steps = rng_range(0x40) + 1u;
-    unsigned i;
 
-    for (i = 0; i < steps; i++) {
-        int dir;
+    for (;;) {
+        unsigned r;
 
-        map_set_tile(x, y, 0x0fu);
-        dir = (int)rng_range(8);
-        x += worldgen_dir_dx_at(dir);
-        y += worldgen_dir_dy_at(dir);
+        map_set_tile(x + 0xa0, y, 0x0fu);
+        map_set_tile(x + 0xa1, y, 0x0fu);
+        map_set_tile(x + 0xa0, y + 1, 0x0fu);
+        r = rng_range(4);
+        if (r > 3u)
+            r = 3u;
+        x += s_dx[r];
+        y += s_dy[r];
+        steps--;
+        if (steps == 0)
+            return CIV_OK;
+        if (x <= 2 || x >= 0x4d)
+            return CIV_OK;
+        if (y <= 2 || y >= 0x2e)
+            return CIV_OK;
     }
-    return CIV_OK;
 }
 
 civ_error_t worldgen_label_continents(void)

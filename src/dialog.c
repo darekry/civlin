@@ -133,6 +133,9 @@ civ_error_t dialog_menuz(const char *title, const char *items_text,
     int last;
     int title_len;
     int title_empty;
+    int art_plain;
+    int art_small;
+    int art_badge;
 
     if (out_index)
         *out_index = dialog_menuz_cancel_code();
@@ -184,6 +187,19 @@ civ_error_t dialog_menuz(const char *title, const char *items_text,
             return CIV_ERR_RANGE;
         (void)dis;
     }
+    /* MenuZ tail gates (DAT_1418_0006 art branch + exit cancel gate):
+     * OS-free 1:1, no Win16, no globals. -1 = plain menu (MainMenu_WndProc
+     * @ 11e0:0221 path), 0..2 = small pic, >= 3 = tech badge; exit
+     * DAT_1418_0008 >= 1 && DAT_12b0_00a0 == -1 = cancel/back. */
+    art_plain = dialog_menuz_art_mode(-1);
+    art_small = dialog_menuz_art_mode(0);
+    art_badge = dialog_menuz_art_mode(3);
+    if (art_plain != 0 || art_small != 1 || art_badge != 2)
+        return CIV_ERR_BAD_DATA;
+    if (dialog_menuz_is_cancel(0, -1) != 0 ||
+        dialog_menuz_is_cancel(1, -1) != 1 ||
+        dialog_menuz_is_cancel(1, 0) != 0)
+        return CIV_ERR_BAD_DATA;
     /* TODO: Orig Dialog_MenuZ_Modal @ 1220:0156 (body ..0d37): int
      * __cdecl16far (char*,u2,u2,u2,u2,u2,char,u4) -> index DAT_12b0_009c;
      * Dialog_SplitMenuText @ 1220:0000 (wired above via
@@ -3526,36 +3542,25 @@ void text_sync_font_tail(void)
      * pull; gfx_indexed HLP rule). NOOP. */
 }
 
-civ_error_t dlg_center_tracked_window(void)
+civ_error_t dlg_center_tracked_window(const dlg_rect_t *parent,
+                                      const dlg_rect_t *dlg,
+                                      dlg_rect_t *out)
 {
     /* Orig Dlg_CenterTrackedWindow @ 1098:0b33 (see dialog.h; flags&1
      * path of Dlg_CreateTracked @ 1098:124f via Dlg_CenterRect @ 11f8:0000
-     * + MOVEWINDOW + GETWINDOWRECT).
-     * PARTIAL dispatcher: OS-free center/inset probes below are LIVE 1:1
-     * (no Win16, no globals, read-only); the MOVEWINDOW/GETWINDOWRECT
-     * application tail stays STUB. Refs verified read-only 1:1 vs
-     * unpacked/civ.exe (NE LE, no copy). */
-    dlg_rect_t outer = { 0, 0, 640, 480 };
-    dlg_rect_t inner = { 0, 0, CIV_DLG_PRESET_W, CIV_DLG_PRESET_H };
-    dlg_rect_t out;
+     * + MOVEWINDOW + GETWINDOWRECT). OS-free 1:1 on explicit rects (no
+     * Win16 handles, no globals, no segments/__far: HWND pair mapped to
+     * parent/dlg offsets/sizes, MOVEWINDOW application is the out write
+     * caller-side); centering math delegated to dlg_center_rect. Refs
+     * verified read-only 1:1 vs unpacked/civ.exe (NE LE, no copy). */
     civ_error_t rc;
-    int inset;
-    int trim;
 
-    rc = dlg_center_rect(&outer, &inner, &out);
+    if (!parent || !dlg || !out)
+        return CIV_ERR_NOENT;
+    rc = dlg_center_rect(parent, dlg, out);
     if (rc != CIV_OK)
-        return CIV_ERR_BAD_DATA;
-    if (out.right - out.left != CIV_DLG_PRESET_W ||
-        out.bottom - out.top != CIV_DLG_PRESET_H)
-        return CIV_ERR_BAD_DATA;
-    inset = dialog_frame3d_base_inset();
-    trim = dialog_frame3d_edge_trim();
-    if (inset != 3 || trim != 1)
-        return CIV_ERR_BAD_DATA;
-    /* TODO: Orig Dlg_CenterTrackedWindow @ 1098:0b33 SDL bridge
-     * (MOVEWINDOW + GETWINDOWRECT on the tracked HWND; SDL_SetWindowPosition
-     * owner TBD; centering math is LIVE in dlg_center_rect above). */
-    return CIV_ERR_UNSUPPORTED;
+        return rc;
+    return CIV_OK;
 }
 
 int dlg_init_palette_word_writes(int headless_28fc)

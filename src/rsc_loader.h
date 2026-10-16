@@ -1120,9 +1120,11 @@ rsc_error_t rsc_kdat_decode_row(const uint8_t *data, size_t size,
  * Ownership (critical): BOTH GetString helpers return a pointer to the
  * shared static buffer @ DAT_13f8_0000 (DAT_13f8_0000 = 0 gate in both
  * decompiles), overwritten by the next call — caller must copy before
- * the next GetString. Linux has no such static (no globals per rules),
- * so the raw/copy entry points stay STUB below with this ownership
- * documented; pure pascal ops above are LIVE on caller buffers. */
+ * the next GetString. Linux keeps the same semantics on a module-static
+ * DAT_13f8_0000 image (s_res_static, 256 B @ 13f8:0000/DGROUP, overwritten
+ * by the next copy/raw call, Orig addr in comment) per AGENTS.md, so the
+ * raw/copy entry points are PARTIAL below (staging LIVE, container-fetch
+ * tail UNSUPPORTED); pure pascal ops above are LIVE on caller buffers. */
 
 /* Orig: Res_AppendPascal @ 11f8:014a — append pascal src onto dst.
  * 1:1: dst[0] += src[0], then copy src[1..len] after dst end. NULL
@@ -1143,33 +1145,50 @@ int res_compare_pascal(const uint8_t *a, const uint8_t *b);
 rsc_error_t res_copy_pascal(uint8_t *dst, size_t cap,
                             const uint8_t *src);
 
-/* Orig: Res_GetStringCopy @ 11f8:0080 — LIVE 1:1 (module-static
- * DAT_13f8_0000 equiv, odblokowanie 2026-10-16).
+/* Orig: Res_GetStringCopy @ 11f8:0080 — PARTIAL (module-static
+ * DAT_13f8_0000 equiv, odblokowanie 2026-10-16; container tail UNSUPPORTED).
  * Decompile (civ.exe, x86:LE:16:Protected Mode):
  *   DAT_13f8_0000 = 0;
  *   ResMgr_GetString(dst=13f8:0000 far, table, N=entry+1);
  *   Util_PascalToCStr(13f8:0000); return 13f8:0000.
  * ResMgr_GetString @ 1100:078a walk: ResMgr_GetById(type 0x2da8, id=table)
- * + GLOBALLOCK, BE count @ +0 (first*0x100+second), N<1 or count<N -> empty
- * (*dst=0), else skip N-1 via p+=*p+1, *dst=len + memcpy(dst+1,p+1,len)
- * via Util_MemCopy @ 1000:299e, GLOBALUNLOCK + DisposeHandle.
- * Linux: staging in s_res_static (256 B, DAT_13f8_0000 image, overwritten
- * by the next copy/raw call — same semantics, Orig addr in comment) then
- * copy C string to out. table = resource id within type 0x2da8 (0x94 tribe,
- * 0x8c leader, 0x95 adj, 0x82 tech, 0x83 wonder-build, 0x84 produce,
- * 0x8d government, 0x8a report, 0x88 city), entry 0-based (N=entry+1).
- * Known tables 0x94/0x8c/0x95 served from verified dumps (mirror of
- * civ_tribe/leader/adj in newgame.h, file offs 0x1b2f/0x18c8/0x2293);
- * other tables need explicit blob via res_get_string_copy_from_blob
- * (legacy returns UNSUPPORTED with *out untouched, no fake). NULL out ->
- * NOENT; entry OOR for a known table -> NOENT (*out untouched);
- * cap==0 or C len+1>cap -> RANGE (*out untouched). No SDL/exit, C17. */
+ * @ 1190:0aea + GLOBALLOCK, BE count @ +0 (first*0x100+second), N<1 or
+ * count<N -> empty (*dst=0), else skip N-1 via p+=*p+1, *dst=len +
+ * memcpy(dst+1,p+1,len) via Util_MemCopy @ 1000:299e, GLOBALUNLOCK +
+ * ResMgr_DisposeHandle @ 1190:09ed.
+ * BE/string 1:1 ref (read-only, no asset writes): unpacked/civ.exe
+ * (NE; tribe strings NOT plain ASCII there — civfonts.fon/DO NOT present,
+ * Romans/Caesar miss) + rsc_dump unpacked/civdata0.rsc (BE count + Pascal
+ * walk via rsc_get_blob_string @ 1100:078a LIVE, e.g. rec[3] 0x0F +
+ * "The Corporation", TEXT rec[1]/[2] ASCII, STR# rec[16] count=141 with
+ * tribe/leader fragments). Layout confirmed for the walk; container fetch
+ * into 13f8:0000/DGROUP (GetById/GLOBALLOCK/DisposeHandle) has no mgr/file
+ * wiring here (no container param), so the tail stays UNSUPPORTED.
+ * Linux: staging in s_res_static (256 B, DAT_13f8_0000 image @ 13f8:0000/
+ * DGROUP, overwritten by the next copy/raw call — same semantics, Orig
+ * addr in comment) then copy C string to out. table = resource id within
+ * type 0x2da8 (0x94 tribe, 0x8c leader, 0x95 adj, 0x82 tech, 0x83
+ * wonder-build, 0x84 produce, 0x8d government, 0x8a report, 0x88 city),
+ * entry 0-based (N=entry+1). Known tables 0x94/0x8c/0x95 served from
+ * verified dumps (mirror of civ_tribe/leader/adj in newgame.h, file offs
+ * 0x1b2f/0x18c8/0x2293); other tables need explicit blob via
+ * res_get_string_copy_from_blob (UNSUPPORTED here with *out untouched, no
+ * fake). NULL out -> NOENT; entry OOR for a known table -> NOENT (*out
+ * untouched); cap==0 or C len+1>cap -> RANGE (*out untouched). No SDL,
+ * no exit, C17.
+ * TODO: Orig 11f8:0080 + 1100:078a + 1190:0aea/09ed — wire the container
+ * tail (rsc_mgr/file GetById/GLOBALLOCK/DisposeHandle into DAT_13f8_0000)
+ * once the 0x2da8 blob container is confirmed; until then PARTIAL. */
 rsc_error_t res_get_string_copy(unsigned table, unsigned entry,
                                 char *out, size_t cap);
 
-/* Orig: Res_GetStringRaw @ 11f8:00c5 — LIVE 1:1 (same static, Pascal kept).
+/* Orig: Res_GetStringRaw @ 11f8:00c5 — PARTIAL (same static, Pascal kept;
+ * container tail UNSUPPORTED, see copy above).
  * Decompile: same as copy above but WITHOUT Util_PascalToCStr (length byte
- * kept). Same staging/copy contract, Pascal len+1 bytes to out. */
+ * kept). Same staging/copy contract, Pascal len+1 bytes to out. Same
+ * BE/string 1:1 ref (unpacked/civ.exe + rsc_dump civdata0) and same TODO
+ * (Orig 11f8:00c5 + 1100:078a + 1190:0aea/09ed container tail into
+ * DAT_13f8_0000 @ 13f8:0000/DGROUP). */
 rsc_error_t res_get_string_raw(unsigned table, unsigned entry,
                                uint8_t *out, size_t cap);
 
@@ -1209,8 +1228,9 @@ const uint8_t *res_raw_static_pascal(void);
  *     11f8:014a shape; N < 1 or count < N -> Empty).
  *   Res_GetStringCopy @ 11f8:0080 (copy: + Util_PascalToCStr @ 1100:0053
  *     into DAT_13f8_0000) vs Res_GetStringRaw @ 11f8:00c5 (raw Pascal,
- *     same static) — both LIVE 1:1 above (module-static DAT_13f8_0000
- *     image + verified 0x94/0x8c/0x95 dumps, generic via _from_blob).
+ *     same static) — both PARTIAL above (module-static DAT_13f8_0000
+ *     image @ 13f8:0000/DGROUP + verified 0x94/0x8c/0x95 dumps, generic
+ *     via _from_blob; container tail UNSUPPORTED).
  *   LIVE fetch: rsc_get_blob_string (data/size/index 0-based, N=index+1).
  * Readers (14 ResMgr_GetString xrefs, entry first param of copy/raw):
  *   0x82 tech names: NewGame_Wizard @ 10e8:03c6 finalize loop (FUN_1170_3181

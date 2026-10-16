@@ -146,10 +146,16 @@ int dos_get_current_dir(int drive, char *buf, size_t cap);
  * with (-param == 0x30 or -param < 0x30) -> DAT_1420_0010 = -param,
  * DAT_1420_4e7a = 0xffff; param in [0, 0x59) passes through to
  * DAT_1420_4e7a with DAT_1420_0010 = byte table[param + 0x4e7c];
- * param >= 0x59 clamps to 0x57 first. Always returns 0xffff. Needs the
- * DGROUP errno words -> stub CIV_ERR_UNSUPPORTED. The pure mapping
- * kernel (no DGROUP writes) is dos_map_error_lookup below (LIVE). */
+ * param >= 0x59 clamps to 0x57 first. Always returns 0xffff. LIVE 1:1
+ * via dos_map_error_lookup below + module-static DAT_1420_0010/4e7a
+ * images in sys.c (overwritten next call, Orig addr in comment).
+ * CIV_OK = words staged (orig 0xffff); accessors below read them.
+ * No DOS INT, no exit(). */
 civ_error_t dos_map_error(int dos_code);
+/* DAT_1420_0010 / DAT_1420_4e7a images: last dos_map_error staging,
+ * valid until the next call. No SDL/exit. */
+int dos_errno_e0010(void);
+int dos_errno_e4e7a(void);
 /* Orig Dos_MapError @ 1000:151a mapping kernel (decompiled 2026-10-16 +
  * byte table @ 1420:4e7c read from unpacked/civ.exe, 0x59 entries, all < 0x80 so
  * the orig (int)*(char *) sign-extend is the identity): code in
