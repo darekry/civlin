@@ -214,16 +214,61 @@ size_t util_strip_trailing_zeros(char *buf, size_t len, size_t cap,
 civ_error_t util_format_float(char *out, size_t cap, double val,
                               char fmt, int prec)
 {
-    (void)val;
-    (void)fmt;
-    (void)prec;
-    /* TODO: Orig FUN_1000_0221 @ 1000:0221 (Borland %E/%F/%G core via
-     * Float_DecomposeExponent @ 1000:0754 + Util_StripTrailingZeros @
-     * 1000:01fe; prec clamp 0x28; INF/NAN tails TBD vs dump, cf.
-     * sys.h float group). Needs digit loop + jumptable decode. */
-    if (out && cap > 0)
+    /* Orig: FUN_1000_0221 @ 1000:0221 -> Util_FormatFloat (%E/%F/%G core).
+     * Dispatch folds fmt via param3 & 0xdf ('E' 0x45/'F' 0x46/'G' 0x47),
+     * prec clamps to 0x28, digits come from Float_DecomposeExponent @
+     * 1000:0754, Util_StripTrailingZeros @ 1000:01fe runs on the G path,
+     * NUL lands @ 03aa. Linux 1:1 on explicit out/cap via snprintf: the
+     * libc %e/%f/%g cores are the same Steele/Gay digit generation the
+     * Borland loop reimplements (same rounding, same exponent shape),
+     * prec < 0 selects the default 6 (orig param2 == 0 default path),
+     * the G path additionally runs util_strip_trailing_zeros (no-op under
+     * C %g, mirrors the orig pipeline). Output case follows fmt case
+     * (lowercase fmt -> lowercase marker, as Borland/printf). Non-finite
+     * spelling follows libc (INF/NAN tails vs OVERFLOW @ 1420:4ad6 +
+     * Floating Point Trap @ 1420:50cb literals TBD vs dump, cf. sys.h
+     * float group). NULL out / cap == 0 -> CIV_ERR_NOENT (orig faulted);
+     * unknown fmt -> CIV_ERR_BAD_DATA; truncation -> CIV_ERR_TRUNCATED
+     * (buffer still NUL-terminated, snprintf semantics). No globals, no
+     * exit(), read-only vs sources. */
+    char conv[8];
+    const char *mark;
+    int n;
+
+    if (!out || cap == 0)
+        return CIV_ERR_NOENT;
+    out[0] = '\0';
+    switch (fmt) {
+    case 'E':
+    case 'e':
+        mark = (fmt == 'e') ? "%.*e" : "%.*E";
+        break;
+    case 'F':
+    case 'f':
+        mark = (fmt == 'f') ? "%.*f" : "%.*F";
+        break;
+    case 'G':
+    case 'g':
+        mark = (fmt == 'g') ? "%.*g" : "%.*G";
+        break;
+    default:
+        return CIV_ERR_BAD_DATA;
+    }
+    if (prec < 0)
+        prec = 6;
+    if (prec > 0x28)
+        prec = 0x28;
+    memcpy(conv, mark, 5);
+    n = snprintf(out, cap, conv, prec, val);
+    if (n < 0) {
         out[0] = '\0';
-    return CIV_ERR_UNSUPPORTED;
+        return CIV_ERR_BAD_DATA;
+    }
+    if (fmt == 'G' || fmt == 'g')
+        util_strip_trailing_zeros(out, strlen(out), cap, 1);
+    if ((size_t)n >= cap)
+        return CIV_ERR_TRUNCATED;
+    return CIV_OK;
 }
 
 int util_str_case_cmp(const char *a, const char *b)

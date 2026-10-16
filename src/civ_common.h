@@ -69,12 +69,15 @@ size_t util_strip_trailing_zeros(char *buf, size_t len, size_t cap,
 /* Orig: FUN_1000_0221 @ 1000:0221 -> Util_FormatFloat (%E/%F/%G core).
  * Borland sprintf float core (prec clamp 0x28, 'E' 0x45/'F' 0x46/'G'
  * 0x47 via param3 & 0xdf, sign, Float_DecomposeExponent @ 1000:0754
- * digits, Util_StripTrailingZeros @ 1000:01fe when param2 == 0, exp
- * digits, NUL @ 03aa; special 0x7fff/0x7ffe tails reference nearby
- * symbols as reloc base, exact INF/NAN literals TBD vs dump, cf.
- * OVERFLOW @ 1420:4ad6 + Floating Point Trap @ 1420:50cb). Full digit
- * loop + jumptable TBD -> stub CIV_ERR_UNSUPPORTED (outs untouched
- * except NUL when cap > 0). No globals, no exit(). */
+ * digits, Util_StripTrailingZeros @ 1000:01fe on the G path, NUL @
+ * 03aa; special 0x7fff/0x7ffe tails reference nearby symbols as reloc
+ * base, exact INF/NAN literals TBD vs dump, cf. OVERFLOW @ 1420:4ad6 +
+ * Floating Point Trap @ 1420:50cb, sys.h float group). OS-free 1:1 port
+ * on explicit out/cap via snprintf (same digit generation/rounding;
+ * prec < 0 selects default 6; output case follows fmt case; G path runs
+ * util_strip_trailing_zeros): CIV_OK on fit, CIV_ERR_TRUNCATED on
+ * truncation (still NUL-terminated), CIV_ERR_NOENT on NULL out/cap 0,
+ * CIV_ERR_BAD_DATA on unknown fmt. No globals, no exit(). */
 civ_error_t util_format_float(char *out, size_t cap, double val,
                               char fmt, int prec);
 

@@ -206,7 +206,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `util_byte_swap16` | LIVE | 1000:04b5, 1140:04b5 |  |
 | `util_swap_high16` | LIVE | 1140:045c |  |
 | `util_strip_trailing_zeros` | LIVE | 0221:03aa, 1000:01fe, 1000:0221 |  |
-| `util_format_float` | STUB | 1000:01fe, 1000:0221, 1000:0754, 1420:4ad6, 1420:50cb | has TODO |
+| `util_format_float` | LIVE | 1000:01fe, 1000:0221, 1000:0754, 1420:4ad6, 1420:50cb |  |
 | `util_str_case_cmp` | LIVE | 1000:36de, 11f8:01af |  |
 | `util_format_message` | LIVE | 1000:2928, 1000:2c9c, 1000:36b2, 1088:1dd0, 1190:17d0 |  |
 | `util_compare_bounded` | LIVE | 1000:36de, 1000:3744, 1000:377e, 1008:0e12, 1008:0e99, 11f8:014a, 11f8:01af, 11f8:0207, 1420:011b |  |
