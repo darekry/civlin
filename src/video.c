@@ -843,3 +843,301 @@ civ_error_t art_load_frame(int frame_id, gfx_port_t **out)
         return CIV_ERR_NOENT;
     return CIV_ERR_UNSUPPORTED;
 }
+
+/* --- Chain 2026-10-16 (8): IntersectRect blits + present/alloc (goals 4/5) ---
+ * OS-free 1:1 LIVE. No globals, no exit(), C17. See video.h chain block. */
+
+int gfx_color_remap_match(int pixel, int old_index)
+{
+    /* Orig GfxPort_ChangeColor @ 10d0:09ee inner: if (*bits == param_4)
+     * *bits = param_5 (byte DIB compare; 0..255 indices, godpal.c
+     * 0x00..0xeb + zero-tail, see gfx_indexed.h). */
+    return pixel == old_index ? 1 : 0;
+}
+
+int gfx_remap_stride(int w)
+{
+    /* Orig same pitch: ((w+1)/2)*2 (even-width bitmap; pad skipped per
+     * row after the w-byte scan). */
+    if (w < 0)
+        return -1;
+    return ((w + 1) / 2) * 2;
+}
+
+int gfx_remap_index(uint8_t *bits, size_t n, int old_index, int new_index)
+{
+    /* Orig GfxPort_ChangeColor @ 10d0:09ee GETBITMAPBITS + SETBITMAPBITS
+     * CPU-side rule on explicit bits (no handles, no palette alias fake:
+     * palette alias would merge two indices visibly, see
+     * gfx_port_change_color STUB). */
+    size_t i;
+    int swapped = 0;
+
+    if (!bits)
+        return -1;
+    if (old_index < 0 || old_index > 255 || new_index < 0 ||
+        new_index > 255)
+        return -1;
+    for (i = 0; i < n; i++) {
+        if (bits[i] == (uint8_t)old_index) {
+            bits[i] = (uint8_t)new_index;
+            swapped++;
+        }
+    }
+    return swapped;
+}
+
+civ_error_t gfx_tile_box(int x, int y, SDL_Rect *out)
+{
+    /* Orig Gfx_PresentTileRect @ 11e8:07c3: SETRECT 0x20 box at (x,y) +
+     * Gfx_IntersectRect @ 1100:0685 clip (caller-side via video_clip_rect
+     * LIVE) + PresentRect @ 10d0:0854 when DAT_12b0_009a. */
+    if (!out)
+        return CIV_ERR_NOENT;
+    out->x = x;
+    out->y = y;
+    out->w = 0x20;
+    out->h = 0x20;
+    return CIV_OK;
+}
+
+civ_error_t gfx_bar_fill_extent(int mode, int px, int w, int hgt,
+                                int icon_w, int icon_h,
+                                int *x1_out, int *h_out)
+{
+    /* Orig Gfx_FillBarRect @ 11e8:0504 (was FUN_11e8_0504): mode == 2 ?
+     * x1 = px+w*2, h = hgt<<1 : x1 = px+icon_w, h = icon_h (icon via
+     * FUN_11e8_0d81/0da8). */
+    if (!x1_out || !h_out)
+        return CIV_ERR_NOENT;
+    if (mode == 2) {
+        *x1_out = px + w * 2;
+        *h_out = hgt << 1;
+    } else {
+        *x1_out = px + icon_w;
+        *h_out = icon_h;
+    }
+    return CIV_OK;
+}
+
+int gfx_bar_fill_cap(int x1, int px, int mono)
+{
+    /* Orig same: if (mono == 0 (DAT_1420_17a6) && 0x1ff < x1 && 0 < px)
+     * x1 = 0x1ff (driver clip). */
+    if (mono == 0 && x1 > 0x1ff && px > 0)
+        return 0x1ff;
+    return x1;
+}
+
+int art_port_is_even_width(int w)
+{
+    /* Orig Art_PortDataToBitmap @ 10b8:0e36 head: w/2*2 == w -> direct
+     * GfxPort_AllocBitmap @ 10d0:0cfa path (even-width BITBLT). */
+    if (w < 0)
+        return -1;
+    return (w / 2 * 2 == w) ? 1 : 0;
+}
+
+int art_port_padded_width(int w)
+{
+    /* Orig same odd-width pad: ((w+1)/2)*2 (GLOBALALLOC + HMEMCPY rows
+     * when DAT_1420_17a6 == 1, else compatible-DC rows). Same pitch as
+     * gfx_remap_stride. */
+    if (w < 0)
+        return -1;
+    return ((w + 1) / 2) * 2;
+}
+
+/* --- Chain 2026-10-16 (9): census badge + bar + port slots (goals 2/3/4) ---
+ * OS-free 1:1 LIVE. No globals, no exit(), C17. See video.h chain block. */
+
+int census_badge_table_off(int icon)
+{
+    /* Orig Census_DrawTechBadge @ 1018:24c5: Gfx_DrawTechIcon @ 11a8:0cb1(
+     * *(icon*2+0x128), ...) word fetch feeding the tech blit (via
+     * Gfx_BlitTechIcon @ 11a8:0f56 core). */
+    if (icon < 0)
+        return -1;
+    return icon * 2 + 0x128;
+}
+
+civ_error_t census_badge_size(int *w_out, int *h_out)
+{
+    /* Orig same: SETRECT(...,0x60,0x35,0,0) fill box, OFFSETRECT to dx/dy
+     * caller-side (position shares gfx_icon_cell_box). */
+    if (!w_out || !h_out)
+        return CIV_ERR_NOENT;
+    *w_out = 0x60;
+    *h_out = 0x35;
+    return CIV_OK;
+}
+
+int gfx_scale_icon_dim(int v)
+{
+    /* Orig Gfx_ScaleIconX @ 11e8:0d81 + Gfx_ScaleIconY @ 11e8:0da8 shared
+     * core: (long)(v * 0xa0) / 100 (x86 LONG divide, trunc toward zero;
+     * used for icon w/h in Gfx_FillBarRect @ 11e8:0504 + coord scale in
+     * GfxPort_SelectForCoords @ 1220:0f2f). */
+    return (int)(((long)v * 0xa0L) / 100L);
+}
+
+int gfx_bar_fill_color(int mono, int civ_entry, int fallback)
+{
+    /* Orig Gfx_FillBarRect @ 11e8:0504 head: cVar1 = DAT_12d8_45fd;
+     * if (DAT_12d8_28fc == 0) cVar1 = civ_table[param_7]. */
+    return (mono == 0) ? civ_entry : fallback;
+}
+
+int gfx_bar_brush_is_alt(int mono, int param_7)
+{
+    /* Orig same tail: (DAT_12d8_28fc == 0 || param_7 != 0xf) ? civ brush
+     * : DAT_1420_17a0 brush. Returns 1 when the alt brush wins. */
+    return (mono != 0 && param_7 == 0xf) ? 1 : 0;
+}
+
+int gfx_bar_range_needs_fill(int x0, int x1, int y0, int y1)
+{
+    /* Orig Gfx_FillBarRectRange @ 11e8:0912 gate: (x0 == x1 || y0 == y1)
+     * -> fill path, else nothing (already a rect). */
+    return (x0 == x1 || y0 == y1) ? 1 : 0;
+}
+
+int gfx_bar_range_width(int x0, int x1)
+{
+    /* Orig same: x-swap when x1 < x0, then w = (x1-x0)+1. */
+    int lo = (x0 < x1) ? x0 : x1;
+    int hi = (x0 < x1) ? x1 : x0;
+
+    return (hi - lo) + 1;
+}
+
+int gfx_bar_range_height(int y0, int y1)
+{
+    /* Orig same: h = (y1-y0)+1 (no y swap in orig). */
+    return (y1 - y0) + 1;
+}
+
+int gfx_port_select_kind(int has_port, int x, int y)
+{
+    /* Orig GfxPort_SelectForCoords @ 1220:0f2f branch (device writes
+     * caller-side: mode 2 SetActive + 17d0, mode 1 17d0, mode 3 scale +
+     * 17d0/17cc). has_port mirrors DAT_1420_9948 != 0. */
+    if (has_port != 0)
+        return 3;
+    if (x < 0 || 199 < x) {
+        if (y < 8 || x < 200)
+            return 0;
+        return 2;
+    }
+    return 1;
+}
+
+int gfx_port_dialog_coord(int v, int base, int off)
+{
+    /* Orig same dialog remap: (v-base)*2-off (bases 8/200, offs
+     * DAT_1408_00c4/c6 passed explicitly). */
+    return (v - base) * 2 - off;
+}
+
+int gfx_port_palette_word(int mono, int word_at_14)
+{
+    /* Orig GfxPort_GetPalette @ 10d0:0262: DAT_12d8_28fc == 0 ?
+     * *(port+0x14) : 0. */
+    return (mono == 0) ? word_at_14 : 0;
+}
+
+const gfx_port_t *gfx_port_slot_after_clear(const gfx_port_t *slot,
+                                            const gfx_port_t *port)
+{
+    /* Orig GfxPort_ClearActive @ 10d0:09a2 per-slot: if (slot == port)
+     * slot = 0 (far-ptr compare; here borrowed pointers). Also the
+     * GfxPort_Close @ 10d0:0172 prologue before GR_PortClose free. */
+    return (slot == port) ? NULL : slot;
+}
+
+civ_error_t gfx_port_clear_active(const gfx_port_t *port,
+                                  const gfx_port_t **active_io,
+                                  const gfx_port_t **prev_io)
+{
+    /* Orig same over both slots (DAT_1420_17cc active + DAT_1420_17ae
+     * prev) on explicit addresses (no globals). NULL port clears NULL
+     * slots (no-op otherwise). */
+    if (!active_io || !prev_io)
+        return CIV_ERR_NOENT;
+    *active_io = gfx_port_slot_after_clear(*active_io, port);
+    *prev_io = gfx_port_slot_after_clear(*prev_io, port);
+    return CIV_OK;
+}
+
+/* --- Chain 2026-10-16 (10): GfxPort create params + tech blit + palette.
+ * OS-free 1:1 LIVE. No globals, no exit(), C17. See video.h. */
+
+int gfx_port_bitmap_pitch(int w)
+{
+    /* Orig GfxPort_Create @ 10d0:0000 → GfxPort_AllocBitmap @ 10d0:0cfa
+     * even width ((w+1)/2*2); odd widths pad (see art_port_padded_width;
+     * GLOBALALLOC + HMEMCPY rows when mono DAT_1420_17a6 == 1, else
+     * compatible-DC rows in Art_PortDataToBitmap @ 10b8:0e36). */
+    if (w < 0)
+        return -1;
+    return ((w + 1) / 2) * 2;
+}
+
+int gfx_port_is_mono(int flag_28fc)
+{
+    /* Orig color gate DAT_12d8_28fc (0 = color/VGA, != 0 = mono/EGA):
+     * GfxPort_GetPalette @ 10d0:0262 returns 0 when mono, Palette_CopyRange
+     * @ 1098:201d skips, Gfx_MakeBrush @ 1098:00b5 takes solid path. */
+    return (flag_28fc != 0) ? 1 : 0;
+}
+
+int gfx_tech_bg_resolve(int req_bg, int res_bg)
+{
+    /* Orig Gfx_BlitTechIcon @ 11a8:0f56 head: if (param_5 == 0) param_5 =
+     * res_bg (icon word +4 via GLOBALLOCK); -1 stays transparent (fast
+     * Gfx_CopyIconBits @ 11a8:13c0 memcpy path when scale/pad allow). */
+    return (req_bg == 0) ? res_bg : req_bg;
+}
+
+int gfx_tech_needs_scale(int a, int b)
+{
+    /* Orig same via Gfx_GetIconScale @ 11a8:0000 (DAT_13a0_0000/0002 set
+     * by Gfx_SetIconScale @ 11a8:002c): bVar22 = (a != b); scales w/h as
+     * (w*a)/b when set (Gfx_CopyIconBits scaled loop else direct). */
+    return (a != b) ? 1 : 0;
+}
+
+int gfx_tech_palette_pick(int bg, int mono, int req)
+{
+    /* Orig Gfx_DrawTechIcon @ 11a8:0cb1: (param_6 == -1 || DAT_1420_17a6
+     * != 1) ? CONCAT11(0x14, param_6) : 0x1a feeding Gfx_BlitTechIcon. */
+    if (bg == -1 || mono != 1)
+        return req;
+    return 0x1a;
+}
+
+int palette_copy_enabled(int mono, int count)
+{
+    /* Orig Palette_CopyRange @ 1098:201d head: if (DAT_12d8_28fc == 0 &&
+     * param_5 != 0) copy (color only, nonzero count). */
+    return (mono == 0 && count != 0) ? 1 : 0;
+}
+
+int palette_copy_range_len(int src_off, int dst_off, int count)
+{
+    /* Orig same 0xec cap: if (0xec < src+count) count = 0xec-src; then
+     * local_e capped by 0xec-dst (word RGBx copy loop). Overrun → 0. */
+    int n = count;
+
+    if (n < 0)
+        return 0;
+    if (src_off < 0 || dst_off < 0)
+        return 0;
+    if (src_off + n > 0xec)
+        n = 0xec - src_off;
+    if (dst_off + n > 0xec)
+        n = 0xec - dst_off;
+    if (n < 0)
+        n = 0;
+    return n;
+}

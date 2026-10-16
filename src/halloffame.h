@@ -193,11 +193,63 @@ civ_error_t HoF_VictoryCeremony(int level, int score);
 civ_error_t City_ShowTopFive(void);
 
 /* Orig: FUN_1040_1137 @ 1040:1137 -> Hof_CalcFinalScore.
- * Stub: pure score math; formula doc pending 1040:1137 decompile
- * (expected shape: base adjusted by difficulty multiplier, hence the
- * TryInsert weight above). The quit==2 bypass lives in the
- * Game_ProcessGameEnd @ 1088:0b6d caller (see game.c:47), not here. */
+ * Partial: pure score math below is LIVE 1:1 (layout fit, accumulation,
+ * cap, bar width); the census-view UI tail (City_OpenCensusView @
+ * 1018:0000 + Pic_PlayShared @ 1030:0000 + Hof_DrawScoreIconStep @
+ * 1040:1b51 + Hof_DrawTechIcon @ 1030:84be + Text_DrawAt/Centered @
+ * 10d8:01fa/0528 + Gfx_FillBarRect @ 11e8:0504 + City_CloseCensusView @
+ * 1018:0380) stays Win16 -> STUB part. The quit==2 bypass lives in the
+ * Game_ProcessGameEnd @ 1088:0b6d caller (see game.c:47), not here.
+ * Callers: Game_ProcessGameEnd @ 1088:0b6d + Game_TurnLoopTick @
+ * 1088:0000. Segment 1040 also holds City_ProcessDisaster @ 1040:068e
+ * (disaster switch, see game.h) — same segment, different path. */
 civ_error_t Hof_CalcFinalScore(int base_score, int difficulty, int *out_score);
+
+/* --- Chain 2026-10-16: Hof_CalcFinalScore @ 1040:1137 formula (goal 1) ---
+ * Orig (civ.exe, x86:LE:16:Protected Mode), decompiled this pass.
+ * Signature in orig: (civ param_1, show param_2) -> score in
+ * DAT_12d8_4464 (also DAT_1420_516e); show != 0 draws the census view.
+ * OS-free math below is LIVE 1:1 on explicit params (no globals, no
+ * Win16, read-only); dialog/GDI tails stay in Hof_CalcFinalScore PARTIAL.
+ * Flow: city size sum local_6 over 0x80 0x1c records (owner @ +7 == civ,
+ * valid @ +2 != -1, size @ +3) + owned-tech count local_8 over 0x16 techs
+ * (discover table, owner match) -> layout-fit loop from DAT_1420_07dc =
+ * 0xd down while rows > 0xb9 -> pop total local_16 (size + 1260:00de -
+ * 1260:00e0 per city) + tech total 0x14 each (DAT_1420_516c) -> palace
+ * bonus (1290:00cc pair) -> pollution minus (DAT_12d8_42f4 * -10) ->
+ * year/misc plus (38f0*3 clamp + 12a8:0022*5) -> cap max(score, baseline
+ * civ*100 + (0x226-turn)*2 + 400 when DAT_1308_0024) -> bar width
+ * clamp(score/4, 0, 0xfa) via Gfx_FillBarRect @ 11e8:0504. */
+
+/* Orig Hof_CalcFinalScore @ 1040:1137 layout value ->
+ * hof_score_layout_value. 1:1 ((city+0x22)/0x23)*scale +
+ * ((tech+1)/2)*clamp(scale+1,8,99) + 0x42 (+0x0a when palace != 0).
+ * Returns the row estimate (0xb9 = fits). No globals. */
+int hof_score_layout_value(int city_total, int tech_count, int scale,
+                           int palace);
+/* Orig same fit loop -> hof_score_layout_fit. 1:1 start scale 0xd down
+ * while layout_value > 0xb9 (at least 1 step; scale floors at 1).
+ * Returns the fitting scale. Negative inputs clamp to 0 totals. */
+int hof_score_layout_fit(int city_total, int tech_count, int palace);
+/* Orig same accumulation tail -> hof_final_accum. 1:1 pop + tech +
+ * palace_bonus - pollution*10 + year_bonus + misc (each caller-side;
+ * negatives clamp: total < 0 -> 0 here, matching DAT_4464 clamp). */
+int hof_final_accum(int pop_total, int tech_total, int palace_bonus,
+                    int pollution, int year_bonus, int misc);
+/* Orig same cap -> hof_final_cap. 1:1 baseline = civ*100 +
+ * (0x226-turn)*2 + 400 when baseline_on != 0 else -1; final = (baseline
+ * < score) ? score : baseline (i.e. max; -1 baseline keeps score).
+ * Returns final >= 0. No globals. */
+int hof_final_cap(int score, int baseline_on, int civ_count, int turn);
+/* Orig same bar -> hof_score_bar_width. 1:1 Util_Clamp(score/4, 0, 0xfa)
+ * foreground width over the 0xfa background (Gfx_FillBarRect @
+ * 11e8:0504 pair). Negative score -> 0. No globals. */
+int hof_score_bar_width(int score);
+/* Orig Hof_DrawScoreIconStep @ 1040:1b51 step -> hof_score_icon_advance.
+ * 1:1 x += 8; when x > 0x124 { y += scale; x = (y>>1 & 4) + 0x10; }
+ * needs_draw = (y < 0xa1). Writes both io ints, returns needs_draw
+ * (1 as CIV_OK, 0 as RANGE). NOENT on NULL. No globals. */
+civ_error_t hof_score_icon_advance(int *x_io, int *y_io, int scale);
 
 /* Orig: FUN_1038_xxxx @ 1038:xxxx -> Hof_CalcInterimScore.
  * OS-free pure score math 1:1 v1 (implemented, no Win16, no globals,

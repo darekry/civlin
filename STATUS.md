@@ -248,6 +248,11 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `diplo_open_contact_dialog` | STUB | 1030:7e57, 1160:0000, 1168:1366, 1168:13b4 | has TODO |
 | `diplo_prompt_contact` | STUB | 1098:124f, 1150:019e, 1160:20c0 | has TODO |
 | `diplo_run_contact_menu` | STUB | 1160:328e, 1220:0156, 1420:31b4 | has TODO |
+| `dialog_frame3d_layers` | LIVE | 1220:0d38 |  |
+| `dialog_frame3d_dark` | LIVE |  |  |
+| `dialog_frame3d_light` | LIVE |  |  |
+| `dialog_frame3d_layer` | LIVE |  |  |
+| `dialog_draw_frame3d` | STUB | 1018:24c5, 1220:0156, 1220:0d38 | has TODO |
 
 ### `src/game.c`
 
@@ -419,6 +424,39 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `diplo_nearest_palace_dist` | LIVE | 1168:12c1, 11c8:02ec, 1420:54fc |  |
 | `combat_check_peace_block` | LIVE | 1050:12be, 1220:00d2, 12d8:3a0a |  |
 | `unit_stack_draw_needs_sea_search` | LIVE | 1110:0dba, 1110:1516, 11a8:0cb1, 11c0:1a2c |  |
+| `city_open_census_view` | STUB | 1018:0000, 1018:015d, 1098:0e0b, 1098:124f, 10d0:0000, 10d0:0956 | has TODO |
+| `city_close_census_view` | STUB | 1018:0380, 10d0:0854, 10d0:09a2 | has TODO |
+| `city_draw_census_header` | STUB | 1018:015d, 1088:1dd0 | has TODO |
+| `census_draw_tech_badge` | STUB | 1018:24c5 | has TODO |
+| `census_tech_target` | LIVE | 1018:03f0 |  |
+| `census_bar_segment` | LIVE | 11c8:0063 |  |
+| `census_bar_width` | LIVE |  |  |
+| `census_bar_origin` | LIVE |  |  |
+| `census_bar_count` | LIVE |  |  |
+| `census_tech_cell` | LIVE | 1018:03f0 |  |
+| `census_tech_owner_color` | LIVE |  |  |
+| `census_unit_row_y` | LIVE | 1018:067b |  |
+| `census_unit_flag_x` | LIVE | 1018:09cc |  |
+| `census_unit_has_row` | LIVE | 1018:067b |  |
+| `census_terrain_row_y` | LIVE | 1018:09cc |  |
+| `census_terrain_cell_x` | LIVE |  |  |
+| `census_report_row_y` | LIVE | 1018:1d5b |  |
+| `census_report_needs_page` | LIVE | 1018:015d |  |
+| `census_report_next_x` | LIVE |  |  |
+| `census_building_icon_shown` | LIVE |  |  |
+| `census_empty_guard` | LIVE | 1018:1d5b, 1018:202a |  |
+| `city_census_gov_title_id` | LIVE | 1018:0000, 1018:015d, 1018:0be0, 1018:1d5b, 1018:208f, 1030:0000, 1040:068e, 1040:1137, 1080:0119, 1088:0000, 1088:0b6d, 1088:1dd0, 1188:123a, 1260:00d6 |  |
+| `city_census_header_civ` | LIVE |  |  |
+| `city_census_header_pos` | LIVE | 1088:1dd0 |  |
+| `census_trade_base` | LIVE | 1018:0be0 |  |
+| `census_trade_wonder_total` | LIVE |  |  |
+| `census_prod_accum_trade` | LIVE |  |  |
+| `census_prod_accum_shields` | LIVE |  |  |
+| `census_prod_year_band` | LIVE |  |  |
+| `census_caravan_value` | LIVE |  |  |
+| `census_building_add` | LIVE |  |  |
+| `census_status_prod_kind` | LIVE | 1018:208f, 10d8:002d |  |
+| `census_status_shields_total` | LIVE |  |  |
 
 ### `src/gfx_indexed.c`
 
@@ -479,7 +517,13 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `HoF_VictoryCeremony` | STUB | 1080:06ff, 10d0:0854, 1150:019e | has TODO |
 | `City_ShowTopFive` | STUB | 1080:099b, 1420:159c, 1420:5500 | has TODO |
 | `Hof_CalcInterimScore` | LIVE | 1030:0000, 1040:1137, 1080:0595, 1080:05b0, 1088:108a |  |
-| `Hof_CalcFinalScore` | STUB | 1040:1137, 1088:0b6d | has TODO |
+| `Hof_CalcFinalScore` | PARTIAL | 1018:0000, 1018:0380, 1030:0000, 1030:84be, 1040:068e, 1040:1137, 1040:1b51, 1088:0000, 1088:0b6d, 10d8:01fa, 11e8:0504 | has TODO |
+| `hof_score_layout_value` | LIVE | 1040:1137, 11c8:0063 |  |
+| `hof_score_layout_fit` | LIVE |  |  |
+| `hof_final_accum` | LIVE | 1040:1137, 12a8:0022 |  |
+| `hof_final_cap` | LIVE |  |  |
+| `hof_score_bar_width` | LIVE | 11e8:0504 |  |
+| `hof_score_icon_advance` | LIVE | 1040:1b51 |  |
 | `Hof_PlayEndAnimation` | STUB | 1088:0b6d, 1188:07ad | has TODO |
 | `Hof_ShowEndDialog` | STUB | 1088:0b6d, 1180:0000 | has TODO |
 | `hof_load` | LIVE | 1080:0023 |  |
@@ -570,6 +614,19 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `map_paint_tiles_clipped` | STUB | 10d0:0854, 1100:0685, 1110:1461, 1208:1534, 1208:1f64, 1330:4010, 1408:00c6 | has TODO |
 | `map_repaint_view_shuffled` | STUB | 1100:0685, 11c8:003d, 1208:1866 | has TODO |
 | `map_draw_city_labels` | STUB | 1098:0ed1, 1100:0685, 1208:1f64 | has TODO |
+| `map_paint_start` | LIVE | 1208:1534, 1330:4010 |  |
+| `map_paint_end` | LIVE |  |  |
+| `map_paint_tile_px` | LIVE |  |  |
+| `map_tile_needs_blank` | LIVE | 1100:0876, 1110:0448, 1110:04d0, 1110:1461, 1128:177e, 1208:1534, 1208:1866, 1408:00cc |  |
+| `map_repaint_mode_is_present` | LIVE | 10d0:0854, 10d0:09a2, 11c8:003d, 1208:1866 |  |
+| `map_repaint_mode_is_shuffled` | LIVE | 11c8:003d |  |
+| `map_repaint_mode_is_rowmajor` | LIVE | 1208:1f64 |  |
+| `map_shuffle_grid_count` | LIVE | 1208:1866, 1408:00c6 |  |
+| `map_shuffle_tile_at` | LIVE |  |  |
+| `map_shuffle_px` | LIVE | 1408:00c6 |  |
+| `map_refresh_tile_px` | LIVE | 1110:0448, 1128:177e, 1330:4010, 1408:00c6 |  |
+| `map_city_label_box` | LIVE | 1100:0685, 1208:1f64 |  |
+| `map_city_label_res_id` | LIVE | 1000:36b2, 1048:0101, 1098:0ed1, 1420:5507 |  |
 
 ### `src/newgame.c`
 
@@ -884,6 +941,34 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `gfx_present_tile_rect` | STUB | 10d0:0854, 1100:0685, 11e8:07c3 | has TODO |
 | `city_draw_tile_view` | STUB | 1100:0685, 1110:04d0, 11a8:0cb1 | has TODO |
 | `art_load_frame` | STUB | 10b8:079d, 10b8:0aa8, 10b8:0e00, 10b8:0e36, 10b8:11bc, 10b8:158c, 10d0:0000, 10f8:040a | has TODO |
+| `gfx_color_remap_match` | LIVE | 10d0:09ee |  |
+| `gfx_remap_stride` | LIVE |  |  |
+| `gfx_remap_index` | LIVE | 10d0:09ee |  |
+| `gfx_tile_box` | LIVE | 10d0:0854, 1100:0685, 11e8:07c3 |  |
+| `gfx_bar_fill_extent` | LIVE | 11e8:0504 |  |
+| `gfx_bar_fill_cap` | LIVE |  |  |
+| `art_port_is_even_width` | LIVE | 10b8:0e36, 10d0:0cfa |  |
+| `art_port_padded_width` | LIVE |  |  |
+| `census_badge_table_off` | LIVE | 1018:24c5, 11a8:0cb1, 11a8:0f56 |  |
+| `census_badge_size` | LIVE |  |  |
+| `gfx_scale_icon_dim` | LIVE | 11e8:0504, 11e8:0d81, 11e8:0da8, 1220:0f2f |  |
+| `gfx_bar_fill_color` | LIVE | 11e8:0504 |  |
+| `gfx_bar_brush_is_alt` | LIVE |  |  |
+| `gfx_bar_range_needs_fill` | LIVE | 11e8:0912 |  |
+| `gfx_bar_range_width` | LIVE |  |  |
+| `gfx_bar_range_height` | LIVE |  |  |
+| `gfx_port_select_kind` | LIVE | 1220:0f2f, 1260:002c, 12b0:0004, 12b0:0034 |  |
+| `gfx_port_dialog_coord` | LIVE |  |  |
+| `gfx_port_palette_word` | LIVE | 10d0:0262 |  |
+| `gfx_port_slot_after_clear` | LIVE | 10d0:0172, 10d0:09a2 |  |
+| `gfx_port_clear_active` | LIVE | 10d0:0172, 10d0:09a2 |  |
+| `gfx_port_bitmap_pitch` | LIVE | 10b8:0e36, 10d0:0000, 10d0:0cfa |  |
+| `gfx_port_is_mono` | LIVE | 1098:00b5, 1098:201d, 10d0:0262 |  |
+| `gfx_tech_bg_resolve` | LIVE | 11a8:0f56, 11a8:13c0 |  |
+| `gfx_tech_needs_scale` | LIVE | 11a8:0000, 11a8:002c |  |
+| `gfx_tech_palette_pick` | LIVE | 11a8:0cb1 |  |
+| `palette_copy_enabled` | LIVE | 1098:201d |  |
+| `palette_copy_range_len` | LIVE |  |  |
 
 ### `src/worldgen.c`
 

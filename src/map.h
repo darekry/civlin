@@ -622,4 +622,95 @@ civ_error_t map_repaint_view_shuffled(int mode);
  * Text_DrawAligned @ 1098:0ed1). GDI text -> SDL_ttf TBD. */
 civ_error_t map_draw_city_labels(void);
 
+/* --- Chain 2026-10-16 (8): paint order + city-label format (goals 2/3) ---
+ * Orig (civ.exe, x86:LE:16:Protected Mode), decompiled this pass:
+ *   Map_PaintTilesClipped @ 1208:1534 (tile-range paint from the
+ *     1330:4010/400e origin + 1408:00c6/c4 offsets: per-tile SETRECT
+ *     0x20 box + Gfx_IntersectRect @ 1100:0685 clip (0 = skip) +
+ *     OOB/fog (Map_WrapX @ 1128:177e + 1408:00cc seen bit) -> blank via
+ *     FUN_1000_14f8/1100:0876 else Map_RevealCenter @ 1110:1461 tile blit
+ *     via Map_RefreshTileView @ 1110:0448 -> City_DrawTileView @ 1110:04d0;
+ *     then Map_DrawCityLabels @ 1208:1f64 + GfxPort_PresentRect @
+ *     10d0:0854 + GfxPort_ClearActive @ 10d0:09a2).
+ *   Map_RepaintViewShuffled @ 1208:1866 (full-view repaint, param_3 mode:
+ *     2 = direct PresentRect, 1 = shuffled tile order via mem_alloc_lock
+ *     + Rng_Range @ 11c8:003d Fisher-Yates (two draws per i swap), 0 =
+ *     row-major; per-tile SETRECT + IntersectRect clip + OOB/fog blank vs
+ *     RevealCenter; scroll sync via SETSCROLLPOS; DAT_12b0_009a gate).
+ *   Kolejnosc malowania: PaintClipped leci wierszami (outer X tiles,
+ *     inner Y tiles, +0x20 px each); Shuffled-1 tasuje kolejnosc kafelkow
+ *     (Fisher-Yates nad order[i] = i, losowa kolejnosc ukrywa kierunek
+ *     odslaniania mgly wojny / artefakty rysowania; potem pojedynczy
+ *     PresentRect per tile + Map_DrawCityLabels), RowMajor-0 leci
+ *     wierszami jak PaintClipped (outer X, inner Y od -off). Shuffled
+ *     dlaczego: rozbija widoczne fale odmalowania przy duzych refreshach
+ *     (brak kierunkowego smuzenia), nie zmienia tresci kafelkow.
+ *   Map_RefreshTileView @ 1110:0448 (tile (x,y) -> px view: wx =
+ *     Map_WrapX(x - 1330:4010)*0x20 - 1408:00c6, wy = (y -
+ *     1330:400e)*0x20 - 1408:00c4, then City_DrawTileView @ 1110:04d0).
+ *   City_DrawTileView @ 1110:04d0 (city tile view: class/occupancy/wonder
+ *     icons + owner frame + IntersectRect clip + label PresentRect when
+ *     DAT_12b0_009a; GfxPort blits -> STUB in video.h city_draw_tile_view).
+ *   Map_DrawCityLabels @ 1208:1f64 (labele miast per entry over
+ *     DAT_1408_0000: box left = x+0x20, top = y-0x86, right = x+0x34,
+ *     bottom = y+0xa6 (w 0x14, h 0x12c) + IntersectRect clip (0 = skip) +
+ *     text = civ adjective (owner*0x20+0x4da) via Util_StrCopy @
+ *     1000:36b2 + font select FUN_11e8_0b40(8) + Text_DrawAligned @
+ *     1098:0ed1; format: sama nazwa/adjective civ, bez rozmiaru ani flagi
+ *     wprost w labelu (rozmiar/flaga sa w City_DrawTileView @ 1110:04d0
+ *     TEXTOUT/Gfx_DrawTechIcon, nie w tym labelu); zwiazek z
+ *     City_FormatName @ 1048:0101: tamten Pascal-join (Res 0x88,4/5 +
+ *     Res_AppendPascal @ 11f8:014a x2) buduje nazwe modalna miasta, ten
+ *     label bierze gotowy adjective civ z tabeli 0x4da (nie wolanie
+ *     FormatName, inny zrodlo stringow)).
+ * Port kolejnosci/geometry -> LIVE below (no Win16, no globals); blit/
+ * present/label-draw tails stay STUB (map_paint_tiles_clipped /
+ * map_repaint_view_shuffled / map_draw_city_labels). */
+
+/* Orig Map_PaintTilesClipped @ 1208:1534 range -> map_paint_start /
+ * map_paint_end / map_paint_tile_px. 1:1: start = origin + off/0x20
+ * (x86 IDIV trunc); end = start + span/0x20 + 1 (+1 when span%0x20 !=
+ * 0); px = (tile - origin)*0x20 (local_8/local_a). No globals. */
+int map_paint_start(int origin, int off);
+int map_paint_end(int start, int span);
+int map_paint_tile_px(int tile, int origin);
+/* Orig same fog gate -> map_tile_needs_blank. 1:1: blank (1) when
+ * ty < 0 || ty > 0x31 (Y never wraps, cf. map_wrap_x @ 1128:177e X-only)
+ * or (reveal == 0 && (seen & 1) == 0) (reveal is DAT_1330_0000, seen is
+ * the 1408:00cc byte at Map_WrapX(x)*0x32+y+10); else 0 (RevealCenter).
+ * X wrap lives in map_wrap_x caller-side. No globals. */
+int map_tile_needs_blank(int ty, int reveal, int seen);
+/* Orig Map_RepaintViewShuffled @ 1208:1866 mode split (param_3). 1:1:
+ * present == (mode == 2) (direct PresentRect), shuffled == (mode == 1)
+ * (Fisher-Yates via Rng_Range @ 11c8:003d), rowmajor == (mode == 0).
+ * No globals. */
+int map_repaint_mode_is_present(int mode);
+int map_repaint_mode_is_shuffled(int mode);
+int map_repaint_mode_is_rowmajor(int mode);
+/* Orig same shuffled grid -> map_shuffle_grid_count / map_shuffle_tile_at
+ * / map_shuffle_px. 1:1: n = w*h (w = local_12-local_e tile cols, h =
+ * local_14-local_10 rows); tile = order[n]: gx = val % w, gy = val / w
+ * (val is the Fisher-Yates order entry); px = g*0x20 - off (off is
+ * 1408:00c6/c4); tile = (gx+origin_x, gy+origin_y) via caller. NOENT on
+ * NULL outs, RANGE on w <= 0, else CIV_OK. No globals. */
+int map_shuffle_grid_count(int w_tiles, int h_tiles);
+civ_error_t map_shuffle_tile_at(int order_val, int w_tiles,
+                                int *gx_out, int *gy_out);
+int map_shuffle_px(int g, int off);
+/* Orig Map_RefreshTileView @ 1110:0448 -> map_refresh_tile_px. 1:1:
+ * px = (tx - origin)*0x20 - off (per axis; X caller wraps via
+ * map_wrap_x @ 1128:177e before passing tx). NOENT on NULL out. */
+civ_error_t map_refresh_tile_px(int tx, int origin, int off, int *px_out);
+/* Orig Map_DrawCityLabels @ 1208:1f64 box -> map_city_label_box. 1:1:
+ * left = x+0x20, top = y-0x86, right = x+0x34, bottom = y+0xa6
+ * (x/y are the DAT_1408_0000 entry words at +0x44/+0x84; w 0x14,
+ * h 0x12c). Clip itself is video_clip_rect (Gfx_IntersectRect @
+ * 1100:0685) caller-side. NOENT on NULL out. */
+civ_error_t map_city_label_box(int x, int y, civ_rect_t *out);
+/* Orig same label text id -> map_city_label_res_id. 1:1: owner*0x20 +
+ * 0x4da (owner is the 1420:5507/5512 city-owner byte; table id feeds
+ * Util_StrCopy @ 1000:36b2 before Text_DrawAligned @ 1098:0ed1).
+ * Returns id, -1 on owner < 0. No globals. */
+int map_city_label_res_id(int owner);
+
 #endif /* CIVLIN_MAP_H */

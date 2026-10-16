@@ -917,6 +917,136 @@ civ_error_t map_draw_city_labels(void)
 {
     /* TODO: Orig Map_DrawCityLabels @ 1208:1f64 (labels over DAT_1408_0000
      * via IntersectRect @ 1100:0685 + Text_DrawAligned @ 1098:0ed1).
-     * GDI text -> SDL_ttf TBD. */
+     * GDI text -> SDL_ttf TBD. Box math lives in map_city_label_box +
+     * map_city_label_res_id below (LIVE). */
     return CIV_ERR_UNSUPPORTED;
+}
+
+/* --- Chain 2026-10-16 (8): paint order + city-label format (goals 2/3) ---
+ * OS-free 1:1 LIVE. No globals, no exit(), C17. See map.h chain block. */
+
+int map_paint_start(int origin, int off)
+{
+    /* Orig Map_PaintTilesClipped @ 1208:1534: local_c = 1330:4010 +
+     * off/0x20 (x86 IDIV trunc toward zero). */
+    return origin + off / 0x20;
+}
+
+int map_paint_end(int start, int span)
+{
+    /* Orig same: end = start + span/0x20 + 1 (+1 when span%0x20 != 0).
+     * span is (right-left) / (bottom-top) of the paint rect. */
+    int end = start + span / 0x20 + 1;
+
+    if (span % 0x20 != 0)
+        end++;
+    return end;
+}
+
+int map_paint_tile_px(int tile, int origin)
+{
+    /* Orig same: px = (tile - origin)*0x20 (local_8/local_a accumulators
+     * advancing +0x20 per tile). */
+    return (tile - origin) * 0x20;
+}
+
+int map_tile_needs_blank(int ty, int reveal, int seen)
+{
+    /* Orig Map_PaintTilesClipped @ 1208:1534 + Map_RepaintViewShuffled @
+     * 1208:1866 fog gate: (ty < 0 || 0x31 < ty) || (reveal == 0 &&
+     * (seen & 1) == 0) -> blank via FUN_1000_14f8/1100:0876 (mode 1) or
+     * FILLRECT stock (mode 0), else Map_RevealCenter @ 1110:1461 (via
+     * Map_WrapX @ 1128:177e X-only + Map_RefreshTileView @ 1110:0448 ->
+     * City_DrawTileView @ 1110:04d0). seen is the 1408:00cc byte. */
+    if (ty < 0 || ty > 0x31)
+        return 1;
+    if (reveal == 0 && (seen & 1) == 0)
+        return 1;
+    return 0;
+}
+
+int map_repaint_mode_is_present(int mode)
+{
+    /* Orig Map_RepaintViewShuffled @ 1208:1866: param_3 == 2 -> direct
+     * GfxPort_PresentRect @ 10d0:0854 + GfxPort_ClearActive @ 10d0:09a2. */
+    return mode == 2;
+}
+
+int map_repaint_mode_is_shuffled(int mode)
+{
+    /* Orig same: param_3 == 1 -> Fisher-Yates shuffled tile order (order
+     * table via mem_alloc_lock + Rng_Range @ 11c8:003d swaps). */
+    return mode == 1;
+}
+
+int map_repaint_mode_is_rowmajor(int mode)
+{
+    /* Orig same: param_3 == 0 -> row-major loops (outer X from -off_x,
+     * inner Y from -off_y, +0x20 px each) + Map_DrawCityLabels @
+     * 1208:1f64 + PresentRect. */
+    return mode == 0;
+}
+
+int map_shuffle_grid_count(int w_tiles, int h_tiles)
+{
+    /* Orig Map_RepaintViewShuffled @ 1208:1866 shuffled head: n =
+     * (local_14-local_10) * local_8 (rows * cols). */
+    if (w_tiles <= 0 || h_tiles <= 0)
+        return -1;
+    return w_tiles * h_tiles;
+}
+
+civ_error_t map_shuffle_tile_at(int order_val, int w_tiles,
+                                int *gx_out, int *gy_out)
+{
+    /* Orig same pop: gx = order[n] % w, gy = order[n] / w (then tile =
+     * (gx+local_e, gy+local_10), px = gx*0x20-off). */
+    if (!gx_out || !gy_out)
+        return CIV_ERR_NOENT;
+    if (w_tiles <= 0 || order_val < 0)
+        return CIV_ERR_RANGE;
+    *gx_out = order_val % w_tiles;
+    *gy_out = order_val / w_tiles;
+    return CIV_OK;
+}
+
+int map_shuffle_px(int g, int off)
+{
+    /* Orig same: px = g*0x20 - off (off is 1408:00c6/c4). */
+    return g * 0x20 - off;
+}
+
+civ_error_t map_refresh_tile_px(int tx, int origin, int off, int *px_out)
+{
+    /* Orig Map_RefreshTileView @ 1110:0448: wx = Map_WrapX(tx -
+     * 1330:4010)*0x20 - 1408:00c6 (X caller wraps via map_wrap_x @
+     * 1128:177e; Y same without wrap). */
+    if (!px_out)
+        return CIV_ERR_NOENT;
+    *px_out = (tx - origin) * 0x20 - off;
+    return CIV_OK;
+}
+
+civ_error_t map_city_label_box(int x, int y, civ_rect_t *out)
+{
+    /* Orig Map_DrawCityLabels @ 1208:1f64: SETRECT(x+0x34, y+0xa6,
+     * x+0x20, y-0x86, local_e) -> left x+0x20, top y-0x86, right x+0x34,
+     * bottom y+0xa6 (x/y are the DAT_1408_0000 entry words). */
+    if (!out)
+        return CIV_ERR_NOENT;
+    out->left = x + 0x20;
+    out->top = y - 0x86;
+    out->right = x + 0x34;
+    out->bottom = y + 0xa6;
+    return CIV_OK;
+}
+
+int map_city_label_res_id(int owner)
+{
+    /* Orig same text: Util_StrCopy @ 1000:36b2(owner*0x20+0x4da) before
+     * FUN_11e8_0b40(8) + Text_DrawAligned @ 1098:0ed1 (civ adjective, not
+     * City_FormatName @ 1048:0101 Pascal-join). */
+    if (owner < 0)
+        return -1;
+    return owner * 0x20 + 0x4da;
 }

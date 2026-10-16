@@ -2049,4 +2049,202 @@ civ_error_t census_show_unit_list(int civ);
  * Per-terrain census rows with flag icons. Win16 -> SDL TBD. */
 civ_error_t census_show_terrain_counts(int civ);
 
+/* --- Chain 2026-10-16 (8): census counting kernels (task goal 1) ---
+ * Orig (civ.exe, x86:LE:16:Protected Mode), decompiled this pass:
+ *   Census_ShowTechBars @ 1018:03f0 (bary 0x0c flag id via
+ *     Unit_DrawFlagIcon @ 11c8:008a + tech list 0x48 via Tech_HasTech @
+ *     1170:3181 + Res 0x82 names, owner color 0xf/0xb; open via
+ *     City_OpenCensusView @ 1018:0000 + Res 0x8a/5, close via
+ *     City_CloseCensusView @ 1018:0380; bar via Gfx_FillBarRect @
+ *     11e8:0504 + Census_DrawTechBadge @ 1018:24c5).
+ *   Census_ShowUnitList @ 1018:067b (0x1c unit rows: counts at
+ *     4121+0xd / 3f5c+0x12 per civ*0x38 + flag civ*0x20+unit+0x40 via
+ *     unit_flag_icon_index (video.h LIVE) + Res 0x84 names + atk/def/
+ *     moves at 1a40/1a42/1a3c; row y = 0x20+n*9, flag x = (n&1)*0x16+2,
+ *     y-5; chains into Census_ShowTerrainCounts).
+ *   Census_ShowTerrainCounts @ 1018:09cc (0x1b terrain rows: any-civ
+ *     nonzero at 2b90 per 0x38 + same flags + Res 0x84 + per-civ counts
+ *     at 0x68 + ord*0x1c, color civ+0x10 (0xf when mono DAT_12d8_28fc);
+ *     row y = 0x1c+n*7).
+ *   City_ShowCensusReport @ 1018:1d5b (0x80 city rows owner == civ &&
+ *     valid != -1 via Pic_PlayShared @ 1030:0000 + City_AppendName +
+ *     building icons 0x2618 mask over 0x18 bits at x 0xd6+n*0x13 +
+ *     totals + City_FormatCensusRatio @ 1018:202a x3 (surplus/total,
+ *     (total-surplus-decay)/total, decay/total); row y = 0x20+n*10,
+ *     page at y > 0xbe via PresentRect + City_DrawCensusHeader @
+ *     1018:015d; empty guard local_10 == 0 -> 1).
+ *   City_OpenCensusView @ 1018:0000 (dialog 0x94 via Dlg_CreateTracked @
+ *     1098:124f + fill + GfxPort_Create/SetActive @ 10d0:0000/0956 +
+ *     City_DrawCensusHeader; DAT_12d8_0026/002c/002e view state).
+ *   City_CloseCensusView @ 1018:0380 (PresentRect @ 10d0:0854 +
+ *     Sys_WaitForInput + FUN_1100_0be5 + GfxPort_ClearActive @ 10d0:09a2
+ *     + Dlg_DestroyTracked).
+ *   City_DrawCensusHeader @ 1018:015d (was FUN_1018_015d: title + civ
+ *     adjective 0x2da/0x1da + gov 0x132/0x139/0x141 + year via
+ *     Status_AppendYearText @ 1088:1dd0; callers Open + TerrainCounts? no:
+ *     Open, Report paging, 0be0, 208f, 1040:1137).
+ *   City_FormatCensusRatio @ 1018:202a (num < 300 ? (num*100)/den :
+ *     (num*10)/(den/10), quotient text only; already LIVE as
+ *     city_format_census_ratio in game.c, untouched).
+ * Format wierszy: tech grid 3-col x = (i%3)*100+8, y = 0x30+(i/3)*7
+ *   (break y > 0xc0); unit/terrain rows as above; report rows y += 10.
+ * Co licza: techy per civ (Tech_HasTech bits, 0x48 techs), jednostki
+ *   (2 tabele count per civ*0x38: owned/desert vs terrain-extra), tereny
+ *   (2b90 per civ*0x38 per terrain 0x1b). Okna (Open/Close/Header/Badge/
+ *   FillBar blits) -> STUB; liczenie/format -> LIVE below, no globals. */
+
+/* Orig City_OpenCensusView @ 1018:0000 -> city_open_census_view.
+ * Dialog 0x94 + GfxPort create/set + City_DrawCensusHeader @ 1018:015d
+ * tail. Win16 dialog/GDI -> SDL TBD. */
+civ_error_t city_open_census_view(int title_id, int civ);
+/* Orig City_CloseCensusView @ 1018:0380 -> city_close_census_view.
+ * PresentRect @ 10d0:0854 + wait + GfxPort_ClearActive @ 10d0:09a2 +
+ * destroy tail. Win16 -> SDL TBD. */
+civ_error_t city_close_census_view(void);
+/* Orig City_DrawCensusHeader @ 1018:015d -> city_draw_census_header.
+ * Title + civ + year header. GDI text -> SDL TBD. */
+civ_error_t city_draw_census_header(int title_id, int civ);
+/* Orig Census_DrawTechBadge @ 1018:24c5 -> census_draw_tech_badge.
+ * Port select + fill + Gfx_DrawTechIcon(*(icon*2+0x128)) badge. GDI -> SDL. */
+civ_error_t census_draw_tech_badge(int icon, int x, int y);
+
+/* Orig Census_ShowTechBars @ 1018:03f0 target math -> census_tech_target.
+ * 1:1: t = difficulty*2 + base + 6 (base is DAT_12a8_0020); if
+ * t < 0xb - extra t = 0xb - extra (extra is the 3f5c+2+civ*2 word).
+ * No globals. */
+int census_tech_target(int difficulty, int base, int extra);
+/* Orig same bar width math -> census_bar_segment / census_bar_width /
+ * census_bar_origin / census_bar_count. 1:1: seg = clamp(0x980/(val+1),
+ * 1, 0x40); w = clamp(seg*val/8+8, 8, 0x130); x0 = 0xa0-w/2; count =
+ * clamp(raw, 0, val) (raw is the 43b8+0x7c+civ*2 word). No globals. */
+int census_bar_segment(int val);
+int census_bar_width(int seg, int val);
+int census_bar_origin(int width);
+int census_bar_count(int raw, int val);
+/* Orig same tech grid -> census_tech_cell. 1:1: x = (idx%3)*100+8,
+ * y = 0x30+(idx/3)*7. idx is the drawn-tech ordinal (local_10).
+ * NOENT on NULL outs, else CIV_OK. No globals. */
+civ_error_t census_tech_cell(int idx, int *x_out, int *y_out);
+/* Orig same owner color -> census_tech_owner_color. 1:1: ((entry&7) ==
+ * civ) ? 0xf : 0xb (entry is the 2afa+6+tech*2 word). No globals. */
+int census_tech_owner_color(int entry, int civ);
+/* Orig Census_ShowUnitList @ 1018:067b rows -> census_unit_row_y /
+ * census_unit_flag_x / census_unit_has_row. 1:1: y = 0x20+row*9;
+ * flag x = (row&1)*0x16+2 at y-5; has = (a > 0 || b > 0) (a is the
+ * 4121+0xd+civ*0x38+unit*2 count, b the 3f5c+0x12 count). row is the
+ * drawn-row ordinal (local_6). No globals. */
+int census_unit_row_y(int row);
+int census_unit_flag_x(int row);
+int census_unit_has_row(int a, int b);
+/* Orig Census_ShowTerrainCounts @ 1018:09cc rows -> census_terrain_row_y
+ * / census_terrain_cell_x. 1:1: y = 0x1c+row*7 (row is the drawn-row
+ * ordinal local_a); self count at 0x68, each other civ +0x1c in civ
+ * order skipping self (ord is the other-civ ordinal 0..). x =
+ * 0x68+ord*0x1c. Flag x shares census_unit_flag_x. No globals. */
+int census_terrain_row_y(int row);
+int census_terrain_cell_x(int ord);
+/* Orig City_ShowCensusReport @ 1018:1d5b rows -> census_report_row_y /
+ * census_report_needs_page / census_report_next_x /
+ * census_building_icon_shown / census_empty_guard. 1:1: y =
+ * 0x20+idx*10 (idx drawn-city ordinal); page when y > 0xbe (0xbe < y);
+ * icon x = 0xd6+n*0x13 (n filtered icons with (mask & 0x2618) != 0 over
+ * 0x18 bits, mask is the 54fc city word); bit shown = (((1u<<bit) &
+ * 0x2618) != 0); empty guard: total == 0 -> 1 (local_10). No globals. */
+int census_report_row_y(int idx);
+int census_report_needs_page(int y);
+int census_report_next_x(int n);
+int census_building_icon_shown(int bit);
+int census_empty_guard(int total);
+
+/* --- Chain 2026-10-16 (9): census header format (task goal 1) ---
+ * Orig City_DrawCensusHeader @ 1018:015d (was FUN_1018_015d), decompiled
+ * this pass: GfxPort_SetActive + FILLRECT 0x140x0x200 civ brush (color
+ * ((civ_table)[param_3]), mono DAT_12d8_28fc forces param_3 = 0) + title
+ * TEXTOUT at 0xa0,2 via FUN_10d8_046e + civ line at 0xa0,10 + year line
+ * at 0xa0,0x12 via FUN_10d8_0528 color 0xf (civ adjective Res 0x2da/0x1da
+ * + gov title 0x132/0x139/0x141 by (gov_word/2) + Status_AppendYearText
+ * @ 1088:1dd0 tail). Callers (6): City_OpenCensusView @ 1018:0000 +
+ * City_ShowCensusReport @ 1018:1d5b paging (y > 0xbe) +
+ * Census_ShowCityProduction @ 1018:0be0 (was FUN_1018_0be0: per-city
+ * trade/production census over 0x80 0x1c records with Pic_PlayShared @
+ * 1030:0000 + trade sums + wonder + 0x18 production breakdown, Res
+ * 0x8a,4,2 title) + Census_ShowCityStatus @ 1018:208f (was FUN_1018_208f:
+ * per-city size/output census with 1260:00d6/00d8/00da + prod 0x83/0x84
+ * names + shields, Res 0x8a,0,8 title) + Hof_CalcFinalScore @ 1040:1137
+ * (was FUN_1040_1137: final-score census view + tech list + Gfx_FillBar
+ * Rect bars; NOT the disaster — disaster is City_ProcessDisaster @
+ * 1040:068e, see game.h; score callers Game_ProcessGameEnd @ 1088:0b6d +
+ * Game_TurnLoopTick @ 1088:0000). Other header painters draw their own
+ * titles (no shared header): HoF_Show @ 1080:0119 + Demo_ShowDemo
+ * graphics @ 1188:123a + city modal (Pic_PlayShared). GDI text tails
+ * stay STUB in city_draw_census_header above; pure format below is LIVE
+ * 1:1 (no Win16, no globals). */
+int city_census_gov_title_id(int gov_half);
+int city_census_header_civ(int mono, int civ);
+civ_error_t city_census_header_pos(int line, int *x_out, int *y_out);
+
+/* --- Chain 2026-10-16 (10): census city production/status counting ---
+ * Orig (civ.exe, x86:LE:16:Protected Mode), decompiled this pass:
+ *   Census_ShowCityProduction @ 1018:0be0 (per-city trade/production over
+ *     0x80 0x1c records @ 1420:5500, owner @ +7 == civ, valid @ +2 != -1:
+ *     Pic_PlayShared @ 1030:0000 + City_AppendName + per-city outputs
+ *     DAT_1260_00dc/00d2/00e2 trade line (bit0 of +2 set = disorder "399"
+ *     line instead) + sums local_a += 00d2 / local_c += 00e2 + wonder
+ *     0x14 (City_IsWonderOpen → local_c += local_c/2) + caravan value
+ *     (diff*2+6)*civ_value*band/local_c with year band (year<0→1,
+ *     <0x6d6→2, else 3) + 0x18 production breakdown local_46[] via 54fc
+ *     bits * cost table 0x192c (+local_e on bit1); title Res 0x8a,4,2;
+ *     paging at y > 0x9f/0xb4 via PresentRect + header).
+ *   Census_ShowCityStatus @ 1018:208f (per-city size/output: size @ +3 +
+ *     DAT_1260_00d6/00d8/00da triple + prod name Res 0x83 (building,
+ *     +5 < 0 branch with 550a shields + cost*10 table 0x1924) vs Res 0x84
+ *     (unit, +5 in 0..0x3f branch with 550a + cost*10 table 0x1a44);
+ *     title Res 0x8a,0,8; paging at y > 0xbf).
+ *   Trade base local_e: g_nDifficulty/2 + Tech_HasTech(civ,0x22) +
+ *     Tech_HasTech(civ,0x25) (trade-route techs, see Tech_HasTech @
+ *     1170:3181 + trade_calc_bonus @ 1038:0d09). Relation to
+ *     City_FormatPopCount @ 11c8:03ac / City_TileYield @ 1250:0000 family:
+ *     outputs 1260:00d6/d8/da/00dc/00d2/00e2 are the per-city tile-yield
+ *     rollup (food/shields/trade + corruption split); this chain only sums
+ *     the rollup, yield math stays in city_tile_base_yield/adjust LIVE.
+ *   GDI census-view tails (Open/Header/Close/Badge/FillBar/Present) stay
+ *     STUB in city_open/close/draw_census_header + census_draw_tech_badge
+ *     (see above + video.h badge/bar); counting below is LIVE 1:1. */
+
+/* Orig Census_ShowCityProduction @ 1018:0be0 trade base -> census_trade_base.
+ * 1:1 local_e = difficulty/2 + (has_t31?1:0) + (has_t26?1:0). Negative
+ * difficulty clamps divisor path to 0 base (orig DIV on s16; guarded). */
+int census_trade_base(int difficulty, int has_t31, int has_t26);
+/* Orig same wonder bonus -> census_trade_wonder_total. 1:1 when
+ * wonder_open != 0: trade + trade/2 (City_IsWonderOpen(g_nPlayerCiv,0x14)
+ * branch, x86 IDIV truncates toward zero; negative trade stays). */
+int census_trade_wonder_total(int trade, int wonder_open);
+/* Orig same accumulators -> census_prod_accum_trade/shields. 1:1 local_a
+ * += DAT_1260_00d2, local_c += DAT_1260_00e2 per ordered city. */
+int census_prod_accum_trade(int acc, int city_trade);
+int census_prod_accum_shields(int acc, int city_shields);
+/* Orig same year band -> census_prod_year_band. 1:1 year<0→1, <0x6d6→2,
+ * else 3 (caravan-distance multiplier select). */
+int census_prod_year_band(int year);
+/* Orig same caravan value -> census_caravan_value. 1:1 (diff*2+6) *
+ * civ_value * band / trade_total (orig IMUL chain then IDIV; trade_total
+ * <= 0 or <0 inputs -> -1, no DIV fault). Truncates toward zero. */
+int census_caravan_value(int difficulty, int civ_value, int band,
+                         int trade_total);
+/* Orig same building breakdown -> census_building_add. 1:1 bit set in the
+ * 54fc city word: total = count + unit_cost (+trade_base when building
+ * == 1, the local_46[1] palace/capital path); bit clear -> count
+ * unchanged. building is 1..0x17, unit_cost is the 0x192c table word. */
+int census_building_add(int count, int building_set, int building,
+                        int unit_cost, int trade_base);
+/* Orig Census_ShowCityStatus @ 1018:208f prod branch ->
+ * census_status_prod_kind. 1:1 prod < 0 (signed +5 byte) → 0 building
+ * (Res 0x83); 0 <= prod < 0x40 → 1 unit (Res 0x84); else 2 = none
+ * (no prod line; orig falls through to the FUN_10d8_002d tail). */
+int census_status_prod_kind(int prod);
+/* Orig same shields line -> census_status_shields_total. 1:1 shown total
+ * = 550a shields + cost_table*10 (cost via 0x1924 building table or
+ * 0x1a44 unit table, caller passes cost explicitly). */
+int census_status_shields_total(int shields, int cost);
+
 #endif /* CIVLIN_GAME_H */

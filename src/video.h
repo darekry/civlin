@@ -543,4 +543,327 @@ civ_error_t gfx_present_tile_rect(int x, int y);
  * label present). GfxPort blits -> SDL TBD. */
 civ_error_t city_draw_tile_view(int tx, int ty, int px, int py);
 
+/* --- Chain 2026-10-16 (8): IntersectRect blits + present/alloc (goals 4/5) ---
+ * Orig (civ.exe, x86:LE:16:Protected Mode), decompiled this pass:
+ *   GfxPort_ChangeColor @ 10d0:09ee (remap bitmapy portu: SETRECT port
+ *     w/h box + Gfx_IntersectRect @ 1100:0685 clip (0 = skip) +
+ *     CREATECOMPATIBLEDC + even-width ((w+1)/2*2) bitmap via
+ *     GfxPort_AllocBitmap @ 10d0:0cfa + BITBLT 0xcc0020 SRCCOPY +
+ *     GETBITMAPBITS scan (old_index -> new_index per byte, stride pad
+ *     ((w+1)/2*2-w) skipped per row) + SETBITMAPBITS write-back + BITBLT
+ *     back + SELECT/DELETEOBJECT + DELETEDC; GLOBALALLOC fail ->
+ *     FUN_1098_28e4 error).
+ *   Gfx_DrawIconClipped @ 11e8:0674 (cell ikony: Gfx_DrawTechIcon @
+ *     11a8:0cb1 blit, then IntersectRect-clipped PresentRect @ 10d0:0854
+ *     of the icon cell (w/h from GLOBALLOCK'd icon resource via
+ *     OFFSETRECT to px/py) when DAT_12b0_009a; FUN_1220_0f2f gate).
+ *   Gfx_PresentTileRect @ 11e8:07c3 (box 0x20: IntersectRect-clipped
+ *     PresentRect of the 0x20 tile box at (x,y), same DAT_12b0_009a +
+ *     FUN_1220_0f2f gates; unconditional repaint helper).
+ *   Co remapuja: ChangeColor remapuje INDEKSY palety (8-bit DIB bytes,
+ *     old_index -> new_index, 0..255; mono? nie: mono branch zyje w
+ *     Gfx_MakeBrush @ 1098:00b5 solid-vs-pattern (gfx_brush_is_solid
+ *     LIVE), tu zawsze bajtowy remap bitmapy portu; paleta (godpal)
+ *     nietknieta, tylko pixele). Zwiazek z gfx_indexed.c: port bitmap
+ *     to INDEX8 (jak rsc_indexed_t pixels + gfx_godpal 0x00..0xeb, patrz
+ *     gfx_indexed.h GFX_GODPAL_COUNT; indeksy 0xec..0xff to LOGPALETTE
+ *     0x300 zero-tail / wolne sloty, remap je tez obejmuje w 0..255).
+ *   Gfx_FillBarRect @ 11e8:0504 (was FUN_11e8_0504: bar fill: mode 2 ->
+ *     x = px+w*2, h = hgt<<1 else x = px+icon_w, h = icon_h via
+ *     FUN_11e8_0d81/0da8; y = py+h; cap 0x1ff when mono == 0 (DAT_1420_
+ *     17a6) && x1 > 0x1ff && px > 0; FILLRECT brush civ color (0xf when
+ *     mono && param_7 == 0xf via DAT_1420_17a0 else civ color); callers
+ *     Census_ShowTechBars @ 1018:03f0 + City_ShowCensusReport @ 1018:1d5b
+ *     + status rows).
+ *   GfxPort_PresentRect @ 10d0:0854 (prezentacja wycietego rectu: BITBLT
+ *     rop 0xcc0020 SRCCOPY w = right-left, h = bottom-top + VALIDATERECT
+ *     no-op; juz LIVE jako gfx_port_present_rect -> SDL_RenderTexture
+ *     refl; VALIDATERECT bez odpowiednika w SDL3, patrz video.h).
+ *   GfxPort_AllocBitmap @ 10d0:0cfa (alokacja bitmap device-dependent:
+ *     w Art_PortDataToBitmap @ 10b8:0e36: even-width direct vs odd-width
+ *     pad via DAT_1420_17a6 vs compatible-DC + SETBITMAPBITS + BITBLT
+ *     rows; juz LIVE jako gfx_port_alloc_bitmap -> SDL_CreateTexture
+ *     INDEX8 TARGET, patrz video.h).
+ * Port regul remap/geometrii -> LIVE below (no Win16, no globals,
+ * read-only except the explicit remap dst); blit/present/device tails
+ * stay STUB (gfx_port_change_color / gfx_draw_icon_clipped /
+ * gfx_present_tile_rect / city_draw_tile_view). */
+
+/* Orig GfxPort_ChangeColor @ 10d0:09ee scan core -> gfx_color_remap_match.
+ * 1:1: nonzero (1) when pixel == old_index (byte compare before the
+ * *dst = new write). Takes bytes explicitly. No globals. */
+int gfx_color_remap_match(int pixel, int old_index);
+/* Orig same row stride -> gfx_remap_stride. 1:1: ((w+1)/2)*2 (even-width
+ * bitmap pitch; pad ((w+1)/2*2-w) skipped per row). Returns pitch, -1 on
+ * w < 0. No globals. */
+int gfx_remap_stride(int w);
+/* Orig same CPU-side rule -> gfx_remap_index. 1:1 GETBITMAPBITS +
+ * SETBITMAPBITS pair on explicit bits (no handles): for i in 0..n-1
+ * bits[i] == (uint8_t)old_index -> bits[i] = (uint8_t)new_index.
+ * Returns swapped count, -1 on NULL bits. Indices 0..255 (godpal.c
+ * 0x00..0xeb live + zero-tail, see gfx_indexed.h). No globals. */
+int gfx_remap_index(uint8_t *bits, size_t n, int old_index, int new_index);
+/* Orig Gfx_PresentTileRect @ 11e8:07c3 box -> gfx_tile_box. 1:1 the 0x20
+ * tile box at (x,y): out = (x, y, x+0x20, y+0x20) (orig SETRECT +
+ * IntersectRect @ 1100:0685 clip caller-side via video_clip_rect LIVE).
+ * NOENT on NULL out. No globals. */
+civ_error_t gfx_tile_box(int x, int y, SDL_Rect *out);
+/* Orig Gfx_FillBarRect @ 11e8:0504 extent -> gfx_bar_fill_extent. 1:1:
+ * mode == 2 (local_6) ? x1 = px + w*2, h = hgt<<1 : x1 = px + icon_w,
+ * h = icon_h (icon_w/h via FUN_11e8_0d81/0da8 icon resource; caller
+ * passes them explicitly, no handles). NOENT on NULL outs. No globals. */
+civ_error_t gfx_bar_fill_extent(int mode, int px, int w, int hgt,
+                                int icon_w, int icon_h,
+                                int *x1_out, int *h_out);
+/* Orig same cap -> gfx_bar_fill_cap. 1:1: mono == 0 (DAT_1420_17a6) &&
+ * x1 > 0x1ff && px > 0 -> 0x1ff, else x1. No globals. */
+int gfx_bar_fill_cap(int x1, int px, int mono);
+/* Orig Art_PortDataToBitmap @ 10b8:0e36 width branch ->
+ * art_port_is_even_width / art_port_padded_width. 1:1: even == (w/2*2
+ * == w) takes the direct BITBLT path; odd with mono (DAT_1420_17a6 ==
+ * 1) pads via GLOBALALLOC + HMEMCPY rows, odd without mono goes the
+ * compatible-DC + SETBITMAPBITS + BITBLT-rows path; padded = ((w+1)/2)
+ * *2 (same pitch as gfx_remap_stride). Returns 1/0 or pitch (-1 on
+ * w < 0). No globals. */
+int art_port_is_even_width(int w);
+int art_port_padded_width(int w);
+
+/* --- Chain 2026-10-16 (9): census header/badge + bar + port slots ---
+ * Orig (civ.exe, x86:LE:16:Protected Mode), renamed this pass:
+ *   City_DrawCensusHeader @ 1018:015d (was FUN_1018_015d: GfxPort_SetActive
+ *     + FILLRECT 0x140x0x200 civ brush + title TEXTOUT at 0xa0,2 via
+ *     FUN_10d8_046e + civ line at 0xa0,10 + year line at 0xa0,0x12 via
+ *     FUN_10d8_0528 color 0xf; civ adjective Res 0x2da/0x1da + gov title
+ *     0x132/0x139/0x141 by (gov_word/2) + year via Status_AppendYearText
+ *     @ 1088:1dd0; mono DAT_12d8_28fc forces civ 0; callers
+ *     City_OpenCensusView @ 1018:0000 + City_ShowCensusReport @ 1018:1d5b
+ *     paging (y > 0xbe) + Census_ShowCityProduction @ 1018:0be0 (was
+ *     FUN_1018_0be0: per-city trade/production census, Res 0x8a,4,2) +
+ *     Census_ShowCityStatus @ 1018:208f (was FUN_1018_208f: per-city
+ *     size/output census, Res 0x8a,0,8) + Hof_CalcFinalScore @ 1040:1137
+ *     (was FUN_1040_1137: final-score census view + Gfx_FillBarRect bars;
+ *     NOT the disaster: disaster is City_ProcessDisaster @ 1040:068e,
+ *     see game.h; score callers Game_ProcessGameEnd @ 1088:0b6d +
+ *     Game_TurnLoopTick @ 1088:0000). Other header painters: HoF_Show @
+ *     1080:0119 + Demo_ShowDemographics @ 1188:123a draw their own titles
+ *     (no shared header; see halloffame.h/game.h). GDI text tails stay
+ *     STUB in city_draw_census_header (see game.h); pure header math
+ *     lives there (gov title / mono civ / line positions).
+ *   Census_DrawTechBadge @ 1018:24c5 (badge: GfxPort_GetPalette @
+ *     10d0:0262 port+0x14 word (0 when mono DAT_12d8_28fc) + Palette_
+ *     CopyRange @ 1098:201d 0xec-capped GLOBALLOCK copy + GfxPort_
+ *     ApplyPalette @ 1200:0116 MainPort_ApplyPalette wrapper with
+ *     port+0x14 + FILLRECT 0x60x0x35 OFFSETRECT badge box + Text_SetColor
+ *     44fc brush + Dialog_DrawFrame3D @ 1220:0d38 raised frame (sole
+ *     other caller Dialog_MenuZ_Modal @ 1220:0156) + Gfx_DrawTechIcon @
+ *     11a8:0cb1(*(icon*2+0x128)) via Gfx_BlitTechIcon @ 11a8:0f56 core
+ *     (sole caller; palette 0x14/req or 0x1a when mono DAT_1420_17a8).
+ *     Which port: the census dialog port (City_OpenCensusView @
+ *     1018:0000 GfxPort_Create @ 10d0:0000 + GfxPort_SetActive @
+ *     10d0:0956 selection; badge params 0x48x0x50 are the palette-copy
+ *     window, NOT MainPort). Which icons: tech icons (Census_ShowTechBars
+ *     @ 1018:03f0 0x0c segments + 0x48 tech list; badge icon is the
+ *     tech-table word). Relation to icon_cell_box: the badge box IS an
+ *     icon cell (0x60x0x35 fill + frame + tech blit; cell math shares
+ *     gfx_icon_cell_box).
+ *     Callers of the badge: Census_ShowTechBars + Census_ShowUnitList @
+ *     1018:067b + Census_ShowCityProduction + Dialog_MenuZ_Modal +
+ *     FUN_1138_0000 (status). GDI/palette-device tails stay STUB;
+ *     OS-free table/size/scale math below is LIVE.
+ *   Gfx_FillBarRect @ 11e8:0504 (bar fill: GfxPort_SelectForCoords @
+ *     1220:0f2f mode gate 0..3 (0 = skip) + Text_SetColor/Gfx_MakeBrush
+ *     civ color (mono DAT_12d8_28fc ? DAT_12d8_45fd fallback :
+ *     civ_table[param_7]) + extent (mode == 2 ? x1 = px+w*2, h = hgt<<1
+ *     : x1 = px+icon_w, h = icon_h via Gfx_ScaleIconX/Y @ 11e8:0d81/0da8
+ *     (v*0xa0)/100) + y = py+h + cap 0x1ff when mono == 0 && x1 > 0x1ff
+ *     && px > 0 + FILLRECT brush (mono && param_7 == 0xf ?
+ *     DAT_1420_17a0 : civ brush). Already LIVE: gfx_bar_fill_extent +
+ *     gfx_bar_fill_cap; extended below with color/brush/range/scale.
+ *     Callers (18): Census_ShowTechBars + City_ShowCensusReport +
+ *     Hof_CalcFinalScore + Demo rank bars @ 1188:0b3e/0db8 + status rows
+ *     @ 11b0:0000/11b8:14e5 + dialog/replay bars (1070:0000/0327,
+ *     10d8:0612, 1158:08e7, 11d8:0000/087f, 1030:8c11, Gfx_FillBarRectRange
+ *     @ 11e8:0912, Replay_PromptMode @ 1180:017a, Replay_ShowConqueror @
+ *     1180:152f, Replay_ShowEntry @ 1180:0e78). No HP bars (one-roll
+ *     kill, see game.h) and no production-progress bars here (city prod
+ *     is icon lists, not bars).
+ *   Gfx_FillBarRectRange @ 11e8:0912 (was FUN_11e8_0912: degenerate-range
+ *     wrapper: (x0 == x1 || y0 == y1) -> x-swap when x1 < x0, then
+ *     Gfx_FillBarRect with w = (x1-x0)+1, h = (y1-y0)+1).
+ *   Gfx_ScaleIconX @ 11e8:0d81 / Gfx_ScaleIconY @ 11e8:0da8 (was
+ *     FUN_11e8_0d81/0da8: shared core (v*0xa0)/100 driver scale for icon
+ *     w/h in FillBarRect + coord scale in SelectForCoords).
+ *   GfxPort_SelectForCoords @ 1220:0f2f (was FUN_1220_0f2f: port select
+ *     by coords: no port (DAT_1420_9948 == 0) ? x<0||x>199 ?
+ *     (y<8||x<200 ? 0 outside : 2 dialog + SetActive + 17d0=12b0:0004) :
+ *     1 main (17d0=12b0:0034) : 3 port (scale or dialog-offset + 17d0 =
+ *     port + 17cc=17ae); dialog offset (v-base)*2-off with bases 8/200
+ *     and DAT_1408_00c4/c6).
+ *   GfxPort_GetPalette @ 10d0:0262 (was FUN_10d0_0262: port+0x14 word
+ *     when color (DAT_12d8_28fc == 0) else 0; feeds Palette_CopyRange +
+ *     GfxPort_ApplyPalette in the badge).
+ *   Palette_CopyRange @ 1098:201d (was FUN_1098_201d: 0xec-capped
+ *     GLOBALLOCK palette copy; callers badge + Anim_AdvanceFrames @
+ *     10b0:0461 + UI palettes).
+ *   GfxPort_ApplyPalette @ 1200:0116 (was FUN_1200_0116: MainPort_
+ *     ApplyPalette @ 1200:00a8 wrapper with port+0x14 + 0x14 params;
+ *     callers badge + HoF_Show + NewGame_Wizard + WorldGen_LoadEarth +
+ *     status/dialog/replay UI).
+ *   Dialog_DrawFrame3D @ 1220:0d38 (was FUN_1220_0d38: raised 3D frame:
+ *     CREATEPEN 0x8080/0xe0e0 + MOVETO/LINETO + INFLATERECT x3; callers
+ *     badge + MenuZ).
+ *   Gfx_BlitTechIcon @ 11a8:0f56 (was FUN_11a8_0f56: tech-icon blit core
+ *     behind Gfx_DrawTechIcon @ 11a8:0cb1, sole caller; mono DAT_1420_17a6
+ *     vs color paths with GfxPort_AllocBitmap @ 10d0:0cfa even-width
+ *     bitmaps + BITBLT rops).
+ *   Port lifecycle (slots DAT_1420_17cc active / DAT_1420_17ae prev):
+ *     GfxPort_Create @ 10d0:0000 (GR_PortOpen: GETDC + CREATECOMPATIBLEDC
+ *     + GfxPort_AllocBitmap @ 10d0:0cfa INDEX8 TARGET bitmap + clip/pal
+ *     words; 33 creators: City_OpenCensusView, Pic_PlayShared @ 1030:0000,
+ *     Dialog_MenuZ_Modal, Art_LoadFrameData @ 10b8:079d, WdwMap_Open @
+ *     1208:0af1 / WdwSmMap_Open @ 1210:025b / WdwStatus_Open @ 1218:0386,
+ *     MainMenu_WndProc @ 11e0:0221, NewGame_Wizard @ 10e8:0000, HoF/Demo/
+ *     Replay/WorldGen UI + WinMain @ 1008:0000) -> GfxPort_SetActive @
+ *     10d0:0956 (17cc = port always; 17ae = port unless the 12d8:44ff+0x43
+ *     dialog port) -> GfxPort_PresentRect @ 10d0:0854 (BITBLT 0xcc0020 +
+ *     VALIDATERECT no-op; LIVE) / GfxPort_Blit @ 10d0:08f1 (LIVE round-
+ *     trip) -> GfxPort_Close @ 10d0:0172 (was FUN_10d0_0172: GR_PortClose:
+ *     ClearActive prologue + DELETEDC + DELETEOBJECT + GLOBALFREE x2 +
+ *     zero words) vs GfxPort_ClearActive @ 10d0:09a2 alone (slot clear
+ *     only, no free; 12 switchers: Anim_AdvanceFrames, Game_UpdateStatus
+ *     Panel @ 1088:13d5, Map_PaintTilesClipped @ 1208:1534, Map_Repaint
+ *     ViewShuffled @ 1208:1866, Unit_ShowInfoPopup @ 11f0:468c, WdwStatus_
+ *     Refresh @ 1218:0801, 1098:21b8, 10b0:0287/17e5, 10e8:231f,
+ *     1210:09b4, 1218:06db; City_CloseCensusView @ 1018:0380 closes via
+ *     Present + wait + 1100:0be5 + Close/ClearActive + destroy). Create/
+ *     SetActive/Close device tails stay STUB (see gfx_port_create etc.);
+ *     AllocBitmap + PresentRect already LIVE; slot-clear math below is
+ *     LIVE on explicit slots (no globals).
+ * OS-free 1:1 LIVE below (no Win16, no globals, C17). */
+
+/* Orig Census_DrawTechBadge @ 1018:24c5 table -> census_badge_table_off.
+ * 1:1 the *(icon*2+0x128) word-fetch offset feeding Gfx_DrawTechIcon @
+ * 11a8:0cb1 (icon is the tech/badge index). Returns offset >= 0, -1 on
+ * icon < 0. No globals. */
+int census_badge_table_off(int icon);
+/* Orig same badge box -> census_badge_size. 1:1 the 0x60x0x35 fill box
+ * (SETRECT + OFFSETRECT to dx/dy caller-side; position shares
+ * gfx_icon_cell_box). Writes w/h, NOENT on NULL. No globals. */
+civ_error_t census_badge_size(int *w_out, int *h_out);
+/* Orig Gfx_ScaleIconX @ 11e8:0d81 + Gfx_ScaleIconY @ 11e8:0da8 shared core
+ * -> gfx_scale_icon_dim. 1:1 (v*0xa0)/100 driver scale (icon w/h in
+ * Gfx_FillBarRect @ 11e8:0504 + coord scale in GfxPort_SelectForCoords @
+ * 1220:0f2f; x86 LONG divide truncates toward zero). No globals. */
+int gfx_scale_icon_dim(int v);
+/* Orig Gfx_FillBarRect @ 11e8:0504 color -> gfx_bar_fill_color. 1:1:
+ * mono == 0 (DAT_12d8_28fc) ? civ_entry : fallback (civ_entry is
+ * civ_table[param_7], fallback is DAT_12d8_45fd). No globals. */
+int gfx_bar_fill_color(int mono, int civ_entry, int fallback);
+/* Orig same brush -> gfx_bar_brush_is_alt. 1:1 nonzero (1) when the
+ * DAT_1420_17a0 brush wins: mono != 0 && param_7 == 0xf, else 0 (civ
+ * brush). No globals. */
+int gfx_bar_brush_is_alt(int mono, int param_7);
+/* Orig Gfx_FillBarRectRange @ 11e8:0912 gate/span ->
+ * gfx_bar_range_needs_fill / gfx_bar_range_width / gfx_bar_range_height.
+ * 1:1: needs = (x0 == x1 || y0 == y1); width = (max(x0,x1)-min(x0,x1))+1
+ * (orig swaps x only); height = (y1-y0)+1 (no y swap in orig). Width -1
+ * on degenerate? no: always >= 1 for int inputs (overflow caller-side).
+ * No globals. */
+int gfx_bar_range_needs_fill(int x0, int x1, int y0, int y1);
+int gfx_bar_range_width(int x0, int x1);
+int gfx_bar_range_height(int y0, int y1);
+/* Orig GfxPort_SelectForCoords @ 1220:0f2f branch ->
+ * gfx_port_select_kind. 1:1 port-mode pick without device state:
+ * has_port == 0 ? (x<0||199<x ? (y<8||x<200 ? 0 : 2) : 1) : 3 (0 outside,
+ * 1 main, 2 dialog, 3 port). Mode 2 also GfxPort_SetActive's the dialog
+ * port + 17d0=12b0:0004; mode 1 sets 17d0=12b0:0034; mode 3 scales (see
+ * gfx_scale_icon_dim / gfx_port_dialog_coord) + 17d0=port + 17cc=17ae.
+ * has_port/x/y are explicit (DAT_1420_9948/1260:002c stay caller-side).
+ * No globals. */
+int gfx_port_select_kind(int has_port, int x, int y);
+/* Orig same dialog offset -> gfx_port_dialog_coord. 1:1 (v-base)*2-off
+ * (bases 8/200 with DAT_1408_00c4/c6 offs passed explicitly). No globals. */
+int gfx_port_dialog_coord(int v, int base, int off);
+/* Orig GfxPort_GetPalette @ 10d0:0262 gate -> gfx_port_palette_word.
+ * 1:1: mono == 0 ? word_at_14 : 0 (word_at_14 is the port+0x14 palette
+ * word; mono is DAT_12d8_28fc != 0). Caller passes the word explicitly
+ * (no handles). No globals. */
+int gfx_port_palette_word(int mono, int word_at_14);
+/* Orig GfxPort_ClearActive @ 10d0:09a2 + GfxPort_Close @ 10d0:0172
+ * prologue -> gfx_port_slot_after_clear / gfx_port_clear_active. 1:1
+ * slot clear: slot == port -> NULL else slot (far-ptr compare in orig;
+ * here borrowed gfx_port_t pointers). The clearer takes explicit slot
+ * addresses (no DAT_1420_17cc/17ae globals): NULL slot addrs -> NOENT;
+ * NULL port clears NULL slots (no-op) and never fails. No globals. */
+const gfx_port_t *gfx_port_slot_after_clear(const gfx_port_t *slot,
+                                            const gfx_port_t *port);
+civ_error_t gfx_port_clear_active(const gfx_port_t *port,
+                                  const gfx_port_t **active_io,
+                                  const gfx_port_t **prev_io);
+
+/* --- Chain 2026-10-16 (10): GfxPort create params + tech blit + palette ---
+ * Orig (civ.exe, x86:LE:16:Protected Mode), decompiled this pass:
+ *   GfxPort_Create @ 10d0:0000 (GR_PortOpen: Debug_LogTrace "GR PortOpen" +
+ *     GETDC(0) + CREATECOMPATIBLEDC + RELEASEDC + Util_MemCopyFar rect +
+ *     OFFSETRECT + port ~0x20 words ([4..7] w/h clip, [8] w, [10] color
+ *     GLOBALALLOC or FUN_1098_28e4 error, [0x17]/[0xd] bitmap select,
+ *     [0xe] palette param_4, [0xf] color handle, [0xc] compat DC) +
+ *     GETDEVICECAPS 0xc/0xe + GfxPort_AllocBitmap @ 10d0:0cfa even width
+ *     ((w+1)/2*2) + SELECTOBJECT; 33 creators: City_OpenCensusView @
+ *     1018:0000, Pic_PlayShared @ 1030:0000, Dialog_MenuZ_Modal @ 1220:0156,
+ *     Art_LoadFrameData @ 10b8:079d, WdwMap_Open @ 1208:0af1 /
+ *     WdwSmMap_Open @ 1210:025b / WdwStatus_Open @ 1218:0386, MainMenu_WndProc
+ *     @ 11e0:0221, NewGame_Wizard @ 10e8:0000, HoF/Demo/Replay/WorldGen UI +
+ *     WinMain @ 1008:0000; relation to MainPort (MainPort_GetOrCreate @
+ *     1098:114a: GETDC + SELECTPALETTE/REALIZEPALETTE +
+ *     GfxPort_SetActive @ 10d0:0956; see boot.h boot_open_windows).
+ *     GfxPort_SetActive @ 10d0:0956: Gfx_SetCurrentDC(port+0x16) + 17cc =
+ *     port always + 17ae = port unless the 12d8:44ff+0x43 dialog port.
+ *   Gfx_BlitTechIcon @ 11a8:0f56 (sole caller Gfx_DrawTechIcon @ 11a8:0cb1,
+ *     which skips param_1 == 0 and picks palette 0x14/param_6 or 0x1a when
+ *     mono DAT_1420_17a6 == 1): GLOBALLOCK icon (w/h at +0/+2, bg at +4) +
+ *     bg resolve (param_5 == 0 → res bg) + Gfx_GetIconScale @ 11a8:0000
+ *     scale when a != b + mono DAT_1420_17a6 vs color paths (mono:
+ *     CREATECOMPATIBLEDC + even-width AllocBitmap + BITBLT 0xcc0020 +
+ *     GET/SETBITMAPBITS via Gfx_AllocIconBuffer @ 11a8:0054 +
+ *     Gfx_CopyIconBits @ 11a8:13c0 transparent/scaled copy; color: mask DC
+ *     + text-color 0 + BITBLT triptych 0x46/0x66 + 0xc6/0x88 + rop) +
+ *     GLOBALUNLOCK when param_1 != 0. Masks: transparent index (-1 =
+ *     copy-all fast path, else skip-bg transparent copy) + mono mask
+ *     bitmap (1-bpp via AllocBitmap 0,1) + color text-mask trio; bg is the
+ *     fill index for the padded/odd-width tail (see art_port_padded_width).
+ *   Palette_CopyRange @ 1098:201d (GLOBALLOCK src/dst palettes + 0xec cap
+ *     on both ends + word copy loop + GLOBALUNLOCKs; gated on color
+ *     DAT_12d8_28fc == 0 && param_5 != 0; callers Census_DrawTechBadge @
+ *     1018:24c5 + Anim_AdvanceFrames @ 10b0:0461 + UI palettes).
+ *   Device tails (GETDC/CREATECOMPATIBLEDC/GETDEVICECAPS/CREATEBITMAP/
+ *     SELECTOBJECT/BITBLT/GET+SETBITMAPBITS/GLOBALALLOC) stay STUB in
+ *     gfx_port_create/set_active/alloc_bitmap/blit above; param math below
+ *     is LIVE 1:1 (no Win16, no globals, C17). */
+
+/* Orig GfxPort_Create @ 10d0:0000 even width -> gfx_port_bitmap_pitch.
+ * 1:1 ((w+1)/2)*2 (same pitch as gfx_remap_stride/art_port_padded_width;
+ * duplicated here so the create path owns its copy). -1 on w < 0. */
+int gfx_port_bitmap_pitch(int w);
+/* Orig same mono gate -> gfx_port_is_mono. 1:1 DAT_12d8_28fc != 0 (1 =
+ * mono/EGA, 0 = color/VGA; feeds GetPalette/CopyRange/MakeBrush). */
+int gfx_port_is_mono(int flag_28fc);
+/* Orig Gfx_BlitTechIcon @ 11a8:0f56 bg resolve -> gfx_tech_bg_resolve.
+ * 1:1 param_5 == 0 → res_bg (icon word +4), else param_5. No globals. */
+int gfx_tech_bg_resolve(int req_bg, int res_bg);
+/* Orig same scale gate (via Gfx_GetIconScale @ 11a8:0000) ->
+ * gfx_tech_needs_scale. 1:1 a != b (DAT_13a0_0000 vs 0002 set by
+ * Gfx_SetIconScale @ 11a8:002c). No globals. */
+int gfx_tech_needs_scale(int a, int b);
+/* Orig Gfx_DrawTechIcon @ 11a8:0cb1 palette pick -> gfx_tech_palette_pick.
+ * 1:1 (bg == -1 || mono != 1) ? req (0x14/param_6) : 0x1a. No globals. */
+int gfx_tech_palette_pick(int bg, int mono, int req);
+/* Orig Palette_CopyRange @ 1098:201d gate -> palette_copy_enabled. 1:1
+ * (mono == 0 && count != 0) with mono = DAT_12d8_28fc != 0. No globals. */
+int palette_copy_enabled(int mono, int count);
+/* Orig same 0xec cap -> palette_copy_range_len. 1:1 count capped by
+ * 0xec - src_off and 0xec - dst_off (negative/overrun → 0; count < 0 →
+ * 0). 0xec = palette entries (godpal 0x00..0xeb, see gfx_indexed.h). */
+int palette_copy_range_len(int src_off, int dst_off, int count);
+
 #endif /* CIVLIN_VIDEO_H */

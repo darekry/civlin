@@ -390,19 +390,125 @@ int Hof_CalcInterimScore(int base_score, int difficulty)
 /* Orig: FUN_1040_1137 @ 1040:1137 -> Hof_CalcFinalScore. */
 civ_error_t Hof_CalcFinalScore(int base_score, int difficulty, int *out_score)
 {
-    (void)base_score;
-    (void)difficulty;
+    int scale;
+    int bar_w;
+
     if (!out_score)
         return CIV_ERR_NOENT;
     if (difficulty < CIV_HOF_DIFFICULTY_MIN ||
         difficulty > CIV_HOF_DIFFICULTY_MAX)
         return CIV_ERR_RANGE;
-    /* TODO: Orig FUN_1040_1137 @ 1040:1137 (pure score arithmetic; exact
-     * formula TBD from decompile — expected shape is a difficulty-weighted
-     * final from the base game score, matching the HoF_TryInsert weight).
-     * quit==2 bypass lives in the Game_ProcessGameEnd @ 1088:0b6d caller
-     * (see game.c:47), not here: that path skips 1188:07ad + 1180:0000. */
+    /* PARTIAL: OS-free formula core below is LIVE (layout fit + bar width
+     * on the caller base_score as the city-total proxy; full city/tech
+     * table scan needs the 0x1c records + discover table, caller-side).
+     * UI tail stays stubbed (see header). quit==2 bypass lives in the
+     * Game_ProcessGameEnd @ 1088:0b6d caller (see game.c:47). */
+    scale = hof_score_layout_fit(base_score < 0 ? 0 : base_score, 0, 0);
+    bar_w = hof_score_bar_width(base_score < 0 ? 0 : base_score);
+    (void)scale;
+    (void)bar_w;
+    /* TODO: Orig FUN_1040_1137 @ 1040:1137 census-view tail
+     * (City_OpenCensusView @ 1018:0000 + Pic_PlayShared @ 1030:0000 +
+     * Hof_DrawScoreIconStep @ 1040:1b51 + Hof_DrawTechIcon @ 1030:84be +
+     * Text_DrawAt/Centered @ 10d8:01fa/0528 + Gfx_FillBarRect @ 11e8:0504
+     * + City_CloseCensusView @ 1018:0380) -> SDL census bridge TBD. */
     return CIV_ERR_UNSUPPORTED;
+}
+
+/* --- Chain 2026-10-16: Hof_CalcFinalScore @ 1040:1137 formula (goal 1).
+ * OS-free 1:1 LIVE. No globals, no exit(), C17. See halloffame.h. */
+
+int hof_score_layout_value(int city_total, int tech_count, int scale,
+                           int palace)
+{
+    /* Orig @ 1040:1137 fit body: iVar5 = ((local_6+0x22)/0x23)*DAT_07dc +
+     * ((local_8+1)/2)*clamp(DAT_07dc+1,8,99); iVar2 = iVar5+0x42 (+0x0a
+     * palace pair *(g_nPlayerCiv*2+0x762) && DAT_1290_00cc). Clamp is
+     * Util_Clamp @ 11c8:0063 inlined. */
+    int ct = city_total < 0 ? 0 : city_total;
+    int tc = tech_count < 0 ? 0 : tech_count;
+    int c = scale + 1;
+
+    if (c < 8)
+        c = 8;
+    if (c > 99)
+        c = 99;
+    return ((ct + 0x22) / 0x23) * scale + ((tc + 1) / 2) * c + 0x42 +
+        (palace != 0 ? 0x0a : 0);
+}
+
+int hof_score_layout_fit(int city_total, int tech_count, int palace)
+{
+    /* Orig same do-while: DAT_07dc = 0xd; do { compute; } while (0xb9 <
+     * iVar2) with DAT_07dc-- per overflow + final-screen DAT_07dc-- per
+     * page overflow. Single fit loop here (page loop is UI tail). */
+    int scale = 0xd;
+
+    while (scale > 1 &&
+           hof_score_layout_value(city_total, tech_count, scale, palace) >
+               0xb9)
+        scale--;
+    return scale;
+}
+
+int hof_final_accum(int pop_total, int tech_total, int palace_bonus,
+                    int pollution, int year_bonus, int misc)
+{
+    /* Orig @ 1040:1137 tail: DAT_4464 = 516c + 516a (+palace local_a when
+     * year matches else message) + 42f4*-10 + clamp(38f0*3,0,100) +
+     * 12a8:0022*5; negative clamps to 0. Caller passes signed parts. */
+    long total = (long)pop_total + (long)tech_total + (long)palace_bonus -
+        (long)pollution * 10L + (long)year_bonus + (long)misc;
+
+    if (total < 0)
+        total = 0;
+    return (int)total;
+}
+
+int hof_final_cap(int score, int baseline_on, int civ_count, int turn)
+{
+    /* Orig same: local_1e = -1; if (DAT_1308_0024) local_1e =
+     * g_nCivCount*100 + (0x226-g_nTurn)*2 + 400; if (4464<0) 4464=0;
+     * if (local_1e < 4464) show 4464 else show local_1e + 4464=local_1e.
+     * Net: final = max(score, baseline) with -1 baseline = keep score. */
+    int baseline = -1;
+
+    if (score < 0)
+        score = 0;
+    if (baseline_on != 0)
+        baseline = civ_count * 100 + (0x226 - turn) * 2 + 400;
+    return (baseline < score) ? score : baseline;
+}
+
+int hof_score_bar_width(int score)
+{
+    /* Orig same Gfx_FillBarRect @ 11e8:0504 pair: background 0xfa then
+     * foreground Util_Clamp(4464/4, 0, 0xfa) when 0 < 4464. */
+    int w;
+
+    if (score <= 0)
+        return 0;
+    w = score / 4;
+    if (w < 0)
+        w = 0;
+    if (w > 0xfa)
+        w = 0xfa;
+    return w;
+}
+
+civ_error_t hof_score_icon_advance(int *x_io, int *y_io, int scale)
+{
+    /* Orig Hof_DrawScoreIconStep @ 1040:1b51: DAT_5168 += 8; if (0x124 <
+     * DAT_5168) { DAT_5166 += DAT_07dc; DAT_5168 = (DAT_5166>>1 & 4) +
+     * 0x10; } if (DAT_5166 < 0xa1) Gfx_DrawIconClipped(...95d0[param]). */
+    if (!x_io || !y_io)
+        return CIV_ERR_NOENT;
+    *x_io = *x_io + 8;
+    if (*x_io > 0x124) {
+        *y_io = *y_io + scale;
+        *x_io = (((*y_io) >> 1) & 4) + 0x10;
+    }
+    return (*y_io < 0xa1) ? CIV_OK : CIV_ERR_RANGE;
 }
 
 /* Orig: FUN_1188_07ad @ 1188:07ad -> Hof_PlayEndAnimation. */

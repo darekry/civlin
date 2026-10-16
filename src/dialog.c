@@ -1613,3 +1613,59 @@ civ_error_t diplo_run_contact_menu(int *out_choice)
      * Win16 modal -> SDL TBD. */
     return CIV_ERR_UNSUPPORTED;
 }
+
+/* --- Chain 2026-10-16 (10): Dialog_DrawFrame3D @ 1220:0d38 geometry.
+ * OS-free 1:1 LIVE. No globals, no exit(), C17. See dialog.h. */
+
+int dialog_frame3d_layers(void)
+{
+    /* Orig @ 1220:0d38: for (iVar4 = 0; iVar4 < 3; iVar4++) draw +
+     * INFLATERECT(-1,-1) (after the head MemCopy + right/bottom -1 +
+     * INFLATERECT(3,3)). */
+    return 3;
+}
+
+int dialog_frame3d_dark(void)
+{
+    /* Orig same: CREATEPEN(...,0x8080,0x80,1) selected for the top/left L
+     * (MOVETO bl → LINETO tl → LINETO tr per layer). */
+    return 0x8080;
+}
+
+int dialog_frame3d_light(void)
+{
+    /* Orig same: CREATEPEN(...,0xe0e0,0xe0,1) selected for the
+     * bottom/right L (MOVETO bl → LINETO br → LINETO tr per layer). */
+    return 0xe0e0;
+}
+
+civ_error_t dialog_frame3d_layer(const dlg_rect_t *rc, int layer,
+                                 dlg_rect_t *out)
+{
+    /* Orig same INFLATERECT(-1,-1) per layer on the caller base rect. */
+    if (!rc || !out)
+        return CIV_ERR_NOENT;
+    if (layer < 0 || layer > 2)
+        return CIV_ERR_RANGE;
+    out->left = rc->left + layer;
+    out->top = rc->top + layer;
+    out->right = rc->right - layer;
+    out->bottom = rc->bottom - layer;
+    if (out->right <= out->left || out->bottom <= out->top)
+        return CIV_ERR_RANGE;
+    return CIV_OK;
+}
+
+civ_error_t dialog_draw_frame3d(const dlg_rect_t *rc)
+{
+    (void)rc;
+    /* TODO: Orig Dialog_DrawFrame3D @ 1220:0d38 GDI tail (CREATEPEN 0x8080
+     * / 0xe0e0 + SELECTOBJECT + MOVETO/LINETO L-pairs per layer from
+     * dialog_frame3d_layer above + INFLATERECT x3 + SELECT restore +
+     * DELETEOBJECTs; callers Census_DrawTechBadge @ 1018:24c5 + MenuZ @
+     * 1220:0156) -> SDL_RenderDrawLines TBD. Inset/color math lives above
+     * (LIVE). */
+    if (!rc)
+        return CIV_ERR_NOENT;
+    return CIV_ERR_UNSUPPORTED;
+}

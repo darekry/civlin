@@ -1104,4 +1104,38 @@ civ_error_t diplo_prompt_contact(int civ, int x, int y);
  * MenuZ modal on 1420:31b4/31b6. Win16 -> SDL TBD. */
 civ_error_t diplo_run_contact_menu(int *out_choice);
 
+/* --- Chain 2026-10-16 (10): Dialog_DrawFrame3D @ 1220:0d38 geometry ---
+ * Orig (civ.exe, x86:LE:16:Protected Mode), decompiled this pass:
+ * CREATEPEN 0x8080 dark + 0xe0e0 light + SELECTOBJECT + MemCopyFar rect +
+ * right/bottom -1 + INFLATERECT(3,3) + 3x { dark top/left L (MOVETO bl +
+ * LINETO tl + LINETO tr), light bottom/right L (MOVETO bl + LINETO br +
+ * LINETO tr... wait order in decompile: dark MOVETO(local_6,local_c) →
+ * LINETO(local_a,local_c) → LINETO(local_a,local_8); light
+ * MOVETO(local_6,local_c) → LINETO(local_6,local_8) →
+ * LINETO(local_a,local_8); then INFLATERECT(-1,-1) } + SELECT restore +
+ * DELETEOBJECTs. Callers: Census_DrawTechBadge @ 1018:24c5 (badge 0x60x0x35
+ * box) + Dialog_MenuZ_Modal @ 1220:0156 (menu frame). Other frame
+ * painters (NOT this): Status_DrawPanelFrame @ 11f8:0278 (FILLRECT +
+ * white/black 0xffff/0 pens + MOVETO/LINETO border via upper/lower rects
+ * 1218:0956/0a06, see game.h) + dialog 0x94 fill in City_OpenCensusView @
+ * 1018:0000. GDI pen/line tails stay STUB below; inset/color math is LIVE. */
+
+/* Orig Dialog_DrawFrame3D @ 1220:0d38 layers -> dialog_frame3d_layers.
+ * 1:1 loop iVar4 = 0; iVar4 < 3 (three INFLATERECT(-1,-1) layers). */
+int dialog_frame3d_layers(void);
+/* Orig same pens -> dialog_frame3d_dark/light. 1:1 CREATEPEN colors
+ * 0x8080 (dark top/left) / 0xe0e0 (light bottom/right). */
+int dialog_frame3d_dark(void);
+int dialog_frame3d_light(void);
+/* Orig same per-layer rect -> dialog_frame3d_layer. 1:1 out = rc inset by
+ * layer (left+layer, top+layer, right-layer, bottom-layer; layer 0 is the
+ * post-INFLATERECT(3,3)/-1 base passed by the caller, each further layer
+ * is INFLATERECT(-1,-1)). RANGE on layer < 0 || > 2 or inverted rect;
+ * NOENT on NULL. No globals. */
+civ_error_t dialog_frame3d_layer(const dlg_rect_t *rc, int layer,
+                                 dlg_rect_t *out);
+/* Orig same GDI tail -> dialog_draw_frame3d. CREATEPEN/SELECTOBJECT +
+ * MOVETO/LINETO per layer + DELETEOBJECT -> SDL_RenderDrawLines TBD. */
+civ_error_t dialog_draw_frame3d(const dlg_rect_t *rc);
+
 #endif /* CIVLIN_DIALOG_H */
