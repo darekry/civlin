@@ -472,20 +472,112 @@ civ_error_t font_fnt_row_ptr(const uint8_t *data, size_t len,
 /* Orig Font_EnumFamiliesCallback @ 1008:0e12 slot-install side (goal 3).
  * The callback installs one GDI face per ENUMFONTFAMILIES hit via
  * CREATEFONTINDIRECT into DAT_1420_5484[DAT_12d8_0022++] (slot array freed
- * in FUN_1008_062f over 0x1e entries; install happens once at boot inside
- * Font_EnumFamiliesInit @ 1008:0e99, selection happens later per-draw via
- * Text_SelectFont @ 1100:0a33 / Text_DispatchFontHandler @ 11e8:0b40).
+ * in Font_FreeSlots @ 1008:062f, was FUN_1008_062f, over 0x1e entries;
+ * install happens once at boot inside Font_EnumFamiliesInit @ 1008:0e99,
+ * selection happens later per-draw via Text_SelectFont @ 1100:0a33 /
+ * Text_DispatchFontHandler @ 11e8:0b40, table @ 11e8:0d1d 25 id ->
+ * 20 slotów 0x00..0x14, patrz boot.h chain-14 + dialog.h text_font_table).
  * STUB: slot-range half is LIVE (0..0x1d valid, else RANGE), the
  * CREATEFONTINDIRECT/ADDFONTRESOURCE GDI install has no Linux equivalent
- * yet (bridge projekt: see boot.h chain-13, bundled-FNT raster first, no
- * fontconfig, no TTF here) -> CIV_ERR_UNSUPPORTED. No globals, no exit(). */
+ * yet (bridge projekt: see boot.h chain-13/14, bundled-FNT raster first,
+ * no fontconfig, no TTF here) -> CIV_ERR_UNSUPPORTED. No globals,
+ * no exit(). */
 civ_error_t font_install_slot(int slot)
 {
-    if (slot < 0 || slot >= 0x1e)
+    if (slot < 0 || slot >= CIV_FONT_SLOT_MAX)
         return CIV_ERR_RANGE;
     /* TODO: CREATEFONTINDIRECT install into the face-slot table
      * (DAT_1420_5484 image) + ADDFONTRESOURCE(CIV_FONT_FILE) bridge. */
     return CIV_ERR_UNSUPPORTED;
+}
+
+/* --- Chain 2026-10-16 (14): fontdir/FNT face name + slot alloc + tail ---
+ * See boot.h chain-14 (fontdir file 0x600 C strings, FNT base+dfFace,
+ * 21/21 v2, 0x1e slots, Tail empty stub). OS-free, no SDL. */
+
+civ_error_t font_fnt_face_name(const uint8_t *data, size_t len,
+                               const font_fnt_info_t *info,
+                               const char **name_out)
+{
+    /* Orig Font_EnumFamiliesInit @ 1008:0e99 FNT face-name side (dfFace
+     * C string at base+dfFace, resource-relative; e.g. unpacked/civfonts.fon
+     * 0x1400+0x18c4 CIVBABYLON .. 0x30e00+0xaaf8 CIVTIMES36 — te same co
+     * fontdir 0x676..0x1054; format C NUL, nie Pascal). Borrowed view. */
+    size_t off;
+    size_t pos;
+
+    if (name_out)
+        *name_out = NULL;
+    if (!data || !info || !name_out)
+        return CIV_ERR_NOENT;
+    if (len < CIV_FNT_MIN_SIZE)
+        return CIV_ERR_TRUNCATED;
+    if (info->dfFace == 0u)
+        return CIV_ERR_BAD_DATA;
+    off = (size_t)info->dfFace;
+    if (off >= len)
+        return CIV_ERR_BAD_DATA;
+    pos = off;
+    while (pos < len && data[pos] != 0u)
+        pos++;
+    if (pos >= len)
+        return CIV_ERR_BAD_DATA;
+    *name_out = (const char *)(data + off);
+    return CIV_OK;
+}
+
+civ_error_t font_slot_claim(int *count, int *slot_out)
+{
+    /* Orig Font_EnumFamiliesCallback @ 1008:0e12 alloc half
+     * (DAT_1420_5484[DAT_12d8_0022++] bez guarda w orig; 21 twarzy < 0x1e
+     * więc bezpiecznie w praktyce; tu twardy RANGE przy >= 0x1e żeby nie
+     * nadpisać za tablicą gdyby ENUM zwrócił > 30 hitów). */
+    if (slot_out)
+        *slot_out = -1;
+    if (!count || !slot_out)
+        return CIV_ERR_NOENT;
+    if (*count < 0 || *count >= CIV_FONT_SLOT_MAX)
+        return CIV_ERR_RANGE;
+    *slot_out = *count;
+    (*count)++;
+    return CIV_OK;
+}
+
+civ_error_t font_free_slots(int *slots, int n, int *count)
+{
+    /* Orig FUN_1008_062f @ 1008:062f -> Font_FreeSlots (see boot.h):
+     * loop SI 0..0x1d over DAT_1420_5484, DELETEOBJECT non-zero handles.
+     * OS-free slot-state half LIVE 1:1 on explicit caller-owned array
+     * (slots[0..n), n slots; orig n is fixed 0x1e) + count image
+     * (DAT_12d8_0022, reset to 0): zeroes every entry (zeros stay zero,
+     * mirroring the CMP-skip), resets *count. GDI DELETEOBJECT per
+     * handle stays caller-side (no Linux equivalent, like install in
+     * font_install_slot STUB). NULL slots/count -> NOENT; n < 0 or n >
+     * CIV_FONT_SLOT_MAX (0x1e) -> RANGE (orig fixed 0x1e; larger would
+     * overrun DAT_1420_5484). No globals, no exit(). */
+    int i;
+
+    if (!slots || !count)
+        return CIV_ERR_NOENT;
+    if (n < 0 || n > CIV_FONT_SLOT_MAX)
+        return CIV_ERR_RANGE;
+    for (i = 0; i < n; i++)
+        slots[i] = 0;
+    *count = 0;
+    return CIV_OK;
+}
+
+void font_enum_families_callback_tail(void)
+{
+    /* Orig Font_EnumFamiliesCallbackTail @ 1008:09d3: pusty far stub
+     * (16 B: MOV AX,DS/NOP/INC BP/PUSH BP/MOV BP,SP/PUSH DS/MOV DS,AX/
+     * JMP 09df/POP DS/POP BP/DEC BP/RETF, bez ciała; dekompilator dopowiada
+     * fikcyjny return — ignorować). Wołany zawsze z ogona callbacku
+     * @ 1008:0e12 (return ignorowany); brak innych xrefs; rodzeństwo
+     * 1008:0d4c/0d5a/0df0/0e02 to puste bezimienne stub-y tego samego
+     * kształtu (placeholder linkera / thunk pod hook, jak
+     * Text_FontPreApply @ 1098:0186 / PostApply @ 1098:0194 wołane tylko
+     * z ogona dispatch 11e8:0cb0). NOOP. */
 }
 
 civ_error_t font_fnt_char_entry(const uint8_t *data, size_t len,
@@ -494,8 +586,9 @@ civ_error_t font_fnt_char_entry(const uint8_t *data, size_t len,
 {
     /* Orig Font_EnumFamiliesInit @ 1008:0e99 FNT dfCharTable side (AH2).
      * OS-free header/entry-only 1:1 on borrowed bytes (caller-owned FNT
-     * image, never writes civfonts.fon). v2 4-B entries (all 21 faces
-     * 0x0200); v3 TODO. No SDL, no globals, no exit(), read-only. */
+     * image, never writes civfonts.fon). v2 4-B entries (u16 width + u16
+     * offset); v3 6-B STUB z powodem poniżej. No SDL, no globals, no
+     * exit(), read-only. */
     size_t ct_off;
     unsigned nchars;
     unsigned idx;
@@ -511,8 +604,11 @@ civ_error_t font_fnt_char_entry(const uint8_t *data, size_t len,
         info->dfVersion != CIV_FNT_VERSION_3)
         return CIV_ERR_BAD_DATA;
     if (info->dfVersion == CIV_FNT_VERSION_3)
-        /* TODO: v3 6-B entries (width u16 + offset u32?); no v3 face in
-         * civfonts.fon to validate against, so stub rather than mis-parse. */
+        /* v3 6-B entries (width u16 + offset u32? dokładny layout TBD):
+         * STUB z powodem — przeskanowano unpacked/civfonts.fon read-only
+         * (21 base 0x1400..0x30e00, dfVersion na base+0x00): 21/21 to
+         * 0x0200 (v2), zero 0x0300 w pliku, więc brak próbki do walidacji
+         * parsowania 6-B (nie zgadywać, nie mis-parsować). */
         return CIV_ERR_UNSUPPORTED;
     if (info->dfFirstChar > info->dfLastChar)
         return CIV_ERR_BAD_DATA;
@@ -747,19 +843,21 @@ const char *menu_string_at(int index)
 civ_error_t config_load_prefs(void)
 {
     /* TODO: Orig FUN_1008_0b4a @ 1008:0b4a -> Config_LoadPrefs. _LOPEN
-     * (OF_READ) + _LREAD of CIV_PREFS_FILE "civ.prf" from the base path
-     * (see sys_base_path), then option-struct fill with built-in defaults
-     * when the file is missing/short. Prefs field map not yet decoded.
+     * (OF_READ) "civ.prf" @ 1420:010b + _LREAD 0x1a do DAT_1420_17b2 +
+     * _LCLOSE + flags 17ca -> g_nOptionFlags @ 12d0:0064 (brak pliku =
+     * defaults). Format 26 B LIVE w config_prefs_unpack (chunki
+     * 485a/48fa/4964 + flags); Win16 file-handle mostek TBD.
      * Read-only: never creates civ.prf. */
     return CIV_ERR_UNSUPPORTED;
 }
 
 civ_error_t config_save_prefs(void)
 {
-    /* TODO: Orig FUN_1008_0bbf @ 1008:0bbf -> Config_SavePrefs. Guarded by
-     * dos_drive_ready @ 1000:1184 (must be ready) + dos_set_path @
-     * 1000:116a (cwd in place) before the _LCREAT/_LWRITE of CIV_PREFS_FILE
-     * "civ.prf". Win16 file-handle path -> stdio bridge TBD. */
+    /* TODO: Orig FUN_1008_0bbf @ 1008:0bbf -> Config_SavePrefs. Guard
+     * config_prefs_needs_path_setup (drive > 0 -> Dos_DriveReady @
+     * 1000:1184 + Dos_SetPath @ 1000:116a) przed _LCREAT "civ.prf" @
+     * 1420:0113 + _LLSEEK 0,0 + _LWRITE 0x1a z 17b2 + _LCLOSE. Obraz 26 B
+     * LIVE w config_prefs_pack; Win16 file-handle mostek TBD. */
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -910,4 +1008,157 @@ const char *boot_video_caps_describe(int index)
      * No entries decoded yet -> always NULL. */
     (void)index;
     return NULL;
+}
+
+/* --- Chain 2026-10-16 (16): shutdown order table @ 1008:0329 (goals 1/5).
+ * See boot.h block. OS-free phase order LIVE as a read-only table (same
+ * order as the disasm; Win16 handles/exit stay caller-side STUB). */
+
+int boot_shutdown_step_count(void)
+{
+    /* 18 faz w kolejnosci WinMain_Shutdown @ 1008:0329 (see boot.h). */
+    return 18;
+}
+
+const char *boot_shutdown_step_name(int index)
+{
+    /* Fazy j.w.; NULL on OOB (same contract as font_face_list /
+     * tribe_get_name_list / boot_video_caps_describe). */
+    static const char *const steps[18] = {
+        "kill-timers",        /* KILLTIMER 460e + 28fa */
+        "free-proc-instance", /* FREEPROCINSTANCE + Ctrl_FreeGdiObjects */
+        "save-prefs",         /* Config_SavePrefs @ 1008:0bbf */
+        "close-ports",        /* GfxPort_Close x5 @ 10d0:0172 */
+        "dispose-palette",    /* Palette_Dispose @ 1090:0596 */
+        "dispose-map-buf",    /* Mem_DisposePtr b394/b396 */
+        "dispose-resmgr",     /* ResMgr_Dispose @ 1190:0c92 */
+        "dispose-tile-cache", /* Map_DisposeTileCache @ 1110:0127 */
+        "free-icon-buffers",  /* Gfx_FreeAllIconBuffers @ 1008:075b */
+        "free-driver-objects",/* Gfx_FreeDriverObjects @ 1008:066d */
+        "free-global-bufs",   /* GLOBALFREE b388 + 0130 */
+        "trace-base",         /* Debug_GetEmptyString @ 1148:0020 */
+        "close-files",        /* File_CloseAll @ 1000:1fc6 */
+        "restore-stock",      /* GETSTOCKOBJECT+SELECTOBJECT x3 */
+        "destroy-window",     /* DESTROYWINDOW */
+        "free-font-slots",    /* Font_FreeSlots @ 1008:062f */
+        "remove-font-message",/* REMOVEFONTRESOURCE + SENDMESSAGE */
+        "exit-fallback",      /* Sys_ExitFallback @ 1000:12d6 */
+    };
+
+    if (index < 0 || index >= 18)
+        return NULL;
+    return steps[index];
+}
+
+int boot_shutdown_exit_code(int last_key)
+{
+    /* Orig tail: Sys_ExitFallback(DAT_1420_54ea) @ 1000:12d6 (Sys_DoExit
+     * wrapper @ 1000:127f); exit code = ostatni key/wParam (54ea). */
+    return last_key;
+}
+
+/* --- Chain 2026-10-16 (17): prefs format + quit dispatch (goals 1/5) ---
+ * See boot.h block. OS-free 1:1 (no Win16, no globals, no exit()). */
+
+civ_error_t config_prefs_pack(const uint8_t *c0, const uint8_t *c1,
+                              const uint8_t *c2, uint16_t option_flags,
+                              uint8_t *out, size_t cap)
+{
+    /* Orig Config_SavePrefs @ 1008:0bbf image side: 3x 8 B GLOBALLOCK
+     * copies (48fa -> 17ba, 485a -> 17b2, 4964 -> 17c2) + flags word ->
+     * 17ca, potem _LWRITE 0x1a z 17b2. Kolejnosc w pliku: [c(485a)]
+     * [c(48fa)] [c(4964)] [flags] (17b2, 17ba, 17c2, 17ca). */
+    size_t i;
+
+    if (!c0 || !c1 || !c2 || !out) {
+        if (out && cap > 0)
+            out[0] = 0;
+        return CIV_ERR_NOENT;
+    }
+    if (cap < (size_t)CIV_PREFS_LEN)
+        return CIV_ERR_TRUNCATED;
+    for (i = 0; i < (size_t)CIV_PREFS_CHUNK_LEN; i++) {
+        out[i] = c0[i];
+        out[8 + i] = c1[i];
+        out[16 + i] = c2[i];
+    }
+    out[CIV_PREFS_FLAGS_OFF] = (uint8_t)(option_flags & 0xffu);
+    out[CIV_PREFS_FLAGS_OFF + 1] = (uint8_t)((option_flags >> 8) & 0xffu);
+    return CIV_OK;
+}
+
+civ_error_t config_prefs_unpack(const uint8_t *img, size_t len,
+                                uint8_t *c0, uint8_t *c1, uint8_t *c2,
+                                uint16_t *flags_out)
+{
+    /* Orig Config_LoadPrefs @ 1008:0b4a image side: _LREAD 0x1a do 17b2,
+     * potem flags 17ca -> g_nOptionFlags @ 12d0:0064 (brak pliku = zostaja
+     * defaults z config_prefs_defaults). */
+    size_t i;
+
+    if (!img) {
+        if (c0)
+            c0[0] = 0;
+        if (c1)
+            c1[0] = 0;
+        if (c2)
+            c2[0] = 0;
+        if (flags_out)
+            *flags_out = 0;
+        return CIV_ERR_NOENT;
+    }
+    if (len < (size_t)CIV_PREFS_LEN)
+        return CIV_ERR_TRUNCATED;
+    if (!c0 || !c1 || !c2 || !flags_out)
+        return CIV_ERR_NOENT;
+    for (i = 0; i < (size_t)CIV_PREFS_CHUNK_LEN; i++) {
+        c0[i] = img[i];
+        c1[i] = img[8 + i];
+        c2[i] = img[16 + i];
+    }
+    *flags_out = (uint16_t)((uint16_t)img[CIV_PREFS_FLAGS_OFF] |
+                            ((uint16_t)img[CIV_PREFS_FLAGS_OFF + 1] << 8));
+    return CIV_OK;
+}
+
+int config_prefs_needs_path_setup(int drive)
+{
+    /* Orig Config_SavePrefs @ 1008:0bbf head: if (0 < g_nCurrentDrive @
+     * 1228:0002) { Dos_DriveReady + Dos_SetPath } (na Linuksie drive = 0,
+     * wiec galaz DOS nigdy nie wchodzi, zob. sys.h). */
+    return (drive > 0) ? 1 : 0;
+}
+
+int main_quit_msg_is_quit(int msg)
+{
+    /* Orig Main_DispatchQuit @ 1098:062f: DAT_1420_54e8 == 0x12 (WM_QUIT)
+     * -> WinMain_Shutdown @ 1008:0329. */
+    return (msg == CIV_WM_QUIT) ? 1 : 0;
+}
+
+int main_quit_flag_requests_shutdown(int quit_flag)
+{
+    /* Orig same: g_nQuitFlag @ 12d8:24ee == 1 (0 run, 1 quit/end,
+     * -1 defeat, 2 ?menu, zob. game.h). */
+    return (quit_flag == 1) ? 1 : 0;
+}
+
+int main_dispatch_quit_requests_shutdown(int msg, int has_cmd,
+                                         int quit_flag)
+{
+    /* Orig same obie sciezki: WM_QUIT 0x12 direct + (Menu_DispatchCommand
+     * @ 1048:01cd wynik != 0 z DAT_1420_54c6/54c8, 0x44-entry table, potem
+     * g_nQuitFlag == 1) -> WinMain_Shutdown. */
+    if (msg == CIV_WM_QUIT)
+        return 1;
+    if (has_cmd != 0 && quit_flag == 1)
+        return 1;
+    return 0;
+}
+
+int main_drain_should_continue(int pumped)
+{
+    /* Orig Main_DrainMessages @ 11e8:02fb: do { Main_PumpMessage @
+     * 1098:02d1 } while (!= 0) (potem 12b0:004c select). */
+    return (pumped != 0) ? 1 : 0;
 }

@@ -279,3 +279,35 @@ int util_format_message(char *dst, size_t cap, const char *fmt, ...)
     va_end(ap);
     return n;
 }
+
+int util_compare_bounded(const char *a, const char *b, int bound)
+{
+    /* Orig FUN_1000_3744 @ 1000:3744 -> Util_CompareBounded (see
+     * civ_common.h): SCASB NUL search in b within bound + CMPSB len
+     * bytes vs a, case-sensitive, returns a-b of the first diff (0 =
+     * match). Sole caller Font_EnumFamiliesCallback @ 1008:0e12 with
+     * (LOGFONT+0x12, DS:0x11b "CIVILIZATION", 3) -> "CIV" prefix gate. */
+    size_t blen = 0;
+    size_t len = 0;
+    size_t i = 0;
+
+    if (bound <= 0)
+        return 0;
+    if (!a)
+        a = "";
+    if (!b)
+        b = "";
+    while (blen < (size_t)bound && b[blen] != '\0')
+        blen++;
+    len = blen;
+    if (len < (size_t)bound)
+        len++; /* NUL found inside bound: compare it too (SCASB incl). */
+    for (i = 0; i < len; i++) {
+        unsigned char ca = (unsigned char)a[i];
+        unsigned char cb = (unsigned char)b[i];
+
+        if (ca != cb)
+            return (int)ca - (int)cb;
+    }
+    return 0;
+}

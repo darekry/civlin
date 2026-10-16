@@ -431,6 +431,50 @@ civ_error_t unit_show_info_popup(int civ, int unit_idx)
     return CIV_ERR_UNSUPPORTED;
 }
 
+/* --- Chain 2026-10-16 (15): Unit_ShowInfoPopup line predicates (goal 3).
+ * See game.h layout block. OS-free 1:1, no Win16, no globals. */
+
+int unit_popup_is_end_of_turn(int unit_idx)
+{
+    /* Orig Unit_ShowInfoPopup @ 11f0:468c branch: param_2 == 0x80 takes
+     * the 3-line end-of-turn card ("End of Turn"/"Press Return"/
+     * "to continue"), else the normal unit card. */
+    return (unit_idx == 0x80) ? 1 : 0;
+}
+
+int unit_popup_has_veteran(int flags)
+{
+    /* Orig same: (*(62fc) & 0x20) != 0 draws "Veteran" @ 1420:4803. */
+    return ((flags & 0x20) != 0) ? 1 : 0;
+}
+
+int unit_popup_moves_full(int moves_raw)
+{
+    /* Orig same: Util_Clamp(*(6300)/3,0,99) full moves before the
+     * fraction tail (Util_Clamp @ 11c8:0063; clamp inline here, no link). */
+    int full = moves_raw / 3;
+
+    if (full < 0)
+        full = 0;
+    if (full > 99)
+        full = 99;
+    return full;
+}
+
+int unit_popup_moves_frac(int moves_raw)
+{
+    /* Orig same: *(6300) % 3 fraction (drawn with 0x4813 tail when != 0;
+     * x86 IDIV remainder sign follows the dividend, same as C %). */
+    return moves_raw % 3;
+}
+
+int unit_popup_badge_needs_wrap(int x, int panel_right)
+{
+    /* Orig same badge-stack tail: if (local_1a - 0x24 <= local_6):
+     * wrap to (local_1e+2, y+0x20). local_1a = panel right, local_6 = x. */
+    return ((panel_right - 0x24 <= x) ? 1 : 0);
+}
+
 civ_error_t combat_resolve_attack(int atk_strength, int def_strength,
                                   int terrain_bonus, int vet_bonus,
                                   int *odds_out)

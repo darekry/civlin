@@ -434,17 +434,20 @@ int font_fnt_glyph_len(int off, int next_off);
  * Anchors, renamed this pass (Ghidra plates carry the shape):
  *   Font_EnumFamiliesCallback @ 1008:0e12 (was ENUMFUNC: MAKEPROCINSTANCE
  *     target from Font_EnumFamiliesInit @ 1008:0e99; if (dwType & 1):
- *     facename match via FUN_1000_3744(+0x12, 0x11b, mode 3), on match
+ *     facename match via Util_CompareBounded @ 1000:3744 (was FUN_1000_3744;
+ *     +0x12, 0x11b, mode 3), on match
  *     CREATEFONTINDIRECT into DAT_1420_5484[DAT_12d8_0022++] with +0xf
  *     mark; always Font_EnumFamiliesCallbackTail @ 1008:09d3; returns 1).
  *   Font_EnumFamiliesCallbackTail @ 1008:09d3 (was FUN_1008_09d3: empty
- *     far stub, sole caller is the callback above; purpose TBD).
+ *     far stub, sole caller is the callback above; purpose TBD, see
+ *     chain-14 + font_enum_families_callback_tail NOOP).
  *   ADDFONTRESOURCE side: no CALLF xref in the disasm (import
  *     EXTERNAL:0000008c present, REMOVEFONTRESOURCE(0xfe) confirmed in
  *     WinMain_Shutdown @ 1008:0329 against "civfonts.fon" @ 1420:00fe);
  *     the install is the CREATEFONTINDIRECT slot fill above at boot, the
  *     remove is the shutdown tail. Slot array DAT_1420_5484 holds 0x1e
- *     entries (FUN_1008_062f frees 0x1e); counter DAT_12d8_0022.
+ *     entries (Font_FreeSlots @ 1008:062f, was FUN_1008_062f, frees 0x1e);
+ *     counter DAT_12d8_0022.
  * Kiedy install (boot? pierwszy Text_SelectFont?): install = raz przy
  *   bocie w Font_EnumFamiliesInit (sole caller WinMain @ 1008:0000,
  *   przed 5x ResMgr_LoadRsc @ 1190:0000); select = przy każdym rysowaniu
@@ -487,10 +490,148 @@ civ_error_t font_fnt_row_ptr(const uint8_t *data, size_t len,
 
 /* Orig Font_EnumFamiliesCallback @ 1008:0e12 slot-install side ->
  * font_install_slot. STUB: slot 0..0x1d (array DAT_1420_5484, 0x1e per
- * FUN_1008_062f) LIVE-validated, < 0 / >= 0x1e -> RANGE; GDI
- * CREATEFONTINDIRECT/ADDFONTRESOURCE install -> CIV_ERR_UNSUPPORTED
- * (mostek wg projektu powyżej). No globals, no exit(). */
+ * Font_FreeSlots @ 1008:062f, was FUN_1008_062f) LIVE-validated, < 0 /
+ * >= 0x1e -> RANGE; GDI CREATEFONTINDIRECT/ADDFONTRESOURCE install ->
+ * CIV_ERR_UNSUPPORTED (mostek wg projektu powyżej). No globals, no exit().
+ * Slotów realnie 0x1e = 30 (pętla free w Font_FreeSlots); text_font_table
+ * @ 11e8:0d1d używa 25 id -> 20 różnych slotów 0x00..0x14 (aliasy
+ * 2->0x0f, 3->0x11, 7->0x10, 207->0x10, 213->0x10, patrz dialog.h
+ * text_font_table), więc przepełnienie nie występuje w praktyce (21 twarzy
+ * < 30); orig callback nie sprawdza przepełnienia (DAT_12d8_0022++ bez
+ * guarda) — port dokłada RANGE w font_slot_claim poniżej. */
 civ_error_t font_install_slot(int slot);
+
+/* --- Chain 2026-10-16 (14): fontdir strings + FNT face name + slot alloc +
+ * callback-tail NOOP (goals 1-3+5; civ.exe, x86:LE:16:Protected Mode, C17,
+ * no exit, no globals, read-only) ---
+ * Gdzie leżą stringi fontdir w pliku (offset? format Pascal/C?):
+ *   unpacked/civfonts.fon (244224 B, NE; packed civ1win/CIVFONTS.FON to
+ *   EDILZSS2 68797 B — read-only, nigdy nie pisane): e_lfanew 0x250, NE,
+ *   align shift 9, RT_FONTDIR 0x8007 x1 (file 0x600, len 6*512 = 3072 B) +
+ *   RT_FONT 0x8008 x21 (file 0x1400/0x3000/0x4c00/0x6800/0x8400/0xaa00/
+ *   0xc600/0xe200/0x10000/0x12600/0x14200/0x15e00/0x17a00/0x19600/0x1b200/
+ *   0x1cc00/0x1f200/0x21400/0x24a00/0x29000/0x30e00). Fontdir w pliku 0x600:
+ *   u16 nfonts = 21 (0x15), potem 21 wpisów każdy ~0x7d-0x80 B: device
+ *   string "Civilization XXX (c) 1993" NUL + metryki + face string
+ *   "CIVXXX" NUL. Face stringi (C, NUL-terminated, NIE Pascal):
+ *   0x676 CIVBABYLON, 0x6f5 CIVZULU, 0x771 CIVEGYPT, 0x7ee CIVENGLISH,
+ *   0x86d CIVGREEK, 0x8ea CIVRUSSIAN, 0x969 CIVGERMAN, 0x9e7 CIVCHINESE,
+ *   0xa66 CIVFRENCH, 0xae4 CIVROMAN, 0xb61 CIVINDIAN, 0xbdf CIVAMERICAN,
+ *   0xc5f CIVAZTEC, 0xcdc CIVMONGOL, 0xd5a CIVTIMES10, 0xdd9 CIVTIMES12,
+ *   0xe58 CIVTIMES14, 0xed7 CIVTIMES18, 0xf56 CIVTIMES24, 0xfd5 CIVTIMES30,
+ *   0x1054 CIVTIMES36. Te same nazwy siedzą w zasobach FNT na
+ *   base+dfFace (resource-relative, C NUL, np. 0x1400+0x18c4 = 0x2cc4
+ *   CIVBABYLON) — port LIVE poniżej czyta stronę FNT (font_fnt_face_name),
+ *   bo fontdir-entry stride nie jest stały i nie ma go co zgadywać.
+ * Jak mapować twarz->slot (font_slot_for_id LIVE?):
+ *   TAK — text_font_slot_for_id / text_font_height_for_id / text_font_table
+ *   / text_dispatch_font w dialog.h/dialog.c są LIVE (tabela @ 11e8:0d1d:
+ *   25 id 1..8, 200..215, 333 -> slot DAT_12d8_0024 + SI height; patrz
+ *   chain-11/12 tam). Slot = rodzina/rozmiar (0x0f h12, 0x13 h30, 0x12 h24,
+ *   0x11 h18, 0x10 h14 body, 0x00..0x0d h14 serie 200.., 0x14 h36 tytuł),
+ *   nie bold/italic (te w dfItalic/dfWeight FNT). ENUMFONTFAMILIES GDI może
+ *   zwracać w innej kolejności niż RT_FONT + callback filtruje (dwType&1,
+ *   match Util_CompareBounded @ 1000:3744, bound 0x11b, mode 3), więc
+ *   font_face_list zostaje STUB (NULL) aż kolejność ENUM-vs-fontdir
+ *   zostanie potwierdzona dumpem (nie zgadywać indeksów).
+ * Wpisy v3 6-B (czy v3 w ogóle występuje w civfonts.fon?):
+ *   NIE — przeskanowano wszystkie 21 twarzy na pliku unpacked/civfonts.fon
+ *   (read-only, struct <H dfVersion na base +0x00 dla każdego z 21 base
+ *   powyżej): 21/21 to 0x0200 (v2). Brak ani jednego 0x0300, więc gałąź v3
+ *   w font_fnt_char_entry zostaje STUB (UNSUPPORTED) z powodem zamiast
+ *   złego parsowania 6-B wpisów bez próbki (width u16 + offset u32?;
+ *   dokładny layout 6-B TBD gdyby v3 się pojawił).
+ * Sloty TTF (ile? kiedy przepełnienie? związek z DAT_1420_5484 i tabelą?):
+ *   0x1e = 30 slotów (Font_FreeSlots @ 1008:062f kasuje 0x1e). Install =
+ *   raz przy bocie w Font_EnumFamiliesInit @ 1008:0e99 (sole caller WinMain
+ *   @ 1008:0000) via Font_EnumFamiliesCallback @ 1008:0e12
+ *   (DAT_1420_5484[DAT_12d8_0022++] bez guarda — przepełnienie gdyby
+ *   > 30 hitów ENUM; 21 twarzy więc bezpiecznie). Select = przy każdym
+ *   rysowaniu via Text_SelectFont @ 1100:0a33 -> Text_DispatchFontHandler
+ *   @ 11e8:0b40 (slot DAT_12d8_0024 + SI height, ogon 11e8:0cb0 z
+ *   Text_FontPreApply @ 1098:0186 / PostApply @ 1098:0194 — oba puste far
+ *   stub-y jak Tail, NOOP). Port alokacji LIVE poniżej (font_slot_claim:
+ *   RANGE przy >= 0x1e); sam install GDI (CREATEFONTINDIRECT/
+ *   ADDFONTRESOURCE) zostaje STUB (font_install_slot) — mostek to raster
+ *   FNT jako kanoniczny (bez fontconfig, bez FNT->TTF, bez SDL_ttf tutaj).
+ * Tail @ 1008:09d3 (pusty far stub, purpose TBD — po co?):
+ *   16 B (09d3-09e2: MOV AX,DS/NOP/INC BP/PUSH BP/MOV BP,SP/PUSH DS/
+ *   MOV DS,AX/JMP 09df/POP DS/POP BP/DEC BP/RETF, bez ciała; dekompilator
+ *   dopowiada fikcyjny return — ignorować). Wołany ZAWSZE na końcu
+ *   callbacku (return ignorowany, enumeracja leci dalej via return 1);
+ *   brak innych xrefs; rodzeństwo 1008:0d4c/0d5a/0df0/0e02 to puste
+ *   bezimienne stub-y tego samego kształtu. Najpewniej placeholder
+ *   linkera / thunk pod przyszły hook (ten sam codegen co Pre/PostApply
+ *   @ 1098:0186/0194, wołane tylko z ogona dispatch 11e8:0cb0 pod strażą
+ *   DAT_1420_b384). Port: NOOP font_enum_families_callback_tail (jak
+ *   cursor_set / text_font_pre/post_apply).
+ * Spójność font_render_glyph vs font_glyph_to_surface (tight vs surowe):
+ *   render_glyph daje TIGHT repack (stride (w+7)/8, MSB-first, tylko
+ *   pierwsze `width` bitów ważne); font_glyph_to_surface (gfx_indexed.c,
+ *   LIVE) bierze DOKŁADNIE ten tight obraz (stride (w+7)/8) i expanduje
+ *   każdy bit do indeksu 8-bit (0 = black, 1 = white) + 2-entry paleta —
+ *   NIE bierze surowych font_fnt_bits (source stride (dfMaxWidth+7)/8).
+ *   Row locating font_fnt_row_ptr operuje na surowym stride. Spójne co do
+ *   kontraktu (tight jest wejściem surface); metryki GETTEXTEXTENT vs
+ *   font_text_width zgodne co do kształtu (suma advance bez trackingu),
+ *   równość wartości bez dowodu z dumpu (hinting GDI vs surowe bity). */
+#define CIV_FONT_SLOT_MAX 0x1e /* DAT_1420_5484 entries (Font_FreeSlots) */
+
+/* Orig Font_EnumFamiliesInit @ 1008:0e99 FNT face-name side ->
+ * font_fnt_face_name. OS-free 1:1 na pożyczonych bajtach (obraz zasobu FNT
+ * od dfVersion, np. unpacked/civfonts.fon 0x1400.., nigdy nie pisze FON):
+ * nazwa to C NUL-string pod base+dfFace (resource-relative, np.
+ * 0x1400+0x18c4 CIVBABYLON .. 0x30e00+0xaaf8 CIVTIMES36; te same co fontdir
+ * 0x676..0x1054 powyżej). NULL data/info/name_out -> NOENT (name_out
+ * zerowane); len < MIN -> TRUNCATED; dfFace == 0 / >= len -> BAD_DATA
+ * (brak nazwy); brak NUL w [dfFace, len) -> BAD_DATA. Sukces: *name_out =
+ * data + dfFace (pożyczony widok, ważny póki obraz żyje) + CIV_OK. No SDL,
+ * no globals, no exit(), read-only. */
+civ_error_t font_fnt_face_name(const uint8_t *data, size_t len,
+                               const font_fnt_info_t *info,
+                               const char **name_out);
+
+/* Orig Font_EnumFamiliesCallback @ 1008:0e12 alloc half -> font_slot_claim.
+ * 1:1 DAT_1420_5484[DAT_12d8_0022++] z guardem (orig guarda nie ma):
+ * *count to DAT_12d8_0022 (0..0x1d), *slot_out to przyznany slot. NULL
+ * outs -> NOENT (zerowane); *count < 0 / >= CIV_FONT_SLOT_MAX (0x1e) ->
+ * RANGE (przepełnienie: orig by nadpisał za tablicą; tu twardy stop).
+ * Sukces: *slot_out = *count, (*count)++, CIV_OK. No Win16 (GDI install w
+ * font_install_slot STUB), no globals (licznik explicite), no exit(). */
+civ_error_t font_slot_claim(int *count, int *slot_out);
+
+/* Orig: FUN_1008_062f @ 1008:062f -> Font_FreeSlots.
+ * Frees 0x1e HFONT handles in DAT_1420_5484 via DELETEOBJECT (loop SI
+ * 0..0x1d, BX = SI*2, ES = 0x1420, skip zeros: CMP [BX+0x5484],0).
+ * Counterpart to Font_EnumFamiliesCallback @ 1008:0e12 slot fill
+ * (DAT_1420_5484[DAT_12d8_0022++] + CREATEFONTINDIRECT, install raz przy
+ * bocie w Font_EnumFamiliesInit @ 1008:0e99, sole caller WinMain @
+ * 1008:0000; select przy każdym rysowaniu via Text_SelectFont @
+ * 1100:0a33 -> Text_DispatchFontHandler @ 11e8:0b40, slot DAT_12d8_0024
+ * + SI height, ogon 11e8:0cb0 z Text_FontPreApply @ 1098:0186 /
+ * PostApply @ 1098:0194 NOOP). Sole caller: WinMain_Shutdown @ 1008:0329
+ * tail (Font_FreeSlots, potem REMOVEFONTRESOURCE(CIV_FONT_FILE @
+ * 1420:00fe), SENDMESSAGE + Sys_ExitFallback; sąsiedzi w shutdown:
+ * Gfx_FreeAllIconBuffers @ 1008:075b (was FUN_1008_075b: icon-buffer
+ * loops via Gfx_FreeIconBuffer) + Gfx_FreeDriverObjects @ 1008:066d (was
+ * FUN_1008_066d: DELETEOBJECT/GLOBALFREE driver handles), oba sole-caller
+ * shutdown, renamed this pass). Slot array size proof: 0x1e = 30;
+ * text_font_table @ 11e8:0d1d uses 20 distinct slots 0x00..0x14 (25 id,
+ * aliases 2->0x0f, 3->0x11, 7->0x10, 207->0x10, 213->0x10, see dialog.h),
+ * so no overflow in practice (21 faces < 30; orig callback has no guard,
+ * claim guards with RANGE). Linux: GDI DELETEOBJECT has no equivalent
+ * (handle table lives in GDI, like CREATEFONTINDIRECT in font_install_slot
+ * STUB) -> the slot-state half below is LIVE 1:1 on explicit
+ * caller-owned array+count (no Win16, no globals, read-only except the
+ * explicit outs); the GDI free stays caller-side TODO. */
+civ_error_t font_free_slots(int *slots, int n, int *count);
+
+/* Orig Font_EnumFamiliesCallbackTail @ 1008:09d3 ->
+ * font_enum_families_callback_tail. Pusty far stub (16 B DS-gadaniny +
+ * RETF, bez ciała; dekompilator dopowiada return — ignorować). Wołany
+ * zawsze z ogona callbacku; brak innych xrefs. NOOP void (jak cursor_set /
+ * text_font_pre/post_apply); straże/return 1 zostają caller-side. */
+void font_enum_families_callback_tail(void);
 
 /* Orig Menu_InitMainBar @ 1048:0000 string side -> menu_strings.
  * OS-free static const port (const char * array, no Win16 USER handles,
@@ -631,5 +772,149 @@ int config_prefs_sounds_on(const civ_prefs_t *prefs);
  * above delegates to it. No globals, no exit(), read-only. */
 int boot_video_caps_count(void);
 const char *boot_video_caps_describe(int index);
+
+/* --- Chain 2026-10-16 (16): shutdown order + tail (goals 1/5) ---
+ * Orig WinMain_Shutdown @ 1008:0329 (decompiled this pass, sole-caller
+ * order verified in disasm 1008:0329-0599): GETKEYBOARDSTATE/SETKEYBOARDSTATE
+ * save + WINHELP close (if 12b0:0004) + KILLTIMER 12d8:460e + KILLTIMER
+ * 12d8:28fa + FREEPROCINSTANCE 1420:5148 + Ctrl_FreeGdiObjects @ 1058:0d71
+ * (1420:514a) + Config_SavePrefs @ 1008:0bbf (was FUN_1008_0bbf: _LCREAT +
+ * option-struct write; if 12b0:0004) + GfxPort_Close @ 10d0:0172 x5
+ * (12d8:4598/455a/451c/44bc + 1420:9314) + Palette_Dispose @ 1090:0596 (was
+ * FUN_1090_0596: GLOBALFREE 1420:9964 + DELETEOBJECT 1420:9966) +
+ * Mem_DisposePtr @ 1100:060b (map buf b394/b396) + ResMgr_Dispose @
+ * 1190:0c92 + Map_DisposeTileCache @ 1110:0127 (was FUN_1110_0127: 0xfa
+ * DELETEOBJECT loop + 1330:0004/0002) + Gfx_FreeAllIconBuffers @ 1008:075b
+ * (19 grup / 821 slotow, see video.h registry) + Gfx_FreeDriverObjects @
+ * 1008:066d (DELETEOBJECT 1420:547e/547c/179e/17a0/17a2 + GLOBALFREE
+ * 485a/48fa/4964) + GLOBALFREE 1420:b388 + GLOBALFREE 1420:0130 +
+ * Debug_GetEmptyString @ 1148:0020 (was FUN_1148_0020: trace base) +
+ * File_CloseAll @ 1000:1fc6 (was FUN_1000_1fc6: fd 5..4e4c via File_CloseEntry
+ * @ 1000:2098, was FUN_1000_2098) + GETSTOCKOBJECT(0xd)+SELECTOBJECT x3
+ * (12b0:0006/001e/0036 restore) + DESTROYWINDOW (12b0:0004) + Font_FreeSlots
+ * @ 1008:062f (0x1e slots DAT_1420_5484) + REMOVEFONTRESOURCE("civfonts.fon"
+ * @ 1420:00fe, 13 B + NUL; para do ADDFONTRESOURCE w Font_EnumFamiliesInit @
+ * 1008:0e99; install = CREATEFONTINDIRECT slot fill w callbacku @ 1008:0e12
+ * raz przy bocie, remove = ten ogon) + SENDMESSAGE(main,0,0,0x1d) (PUSH
+ * -1/0x1d/0/0: do glownego okna, shutdown broadcast, nie broadcast-all) +
+ * Sys_ExitFallback @ 1000:12d6 (Sys_DoExit(code,0,0) wrapper; exit code =
+ * DAT_1420_54ea, ostatni key/wParam z Sys_WaitForInput @ 1038:0c1d petli).
+ * Kto wola Shutdown: WinMain @ 1008:0000 tail + Main_DispatchQuit @
+ * 1098:062f (was FUN_1098_062f: WM_QUIT 0x12 + g_nQuitFlag == 1 paths) +
+ * MainMenu_WndProc @ 11e0:0221 (Quit) + Game_ProcessGameEnd @ 1088:0b6d
+ * (via Hof_ShowEndDialog @ 1180:0000 family) + Art paths @ 10b8:0000/04df +
+ * Main_PumpMessage @ 1098:02d1 quit (g_nQuitFlag == 1). Spojnosc z
+ * boot_shutdown w boot.c: void org (timers/windows via video/map,
+ * dialogs, audio) zachowuje te sama kolejnosc faz (KILLTIMER->ports->
+ * palette/buffers->font-remove); szczegoly Win16 (KILLTIMER handles,
+ * FREEPROCINSTANCE, DESTROYWINDOW, DELETEOBJECT/GLOBALFREE, SENDMESSAGE,
+ * exit code) nie maja odpowiednika i zostaja caller-side STUB — sama
+ * kolejnosc faz ponizej jest LIVE 1:1 jako tabela (no Win16, no globals).
+ * No exit() (Sys_ExitFallback/Sys_DoExit @ 1000:127f/12d6 stay STUB). */
+int boot_shutdown_step_count(void);
+const char *boot_shutdown_step_name(int index);
+int boot_shutdown_exit_code(int last_key);
+
+/* --- Chain 2026-10-16 (17): prefs file format + quit dispatch (goals 1/5) ---
+ * Orig (civ.exe, x86:LE:16:Protected Mode), decompiled this pass:
+ *   Config_SavePrefs @ 1008:0bbf (was FUN_1008_0bbf: drive guard 0 <
+ *     g_nCurrentDrive @ 1228:0002 via Dos_DriveReady @ 1000:1184 +
+ *     Dos_SetPath @ 1000:116a, then _LCREAT "civ.prf" @ 1420:0113 (8 B
+ *     "civ.prf\\0", second copy @ 1420:010b for _LOPEN) + option-word
+ *     store g_nOptionFlags @ 12d0:0064 -> DAT_1420_17ca + 3x GLOBALLOCK
+ *     copies of 8 B from driver handles +0x14 (DAT_1420_48fa ->
+ *     DAT_1420_17ba, DAT_1420_485a -> DAT_1420_17b2, DAT_1420_4964 ->
+ *     DAT_1420_17c2, each via Util_MemCopyFar @ 1000:137f CX=8) +
+ *     _LLSEEK 0,0 + _LWRITE 0x1a from DAT_1420_17b2 + _LCLOSE).
+ *   Config_LoadPrefs @ 1008:0b4a (was FUN_1008_0b4a: defaults
+ *     DAT_1420_17ca -> g_nOptionFlags, then _LOPEN "civ.prf" @ 1420:010b
+ *     + _LREAD 0x1a into DAT_1420_17b2 + _LCLOSE + flags 17ca -> 12d0:64;
+ *     missing file keeps the defaults).
+ * Format pliku prefs (civ.prf, 0x1a = 26 B od DAT_1420_17b2):
+ *   [0x00..0x07] driver chunk A (8 B z handle DAT_1420_485a+0x14),
+ *   [0x08..0x0f] driver chunk B (8 B z DAT_1420_48fa+0x14),
+ *   [0x10..0x17] driver chunk C (8 B z DAT_1420_4964+0x14),
+ *   [0x18..0x19] option_flags word (DAT_1420_17ca = g_nOptionFlags @
+ *   12d0:0064, bit 0x10 = sounds on, zob. config_prefs_defaults).
+ *   Chunki A/B/C to nieprzezroczyste bajty obiektow drivera (te same
+ *   handle GLOBALFREE w Gfx_FreeDriverObjects @ 1008:066d + WdwSmMap_Open
+ *   @ 1210:025b + Menu_CheckCityNameId @ 1008:0dc9 xrefs; MM code? nie:
+ *   to GDI/driver state, nie dzwiek — dzwiek to tylko bit 0x10 flag, por.
+ *   Sound_PlayId @ 1150:00c9 gate z DAT_1228:0104 w audio.h; video?
+ *   czesciowo: te same handle czyta tez WdwMap_Open @ 1208:0af1, wiec
+ *   sciezki plikowe w chunkach TBD z dumpu, nigdy nie zgadywane).
+ *   Zwiazek z config_prefs_defaults/sounds_on (LIVE): defaults daja samo
+ *   slowo flag (sounds on), pack/unpack ponizej daja caly 26-B obraz.
+ * Port: layout pack/unpack + drive-guard LIVE 1:1 na jawnych buforach
+ * (no Win16, no globals, read-only oprocz out); _LCREAT/_LWRITE/_LOPEN/
+ * _LREAD/GLOBALLOCK mostek w config_load/save_prefs zostaje STUB.
+ *   Main_DispatchQuit @ 1098:062f (was FUN_1098_062f: PEEKMESSAGE +
+ *     TRANSLATEACCELERATOR (12b0:0004) + WM_QUIT 0x12 -> WinMain_Shutdown
+ *     @ 1008:0329 + TRANSLATEMESSAGE/DISPATCHMESSAGE + Menu_Dispatch-
+ *     Command @ 1048:01cd (DAT_1420_54c6/54c8, 0x44-entry table) +
+ *     g_nQuitFlag @ 12d8:24ee == 1 -> WinMain_Shutdown; sole caller
+ *     Main_DispatchQuitEntry @ 1098:061a).
+ * Sciezki quit: menu Quit (MainMenu_WndProc @ 11e0:0221) + X okna / ESC
+ * (WM_QUIT 0x12) + Game_ProcessGameEnd @ 1088:0b6d (HoF family) + Art
+ * sciezki @ 10b8:0000/04df + Main_PumpMessage @ 1098:02d1 (g_nQuitFlag).
+ * Zwiazek z Main_DrainMessages @ 11e8:02fb (drain loop az Main_PumpMessage
+ * @ 1098:02d1 == 0, potem 12b0:004c select) i boot_shutdown (faza
+ * save-prefs w tabeli: Config_SavePrefs tylko gdy 12b0:0004).
+ * Port: predykaty flagi/dispatch LIVE 1:1 (no Win16, no globals); pompa
+ * MSG (PEEKMESSAGE/TRANSLATE/DISPATCH) zostaje STUB w main_pump_message
+ * (zob. sys.h). No exit(). */
+
+/* Orig civ.prf image @ 1420:17b2 (Config_SavePrefs @ 1008:0bbf _LWRITE). */
+#define CIV_PREFS_LEN 0x1a
+#define CIV_PREFS_CHUNK_LEN 8
+#define CIV_PREFS_NCHUNKS 3
+#define CIV_PREFS_FLAGS_OFF 24
+
+/* Orig Config_SavePrefs @ 1008:0bbf image side -> config_prefs_pack.
+ * 1:1 sklada 26-B obraz: c0 -> [0..8), c1 -> [8..16), c2 -> [16..24),
+ * flags LE -> [24..26). NULL c0/c1/c2/out -> NOENT (out zerowane gdy
+ * cap > 0); cap < CIV_PREFS_LEN -> TRUNCATED (out nietkniete). No Win16,
+ * no globals, no exit(), read-only oprocz out. */
+civ_error_t config_prefs_pack(const uint8_t *c0, const uint8_t *c1,
+                              const uint8_t *c2, uint16_t option_flags,
+                              uint8_t *out, size_t cap);
+
+/* Orig Config_LoadPrefs @ 1008:0b4a image side -> config_prefs_unpack.
+ * 1:1 rozbiera 26-B obraz (img musi miec >= CIV_PREFS_LEN). NULL img ->
+ * NOENT (outs zerowane); len < CIV_PREFS_LEN -> TRUNCATED (outs
+ * nietkniete); NULL c0/c1/c2/flags_out -> NOENT (reszta nietknieta).
+ * No Win16, no globals, no exit(), read-only oprocz outs. */
+civ_error_t config_prefs_unpack(const uint8_t *img, size_t len,
+                                uint8_t *c0, uint8_t *c1, uint8_t *c2,
+                                uint16_t *flags_out);
+
+/* Orig Config_SavePrefs @ 1008:0bbf guard (0 < g_nCurrentDrive @
+ * 1228:0002) -> config_prefs_needs_path_setup. 1:1: 1 gdy drive > 0
+ * (Dos_DriveReady @ 1000:1184 + Dos_SetPath @ 1000:116a), 0 wpp (na
+ * Linuksie drive zawsze 0, zob. sys.h). No globals. */
+int config_prefs_needs_path_setup(int drive);
+
+/* Orig Main_DispatchQuit @ 1098:062f message side. */
+#define CIV_WM_QUIT 0x12
+
+/* Orig same (DAT_1420_54e8 == 0x12) -> main_quit_msg_is_quit.
+ * 1:1: 1 gdy msg == CIV_WM_QUIT, 0 wpp. No globals. */
+int main_quit_msg_is_quit(int msg);
+
+/* Orig same (g_nQuitFlag @ 12d8:24ee == 1) -> main_quit_flag_requests_
+ * shutdown. 1:1: 1 gdy flag == 1 (wartosci jak w game.h: 0 run, 1 quit,
+ * -1 defeat, 2 ?menu), 0 wpp. No globals. */
+int main_quit_flag_requests_shutdown(int quit_flag);
+
+/* Orig same obie sciezki -> main_dispatch_quit_requests_shutdown. 1:1:
+ * shutdown gdy (msg == 0x12) || (has_cmd != 0 && quit_flag == 1) (druga
+ * galaz to Menu_DispatchCommand @ 1048:01cd + g_nQuitFlag == 1). No
+ * globals. */
+int main_dispatch_quit_requests_shutdown(int msg, int has_cmd,
+                                         int quit_flag);
+
+/* Orig Main_DrainMessages @ 11e8:02fb loop (Main_PumpMessage @ 1098:02d1
+ * az 0) -> main_drain_should_continue. 1:1: pumped != 0. No globals. */
+int main_drain_should_continue(int pumped);
 
 #endif /* CIVLIN_BOOT_H */

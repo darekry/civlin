@@ -1050,3 +1050,120 @@ int map_city_label_res_id(int owner)
         return -1;
     return owner * 0x20 + 0x4da;
 }
+
+/* --- Chain 2026-10-16 (17): tile icon cache (goal 3) ---
+ * See map.h block. OS-free 1:1 (no Win16, no globals, no exit()). */
+
+int map_tile_cache_capacity(void)
+{
+    /* Orig Map_DisposeTileCache @ 1110:0127 loop + Map_AllocTileCacheEntry
+     * @ 1110:01a3 append bound: 0xfa = 250 slotow. */
+    return CIV_TILE_CACHE_N;
+}
+
+int map_tile_cache_slot_len(void)
+{
+    /* Orig 12-B stride (undefined2 i*6 / undefined4 i*3 w disasm). */
+    return CIV_TILE_CACHE_SLOT_LEN;
+}
+
+int map_tile_cache_match(const map_tile_slot_t *slot, int32_t key, int sub)
+{
+    /* Orig Map_FindTileCache @ 1110:030c: (*(long *)(slot+1) == param_1)
+     * && ((char)slot[5] == param_2) (2-B int: +2 B key, +10 B sub). */
+    if (!slot)
+        return 0;
+    return (slot->key == key && slot->sub == sub) ? 1 : 0;
+}
+
+int map_tile_cache_is_empty(const map_tile_slot_t *slot)
+{
+    /* Orig Map_DisposeTileCache @ 1110:0127 + Alloc victim: DELETEOBJECT
+     * tylko gdy handle != 0 (puste skipowane). */
+    if (!slot)
+        return 1;
+    return (slot->handle == 0) ? 1 : 0;
+}
+
+int map_tile_cache_find(const map_tile_slot_t *slots, int n, int used,
+                        int32_t key, int sub)
+{
+    /* Orig Map_FindTileCache @ 1110:030c scan 0..DAT_1330_0002-1 (hit ->
+     * lru refresh + 2e40++, miss -> 2e44++ + 0; liczniki caller-side). */
+    int lim;
+    int i;
+
+    if (!slots || n <= 0 || used <= 0)
+        return -1;
+    lim = (used < n) ? used : n;
+    for (i = 0; i < lim; i++) {
+        if (slots[i].key == key && slots[i].sub == sub)
+            return i;
+    }
+    return -1;
+}
+
+int map_tile_cache_victim(const map_tile_slot_t *slots, int n, int used)
+{
+    /* Orig Map_AllocTileCacheEntry @ 1110:01a3: used < 0xfa -> slot[used]
+     * (append + 2e42++), else min-lru victim (init 0x7fffffff; DELETEOBJECT
+     * starego handle caller-side). */
+    int lim;
+    int i;
+    int best;
+    int32_t best_lru;
+
+    if (!slots || n <= 0 || used < 0)
+        return -1;
+    if (used < n && used < CIV_TILE_CACHE_N)
+        return used;
+    lim = (used < n) ? used : n;
+    if (lim <= 0)
+        return -1;
+    best = 0;
+    best_lru = slots[0].lru;
+    for (i = 1; i < lim; i++) {
+        if (slots[i].lru < best_lru) {
+            best_lru = slots[i].lru;
+            best = i;
+        }
+    }
+    return best;
+}
+
+civ_error_t map_tile_cache_dispose(map_tile_slot_t *slots, int n,
+                                   int *used_io, int *tick_io,
+                                   int *total_io)
+{
+    /* Orig Map_DisposeTileCache @ 1110:0127: 2e42 = 0 + per-slot handle =
+     * 0 + key (a2ec) = 0 + lru (a2f0) = 0 + 1330:0004 = 0 + 1330:0002 = 0
+     * (DELETEOBJECT per-slot caller-side, jak font_free_slots). */
+    int i;
+
+    if (!slots) {
+        if (n > 0)
+            return CIV_ERR_NOENT;
+        n = 0;
+    }
+    if (n < 0 || n > CIV_TILE_CACHE_N)
+        return CIV_ERR_RANGE;
+    for (i = 0; i < n; i++) {
+        slots[i].handle = 0;
+        slots[i].key = 0;
+        slots[i].lru = 0;
+        slots[i].sub = 0;
+    }
+    if (used_io)
+        *used_io = 0;
+    if (tick_io)
+        *tick_io = 0;
+    if (total_io)
+        *total_io = 0;
+    return CIV_OK;
+}
+
+int map_tile_cache_next_tick(int tick)
+{
+    /* Orig DAT_1330_0004++ w Alloc @ 1110:01a3 i Find-hit @ 1110:030c. */
+    return tick + 1;
+}

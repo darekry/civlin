@@ -248,6 +248,24 @@ void sys_yield(void);
  * queue was empty. Distinct from sys_yield (Anim pump @ 10b0:0000) and
  * sys_drain_input (state clear + queue drain, see game.h). */
 int sys_pump_messages(void);
+/* Orig: FUN_1038_0c1d @ 1038:0c1d -> Sys_WaitForInput.
+ * Modal PEEKMESSAGE wait (no timeout, click-or-key): Cursor_Set(0x81) +
+ * sys_drain_input @ 11f0:4ea0 prologue, then loop PEEKMESSAGE: WM_CHAR
+ * 0x102 -> return DAT_1420_54ea (key); WM_LBUTTONDOWN 0x201 inside
+ * DAT_1420_9948 -> DAT_1328_0012 = 1 + DAT_1328_0010/000e coords
+ * (x*10>>4) + return 1; else TRANSLATEMESSAGE + DISPATCHMESSAGE.
+ * Caller-side modal for Unit_ShowInfoPopup @ 11f0:468c (paint there is
+ * non-modal; wait happens here) + 20 callers: Census_ShowCityProduction
+ * @ 1018:0be0 / Census_ShowCityStatus @ 1018:208f / Census_ShowUnitList
+ * @ 1018:067b / City_CloseCensusView @ 1018:0380 / City_ShowCensusReport
+ * @ 1018:1d5b / FUN_1060_01c1 / FUN_1070_2015 / FUN_1138_0000 /
+ * FUN_1158_0000 / FUN_1170_21b3 / FUN_1178_0022 / FUN_1188_0b3e /
+ * FUN_11b0_0000 / FUN_11d8_0000 / HoF_Show @ 1080:0119 /
+ * HoF_VictoryCeremony @ 1080:06ff / NewGame_Wizard @ 10e8:0000 /
+ * Pic_PlayShared @ 1030:0000 / Replay @ 1180:0000/02d3/152f. SDL event
+ * bridge TBD (SDL_WaitEvent + mouse/key map); stub CIV_ERR_UNSUPPORTED.
+ * No globals, no exit(). */
+civ_error_t sys_wait_for_input(void);
 /* Orig: Main_PumpMessage @ 1098:02d1 -> main_pump_message (STUB).
  * Win16 MSG dispatcher behind Main_DrainMessages @ 11e8:02fb (drains
  * until 0): PEEKMESSAGE @ 1608:0134 (0x108/0x100) -> TRANSLATEACCELERATOR
@@ -747,5 +765,167 @@ civ_error_t mem_realloc_handle(int *handle);
  * consumed/status -> 0.0 without writing outs. Stays PARTIAL. */
 double float_scan_float(float_getchar_fn get, float_ungetchar_fn unget,
                         void *ctx, int nmax, int *consumed, int *status);
+
+/* --- Chain 2026-10-16 (16): modal-wait discriminators @ 1038:0c1d (goal 2) ---
+ * Orig Sys_WaitForInput @ 1038:0c1d (decompiled this pass): Cursor_Set(0x81)
+ * + sys_drain_input @ 11f0:4ea0 prologue, then PEEKMESSAGE loop: WM_CHAR
+ * 0x102 -> return DAT_1420_54ea (key); WM_LBUTTONDOWN 0x201 inside
+ * DAT_1420_9948 -> DAT_1328_0012 = 1 + DAT_1328_0010/000e coords
+ * (LOWORD*10>>4 / HIWORD*10>>4) + return 1; else TRANSLATEMESSAGE +
+ * DISPATCHMESSAGE. 21 callerow: Census_ShowCityProduction @ 1018:0be0 /
+ * Census_ShowCityStatus @ 1018:208f / Census_ShowUnitList @ 1018:067b /
+ * City_CloseCensusView @ 1018:0380 / City_ShowCensusReport @ 1018:1d5b /
+ * FUN_1060_01c1 / FUN_1070_2015 / FUN_1138_0000 / FUN_1158_0000 /
+ * FUN_1170_21b3 / FUN_1178_0022 / FUN_1188_0b3e / FUN_11b0_0000 /
+ * FUN_11d8_0000 / HoF_Show @ 1080:0119 / HoF_VictoryCeremony @ 1080:06ff /
+ * NewGame_Wizard @ 10e8:0000 / Pic_PlayShared @ 1030:0000 /
+ * Replay_OpenOrPlay @ 1180:0000 / Replay_PlayLog @ 1180:02d3 /
+ * Replay_ShowConqueror @ 1180:152f (census/HoF/wizard/Pic/Replay + 15 innych
+ * UI modali z listy powyzej).
+ * Decyzja: caly modal zostaje STUB (sys_wait_for_input CIV_ERR_UNSUPPORTED).
+ * Petla SDL_WaitEvent jako PARTIAL odrzucona: modal potrzebuje okna +
+ * mapowania klawiszy (WM_CHAR 0x102 -> DAT_1420_54ea) + hit-testu
+ * (DAT_1420_9948) + skali coords + drainu (11f0:4ea0) + pomp anim/timera;
+ * pojedynczy SDL_WaitEvent zablokowalby pompe (TIMERPROC @ 1008:0d68 /
+ * Sys_Yield @ 1098:0157) i sklamal gotowosc. Dyskryminatory ponizej sa LIVE
+ * 1:1 (no Win16, no globals); mostek SDL_WaitEvent + mouse/key map TBD. */
+int sys_wait_msg_is_key(int msg);
+int sys_wait_msg_is_lbutton(int msg);
+int sys_wait_scale_coord(int v);
+int sys_wait_cursor_id(void);
+
+/* --- Chain 2026-10-16 (17): file-table geometry (goal 4) ---
+ * Orig (civ.exe, x86:LE:16:Protected Mode), decompiled this pass:
+ *   File_CloseAll @ 1000:1fc6 (uVar3 = 5; local_6 = 0x4d20; petla az
+ *     uVar3 < DAT_1420_4e4c: local_6 += 0x14, uVar3++: gdy
+ *     -1 < *(char *)(local_6 + 4) to File_CloseEntry @ 1000:2098
+ *     (local_6); sukcesy liczone, pierwszy blad -> -9999, na koncu
+ *     < 0 -> -1; sole caller WinMain_Shutdown @ 1008:0329, faza
+ *     "close-files").
+ *   File_CloseEntry @ 1000:2098 (self-check ((int *)p)[9] == p (+18 B,
+ *     2-B int) + [3] (+6, dirty) + [1] (+2, flags) + [2] (+4, fd byte):
+ *     *p < 0 -> File_Flush @ 1000:2152 (fail -> 0xffff); flags & 4 ->
+ *     FUN_1000_4239([4],[5]) (thin wrapper nad FUN_1000_4a52 z
+ *     DAT_1420_0027); fd byte >= 0 (signed char) ->
+ *     File_CloseWrapper @ 1000:1f7c (0x4e4e-table clear + Dos_Close @
+ *     1000:1fa6 INT 21h AH=0x3e, OOR -> Dos_MapError(6)); zerowanie
+ *     zerowanie [1] / [3] / body + *(p+2) = 0xff (fd = -1 empty); [8] (+16, tmp path)
+ *     != 0 -> File_BuildTempPath @ 1000:1648 ([8],0,0,0,0) + Dos_Unlink
+ *     @ 1000:19a6 (INT 21h AH=0x41)).
+ * Tablica plikow: DGROUP offset 0x4d20, stride 0x14 = 20 B na wpis, fd
+ *   byte na +4 (signed char, -1 = pusty slot), DAT_1420_4e4c = high-water
+ *   (ile slotow skanowac), start od fd 5 (0..4 zarezerwowane: stdin/out/
+ *   err/aux/prn). Ile slotow: do DAT_1420_4e4c (nie stale N — high-water
+ *   rosnie z File_Open @ 1000:2ad9; co to 4e4c: wlasnie ten high-water,
+ *   nie adres ani rozmiar w bajtach).
+ * Tmp-unlink (ktore pliki tymczasowe): [8] sciezka tmp budowana przez
+ *   File_BuildTempPath (FUN_1000_1e9c + 15fc + Util_StrAppend @ 1000:363e)
+ *   i kasowana Dos_Unlink — pliki O_TEMPORARY / save-temp (File_Open @
+ *   1000:2ad9 flaga tmp) oraz cache konwersji artwork (Art_SaveConverted-
+ *   Frame @ 10b8:0c1c _LCREAT/_HWRITE + Art_MaybeConvertArtwork @ 10b8:0000
+ *   loop; save_pack/save_unpack rodzina tez przez ten slot).
+ * Zwiazek z File_Open/ReadBuffered/WriteBuffered (LIVE/STUB w sys.c):
+ *   surowa warstwa DOS (Dos_Open/Read/Write/Seek/Unlink/Close @ 1000:2ac7/
+ *   1750/3fc4/161c/19a6/1fa6 INT 21h + Dos_MapError @ 1000:151a) zostaje
+ *   STUB CIV_ERR_UNSUPPORTED (zob. dos_* w sys.h); zywa sciezka omija ja
+ *   calkowicie: save_file_open/read/write/close @ 1140:0139/019d/0245/037c
+ *   to POSIX open/read/write/lseek/close (zob. save.h, halloffame.h),
+ *   streaming RSC to file_read_chunk (fread twin File_ReadChunk @
+ *   1000:272a, zob. rsc_loader.h) + file_write_chunk (fwrite twin).
+ * Port tablicy/metryk: geometria + predykat open + slot-rel LIVE 1:1 na
+ *   jawnych parametrach (no DOS, no globals, read-only); flush/close/
+ *   unlink ogony zostaja STUB z TODO Orig (file_close_all/entry nie maja
+ *   nowych symboli — metryki wystarcza do testu). No exit(). */
+
+/* Orig File_CloseAll @ 1000:1fc6 table shape. */
+#define CIV_FILE_TABLE_FIRST_FD 5
+#define CIV_FILE_TABLE_ENTRY_LEN 0x14
+#define CIV_FILE_TABLE_FD_OFF 4
+
+/* Orig same start (uVar3 = 5) -> first_fd. */
+int file_table_first_fd(void);
+/* Orig same stride (local_6 += 0x14) -> entry_len. */
+int file_table_entry_len(void);
+/* Orig same fd-word (local_6 + 4) -> fd_off. */
+int file_table_fd_off(void);
+/* Orig File_CloseEntry @ 1000:2098 open gate (-1 < *(char *)(p + 4)):
+ * file_entry_is_open. 1:1: 1 gdy fd_byte >= 0 (signed char slot), 0 wpp
+ * (-1/0xff = pusty). No globals. */
+int file_entry_is_open(int fd_byte);
+/* Orig File_CloseAll @ 1000:1fc6 slot (0x4d20 + (fd-5)*0x14) -> slot_rel.
+ * 1:1 wzgledny offset slotu (bez bazy DGROUP): (fd-5)*0x14. -1 gdy
+ * fd < 5. No globals. */
+int file_table_slot_rel(int fd);
+
+/* --- Chain 2026-10-16 (18): drive/path guards + tmp format (goals 1+3) ---
+ * Orig (civ.exe, x86:LE:16:Protected Mode), decompiled this pass:
+ *   Dos_SetPath @ 1000:116a (MOV AH,0x3b / LDS DX,[BP+6] / INT 0x21;
+ *     CF -> Dos_MapError @ 1000:151a else 0; single far-path param).
+ *   Dos_DriveReady @ 1000:1184 (Dos_SelectDrive @ 1000:1266(drive,
+ *     &tmp) + Dos_GetCurrentDrive @ 1000:1252(&tmp); tmp == drive ?
+ *     0 : 0xffff).
+ *   Dos_SelectDrive @ 1000:1266 (MOV DL,drive / DEC DL / MOV AH,0x0e /
+ *     INT 0x21; AL = drive count -> out).
+ *   Dos_GetFileAttr @ 1000:1210 (MOV AH,0x43 / XOR AL,AL / LDS DX,path /
+ *     INT 0x21; CF -> FUN_1000_1553 else CX attrs -> out).
+ *   File_BuildTempPath @ 1000:1648 (near __stdcall: NULL dir ->
+ *     DS:0x4ed6 "TMP" @ 1420:4ed6; NULL prefix/dest -> DS:0xB498;
+ *     FUN_1000_1e9c copy + FUN_1000_15fc decimal (Util_FormatInt @
+ *     1000:157a) + Util_StrAppend @ 1000:363e ".$$$" @ 1420:4eda).
+ *   File_BuildUniqueTempPath @ 1000:16a5 (counter += 1 (slot taken) or
+ *     +2 (slot free) + File_BuildTempPath + Dos_GetFileAttr probe until
+ *     missing; sole callers: itself-loop + File_CloseEntry @ 1000:2098
+ *     tmp-unlink tail).
+ * Guard sites (all four share the shape `0 < g_nCurrentDrive @
+ *   1228:0002 -> Dos_DriveReady; ready==0 -> Dos_SetPath(1228:0004)`):
+ *   Config_SavePrefs @ 1008:0bbf (PUSH 0x1228 / PUSH 0x4 = far ptr
+ *     1228:0004 = g_szBasePath; SetPath rc != 0 -> return, else _LCREAT
+ *     "civ.prf" @ 1420:0113), Sound_PlayId @ 1150:00c9 (rc ignored,
+ *     then SNDPLAYSOUND STOP or Sound_MapIdToWav + Sound_PlayFile),
+ *   Art_LoadDiskFile @ 10b8:0aa8, Art_SaveConvertedFrame @ 10b8:0c1c.
+ * Jakie drivery/sciezki: dysk z gra (g_nCurrentDrive, WinMain prolog via
+ *   Sys_GetCurrentDrive @ 1000:11bb) + CWD/base (g_szBasePath @ 1228:0004
+ *   via Sys_BuildCurrentDirPath @ 1000:2826 = sys_init_paths(), LIVE).
+ *   Na Linuksie drive = 0, wiec guard pomija chdir (cwd wlasciciela).
+ * Tmp-unlink (ktore pliki): slot [8] != 0 (O_TEMPORARY-style: save-temp
+ *   via File_Open @ 1000:2ad9 + Art_SaveConvertedFrame @ 10b8:0c1c disk
+ *   cache); File_CloseEntry rebuilduje (num,0,0,0,0) i Dos_Unlink @
+ *   1000:19a6 (INT 21h AH=0x41). Format: <dir>\<prefix><num>.$$$,
+ *   dir z "TMP", zadnej losowosci (inkrement w UniqueTempPath).
+ * Port: guardy LIVE 1:1 na jawnych parametrach (no DOS, no globals);
+ *   surowe INT 21h (chdir AH=3Bh, select AH=0Eh) STUB; format tmp LIVE
+ *   (dir NULL -> getenv("TMP") -> "."; separator '/' zamiast '\\').
+ *   High-level dos_drive_ready/dos_set_path juz LIVE w boot.c (no-op).
+ * No exit(). */
+
+/* Orig Config_SavePrefs @ 1008:0bbf JLE gate (g_nCurrentDrive @
+ * 1228:0002): 1 gdy drive > 0 (trzeba Dos_DriveReady + Dos_SetPath),
+ * 0 wpp (bezposrednio do _LCREAT). */
+int sys_path_guard_should_set(int drive);
+/* Orig same: Dos_DriveReady @ 1000:1184 rc gate (OR SI,SI / JNZ skip):
+ * 1 gdy rc == 0 (ready). */
+int sys_drive_ready_ok(int rc);
+/* Orig Config_SavePrefs @ 1008:0bbf: Dos_SetPath @ 1000:116a rc gate
+ * (OR SI,SI / JZ continue / JMP abort): 1 gdy rc != 0 (przerwac zapis).
+ * Sound_PlayId @ 1150:00c9 ignoruje rc (fire-and-forget). */
+int sys_path_guard_abort(int rc);
+/* Orig FUN_1000_116a @ 1000:116a -> dos_chdir_raw (Dos_SetPath INT 21h
+ * AH=0x3b). STUB CIV_ERR_UNSUPPORTED; NULL -> NOENT. Linux twin:
+ * dos_set_path w boot.c (CIV_OK no-op). */
+civ_error_t dos_chdir_raw(const char *path);
+/* Orig FUN_1000_1266 @ 1000:1266 -> dos_select_drive (INT 21h AH=0x0e,
+ * DL = drive - 1; AL = drive count -> *out_total). STUB
+ * CIV_ERR_UNSUPPORTED (*out_total = 0 wczesniej). */
+civ_error_t dos_select_drive(int drive, unsigned *out_total);
+/* Orig File_BuildTempPath @ 1000:1648: DS:0x4ed6 @ 1420:4ed6 ("TMP",
+ * env var name) i DS:0x4eda @ 1420:4eda (".$$$"). Read-only stringi. */
+const char *file_temp_env_name(void);
+const char *file_temp_suffix(void);
+/* Orig File_BuildTempPath @ 1000:1648 -> file_build_temp_path (LIVE).
+ * "<dir>/<prefix><num>.$$$" (orig '\\'); dir NULL/puste ->
+ * getenv("TMP") -> "."; prefix NULL -> "". Zwraca znaki bez NUL,
+ * -1 przy NULL dst / cap == 0 / obcieciu. */
+int file_build_temp_path(char *dst, size_t cap, const char *dir,
+                         const char *prefix, unsigned num);
 
 #endif /* CIVLIN_SYS_H */

@@ -2012,3 +2012,16 @@ civ_error_t text_fit_pascal_ellipsis_scaled(char *buf, size_t cap, int w,
     return text_fit_pascal_ellipsis(buf, cap, text_fit_scaled_width(w),
                                     measure, ctx);
 }
+
+/* --- Chain 2026-10-16 (14): popup ellipsis limit (goal 4). --- */
+
+int unit_popup_text_limit(int panel_left, int panel_right)
+{
+    /* Orig Unit_ShowInfoPopup @ 11f0:468c: iVar4 = (local_1a - local_1e) +
+     * -8 (status-panel width - 8; WdwStatus_CalcPanelRect +
+     * Status_DrawPanelFrame tail). Limit dla obu linii Fit w popupie
+     * (unit-name @ 11f0:4808 + city-name via City_AppendName @ 11f0:4a76;
+     * scaled pola census/Pic_PlayShared używają text_fit_scaled_width).
+     * OS-free 1:1, bez clamp (ujemny max wymusza "." w pętli Fit). */
+    return (panel_right - panel_left) - 8;
+}

@@ -4,6 +4,7 @@
 
 #include <math.h>
 #include <stdarg.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -366,6 +367,16 @@ int sys_pump_messages(void)
      * dispatch via SDL_PollEvent TBD with the modal-wait rewrite). */
     SDL_PumpEvents();
     return 0;
+}
+
+civ_error_t sys_wait_for_input(void)
+{
+    /* TODO: Orig FUN_1038_0c1d @ 1038:0c1d -> Sys_WaitForInput (see sys.h:
+     * Cursor_Set(0x81) + sys_drain_input @ 11f0:4ea0, then PEEKMESSAGE
+     * loop: 0x102 -> key, 0x201 click -> 1 + coords, else pump). SDL
+     * SDL_WaitEvent key/mouse bridge TBD (modal for Unit_ShowInfoPopup
+     * @ 11f0:468c paint + 20 census/HoF/wizard/Pic/Replay callers). */
+    return CIV_ERR_UNSUPPORTED;
 }
 
 civ_error_t main_pump_message(void)
@@ -1622,4 +1633,177 @@ civ_error_t mem_realloc_handle(int *handle)
     if (!handle)
         return CIV_ERR_NOENT;
     return CIV_ERR_UNSUPPORTED;
+}
+
+/* --- Chain 2026-10-16 (16): modal-wait discriminators @ 1038:0c1d ---
+ * See sys.h decision (modal stays STUB; SDL_WaitEvent TBD). OS-free 1:1. */
+
+int sys_wait_msg_is_key(int msg)
+{
+    /* Orig Sys_WaitForInput @ 1038:0c1d: DAT_1420_54e8 == 0x102 (WM_CHAR). */
+    return (msg == 0x102) ? 1 : 0;
+}
+
+int sys_wait_msg_is_lbutton(int msg)
+{
+    /* Orig same: DAT_1420_54e8 == 0x201 (WM_LBUTTONDOWN). */
+    return (msg == 0x201) ? 1 : 0;
+}
+
+int sys_wait_scale_coord(int v)
+{
+    /* Orig same click branch: (uint)((int)v * 10) >> 4 (LOWORD/HIWORD
+     * of DAT_1420_54ec -> DAT_1328_0010/000e). Guard for v < 0 is a
+     * Linux-side addition (orig did unsigned wrap on a pixel coord). */
+    if (v < 0)
+        return -1;
+    return (v * 10) >> 4;
+}
+
+int sys_wait_cursor_id(void)
+{
+    /* Orig same prologue: Cursor_Set(0x81) before the drain + loop. */
+    return 0x81;
+}
+
+/* --- Chain 2026-10-16 (17): file-table geometry (goal 4) ---
+ * See sys.h block. OS-free 1:1 (no DOS, no globals, no exit()). */
+
+int file_table_first_fd(void)
+{
+    /* Orig File_CloseAll @ 1000:1fc6: uVar3 = 5 (0..4 to stdin/out/err/
+     * aux/prn, skan od 5 do DAT_1420_4e4c). */
+    return CIV_FILE_TABLE_FIRST_FD;
+}
+
+int file_table_entry_len(void)
+{
+    /* Orig same: local_6 += 0x14 (20 B na wpis od 0x4d20 DGROUP). */
+    return CIV_FILE_TABLE_ENTRY_LEN;
+}
+
+int file_table_fd_off(void)
+{
+    /* Orig same: *(char *)(local_6 + 4) to fd byte (signed char). */
+    return CIV_FILE_TABLE_FD_OFF;
+}
+
+int file_entry_is_open(int fd_byte)
+{
+    /* Orig File_CloseEntry @ 1000:2098 gate: -1 < *(char *)((int *)p)[2]
+     * (fd byte na +4; -1/0xff = pusty slot) -> File_CloseWrapper @
+     * 1000:1f7c (0x4e4e-table clear + Dos_Close @ 1000:1fa6). */
+    return (fd_byte >= 0) ? 1 : 0;
+}
+
+int file_table_slot_rel(int fd)
+{
+    /* Orig File_CloseAll @ 1000:1fc6 slot: 0x4d20 + (fd-5)*0x14 (wzgledny
+     * offset, bez bazy DGROUP; DAT_1420_4e4c to high-water slotow). */
+    if (fd < CIV_FILE_TABLE_FIRST_FD)
+        return -1;
+    return (fd - CIV_FILE_TABLE_FIRST_FD) * CIV_FILE_TABLE_ENTRY_LEN;
+}
+
+/* --- Chain 2026-10-16 (18): drive/path guards + tmp format (goals 1+3) ---
+ * See sys.h block. Guards LIVE 1:1 on explicit params (no DOS, no globals);
+ * raw INT 21h bodies stay STUB with TODO Orig. */
+
+int sys_path_guard_should_set(int drive)
+{
+    /* Orig Config_SavePrefs @ 1008:0bbf: CMP word ptr ES:[0x2],0x0 /
+     * JLE skip (g_nCurrentDrive @ 1228:0002); same JLE shape in
+     * Sound_PlayId @ 1150:00c9 (0 < g_nCurrentDrive), Art_LoadDiskFile @
+     * 10b8:0aa8, Art_SaveConvertedFrame @ 10b8:0c1c. Linux drive is
+     * always 0 (dos_get_current_drive), so the guard skips the chdir. */
+    return (drive > 0) ? 1 : 0;
+}
+
+int sys_drive_ready_ok(int rc)
+{
+    /* Orig same sites: OR SI,SI / JNZ skip (Dos_DriveReady @ 1000:1184
+     * rc: 0 = ready, 0xffff = not). A not-ready drive still falls
+     * through to the file op (only the chdir is skipped); only the
+     * SetPath failure aborts (see sys_path_guard_abort). */
+    return (rc == 0) ? 1 : 0;
+}
+
+int sys_path_guard_abort(int rc)
+{
+    /* Orig Config_SavePrefs @ 1008:0bbf: OR SI,SI / JZ continue /
+     * JMP abort (Dos_SetPath @ 1000:116a rc; nonzero -> return without
+     * _LCREAT). Sound_PlayId @ 1150:00c9 ignores the rc instead
+     * (fire-and-forget chdir before the WAV open). */
+    return (rc != 0) ? 1 : 0;
+}
+
+civ_error_t dos_chdir_raw(const char *path)
+{
+    if (!path)
+        return CIV_ERR_NOENT;
+    /* TODO: Orig FUN_1000_116a @ 1000:116a (Dos_SetPath: MOV AH,0x3b /
+     * LDS DX,[BP+6] far path / INT 0x21; CF -> Dos_MapError @ 1000:151a,
+     * else 0). Callers pass 1228:0004 (g_szBasePath via sys_init_paths;
+     * verified PUSH 0x1228 / PUSH 0x4 in Config_SavePrefs @ 1008:0bff).
+     * Needs DOS; the Linux high-level twin dos_set_path in boot.c stays
+     * a CIV_OK no-op (cwd owned by the launcher). */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t dos_select_drive(int drive, unsigned *out_total)
+{
+    if (out_total)
+        *out_total = 0;
+    /* TODO: Orig FUN_1000_1266 @ 1000:1266 (Dos_SelectDrive:
+     * MOV DL,[BP+6] / DEC DL / MOV AH,0x0e / INT 0x21; AL = drive count
+     * -> ES:[BX] out). Sole users: Dos_DriveReady @ 1000:1184 +
+     * Dos_GetCurrentDrive @ 1000:1252. Needs DOS. */
+    (void)drive;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+const char *file_temp_env_name(void)
+{
+    /* Orig File_BuildTempPath @ 1000:1648 default dir DS:0x4ed6 = "TMP"
+     * (1420:4ed6, env var name read from the image). */
+    return "TMP";
+}
+
+const char *file_temp_suffix(void)
+{
+    /* Orig same DS:0x4eda = ".$$$" (1420:4eda) appended via
+     * Util_StrAppend @ 1000:363e. */
+    return ".$$$";
+}
+
+int file_build_temp_path(char *dst, size_t cap, const char *dir,
+                         const char *prefix, unsigned num)
+{
+    /* Orig File_BuildTempPath @ 1000:1648: FUN_1000_1e9c copy +
+     * FUN_1000_15fc decimal (Util_FormatInt @ 1000:157a) +
+     * Util_StrAppend @ 1000:363e ".$$$" (DS:0x4eda). Uniqueness lives one
+     * level up in File_BuildUniqueTempPath @ 1000:16a5 (counter +1/+2 +
+     * Dos_GetFileAttr @ 1000:1210 INT 21h AH=0x43 probe loop); the tmp
+     * slot ([8] != 0, O_TEMPORARY-style via File_Open @ 1000:2ad9: save
+     * temp, Art_SaveConvertedFrame @ 10b8:0c1c disk cache) is rebuilt in
+     * File_CloseEntry @ 1000:2098 as (num,0,0,0,0) then Dos_Unlink @
+     * 1000:19a6 (INT 21h AH=0x41). No randomness: plain incrementing
+     * counter. Linux 1:1 on explicit params (no far, no DOS, no globals):
+     * dir NULL/empty -> getenv("TMP") -> "." fallback; prefix NULL ->
+     * ""; joined with '/' (orig '\\' on DOS). Returns chars without NUL,
+     * -1 on NULL dst / cap == 0 / truncation. */
+    const char *d;
+    const char *p;
+    int n;
+
+    if (!dst || cap == 0)
+        return -1;
+    d = (dir && dir[0] != '\0') ? dir : getenv("TMP");
+    if (!d || d[0] == '\0')
+        d = ".";
+    p = (prefix && prefix[0] != '\0') ? prefix : "";
+    n = snprintf(dst, cap, "%s/%s%u.$$$", d, p, num);
+    if (n < 0 || (size_t)n >= cap)
+        return -1;
+    return n;
 }

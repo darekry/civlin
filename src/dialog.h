@@ -1426,4 +1426,37 @@ civ_error_t text_fit_pascal_ellipsis_scaled(char *buf, size_t cap, int w,
                                                            void *ctx),
                                             void *ctx);
 
+/* --- Chain 2026-10-16 (14): popup ellipsis limit + kto jeszcze ucina
+ * (goal 4; civ.exe, x86:LE:16:Protected Mode, C17, no exit, no globals) ---
+ * Pola = linia nazwy unita + linia miasta w Unit_ShowInfoPopup @ 11f0:468c:
+ *   decompile: iVar4 = (local_1a - local_1e) - 8 (status-panel width - 8,
+ *   WdwStatus_CalcPanelRect + Status_DrawPanelFrame tail); potem 2x
+ *   Text_FitPascalEllipsis @ 1098:0000 z tym limitem: raz linia nazwy unita
+ *   (Util_StrCopy 24fa/12d8 z 0x3da+idx*0x20 + Fit + DrawDirect), raz linia
+ *   miasta (City_AppendName na 24fa/12d8 + Fit + DrawDirect). Xrefs Fit:
+ *   TYLKO scaled wrapper @ 11d0:0301 + te 2 miejsca w popupie (@ 11f0:4808
+ *   unit-name, @ 11f0:4a76 city-name) — pełny NE xref scan, brak innych.
+ * Kto jeszcze ucina (scaled wrapper @ 11d0:02e4, max = (w*16)/10):
+ *   6 xrefs: Census_ShowCityProduction @ 1018:0d42, Census_ShowCityStatus
+ *   @ 1018:23d5, FUN_1030_8d33 x2 (@ 1030:8e0b/8f6c), FUN_1188_0b3e
+ *   (@ 1188:0d52), Pic_PlayShared @ 1030:0000 (@ 1030:4bea, tryb modal).
+ *   Limity tam w jednostkach po Text_MeasureWidth @ 10d8:05b8 ((w*10)/0x10;
+ *   wrapper je oddskalowuje (w*16)/10 przed pętlą — patrz
+ *   text_fit_scaled_width LIVE). Kto NIE ucina (zweryfikowano brakiem
+ *   xrefs Fit/FitScaled): menu (MenuZ @ 1220:0156 id math, brak Fit),
+ *   status rows (Text_DrawStatusRow @ 11f8:0278 + formatters 1138/11b0/11b8
+ *   — formatują do 12d8:24fa bez trunchacji), dialogi list (DrawDlgItemString
+ *   @ 1098:2796 + FillResStringList @ 1098:1f4f — pack bez cięcia), save
+ *   prompts (save_prompt_open/save @ 1130:0075/0194 + sanitize — cięcie
+ *   nazw plików, nie ellipsis), MainMenu_WndProc @ 11e0:0221, HoF_Show @
+ *   1080:0119, diplomacy @ 1160/1168 (Dialog_ShowMessage @ 1220:00d2 modal
+ *   bez Fit). OS-free limit poniżej LIVE 1:1 (no Win16); GDI Fit ogon w
+ *   text_fit_pascal_ellipsis (LIVE) — ten limit jest jego `max_width`. */
+
+/* Orig Unit_ShowInfoPopup @ 11f0:468c limit half -> unit_popup_text_limit.
+ * 1:1 (panel_right - panel_left) - 8 (decompiler iVar4 = local_1a -
+ * local_1e + -8). Ujemne dozwolone (orig nie clampuje; ujemny max wymusza
+ * ellipsis do "." jak pętla Fit). No globals, no exit(). */
+int unit_popup_text_limit(int panel_left, int panel_right);
+
 #endif /* CIVLIN_DIALOG_H */

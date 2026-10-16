@@ -113,8 +113,12 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `font_fnt_parse` | LIVE | 1008:0e99 |  |
 | `font_face_bitmap` | LIVE | 1008:0e99 |  |
 | `font_fnt_row_ptr` | LIVE |  |  |
-| `font_install_slot` | STUB | 1008:0e12 | has TODO |
-| `font_fnt_char_entry` | PARTIAL | 1008:0e99 | has TODO |
+| `font_install_slot` | STUB | 1008:062f, 1008:0e12, 11e8:0d1d | has TODO |
+| `font_fnt_face_name` | LIVE | 1008:0e99 |  |
+| `font_slot_claim` | LIVE | 1008:0e12 |  |
+| `font_free_slots` | LIVE | 1008:0000, 1008:0329, 1008:062f, 1008:066d, 1008:075b, 1008:0e12, 1008:0e99, 1098:0186, 1098:0194, 1100:0a33, 11e8:0b40, 11e8:0cb0, 11e8:0d1d, 1420:00fe |  |
+| `font_enum_families_callback_tail` | NOOP | 1008:09d3, 1008:0d4c, 1008:0e12 |  |
+| `font_fnt_char_entry` | PARTIAL | 1008:0e99 |  |
 | `font_fnt_bits` | LIVE | 1008:0e99 |  |
 | `font_render_glyph` | LIVE | 1008:0e99 |  |
 | `font_text_width` | LIVE | 1098:0dda, 11f8:0278 |  |
@@ -123,8 +127,8 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `font_fnt_glyph_len` | LIVE | 1008:0e99 |  |
 | `menu_strings_count` | LIVE | 1048:0000, 1420:435b, 14b0:0010, 14b0:0092, 14d0:0028 |  |
 | `menu_string_at` | LIVE |  |  |
-| `config_load_prefs` | STUB | 1008:0b4a | has TODO |
-| `config_save_prefs` | STUB | 1000:116a, 1000:1184, 1008:0bbf | has TODO |
+| `config_load_prefs` | STUB | 1008:0b4a, 12d0:0064, 1420:010b | has TODO |
+| `config_save_prefs` | STUB | 1000:116a, 1000:1184, 1008:0bbf, 1420:0113 | has TODO |
 | `boot_run` | PARTIAL | 1000:11bb, 1000:2826, 1008:0000, 1008:059a, 1008:0b4a, 1008:0d68, 1008:0e99, 1088:0000, 1090:0488, 1098:06f8, 1098:096c, 10b8:0000, 10e8:2d46, 1190:0000, 11e8:0000, 11e8:0337 |  |
 | `boot_shutdown` | LIVE | 1008:0000, 1008:0329, 1008:0d68, 1208:0af1 |  |
 | `art_maybe_convert_artwork` | LIVE | 1090:0488, 10b8:0000, 10b8:04df, 10b8:062d, 10b8:06a0, 10b8:076a, 10b8:079d, 10b8:0aa8, 10b8:0c1c, 10b8:0ded, 10b8:0e36, 10b8:11bc, 10b8:158c, 10d0:0cfa, 1420:20a9 |  |
@@ -133,6 +137,16 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `config_prefs_sounds_on` | LIVE |  |  |
 | `boot_video_caps_count` | LIVE | 1008:059a, 1420:0af4 |  |
 | `boot_video_caps_describe` | STUB |  |  |
+| `boot_shutdown_step_count` | LIVE | 1000:127f, 1000:12d6, 1000:1fc6, 1000:2098, 1008:0000, 1008:0329, 1008:062f, 1008:066d, 1008:075b, 1008:0bbf, 1008:0e12, 1008:0e99, 1038:0c1d, 1058:0d71, 1088:0b6d, 1090:0596, 1098:02d1, 1098:062f, 10b8:0000, 10d0:0172, 1100:060b, 1110:0127, 1148:0020, 1180:0000, 1190:0c92, 11e0:0221, 12b0:0004, 12b0:0006, 12d8:28fa, 12d8:4598, 12d8:460e, 1330:0004, 1420:00fe, 1420:0130, 1420:5148, 1420:514a, 1420:547e, 1420:9314, 1420:9964, 1420:9966, 1420:b388 |  |
+| `boot_shutdown_step_name` | LIVE | 1008:0bbf |  |
+| `boot_shutdown_exit_code` | LIVE | 1000:127f, 1000:12d6 |  |
+| `config_prefs_pack` | LIVE | 1008:0bbf |  |
+| `config_prefs_unpack` | LIVE | 1008:0b4a, 12d0:0064 |  |
+| `config_prefs_needs_path_setup` | LIVE | 1000:116a, 1000:1184, 1008:0bbf, 1228:0002 |  |
+| `main_quit_msg_is_quit` | LIVE | 1008:0329, 1098:062f |  |
+| `main_quit_flag_requests_shutdown` | LIVE | 12d8:24ee |  |
+| `main_dispatch_quit_requests_shutdown` | LIVE | 1048:01cd |  |
+| `main_drain_should_continue` | LIVE | 1098:02d1, 11e8:02fb, 12b0:004c |  |
 
 ### `src/civ_common.c`
 
@@ -157,6 +171,7 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `util_format_float` | STUB | 1000:01fe, 1000:0221, 1000:0754, 1420:4ad6, 1420:50cb | has TODO |
 | `util_str_case_cmp` | LIVE | 1000:36de, 11f8:01af |  |
 | `util_format_message` | LIVE | 1000:2928, 1000:2c9c, 1000:36b2, 1088:1dd0, 1190:17d0 |  |
+| `util_compare_bounded` | LIVE | 1000:36de, 1000:3744, 1000:377e, 1008:0e12, 1008:0e99, 11f8:014a, 11f8:01af, 11f8:0207, 1420:011b |  |
 
 ### `src/dialog.c`
 
@@ -280,6 +295,7 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `text_fit_pascal_ellipsis` | LIVE | 1098:0000, 1100:00a1 |  |
 | `text_fit_scaled_width` | LIVE | 10d8:05b8, 11d0:02e4 |  |
 | `text_fit_pascal_ellipsis_scaled` | LIVE | 1018:0be0, 1030:0000, 11d0:02e4 |  |
+| `unit_popup_text_limit` | LIVE | 11f0:468c, 11f0:4808, 11f0:4a76 |  |
 
 ### `src/game.c`
 
@@ -315,6 +331,11 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `sys_drain_input` | STUB | 11c0:0395, 11f0:06d2, 11f0:4ea0, 12b0:004c, 1420:1d44 | has TODO |
 | `game_calc_progress_threshold` | LIVE | 1088:1d99 |  |
 | `unit_show_info_popup` | STUB | 1098:0dda, 11f0:468c, 11f0:4754, 1218:0801, 1220:0156, 1420:62fc | has TODO |
+| `unit_popup_is_end_of_turn` | LIVE | 1000:36b2, 1018:067b, 1030:0000, 1038:0bba, 1038:0c1d, 1080:0119, 1098:0000, 1098:00b5, 1098:0dda, 1098:0e0b, 1098:1104, 10d0:0854, 10d0:09a2, 10d8:00e0, 10e8:0000, 1100:0a33, 1110:0ff6, 1110:16c0, 1110:199b, 1180:0000, 11c8:00c4, 11f0:468c, 11f0:4808, 11f0:4a76, 11f8:0080, 11f8:0278, 1218:0abf, 1420:1a3c, 1420:47dd, 1420:47e9, 1420:47f6, 1420:4803, 1420:480b, 1420:481d, 1420:482f, 1420:483c, 1420:4845 |  |
+| `unit_popup_has_veteran` | LIVE | 1420:4803 |  |
+| `unit_popup_moves_full` | LIVE | 11c8:0063 |  |
+| `unit_popup_moves_frac` | LIVE |  |  |
+| `unit_popup_badge_needs_wrap` | LIVE |  |  |
 | `combat_resolve_attack` | STUB | 1050:0000, 1078:1480, 11c0:1bc3 | has TODO |
 | `combat_calc_odds` | LIVE | 1078:1480, 11c0:1bc3 |  |
 | `unit_found_city_if_home` | STUB | 11c0:16a4, 1420:5500, 1420:62fc | has TODO |
@@ -659,6 +680,14 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `map_refresh_tile_px` | LIVE | 1110:0448, 1128:177e, 1330:4010, 1408:00c6 |  |
 | `map_city_label_box` | LIVE | 1100:0685, 1208:1f64 |  |
 | `map_city_label_res_id` | LIVE | 1000:36b2, 1048:0101, 1098:0ed1, 1420:5507 |  |
+| `map_tile_cache_capacity` | LIVE | 1110:0127, 1110:01a3 |  |
+| `map_tile_cache_slot_len` | LIVE |  |  |
+| `map_tile_cache_match` | LIVE | 1110:030c |  |
+| `map_tile_cache_is_empty` | LIVE | 1110:0127 |  |
+| `map_tile_cache_find` | LIVE | 1110:030c |  |
+| `map_tile_cache_victim` | LIVE | 1110:01a3 |  |
+| `map_tile_cache_dispose` | LIVE | 1110:0127, 1330:0002, 1330:0004, 1420:2e42 |  |
+| `map_tile_cache_next_tick` | LIVE | 1110:01a3, 1110:030c |  |
 
 ### `src/newgame.c`
 
@@ -869,6 +898,7 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `sys_base_path` | LIVE | 1228:0004 |  |
 | `sys_yield` | LIVE | 1098:0157, 10b0:0000 |  |
 | `sys_pump_messages` | LIVE | 10b0:0000, 1108:0000, 11c0:0ec2, 11e8:02fb, 1328:0012 |  |
+| `sys_wait_for_input` | STUB | 1018:0380, 1018:067b, 1018:0be0, 1018:1d5b, 1018:208f, 1030:0000, 1038:0c1d, 1080:0119, 1080:06ff, 10e8:0000, 1180:0000, 11f0:468c, 11f0:4ea0 | has TODO |
 | `main_pump_message` | STUB | 1008:0329, 1008:0a8d, 1098:0157, 1098:02d1, 1108:0000, 11e8:02fb, 1208:0000, 1608:0134, 1608:013c, 1608:0140 | has TODO |
 | `main_key_to_res_char` | LIVE | 1098:02d1, 1208:0000, 1420:1400, 1420:142c |  |
 | `sys_get_client_rect` | STUB | 1000:137f, 1218:0956, 1218:0a06 | has TODO |
@@ -916,6 +946,15 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `mem_dispose_ptr` | STUB | 1008:0329, 1028:0000, 10f8:02bd, 1100:060b | has TODO |
 | `mem_dispose_handle` | STUB | 1100:0652 | has TODO |
 | `mem_realloc_handle` | STUB | 1100:030f | has TODO |
+| `sys_wait_msg_is_key` | LIVE | 1008:0d68, 1018:0380, 1018:067b, 1018:0be0, 1018:1d5b, 1018:208f, 1030:0000, 1038:0c1d, 1080:0119, 1080:06ff, 1098:0157, 10e8:0000, 1180:0000, 1180:02d3, 1180:152f, 11f0:4ea0 |  |
+| `sys_wait_msg_is_lbutton` | LIVE |  |  |
+| `sys_wait_scale_coord` | LIVE |  |  |
+| `sys_wait_cursor_id` | LIVE |  |  |
+| `file_table_first_fd` | LIVE | 1000:1fc6 |  |
+| `file_table_entry_len` | LIVE |  |  |
+| `file_table_fd_off` | LIVE |  |  |
+| `file_entry_is_open` | LIVE | 1000:1f7c, 1000:1fa6, 1000:2098 |  |
+| `file_table_slot_rel` | LIVE | 1000:1fc6 |  |
 
 ### `src/title.c`
 
@@ -1012,6 +1051,20 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `gfx_copy_span` | LIVE | 11a8:0328 |  |
 | `gfx_blit_scaled_is_direct` | LIVE | 1040:1137, 11a8:002c, 11a8:0450 |  |
 | `gfx_nearest_src` | LIVE | 11a8:13c0 |  |
+| `gfx_icon_mask_row_bytes` | LIVE | 1030:925b, 1068:06af, 10d0:09ee, 10e8:2d46, 1110:04d0, 1110:0ff6, 1118:0000, 11a8:00fe, 11a8:022f, 11a8:02ad, 11a8:076f, 11a8:0cfd, 11a8:0d6e, 11a8:0f56 |  |
+| `gfx_icon_transparent_match` | LIVE | 11a8:076f, 11a8:0d6e |  |
+| `gfx_icon_content_bounds` | LIVE | 11a8:00fe |  |
+| `gfx_fill_icon_rect` | LIVE | 11a8:02ad |  |
+| `gfx_icon_copy_clipped` | LIVE | 11a8:076f |  |
+| `gfx_blit_rop_direct` | LIVE | 11a8:0f56, 11a8:1147, 11a8:12eb |  |
+| `gfx_blit_rop_mask_step` | LIVE | 11a8:11bb, 11a8:11dc, 11a8:11fd |  |
+| `gfx_mask_needs_bitmap` | LIVE |  |  |
+| `gfx_icon_registry_groups` | LIVE | 1008:075b |  |
+| `gfx_icon_registry_group_count` | LIVE |  |  |
+| `gfx_icon_registry_total` | LIVE |  |  |
+| `gfx_icon_registry_free` | LIVE | 1008:062f, 1008:075b |  |
+| `palette_dispose` | NOOP | 1090:0488, 1090:0596 |  |
+| `palette_handle_is_live` | LIVE | 1090:0596 |  |
 
 ### `src/worldgen.c`
 

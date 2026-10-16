@@ -363,6 +363,78 @@ unsigned game_calc_progress_threshold(int n, int difficulty);
  * header top). Win16 dialog + GDI text -> SDL TBD; stub. */
 civ_error_t unit_show_info_popup(int civ, int unit_idx);
 
+/* --- Chain 2026-10-16 (15): Unit_ShowInfoPopup layout (goal 3) ---
+ * Orig Unit_ShowInfoPopup @ 11f0:468c (civ.exe, x86:LE:16:Protected
+ * Mode), decompiled this pass (body 11f0:468c-4e25; note: 11f0:4a76 is
+ * INSIDE this body, not a separate City_AppendName — the true
+ * City_AppendName is @ 1038:0bba, callee below; the @4a76 label in the
+ * task is the city-line site inside the popup, kept as a code offset,
+ * not a function).
+ * Full layout (paint only, no wait loop inside):
+ *   frame: Gfx_GetCurrentDC + GfxPort_SetActive + color DAT_12d8_45fb
+ *     (or DAT_12d8_45ee when DAT_12d8_28fc mono != 0) + WdwStatus_
+ *     CalcPanelRect @ 1218:0abf + Status_DrawPanelFrame @ 11f8:0278
+ *     (FILLRECT via Gfx_MakeBrush @ 1098:00b5 + white/black border, see
+ *     game.h status_draw_tech_icons neighbours) + limit iVar4 =
+ *     (local_1a - local_1e) - 8 = unit_popup_text_limit LIVE (see
+ *     dialog.h) + Text_DispatchFontHandler(1) (slot DAT_12d8_0024 via
+ *     Text_SelectFont @ 1100:0a33; first paint, e.g. here) +
+ *     SELECTOBJECT font slot + Text_GetFontHeight @ 1098:0dda line
+ *     stride iVar5.
+ *   branch param_1 == -1: empty (frame only, no lines).
+ *   branch param_2 == 0x80 (end-of-turn card): 3 centered lines via
+ *     Text_DrawDirect @ 10d8:00e0 at (local_1e+0xe, local_1c+0xe + k*h):
+ *     "End of Turn" @ 1420:47dd + "Press Return" @ 1420:47e9 +
+ *     "to continue" @ 1420:47f6 (0xe indent, DAT_13f0_0004/0006 pos).
+ *   else (normal unit card, x0 = local_1e+4, y steps by h):
+ *     1. unit name: Util_StrCopy @ 1000:36b2 (0x3da+civ*0x20) +
+ *        Text_FitPascalEllipsis @ 1098:0000 (limit above, site @ 11f0:4808)
+ *        + Text_DrawDirect.
+ *     2. unit type: Res_GetStringCopy @ 11f8:0080 (0x84, type @ 62ff) +
+ *        DrawDirect.
+ *     3. opt "Veteran" @ 1420:4803 when flags @ 62fc & 0x20
+ *        (unit_popup_has_veteran LIVE).
+ *     4. "Moves " @ 1420:480b + dec(Util_Clamp(moves/3,0,99)) + opt
+ *        fraction ("..." @ 0x4813 + dec(rem) when moves%3 != 0; moves @
+ *        6300, full = moves/3 clamped, frac = moves%3, both LIVE) + opt
+ *        build tail ("..." @ 0x4815 + dec(full+rate) + "..." @ 0x4817 when
+ *        *(type*0x16+0x1a3e) != 0, rate = *(6301) * 1420:1a3c[type*0xb]).
+ *     5. city line: City_AppendName @ 1038:0bba (home @ 6307; -1 appends
+ *        0x795, else Util_StrLen + copy from 0x4da+...) + Fit (site @
+ *        11f0:4a76 = second Fit, same limit) + DrawDirect.
+ *     6. terrain: copy 0x4819 + Res_GetStringCopy(0x85, Map_GetTileClass
+ *        @ 1110:16c0 (x @ 62fd, y @ 62fe)) + append 0x481b + DrawDirect.
+ *     7. opt occupancy (Map_GetOccupancyFlags @ 1110:199b bits):
+ *        0x10 Railroad @ 1420:481d else 0x08 river? @ 0x4828; 0x02
+ *        Irrigation @ 1420:482f else 0x04 Mining @ 1420:483c; 0x40
+ *        Pollution @ 1420:4845 (each DrawDirect + h step).
+ *     8. badges: Unit_DrawStatusBadge @ 1110:0ff6 per stack link
+ *        (next @ 6306 chain, x += 0x20, wrap to left+2 / y += 0x20 when
+ *        panel_right-0x24 <= x, LIVE wrap predicate below) + city-guard
+ *        2 slots when occupancy & 1 (City_FindByTile @ 11c8:00c4 +
+ *        DAT_1420_5516, temp 68f3/68f0/68f6 badge draw).
+ *   tail: SELECTOBJECT restore + SETRECT reset + GfxPort_PresentRect @
+ *     10d0:0854 (BITBLT 0xcc0020 SRCCOPY) + ClearActive @ 10d0:09a2 +
+ *     SetActive + Gfx_StoreDC @ 1098:1104.
+ * Ikony: badge icons 0x20 px steps (flag sheet civ*0x20+type+0x40, see
+ *   video.h unit_flag_icon_index); kolory: panel frame color byte above
+ *   (45fb/45ee) + Text_SetColor @ 1098:0e0b slot font; timeout/klik:
+ *   BRAK w popupie (paint + present only) — modal wait lives
+ *   caller-side via Sys_WaitForInput @ 1038:0c1d (PEEKMESSAGE loop:
+ *   0x102 key -> return DAT_1420_54ea, 0x201 click in DAT_1420_9948 ->
+ *   DAT_1328_0012 = 1 + coords + return 1, else
+ *   TRANSLATE/DISPATCH; 20+ callers: census 1018:067b/0be0/1d5b/208f,
+ *   HoF 1080:0119/06ff, NewGame_Wizard @ 10e8:0000, Pic_PlayShared @
+ *   1030:0000, Replay @ 1180:0000/02d3/152f, etc.; SDL bridge TBD ->
+ *   sys_wait_for_input STUB in sys.h, unit_show_info_popup stays STUB
+ *   for the GDI/present/modal tail). OS-free line predicates below are
+ *   LIVE 1:1 (no Win16, no globals, read-only); modal stays STUB. */
+int unit_popup_is_end_of_turn(int unit_idx);
+int unit_popup_has_veteran(int flags);
+int unit_popup_moves_full(int moves_raw);
+int unit_popup_moves_frac(int moves_raw);
+int unit_popup_badge_needs_wrap(int x, int panel_right);
+
 /* --- packet O (2026-10-15): combat/unit tactical ---
  * Anchors: unit_choose_order @ 1078:1480 (combat odds via
  *   Combat_ResolveAttack + 11c0:1bc3), unit_step_toward_goal @

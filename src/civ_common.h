@@ -152,4 +152,37 @@ int util_swap_high16(uint32_t v);
  * OS-free 1:1, no Win16, no globals, no exit(). */
 int util_str_case_cmp(const char *a, const char *b);
 
+/* Orig: FUN_1000_3744 @ 1000:3744 -> Util_CompareBounded.
+ * Bounded case-SENSITIVE prefix compare (SCASB NUL search within bound +
+ * CMPSB; 0 = match). Disasm: LES DI,[BP+0xa] (filter far ptr) + CX =
+ * word [BP+0xe] (bound) + SCASB.REPNE (AL=0) + LDS SI,[BP+6] (candidate
+ * far ptr) + CMPSB.REPE, returns last-byte diff (SI - DI). Len = bound
+ * minus SCASB remainder = min(bound, strlen(filter)+1) incl. the NUL when
+ * found inside bound; then that many bytes compared (same result as
+ * strncmp(a,b,bound) with NULL-as-"" totality; bound <= 0 -> 0 via JCXZ,
+ * no touch). NO case folding (unlike Util_StrCaseCmp @ 1000:36de above:
+ * 0x60 < c < 0x7b fold there, raw bytes here).
+ * Sole caller: Font_EnumFamiliesCallback @ 1008:0e12 (ENUMFUNC via
+ * MAKEPROCINSTANCE from Font_EnumFamiliesInit @ 1008:0e99): pushes 0x3,
+ * DS, 0x11b, LOGFONT seg, LOGFONT+0x12 off (ADD SP,0xa = 5 words), so
+ * [BP+6] = LOGFONT+0x12 candidate (lfFaceName), [BP+0xa/+0xc] = DS:0x11b
+ * filter far ptr (NOT a 0x11b bound: 0x11b is the DGROUP offset; DS:0x11b
+ * reads "CIVILIZATION" @ 1420:011b, 12 B + NUL), [BP+0xe] = 3 = bound.
+ * SCASB scans the filter for NUL within 3 (none: "CIV"), len = 3, CMPSB
+ * checks the "CIV" prefix case-sensitively -> keeps only CIV* faces (all
+ * 21 RT_FONT faces qualify; GDI order may differ from RT_FONT order, see
+ * boot.h chain-13/14). "Mode 3" = bound 3 (prefix length), not a case
+ * mode; no other mode value occurs (single call site).
+ * Who else should call (match nazw? search?): NOBODY now — full NE xref
+ * scan shows no other callers; the sibling string families use different
+ * helpers by design: Res_CompareStringsCI @ 11f8:01af (case-insensitive
+ * unbounded via Util_StrCaseCmp, a-z fold) + Res_ComparePascal @
+ * 11f8:0207 (Pascal min-len memcmp + len diff, see rsc_loader.h
+ * res_compare_pascal LIVE) + Res_AppendPascal @ 11f8:014a (Pascal join)
+ * + Util_StrCopyN @ 1000:377e (bounded COPY with NUL pad, same SCASB
+ * shape as here but copy, not compare). A future facename search reuses
+ * this helper (same "CIV" prefix rule), it does NOT reuse the CI/Pascal
+ * family. OS-free 1:1, no Win16, no globals, no exit(). */
+int util_compare_bounded(const char *a, const char *b, int bound);
+
 #endif /* CIVLIN_COMMON_H */

@@ -713,4 +713,92 @@ civ_error_t map_city_label_box(int x, int y, civ_rect_t *out);
  * Returns id, -1 on owner < 0. No globals. */
 int map_city_label_res_id(int owner);
 
+/* --- Chain 2026-10-16 (17): tile icon cache (goal 3) ---
+ * Orig (civ.exe, x86:LE:16:Protected Mode), decompiled this pass:
+ *   Map_DisposeTileCache @ 1110:0127 (DAT_1420_2e42 = 0, potem petla
+ *     0xfa: DELETEOBJECT handle gdy != 0 + zerowanie slotu, na koncu
+ *     DAT_1330_0004 = 0 + DAT_1330_0002 = 0; sole caller WinMain_Shutdown
+ *     @ 1008:0329, faza "dispose-tile-cache").
+ *   Map_AllocTileCacheEntry @ 1110:01a3 (was FUN_1110_01a3: gdy
+ *     DAT_1330_0002 < 0xfa bierze slot[used++] + DAT_1420_2e42++, else
+ *     LRU-victim (min *(long *)(slot+3), init 0x7fffffff) + DELETEOBJECT
+ *     starego handle; potem GLOBALLOCK(param_3) + key dword ->
+ *     slot+1 (2-B int arytmetyka: +2 B) + sub byte -> slot+5 (+10 B) +
+ *     GfxPort_AllocBitmap @ 10d0:0cfa (even ((w+1)/2*2)) + SETBITMAP-
+ *     DIMENSION + lru = DAT_1330_0004++).
+ *   Map_FindTileCache @ 1110:030c (was FUN_1110_030c: liniowy scan
+ *     0..DAT_1330_0002-1 po (key dword @ slot+1 == param_1) &&
+ *     ((char)slot[5] == param_2): hit z handle != 0 -> lru refresh
+ *     (DAT_1330_0004++) + DAT_1420_2e40++ + return handle; handle == 0 ->
+ *     wyzeruj slot + miss; brak matcha -> DAT_1420_2e44++ + return 0).
+ * Co to za cache: 0xfa = 250 slotow po 12 B (6 slow 2-B int):
+ *   [+0] HBITMAP handle (DELETEOBJECT; 0 = pusty),
+ *   [+2..+5] key dword (param_1: ramka/ikona),
+ *   [+6..+9] lru long (DAT_1330_0004 tick: alloc/hit refresh),
+ *   [+10] sub byte (param_2: wariant), [+11] pad.
+ *   (W 32-bit dekompilacie slot+1/+3/+5 to +2/+6/+10 B, bo int = 2 B.)
+ *   Liczniki: DAT_1330_0002 used, DAT_1330_0004 lru-tick, DAT_1420_2e42
+ *   alloc-total, DAT_1420_2e40 hits, DAT_1420_2e44 misses.
+ * Kto napelnia: Map_AllocTileCacheEntry (evict-LRU + GfxPort_AllocBitmap
+ *   bitmapa ikony; wolany ze sciezki paint, nie z Art_LoadFrameData @
+ *   10b8:079d — tamten laduje ramki disk/RSC + LZW, tutaj gotowe ikony).
+ * Kto uzywa: Map_FindTileCache (hit/miss) + Map_RefreshTileView @
+ *   1110:0448 (Map_WrapX(x - 1330:4010)*0x20 - 1408:00c6, potem
+ *   City_DrawTileView @ 1110:04d0, zob. video.h city_draw_tile_view STUB)
+ *   + Map_PaintTilesClipped @ 1208:1534 / Map_RepaintViewShuffled @
+ *   1208:1866 (per-tile paint, zob. map_paint_* LIVE).
+ * Zwiazek ze slotami 17cc/17ae: ZADEN bezposredni — DAT_1420_17cc (active)
+ *   / DAT_1420_17ae (prev) to sloty GfxPort (GfxPort_SetActive @ 10d0:0956
+ *   + gfx_port_clear_active LIVE w video.h), nie tile-cache; cache ma
+ *   wlasne used/tick w 1330:0002/0004.
+ * Port struktury cache: slot + LRU/find/dispose LIVE 1:1 na jawnych
+ *   parametrach (no Win16, no globals); DELETEOBJECT/GLOBALLOCK/
+ *   GfxPort_AllocBitmap ogony zostaja caller-side STUB z TODO Orig. */
+
+#define CIV_TILE_CACHE_N 0xfa
+#define CIV_TILE_CACHE_SLOT_LEN 12
+
+/* Orig slot @ DAT_1420_a2ea (12 B j.w.). Logiczny obraz (bez packingu). */
+typedef struct map_tile_slot {
+    int handle;   /* [+0] HBITMAP (0 = pusty) */
+    int32_t key;  /* [+2] param_1 dword */
+    int32_t lru;  /* [+6] DAT_1330_0004 tick */
+    int sub;      /* [+10] param_2 byte */
+} map_tile_slot_t;
+
+/* Orig 0xfa bound (Dispose loop + Alloc append) -> pojemnosc. */
+int map_tile_cache_capacity(void);
+/* Orig 12-B stride (i*6 slow / i*3 dword) -> dlugosc slotu. */
+int map_tile_cache_slot_len(void);
+/* Orig Map_FindTileCache @ 1110:030c match (key dword + sub byte).
+ * 1:1: 1 gdy slot != NULL i slot->key == key i slot->sub == sub, 0 wpp
+ * (NULL -> 0; handle osobno w is_empty). No globals. */
+int map_tile_cache_match(const map_tile_slot_t *slot, int32_t key, int sub);
+/* Orig Map_DisposeTileCache @ 1110:0127 + Alloc victim guard (handle != 0
+ * przed DELETEOBJECT) -> is_empty. 1:1: 1 gdy slot == NULL lub handle
+ * == 0, 0 wpp. No globals. */
+int map_tile_cache_is_empty(const map_tile_slot_t *slot);
+/* Orig Map_FindTileCache @ 1110:030c scan -> find. 1:1 liniowy scan
+ * 0..used-1 (used clampowane do [0, n]): indeks pierwszego matcha
+ * (match j.w.) albo -1 (miss: orig DAT_1420_2e44++ + return 0). NULL
+ * slots / n <= 0 / used <= 0 -> -1. Read-only. No globals. */
+int map_tile_cache_find(const map_tile_slot_t *slots, int n, int used,
+                        int32_t key, int sub);
+/* Orig Map_AllocTileCacheEntry @ 1110:01a3 victim half -> victim. 1:1:
+ * used < n i used < 0xfa -> used (append); else indeks min-lru ze
+ * scanu 0..min(used,n)-1 (orig init 0x7fffffff). NULL slots / n <= 0 /
+ * used < 0 -> -1; pusty zakres scanu -> -1. Read-only. No globals. */
+int map_tile_cache_victim(const map_tile_slot_t *slots, int n, int used);
+/* Orig Map_DisposeTileCache @ 1110:0127 slot-state half -> dispose. 1:1:
+ * zeruje sloty[0..n) (handle/key/lru/sub) + *used_io = 0 (1330:0002) +
+ * *tick_io = 0 (1330:0004) + *total_io = 0 (1420:2e42); DELETEOBJECT
+ * caller-side (jak font_free_slots / gfx_icon_registry_free). NULL slots
+ * przy n > 0 -> NOENT; n < 0 lub n > 0xfa -> RANGE; NULL liczniki =
+ * skip (orig zawsze je ma, tu opcjonalne). No globals. */
+civ_error_t map_tile_cache_dispose(map_tile_slot_t *slots, int n,
+                                   int *used_io, int *tick_io,
+                                   int *total_io);
+/* Orig DAT_1330_0004++ (Alloc + Find-hit) -> next_tick. 1:1 tick + 1. */
+int map_tile_cache_next_tick(int tick);
+
 #endif /* CIVLIN_MAP_H */

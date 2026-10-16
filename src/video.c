@@ -1268,3 +1268,244 @@ int gfx_nearest_src(int dst, int num, int den)
         return dst;
     return (dst * den) / num;
 }
+
+/* --- Chain 2026-10-16 (15): icon mask pipeline geometry @ 11a8 (goal 4).
+ * See video.h pipeline block. OS-free 1:1 on explicit buffers (no
+ * GLOBALLOCK/HMEMCPY/BITBLT/CREATEBITMAP, no globals, no exit()). */
+
+int gfx_icon_mask_row_bytes(int w)
+{
+    /* Orig Gfx_BuildIconMask @ 11a8:0d6e row: 16-px words x 2 B, BE word
+     * (high then low), remainder padded with 1s. Row bytes = ceil(w/16)*2
+     * (NOT the 8-bit ((w+1)/2)*2 pitch of gfx_remap_stride: the mask is
+     * 1-bpp). -1 on w < 0 (orig faulted); 0 when w == 0. */
+    if (w < 0)
+        return -1;
+    return ((w + 15) / 16) * 2;
+}
+
+int gfx_icon_transparent_match(int pixel, int transparent)
+{
+    /* Orig mask-bit rule in Gfx_BuildIconMask @ 11a8:0d6e + skip rule in
+     * Gfx_CopyIconClipped @ 11a8:076f: bit/skip when pixel == transparent
+     * key (default first pixel caller-side when the orig param == 0). */
+    return (pixel == transparent) ? 1 : 0;
+}
+
+civ_error_t gfx_icon_content_bounds(const uint8_t *px, int w, int h,
+                                    uint8_t bg, int *l_out, int *t_out,
+                                    int *r_out, int *b_out)
+{
+    /* Orig Gfx_GetIconContentBounds @ 11a8:00fe bbox (see video.h): min/max
+     * x/y over pixels != bg, then max+1 (exclusive); empty -> 0,0,0,0
+     * (orig SETRECT). Caller passes bg explicitly (orig defaults to the
+     * first pixel when param_3 == 0). */
+    int minx = 0;
+    int miny = 0;
+    int maxx = 0;
+    int maxy = 0;
+    int x = 0;
+    int y = 0;
+
+    if (l_out)
+        *l_out = 0;
+    if (t_out)
+        *t_out = 0;
+    if (r_out)
+        *r_out = 0;
+    if (b_out)
+        *b_out = 0;
+    if (!px || !l_out || !t_out || !r_out || !b_out)
+        return CIV_ERR_NOENT;
+    if (w <= 0 || h <= 0)
+        return CIV_ERR_RANGE;
+    minx = w;
+    miny = h;
+    maxx = -1;
+    maxy = -1;
+    for (y = 0; y < h; y++) {
+        for (x = 0; x < w; x++) {
+            if (px[(size_t)y * (size_t)w + (size_t)x] != bg) {
+                if (x < minx)
+                    minx = x;
+                if (x > maxx)
+                    maxx = x;
+                if (y < miny)
+                    miny = y;
+                if (y > maxy)
+                    maxy = y;
+            }
+        }
+    }
+    if (maxx < minx || maxy < miny) {
+        *l_out = 0;
+        *t_out = 0;
+        *r_out = 0;
+        *b_out = 0;
+        return CIV_OK;
+    }
+    *l_out = minx;
+    *t_out = miny;
+    *r_out = maxx + 1;
+    *b_out = maxy + 1;
+    return CIV_OK;
+}
+
+civ_error_t gfx_fill_icon_rect(uint8_t *px, int w, int h,
+                               int l, int t, int r, int b, uint8_t color)
+{
+    /* Orig Gfx_FillIconRect @ 11a8:02ad: rows t..b-1 at cols l..r-1 set
+     * to color (orig GLOBALLOCK bits + row base + per-byte fill). Strict
+     * bounds here (orig assumed inside; larger would overrun the locked
+     * bits, so RANGE instead of a fake clamp). */
+    int y = 0;
+    int x = 0;
+
+    if (!px)
+        return CIV_ERR_NOENT;
+    if (w <= 0 || h <= 0)
+        return CIV_ERR_RANGE;
+    if (l < 0 || t < 0 || r > w || b > h || l >= r || t >= b)
+        return CIV_ERR_RANGE;
+    for (y = t; y < b; y++) {
+        for (x = l; x < r; x++)
+            px[(size_t)y * (size_t)w + (size_t)x] = color;
+    }
+    return CIV_OK;
+}
+
+civ_error_t gfx_icon_copy_clipped(const uint8_t *src, int sw, int sh,
+                                  uint8_t *dst, int dw, int dh,
+                                  int dx, int dy, uint8_t transparent)
+{
+    /* Orig Gfx_CopyIconClipped @ 11a8:076f transparent + offset clip
+     * (see video.h): same-size + zero offset takes the fast w*h skip
+     * loop; else clip cw = min(sw, dw-dx), ch = min(sh, dh-dy) and skip
+     * transparent per pixel. dx/dy >= 0 (orig ports never pass negative;
+     * negative -> RANGE, no clamp). Off-screen (cw/ch <= 0) -> CIV_OK
+     * no-op (orig returns without touching bits, like video_clip_rect
+     * visible = 0). */
+    int cw = 0;
+    int ch = 0;
+    int y = 0;
+    int x = 0;
+
+    if (!src || !dst)
+        return CIV_ERR_NOENT;
+    if (sw <= 0 || sh <= 0 || dw <= 0 || dh <= 0)
+        return CIV_ERR_RANGE;
+    if (dx < 0 || dy < 0)
+        return CIV_ERR_RANGE;
+    cw = sw;
+    ch = sh;
+    if (dh < dy + sh)
+        ch = dh - dy;
+    if (dw < dx + sw)
+        cw = dw - dx;
+    if (cw <= 0 || ch <= 0)
+        return CIV_OK;
+    for (y = 0; y < ch; y++) {
+        for (x = 0; x < cw; x++) {
+            uint8_t s = src[(size_t)y * (size_t)sw + (size_t)x];
+
+            if (s == transparent)
+                continue;
+            dst[(size_t)(dy + y) * (size_t)dw + (size_t)(dx + x)] = s;
+        }
+    }
+    return CIV_OK;
+}
+
+/* --- Chain 2026-10-16 (16): ROP selectors + registry @ 11a8/1008 (goals 3/4).
+ * See video.h block. OS-free 1:1 LIVE, no Win16, no globals, no exit(). */
+
+unsigned gfx_blit_rop_direct(void)
+{
+    /* Orig Gfx_BlitTechIcon @ 11a8:0f56 PUSH 0xcc0020 (SRCCOPY direct). */
+    return GFX_ROP_SRCCOPY;
+}
+
+unsigned gfx_blit_rop_mask_step(int step)
+{
+    /* Orig same PUSH 0x660046 / 0x8800C6 / 0x660046 (SRCINVERT/SRCAND). */
+    switch (step) {
+    case 0:
+        return GFX_ROP_SRCINVERT;
+    case 1:
+        return GFX_ROP_SRCAND;
+    case 2:
+        return GFX_ROP_SRCINVERT;
+    default:
+        return 0u;
+    }
+}
+
+int gfx_mask_needs_bitmap(void)
+{
+    /* Orig trio needs 1-bpp CREATEBITMAP; SDL3 uses colorkey/alpha instead. */
+    return 0;
+}
+
+int gfx_icon_registry_groups(void)
+{
+    /* Orig Gfx_FreeAllIconBuffers @ 1008:075b: 19 loop groups. */
+    return 19;
+}
+
+int gfx_icon_registry_group_count(int group)
+{
+    /* Orig same loop counts in decompile order (see video.h for addresses).
+     * 0:42 1:8 2:16 3:11 4:192 5:33 6:32 7:60 8:4 9:36 10:9 11:320 12:11
+     * 13:4 14:28 15:12 16:1 17:1 18:1 (16-18 are the 3 singletons). */
+    static const int counts[19] = {
+        42, 8, 16, 11, 192, 33, 32, 60, 4, 36,
+        9, 320, 11, 4, 28, 12, 1, 1, 1
+    };
+
+    if (group < 0 || group >= 19)
+        return -1;
+    return counts[group];
+}
+
+int gfx_icon_registry_total(void)
+{
+    /* Orig same: sum of the 19 groups = 821 slots. */
+    return 821;
+}
+
+civ_error_t gfx_icon_registry_free(int *slots, int n)
+{
+    /* Orig Gfx_FreeAllIconBuffers @ 1008:075b slot-state half (GLOBALFREE
+     * caller-side, like DELETEOBJECT in font_free_slots @ 1008:062f). */
+    int i;
+
+    if (!slots)
+        return CIV_ERR_NOENT;
+    if (n < 0 || n > 821)
+        return CIV_ERR_RANGE;
+    for (i = 0; i < n; i++)
+        slots[i] = 0;
+    return CIV_OK;
+}
+
+/* --- Chain 2026-10-16 (17): palette dispose pair (goal 2) ---
+ * See video.h block. LIVE-noop (no Win16, no globals, no exit()). */
+
+void palette_dispose(void)
+{
+    /* Orig Palette_Dispose @ 1090:0596: Debug_LogTrace("FreeGodPalette()
+     * : godpal.c") + GLOBALFREE DAT_1420_9964 (LOGPALETTE 0x3b4, gdy != 0)
+     * + DELETEOBJECT DAT_1420_9966 (HPALETTE). Pair do palette_init() @
+     * 1090:0488 (LIVE-noop powyzej): SDL3 nie instaluje globalnej palety
+     * (per-surface/texture w palette_apply_to_port), wiec dispose tez
+     * no-op; selektory/handles nie maja odpowiednika (caller-side TODO).
+     * Sole caller: WinMain_Shutdown @ 1008:0329 (faza "dispose-palette").
+     * Jak Debug_LogTrace @ 1148:003c: release no-op (zob. sys.h). */
+}
+
+int palette_handle_is_live(int handle)
+{
+    /* Orig same guard: GLOBALFREE/DELETEOBJECT tylko gdy handle != 0
+     * (zera skipowane CMP w disasm 1090:0596/0488). */
+    return (handle != 0) ? 1 : 0;
+}

@@ -988,4 +988,193 @@ int gfx_blit_scaled_is_direct(int num, int den);
  * ever). -1 on num <= 0 or dst < 0. No globals. */
 int gfx_nearest_src(int dst, int num, int den);
 
+/* --- Chain 2026-10-16 (15): icon mask pipeline @ 11a8 (goal 4) ---
+ * Orig (civ.exe, x86:LE:16:Protected Mode), decompiled this pass:
+ *   Gfx_CreateIconMaskBitmap @ 11a8:0cfd (wrapper: GLOBALLOCK icon +
+ *     Gfx_BuildIconMask + GLOBALUNLOCK when handle != 0; sole caller
+ *     Gfx_BlitTechIcon @ 11a8:0f56 mask branch when param_5 != -1, i.e.
+ *     transparent key present; param_5 == -1 takes the direct BITBLT
+ *     0x20/0xcc path without a mask).
+ *   Gfx_BuildIconMask @ 11a8:0d6e (GLOBALALLOC ((w+1)/2*2 * h) 8-bit
+ *     scratch + GLOBALLOCK, then per-row 16-px words: bit 1 <<
+ *     (0xf - x & 0x1f) set when pixel == transparent (param_4), stored
+ *     high byte then low byte (BE word), remainder row padded with 1s
+ *     (transparent), then CREATEBITMAP(w?, h, 1, 1, bits) 1-bpp +
+ *     UNLOCK/FREE. Callers: Gfx_CreateIconMaskBitmap above +
+ *     FUN_1030_925b @ 1030:925b (PIC path).
+ *   Gfx_CopyIconClipped @ 11a8:076f (transparent + offset clip: same
+ *     size + zero offset -> fast w*h loop skipping transparent (default
+ *     first pixel when param_5 == 0); else clip h = min(sh, dh-dy), w =
+ *     min(sw, dw-dx), per-pixel skip; callers FUN_1118_0000 @ 1118:0000).
+ *   Gfx_GetIconContentBounds @ 11a8:00fe (non-bg bbox: GLOBALLOCK icon,
+ *     default bg = first pixel when param_3 == 0, scan min/max x/y of
+ *     pixels != bg, then +1 on max (exclusive), empty (max < min) ->
+ *     SETRECT 0,0,0,0; callers FUN_1068_06af @ 1068:06af +
+ *     Unit_DrawStatusBadge @ 1110:0ff6).
+ *   Gfx_ReplaceIconColor @ 11a8:022f (w*h byte scan old -> new; callers
+ *     City_DrawTileView @ 1110:04d0 + Init_UnitFontTables @ 10e8:2d46 +
+ *     Unit_DrawStatusBadge @ 1110:0ff6: civ flag recolor).
+ *   Gfx_FillIconRect @ 11a8:02ad (rows [t,b) at cols [l,r) fill color;
+ *     caller FUN_1118_0000 @ 1118:0000).
+ * Po co 1-bpp? Win16 transparent blit needs a monochrome mask for the
+ *   AND/PAINT rop trio (Gfx_BlitTechIcon mask branch: SELECT mask +
+ *   SETTEXTCOLOR 0/SETBKCOLOR + BITBLT 0x46/0x66/0xc688 + restore; the
+ *   -1 branch skips the mask with direct 0x20/0xcc). 1 plane × 1 bpp is
+ *   the CREATEBITMAP mask shape (opaque vs transparent only, no color).
+ * Transparent blit? Yes: mask bit = 1 where source == transparent key
+ *   (param_4, default first pixel), 0 elsewhere; the rop trio punches
+ *   the transparent pixels out of the dest before painting the icon.
+ * Tło flagi civ? The replaced/filled key is the per-civ flag background
+ *   (owner color cell): ReplaceIconColor swaps the flag index (civ color
+ *   via GfxPort_ChangeColor @ 10d0:09ee family, see gfx_remap_index) and
+ *   FillIconRect paints the badge/flag box; bbox trims the flag box to
+ *   the non-bg content. Relation to gfx_indexed.c: icon bytes are INDEX8
+ *   (like rsc_indexed_t pixels + gfx_godpal 0x00..0xeb, see gfx_indexed.h
+ *   GFX_GODPAL_COUNT; remap itself lives in gfx_remap_index, not here).
+ * OS-free geometry below is LIVE 1:1 on explicit caller buffers (no
+ * GLOBALLOCK/HMEMCPY/BITBLT/CREATEBITMAP handles, no globals); device
+ * tails stay STUB (gfx_port_change_color / gfx_draw_icon_clipped /
+ * gfx_present_tile_rect / city_draw_tile_view). */
+int gfx_icon_mask_row_bytes(int w);
+int gfx_icon_transparent_match(int pixel, int transparent);
+civ_error_t gfx_icon_content_bounds(const uint8_t *px, int w, int h,
+                                    uint8_t bg, int *l_out, int *t_out,
+                                    int *r_out, int *b_out);
+civ_error_t gfx_fill_icon_rect(uint8_t *px, int w, int h,
+                               int l, int t, int r, int b, uint8_t color);
+civ_error_t gfx_icon_copy_clipped(const uint8_t *src, int sw, int sh,
+                                   uint8_t *dst, int dw, int dh,
+                                   int dx, int dy, uint8_t transparent);
+
+/* --- Chain 2026-10-16 (16): blit ROP selectors + icon-buffer registry
+ * (goals 3/4; civ.exe, x86:LE:16:Protected Mode, C17, no exit, no globals) ---
+ * Anchors (decompiled this pass, disasm-verified PUSH immediates):
+ *   Gfx_BlitTechIcon @ 11a8:0f56 (was FUN_11a8_0f56): color branch builds the
+ *     mask via Gfx_CreateIconMaskBitmap @ 11a8:0cfd (was FUN_11a8_0cfd:
+ *     GLOBALLOCK icon + Gfx_BuildIconMask + GLOBALUNLOCK; sole caller here)
+ *     + Gfx_BuildIconMask @ 11a8:0d6e (was FUN_11a8_0d6e: GLOBALALLOC
+ *     ((w+1)/2*2*h) scratch + per-row 16-px words, bit 1<<(0xf-x&0x1f) when
+ *     pixel == transparent key, BE word high-then-low, tail rows padded
+ *     with 1s, CREATEBITMAP(w?,h,1,1,bits) 1-bpp + UNLOCK/FREE; second caller
+ *     FUN_1030_925b PIC path) + mask DC (CREATECOMPATIBLEDC x2) + trio:
+ *     Orig PUSH 0x660046 / 0x8800C6 / 0x660046 @ 11a8:11bb/11dc/11fd (mask
+ *     branch) vs direct PUSH 0xcc0020 @ 11a8:1147 (param_5 == -1 fast path)
+ *     + mono path PUSH 0xcc0020 x2 @ 11a8:12eb/1375 (DAT_1420_17a6 == 1 via
+ *     Gfx_AllocIconBuffer @ 11a8:0054 + Gfx_CopyIconBits @ 11a8:13c0 +
+ *     GET/SETBITMAPBITS). SETTEXTCOLOR 0 + SETBKCOLOR 0xffffff frame the
+ *     trio (mask select + text/bk colors + restore + DELETEOBJECT mask).
+ *   Dokladne raster-opy: 0x00CC0020 = SRCCOPY (direct copy: -1 fast path +
+ *     mono GET/SETBITMAPBITS path + GfxPort_PresentRect @ 10d0:0854 /
+ *     GfxPort_Blit @ 10d0:08f1 family, already LIVE as gfx_port_blit /
+ *     gfx_port_present_rect); 0x00660046 = SRCINVERT (mask steps 0 i 2:
+ *     dest ^= src pattern passes around the AND); 0x008800C6 = SRCAND
+ *     (mask step 1: dest &= mask punches the transparent pixels out before
+ *     the icon paint). Decompiler split them as 0x46/0x66 + 0xc6/0x88 byte
+ *     pairs — pelne ROP-y to 0x00660046 / 0x008800C6 (PUSH immediates
+ *     w disasm, nie zgadywane). MERGPAINT (0x00BB0226) / SRCPAINT
+ *     (0x00EE0086) nie wystepuja w tym triptyku.
+ *   Zwiazek z SDL: Win16 potrzebuje 1-bpp maski bo trio AND/PAINT operuje
+ *     na monochromatycznej masce (CREATEBITMAP 1 plane x 1 bpp: opaque vs
+ *     transparent only, no color); SDL3 nie potrzebuje maski: transparent
+ *     blit to SDL_SetSurfaceColorKey (colorkey == transparent key, default
+ *     first pixel caller-side jak CopyIconClipped @ 11a8:076f) lub
+ *     SDL_BLENDMODE_BLEND alpha — wiec Gfx_BuildIconMask /
+ *     Gfx_CreateIconMaskBitmap device tails zostaja STUB (GLOBALALLOC +
+ *     CREATEBITMAP nie maja odpowiednika), a selektory ROP ponizej sa LIVE
+ *     1:1 (wybor sciezki direct-vs-mask + numer kroku tria, no Win16).
+ *   Gfx_FreeAllIconBuffers @ 1008:075b (sole caller WinMain_Shutdown @
+ *     1008:0329): 19 grup / 821 slotow (loop counts z dekompilatu: 42 + 8
+ *     + 16 + 11 + 192(16x12) + 33 + 33?nie: 33 + 32 + 60(3x20) + 4 + 36(9x4)
+ *     + 9 + 320(0x140) + 11 + 4 + 28(14x2) + 12(4x3) + 3 single = 821;
+ *     adresy DAT_1420_98f4/98e4/98c4/98ae/972e/96ec/96ac/9632/962a/95e2/95d0/
+ *     9350/933a/+0x128/b168/b150/b1a0/aea2/96aa). Ktore tablice: dokladny
+ *     content-map TBD z dumpu (kandydaci: tech icons @ 11a8:0cb1 via
+ *     *(icon*2+0x128) + unit sprites @ 1110:0dba/0ff6 + tile/flag cells @
+ *     1420:9350 + port/scratch bufory; rozmiary per-slot via
+ *     gfx_icon_buffer_size w*h+6, patrz Gfx_AllocIconBuffer @ 11a8:0054).
+ *     Rejestr ponizej jest LIVE bez GLOBALALLOC (caller-owned int slots +
+ *     counts, zero jak font_free_slots @ 1008:062f; GLOBALFREE caller-side).
+ * OS-free 1:1 LIVE (no Win16 handles, no globals, read-only except outs). */
+#define GFX_ROP_SRCCOPY 0x00CC0020u
+#define GFX_ROP_SRCINVERT 0x00660046u
+#define GFX_ROP_SRCAND 0x008800C6u
+
+/* Orig Gfx_BlitTechIcon @ 11a8:0f56 direct path (PUSH 0xcc0020 @ 11a8:1147
+ * + mono 0xcc0020 x2 @ 11a8:12eb/1375) -> gfx_blit_rop_direct. 1:1 SRCCOPY.
+ * No globals. */
+unsigned gfx_blit_rop_direct(void);
+
+/* Orig same mask triptych (PUSH 0x660046 @ 11a8:11bb + 0x8800c6 @ 11a8:11dc
+ * + 0x660046 @ 11a8:11fd) -> gfx_blit_rop_mask_step. 1:1 step 0 -> SRCINVERT,
+ * 1 -> SRCAND, 2 -> SRCINVERT; OOB step -> 0 (orig never passes it). */
+unsigned gfx_blit_rop_mask_step(int step);
+
+/* Orig mask-vs-colorkey decision (SDL bridge) -> gfx_mask_needs_bitmap.
+ * 1 on Win16 (1-bpp CREATEBITMAP trio above), 0 on SDL3 (colorkey/alpha).
+ * Takes no handles; documents why Build/CreateIconMask stay STUB. */
+int gfx_mask_needs_bitmap(void);
+
+/* Orig Gfx_FreeAllIconBuffers @ 1008:075b registry shape ->
+ * gfx_icon_registry_groups / group_count / total. 1:1 loop counts (19 grup,
+ * 821 total j.w.; group ids 0..18 w kolejnosci dekompilatu). OOB group -> -1.
+ * No globals. */
+int gfx_icon_registry_groups(void);
+int gfx_icon_registry_group_count(int group);
+int gfx_icon_registry_total(void);
+
+/* Orig same slot-state half (jak font_free_slots @ 1008:062f) ->
+ * gfx_icon_registry_free. Zeruje caller-owned slots[0..n) + CIV_OK (zera
+ * zostaja zerami jak CMP-skip w orig; GDI GLOBALFREE caller-side).
+ * NULL slots -> NOENT; n < 0 lub n > total (821) -> RANGE. No globals. */
+civ_error_t gfx_icon_registry_free(int *slots, int n);
+
+/* --- Chain 2026-10-16 (17): palette init/dispose pair (goal 2) ---
+ * Orig (civ.exe, x86:LE:16:Protected Mode), decompiled this pass:
+ *   Palette_Init @ 1090:0488 (GLOBALALLOC 0x3b4 LOGPALETTE -> DAT_1420_9964
+ *     + GLOBALLOCK + *p = 0x300 (palVersion) + p[1] = 0xec (palNumEntries,
+ *     godpal 236 kolorow, zob. gfx_indexed.h gfx_godpal_count/get) + 0xec
+ *     RGB triples + flag byte (1 gdy DAT_1420_17a6 == 0, else 0) +
+ *     CREATEPALETTE -> DAT_1420_9966 (stary 9966 kasowany DELETEOBJECT);
+ *     juz LIVE-noop jako palette_init, bo SDL3 nie ma globalnej palety).
+ *   Palette_Dispose @ 1090:0596 (Debug_LogTrace "FreeGodPalette()  :
+ *     godpal.c" @ 1420:1e3a + GLOBALFREE DAT_1420_9964 (gdy != 0) +
+ *     DELETEOBJECT DAT_1420_9966; sole caller WinMain_Shutdown @ 1008:0329,
+ *     faza "dispose-palette" w boot_shutdown_step_name).
+ * Co to za obiekty: 9964 = GLOBALALLOC handle na LOGPALETTE (0x3b4 B =
+ *   4 naglowek + 0xec * 4 wpisy RGB+flags), 9966 = HPALETTE z
+ *   CREATEPALETTE (device palette). Nie pedzel ani bitmapa (pedzle zyja
+ *   w Gfx_MakeBrush @ 1098:00b5, bitmapy w GfxPort_AllocBitmap @
+ *   10d0:0cfa; kasuje je Gfx_FreeDriverObjects @ 1008:066d, nie ten ogon).
+ * Kto jeszcze uzywa: MainPort_ApplyPalette @ 1200:00a8 (GLOBALLOCK portu
+ *   -> Palette_AnimateRange @ 1090:0376, opcode 1 full + 0xe fade, potem
+ *   *(port+6) = DAT_1420_9966) + Gfx_LookupColor @ 1098:01b0 (GLOBALLOCK
+ *   9964 + 4 przy wpisie (color-10)*4+4, 10 < color < 0xf6) +
+ *   GfxPort_ChangeColor @ 10d0:09ee (NIE rusza palety: remapuje INDEKSY
+ *   bitmapy portu old->new, zob. gfx_remap_index) + Anim_AdvanceFrames @
+ *   10b0:0461 (timed 1/0xe fades) + title/HoF fades (palette_animate_range
+ *   LIVE). Pelna lista xrefs 9966: 1018:00f8, 1210:02c0/04e4, 1208:0b61/
+ *   0dfc/0e4d, 10e8:00f4, 1218:03dd, 1188:00b1, 1098:1140, 11a8:04fb,
+ *   1200:00f8, 1098:1514, 10b8:0a49, 1210:0a54, 1090:044b, 1208:2261+,
+ *   11e0:0578, 1208:107a, 1090:06fd+, 1098:2f8f, 1090:0670.
+ * Port pary init/dispose: init juz LIVE-noop (palette_init), dispose
+ *   ponizej LIVE-noop (GLOBALFREE/DELETEOBJECT nie maja odpowiednika —
+ *   SDL3 trzyma palete per-surface/texture, zob. palette_apply_to_port);
+ *   ksztalt LOGPALETTE + guard nonzero LIVE jako stale/predykat (no
+ *   Win16, no globals, read-only). */
+
+/* Orig Palette_Init @ 1090:0488 LOGPALETTE shape (godpal 0xec). */
+#define CIV_PALETTE_COUNT 0xec
+#define CIV_PALETTE_LOGPAL_SIZE 0x3b4
+#define CIV_PALETTE_LOGPAL_VER 0x300
+
+/* Orig Palette_Dispose @ 1090:0596 -> palette_dispose. LIVE-noop pair do
+ * palette_init (void jak orig; GLOBALFREE 9964 + DELETEOBJECT 9966 to
+ * Win16 handles, caller-side TODO; SDL3 nie instaluje nic globalnie).
+ * No globals, no exit(). */
+void palette_dispose(void);
+
+/* Orig same guard (9964/9966 != 0 przed free) -> palette_handle_is_live.
+ * 1:1: 1 gdy handle != 0 (free), 0 wpp (skip). No globals. */
+int palette_handle_is_live(int handle);
+
 #endif /* CIVLIN_VIDEO_H */
