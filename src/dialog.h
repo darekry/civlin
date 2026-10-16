@@ -2452,4 +2452,75 @@ int dialog_refresh_msg(void);
  * anim_opcode_is_text. 1:1 op == 7. */
 int anim_opcode_is_text(int op);
 
+/* --- Chain 2026-10-16 (32): tracked/anim/diplo/menu/text gates (task) ---
+ * Orig (civ.exe, x86:LE:16:Protected Mode), 1:1 OS-free ports of pure
+ * branches documented inside the STUB bodies below (no Win16, no globals,
+ * no exit(), read-only, C17). Handle/modal/GDI tails stay STUB with TODO
+ * Orig (dialog_menuz @ 1220:0156, dlg_create_tracked @ 1098:124f,
+ * anim_open_sequence @ 10b0:008a, anim_advance_frames @ 10b0:0461,
+ * diplomacy_post_contact @ 1168:0a07, text_draw_aligned @ 1098:0ed1).
+ * Refs verified read-only 2026-10-16: unpacked/civ.exe strings
+ * ("RanDoMRadio"/"RanDoMStatic"/"RanDoMUser", "RANDOMRADIOPROC"/
+ * "RANDOMSTATICPROC"/"RANDOMUSERPROC", "Can't initialize timer in MenuZ" @
+ * windows.c, "End of Turn"/"Press Return") + unpacked/civhelp.hlp 72787 B
+ * (magic 3F 5F 03 00 + version 0x46, see help_hlp_system above). */
+#define CIV_DLG_PRESET_W 0x200
+#define CIV_DLG_PRESET_H 0x140
+#define CIV_ANIM_SEQ_CTX_SIZE 0xa6
+
+/* Orig Dlg_CreateTracked @ 1098:124f preset-size branch (param_1 == 0x94
+ * || == 0x8f -> DAT_12d8_0026 = 1 + 002e = 0x200 + 002c = 0x140; see
+ * dlg_id_needs_preset_size + dlg_create_tracked STUB) -> dlg_preset_w/h.
+ * 1:1 preset width/height for 0x94 (intro/PIC host) / 0x8f (earth-custom),
+ * -1 for any other id (MOVEWINDOW path). No globals. */
+int dlg_preset_w(int dlg_id);
+int dlg_preset_h(int dlg_id);
+
+/* Orig Anim_OpenSequence @ 10b0:008a count half (param_3 == 0 -> count recs
+ * until opcode 0 via anim_seq_count_frames, stride 0xf words; else param_3;
+ * see anim_open_sequence STUB) -> anim_seq_resolve_count. 1:1 param_3 != 0
+ * ? param_3 : counted (counted is the anim_seq_count_frames result,
+ * negative propagates as-is). No globals. */
+int anim_seq_resolve_count(int param_3, int counted);
+
+/* Orig Anim_OpenSequence @ 10b0:008a ctx alloc (mem_alloc_lock 0xa6 +
+ * DAT_1420_1f40 = ctx; see anim_open_sequence STUB) -> anim_seq_ctx_size.
+ * 1:1 0xa6 (sibling of CIV_DLG_TRACKED_CTX_SIZE 0x18 + ANIM_SLOT_SIZE
+ * 0x14 + ANIM_DISSOLVE_CTX_SIZE 0x79c above). No globals. */
+int anim_seq_ctx_size(void);
+
+/* Orig Anim_AdvanceFrames @ 10b0:0461 timed cases 11 (scroll-blit) / 14
+ * (palette-rotate): (tick - start) % len == 0 gate (SetActive/CopyRange
+ * tails stay in anim_advance_frames STUB) -> anim_tick_is_due. 1:1 nonzero
+ * (1) when due, 0 when not; len <= 0 -> -1 (orig divided; here a hard
+ * stop). No globals. */
+int anim_tick_is_due(long start, long tick, int len);
+
+/* Orig Diplo_PostContact @ 1168:0a07 contacted-fresh gate (bit 0x01 with
+ * the 392b+3 turn stamp; > 0xf turns since -> stale, re-contact via
+ * Diplo_ShouldMakePeace @ 1168:0f47 path; fresh skips the player dialog;
+ * see diplomacy_post_contact STUB) -> diplo_contact_stamp_due. 1:1 nonzero
+ * (1) when turn - stamp > 0x0f (stale), 0 when fresh. No globals. */
+int diplo_contact_stamp_due(int turn, int stamp);
+
+/* Orig Dialog_MenuZ_Modal @ 1220:0156 radio disable (RanDoMRadio 500+i
+ * DISABLE when the DAT_12d8_24da bit for i is set; preselect skips disabled
+ * via local_44+1; see dialog_menuz STUB) -> dialog_menuz_item_disabled.
+ * 1:1 nonzero (1) when bit index is set in mask, 0 when clear; index OOR
+ * (< 0 or >= 32, int shift width) -> -1. No globals. */
+int dialog_menuz_item_disabled(int mask, int index);
+
+/* Orig same radio fan-out (CREATEWINDOW RanDoMRadio 500+i for i < count,
+ * cap CIV_SPLIT_MAX 0x18; see dialog_menuz STUB + dialog_menuz_id_to_index)
+ * -> dialog_menuz_id_is_valid. 1:1 nonzero (1) when 500 <= button_id <
+ * 500 + count, 0 otherwise (count <= 0 -> 0). No globals. */
+int dialog_menuz_id_is_valid(int button_id, int count);
+
+/* Orig Text_DrawAligned @ 1098:0ed1 shadow passes (shadow TEXTOUT x3 via
+ * Text_SetColor @ 1098:0e0b when text_needs_shadow above; final TEXTOUT is
+ * the 4th draw; see text_draw_aligned STUB) -> text_shadow_passes. 1:1 3
+ * (sibling of dialog_frame3d_layers/dialog_refresh_view_count constants).
+ * No globals. */
+int text_shadow_passes(void);
+
 #endif /* CIVLIN_DIALOG_H */

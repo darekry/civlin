@@ -141,8 +141,27 @@ civ_error_t file_emit_char(char c)
     (void)c;
     /* TODO: Orig FUN_1000_2cba @ 1000:2cba (File_EmitChar: count -1 then
      * File_PutCharBuffered @ 1000:2cd8; overflow path of
-     * File_WriteBuffered @ 1000:2e85). Same stream/DOS dependency. */
+     * File_WriteBuffered @ 1000:2e85). Same stream/DOS dependency.
+     * Live twin: file_write_chunk single byte (fwrite). */
     return CIV_ERR_UNSUPPORTED;
+}
+
+int file_buffered_is_direct(unsigned flags)
+{
+    /* Orig File_WriteBuffered @ 1000:2e85 / File_PutCharBuffered @
+     * 1000:2cd8 flag dispatch (flag 8 = direct path, else buffered via
+     * the 1420:4cd0 stream; verified against the unpacked/civ.exe
+     * decompiler comments in sys.h). */
+    return ((flags & 8u) != 0u) ? 1 : 0;
+}
+
+int file_is_text_mode(unsigned flags)
+{
+    /* Orig File_WriteText @ 1000:3e70 / File_ReadBuffered @ 1000:33c0
+     * text gate (0x4000 bit in the 0x4e4e-table word enables LF->CRLF /
+     * CRLF handling; same bit tested in Dos_Read @ 1000:1750 / Dos_Write
+     * @ 1000:3fc4 comments). */
+    return ((flags & 0x4000u) != 0u) ? 1 : 0;
 }
 
 /* --- DOS-file primitives (raw INT 21h; all STUB, contracts in sys.h) --- */
@@ -196,8 +215,18 @@ civ_error_t dos_is_char_device(int fd)
 {
     (void)fd;
     /* TODO: Orig FUN_1000_1566 @ 1000:1566 (Dos_IsCharDevice: INT 21h
-     * AX=0x4400, BX=fd -> DX & 0x80). No DOS ioctls on Linux. */
+     * AX=0x4400, BX=fd -> DX & 0x80). No DOS ioctls on Linux.
+     * Live twin: isatty() one level up (not at this layer).
+     * Pure bit kernel: dos_is_char_device_bit below (LIVE). */
     return CIV_ERR_UNSUPPORTED;
+}
+
+int dos_is_char_device_bit(unsigned dx)
+{
+    /* Orig Dos_IsCharDevice @ 1000:1566 tail (MOV AX,DX / AND AX,0x80):
+     * 1 = char device (console), 0 = block file. Routes the Dos_Read @
+     * 1000:1750 / Dos_Write @ 1000:3fc4 hook vectors (1420:4fc4/4fc8). */
+    return ((dx & 0x80u) != 0u) ? 1 : 0;
 }
 
 civ_error_t dos_seek(int fd, long offset, int origin)
@@ -206,8 +235,17 @@ civ_error_t dos_seek(int fd, long offset, int origin)
     (void)offset;
     (void)origin;
     /* TODO: Orig FUN_1000_161c @ 1000:161c (Dos_Seek: INT 21h AH=0x42,
-     * AL=origin, CX:DX=offset; live twin file_seek_wrapper in save.c). */
+     * AL=origin, CX:DX=offset; live twin file_seek_wrapper in save.c).
+     * Pure origin kernel: dos_seek_origin_ok below (LIVE). */
     return CIV_ERR_UNSUPPORTED;
+}
+
+int dos_seek_origin_ok(int origin)
+{
+    /* Orig Dos_Seek @ 1000:161c AL contract (INT 21h AH=0x42: 0 SET /
+     * 1 CUR / 2 END from [BP+0x0c]; clears 0x4e4e-table bit 0x200 first;
+     * other AL values fail via Dos_MapError @ 1000:151a). */
+    return (origin >= 0 && origin <= 2) ? 1 : 0;
 }
 
 civ_error_t dos_read(int fd, void *buf, unsigned len)
@@ -216,9 +254,18 @@ civ_error_t dos_read(int fd, void *buf, unsigned len)
     if (!buf)
         return CIV_ERR_NOENT;
     /* TODO: Orig FUN_1000_1750 @ 1000:1750 (Dos_Read: INT 21h AH=0x3f;
-     * live twin save_file_read @ 1140:019d in save.c). */
+     * live twin save_file_read @ 1140:019d in save.c).
+     * Pure guard kernel: dos_read_is_blocked below (LIVE). */
     (void)len;
     return CIV_ERR_UNSUPPORTED;
+}
+
+int dos_read_is_blocked(unsigned flags)
+{
+    /* Orig Dos_Read @ 1000:1750 guard head (0x4e4e-table word bit 1 set
+     * -> errno 5 via Dos_MapError @ 1000:151a, before the 1420:4fc4 hook
+     * + Dos_IsCharDevice @ 1000:1566 dispatch). */
+    return ((flags & 2u) != 0u) ? 1 : 0;
 }
 
 civ_error_t dos_unlink(const char *path)
@@ -235,10 +282,18 @@ civ_error_t dos_file_attr(const char *path, int func, int attrs)
     if (!path)
         return CIV_ERR_NOENT;
     /* TODO: Orig FUN_1000_1f5c @ 1000:1f5c (Dos_FileAttr: INT 21h AH=0x43,
-     * AL=func, CX=attrs). */
+     * AL=func, CX=attrs). Pure func kernel: dos_file_attr_func_ok (LIVE). */
     (void)func;
     (void)attrs;
     return CIV_ERR_UNSUPPORTED;
+}
+
+int dos_file_attr_func_ok(int func)
+{
+    /* Orig Dos_FileAttr @ 1000:1f5c AL contract (0 = get attrs -> CX,
+     * 1 = set attrs from CX; File_Open @ 1000:2ad9 probes with 0 and
+     * restores read-only with 1). */
+    return (func == 0 || func == 1) ? 1 : 0;
 }
 
 civ_error_t dos_close(int fd)
@@ -326,9 +381,18 @@ civ_error_t dos_write(int fd, const void *buf, unsigned len)
     if (!buf)
         return CIV_ERR_NOENT;
     /* TODO: Orig FUN_1000_3fc4 @ 1000:3fc4 (Dos_Write: INT 21h AH=0x40;
-     * live twin save_file_write @ 1140:0245 in save.c). */
+     * live twin save_file_write @ 1140:0245 in save.c).
+     * Pure guard kernel: dos_write_is_blocked below (LIVE). */
     (void)len;
     return CIV_ERR_UNSUPPORTED;
+}
+
+int dos_write_is_blocked(unsigned flags)
+{
+    /* Orig Dos_Write @ 1000:3fc4 guard head (0x4e4e-table word bit 0 set
+     * -> errno 5 via Dos_MapError @ 1000:151a, before the 1420:4fc8 hook
+     * + Dos_IsCharDevice @ 1000:1566 dispatch; success sets bit 0x1000). */
+    return ((flags & 1u) != 0u) ? 1 : 0;
 }
 
 civ_error_t dos_ioctl(int fd, int func)
@@ -336,8 +400,30 @@ civ_error_t dos_ioctl(int fd, int func)
     (void)fd;
     (void)func;
     /* TODO: Orig FUN_1000_4252 @ 1000:4252 (Dos_Ioctl: INT 21h AH=0x44
-     * subfunction dispatch with verr() gate). Console/device only. */
+     * subfunction dispatch with verr() gate). Console/device only.
+     * Pure whitelist kernel: dos_ioctl_is_direct below (LIVE). */
     return CIV_ERR_UNSUPPORTED;
+}
+
+int dos_ioctl_is_direct(int func)
+{
+    /* Orig Dos_Ioctl @ 1000:4252 dispatch head (direct INT 21h AH=0x44
+     * funcs pass straight through; others require DAT_1420_0012 != 0 +
+     * verr() or fail errno 0x13 via Dos_MapError @ 1000:151a; func 0
+     * returns the high word DX:AX >> 16). */
+    switch (func) {
+    case 0:
+    case 6:
+    case 7:
+    case 8:
+    case 9:
+    case 10:
+    case 0x0E:
+    case 0x0F:
+        return 1;
+    default:
+        return 0;
+    }
 }
 
 int dos_get_current_drive(void)

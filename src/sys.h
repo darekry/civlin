@@ -92,19 +92,33 @@ int debug_print_line(const char *s);
  * (flag 8 direct vs 0x40/buffered paths, fd via 0x4e4e table, DOS write
  * via Dos_Write @ 1000:3fc4 INT 21h, overflow via File_EmitChar @ 1000:2cba).
  * Needs the Borland FILE struct at 1420:4cd0 + DOS fd table -> stub
- * CIV_ERR_UNSUPPORTED. No globals, no exit(). */
+ * CIV_ERR_UNSUPPORTED. No globals, no exit(). Live twin: file_write_chunk
+ * (fwrite, packet E below). Pure flag kernel: file_buffered_is_direct. */
 civ_error_t file_write_buffered(const uint8_t *src, size_t len);
 /* Orig: FUN_1000_2cd8 @ 1000:2cd8, now File_PutCharBuffered in Ghidra.
  * Buffered fputc core (flag 8/0x90/0x200 dispatch, \n 0x0a / \r 0x0d
  * handling, flush via File_Flush @ 1000:2152, DOS via Dos_Write @
  * 1000:3fc4). Needs the 1420:4cd0 stream + DOS -> stub
- * CIV_ERR_UNSUPPORTED. */
+ * CIV_ERR_UNSUPPORTED. Live twin: file_write_chunk single byte (fwrite).
+ * Pure flag kernels: file_buffered_is_direct / file_is_text_mode. */
 civ_error_t file_put_char_buffered(int c);
 /* Orig: FUN_1000_2cba @ 1000:2cba, now File_EmitChar in Ghidra.
  * Thin wrapper over File_PutCharBuffered @ 1000:2cd8 (count -1 then
  * emit one char). Overflow path of File_WriteBuffered @ 1000:2e85.
- * Same DOS/stream dependency -> stub CIV_ERR_UNSUPPORTED. */
+ * Same DOS/stream dependency -> stub CIV_ERR_UNSUPPORTED. Live twin:
+ * file_write_chunk single byte (fwrite). */
 civ_error_t file_emit_char(char c);
+/* Orig File_WriteBuffered @ 1000:2e85 / File_PutCharBuffered @ 1000:2cd8
+ * flag dispatch (decompiled 2026-10-16: flag 8 = direct/unbuffered path,
+ * else 0x40/buffered via the 1420:4cd0 stream; File_Flush @ 1000:2152 on
+ * the 0x90/0x200 tails). OS-free 1:1: 1 when (flags & 8) != 0, else 0.
+ * No DOS, no globals, no exit(). */
+int file_buffered_is_direct(unsigned flags);
+/* Orig File_WriteText @ 1000:3e70 / File_ReadBuffered @ 1000:33c0 text
+ * gate (LF->CRLF / CRLF->LF + 0x1a handling when the 0x4e4e-table word has
+ * bit 0x4000 set). OS-free 1:1: 1 when (flags & 0x4000) != 0, else 0.
+ * No DOS, no globals, no exit(). */
+int file_is_text_mode(unsigned flags);
 
 /* --- DOS drive/dir (adapted; see header note) --- */
 
@@ -152,23 +166,39 @@ int dos_map_error_lookup(int dos_code, int *out_e0010, int *out_e4e7a);
  * (1 = char device e.g. console, 0 = block file). Used to route the
  * Dos_Read @ 1000:1750 / Dos_Write @ 1000:3fc4 hook vectors
  * (1420:4fc4 / 1420:4fc8) for console handles. No Linux equivalent at
- * this layer (isatty lives one level up) -> stub CIV_ERR_UNSUPPORTED. */
+ * this layer (isatty lives one level up) -> stub CIV_ERR_UNSUPPORTED.
+ * Pure bit kernel: dos_is_char_device_bit below (LIVE). */
 civ_error_t dos_is_char_device(int fd);
+/* Orig Dos_IsCharDevice @ 1000:1566 return tail (MOV AX,DX / AND AX,0x80:
+ * nonzero = char device). OS-free 1:1 on the explicit DX word: 1 when
+ * (dx & 0x80) != 0, else 0. No DOS, no globals, no exit(). */
+int dos_is_char_device_bit(unsigned dx);
 /* Orig: FUN_1000_161c @ 1000:161c, now Dos_Seek in Ghidra.
  * INT 21h AH=0x42 (LSEEK): BX=fd, AL=origin ([BP+0x0c]: 0 SET / 1 CUR /
  * 2 END), CX:DX=offset ([BP+0x0a]/[BP+8]). Clears 0x4e4e-table bit 0x200
  * first; CF=1 -> Dos_MapError(AX). Live twin: file_seek_wrapper
  * (fseek/ftell, see save.h). Raw primitive stays stub
- * CIV_ERR_UNSUPPORTED. */
+ * CIV_ERR_UNSUPPORTED. Pure origin kernel: dos_seek_origin_ok (LIVE). */
 civ_error_t dos_seek(int fd, long offset, int origin);
+/* Orig Dos_Seek @ 1000:161c AL contract (INT 21h AH=0x42: AL 0 SET /
+ * 1 CUR / 2 END; other AL values fail via Dos_MapError @ 1000:151a).
+ * OS-free 1:1 validator: 1 when 0 <= origin <= 2, else 0. No DOS,
+ * no globals, no exit(). */
+int dos_seek_origin_ok(int origin);
 /* Orig: FUN_1000_1750 @ 1000:1750, now Dos_Read in Ghidra.
  * INT 21h AH=0x3f: BX=fd, CX=count [BP+0x0c], DS:DX=buf [BP+8].
  * Guards: 0x4e4e-table bit 1 set -> errno 5 via Dos_MapError; hook vec
  * 1420:4fc4 + Dos_IsCharDevice nonzero -> indirect read. Text-mode
  * (0x4000) CRLF/0x1a handling lives one level up in File_ReadBuffered
  * @ 1000:33c0. Live twin: save_file_read (POSIX, chunked 0x8000).
- * Raw primitive stays stub CIV_ERR_UNSUPPORTED. */
+ * Raw primitive stays stub CIV_ERR_UNSUPPORTED. Pure guard kernel:
+ * dos_read_is_blocked below (LIVE). */
 civ_error_t dos_read(int fd, void *buf, unsigned len);
+/* Orig Dos_Read @ 1000:1750 guard head (0x4e4e-table word bit 1 set ->
+ * errno 5 via Dos_MapError @ 1000:151a, no INT 21h issued). OS-free 1:1
+ * on the explicit table word: 1 when (flags & 2) != 0 (blocked), else 0.
+ * No DOS, no globals, no exit(). */
+int dos_read_is_blocked(unsigned flags);
 /* Orig: FUN_1000_19a6 @ 1000:19a6, now Dos_Unlink in Ghidra.
  * INT 21h AH=0x41 (delete file): DS:DX=path [BP+6]. CF=1 ->
  * Dos_MapError(AX), else 0. NULL path -> NOENT (orig faulted). Raw
@@ -181,8 +211,13 @@ civ_error_t dos_unlink(const char *path);
  * attrs (get) or CX passthrough (set); CF=1 -> Dos_MapError. Used by
  * File_Open @ 1000:2ad9 to probe existence (func 0) and restore
  * read-only (func 1, arg 1). Raw primitive stays stub
- * CIV_ERR_UNSUPPORTED. */
+ * CIV_ERR_UNSUPPORTED. Pure func kernel: dos_file_attr_func_ok (LIVE). */
 civ_error_t dos_file_attr(const char *path, int func, int attrs);
+/* Orig Dos_FileAttr @ 1000:1f5c AL contract (INT 21h AH=0x43: AL 0 = get
+ * attrs -> CX, AL 1 = set attrs from CX; File_Open @ 1000:2ad9 uses both).
+ * OS-free 1:1 validator: 1 when func == 0 || func == 1, else 0. No DOS,
+ * no globals, no exit(). */
+int dos_file_attr_func_ok(int func);
 /* Orig: FUN_1000_1fa6 @ 1000:1fa6, now Dos_Close in Ghidra.
  * INT 21h AH=0x3e: BX=fd [BP+6]. Success clears the 0x4e4e-table word
  * (fd*2+0x4e4e = 0); CF=1 -> Dos_MapError. Wrapped by
@@ -246,15 +281,26 @@ unsigned dos_open_table_word(int flags);
  * count. Success sets table bit 0x1000, returns AX=bytes written;
  * CF=1 -> Dos_MapError(AX). Text-mode twin File_WriteText @ 1000:3e70
  * (LF->CRLF when 0x4000). Live twin: save_file_write (POSIX). Raw
- * primitive stays stub CIV_ERR_UNSUPPORTED. */
+ * primitive stays stub CIV_ERR_UNSUPPORTED. Pure guard kernel:
+ * dos_write_is_blocked below (LIVE). */
 civ_error_t dos_write(int fd, const void *buf, unsigned len);
+/* Orig Dos_Write @ 1000:3fc4 guard head (0x4e4e-table word bit 0 set ->
+ * errno 5 via Dos_MapError @ 1000:151a, no INT 21h issued). OS-free 1:1
+ * on the explicit table word: 1 when (flags & 1) != 0 (blocked), else 0.
+ * No DOS, no globals, no exit(). */
+int dos_write_is_blocked(unsigned flags);
 /* Orig: FUN_1000_4252 @ 1000:4252, now Dos_Ioctl in Ghidra.
  * INT 21h AH=0x44 dispatcher: funcs 0/6/7/8/9/10/0xe/0xf pass straight
  * through, others require DAT_1420_0012 != 0 + verr() or fail with
  * errno 0x13 via Dos_MapError. Func 0 returns the high word
  * (DX:AX >> 16). Console/device control only -> stub
- * CIV_ERR_UNSUPPORTED. */
+ * CIV_ERR_UNSUPPORTED. Pure whitelist kernel: dos_ioctl_is_direct (LIVE). */
 civ_error_t dos_ioctl(int fd, int func);
+/* Orig Dos_Ioctl @ 1000:4252 dispatch head (direct INT 21h AH=0x44 funcs
+ * 0/6/7/8/9/10/0xe/0xf; all other funcs need DAT_1420_0012 + verr()).
+ * OS-free 1:1: 1 when func is direct, else 0. No DOS, no globals,
+ * no exit(). */
+int dos_ioctl_is_direct(int func);
 
 /* --- system --- */
 

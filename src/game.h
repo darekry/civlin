@@ -3243,4 +3243,69 @@ int demo_family_raw(int food, int pop);
  * improvement total). Always returns the clamped value. No globals. */
 int demo_life_clamp(int impr);
 
+/* --- Turn-loop frontier gates (2026-10-16) ---
+ * Parents stay STUB (Win16/GDI/dialog tails); OS-free heads below are
+ * LIVE 1:1 on explicit params (no globals, no Win16, no exit()).
+ * Ref: unpacked/civ.exe (read-only; e.g. "00,000 citizens." @ 1420:172b
+ * verified via strings, never edited). */
+
+/* Orig City_ProcessDisaster @ 1040:068e city pick (2x per
+ * Game_TurnLoopTick @ 1088:0000 pass once g_nTurn > 0x32, Rng_Range @
+ * 11c8:003d 0x80 draws caller-side) -> city_disaster_city_ok. 1:1:
+ * valid (@ 1420:5502, 0xff/-1 = empty slot) != empty && pop (@ 1420:3efe)
+ * > 1 && size (@ 1420:5503) > 4. Returns 1 eligible / 0 skip. */
+int city_disaster_city_ok(int valid, int pop, int size);
+
+/* Orig same disaster switch (Rng_Range(10) @ 11c8:003d) building-flag
+ * checks on the 0x1c city mask @ 1420:54fc (bits 0x10/0x100/0x80/0x08/
+ * 0x04/0x02/0x40) -> city_disaster_has_building. 1:1: nonzero (1) when
+ * (mask & bit) != 0 (bit is one of the 54fc bits above); bit == 0 never
+ * matches (-> 0). Messages @ 1420:07f0/0839 + viewer Pic_PlayShared @
+ * 1030:0000 + dialog Dialog_ShowMessage @ 1220:00d2 + Map_CenterOnTile @
+ * 1110:03ae tails stay in city_process_disaster (STUB). */
+int city_disaster_has_building(unsigned mask, unsigned bit);
+
+/* Orig Game_UpdateStatusPanel @ 1088:13d5 milestone popup gate ->
+ * game_status_milestone_due. 1:1: pop tier rose (tier > prev_tier) and
+ * DAT_1420_14e6 > -2, then Dialog_ShowMessage @ 1220:00d2 with the
+ * "00,000 citizens." @ 1420:172b tail (dialog tail stays Win16 in
+ * game_update_status_panel, STUB). Returns 1 fire / 0 silent. */
+int game_status_milestone_due(int prev_tier, int tier, int flag14e6);
+
+/* Orig Status_DrawTechIcons @ 1088:1a82 AI-fake pick ->
+ * status_lcg_pick. 1:1: (seed & 0xff) % 9 icon slot (seed iterates via
+ * status_lcg_next: seed = seed*5+1 from DAT_13c0_0000*civ; 999-try cap +
+ * adjacency/budget gates via status_tech_count_ok/height_ok stay
+ * caller-side in status_draw_tech_icons, STUB). Returns 0..8. */
+int status_lcg_pick(unsigned seed);
+
+/* Orig Gfx_DrawTechIcon @ 11a8:0cb1 range -> gfx_tech_icon_valid. 1:1:
+ * 9-icon blitter index 0..8 (caller status_draw_tech_icons @ 1088:1a82
+ * advances per slot; SELECTPALETTE + BITBLT tail stays Win16 in
+ * gfx_draw_tech_icon, STUB). Returns 1 valid / 0 OOR. */
+int gfx_tech_icon_valid(int index);
+
+/* Orig Unit_FoundCityIfHome @ 11c0:16a4 join gate -> unit_found_join_ok.
+ * 1:1: type == 0x1a (settler, 1420:62ff) && home (+10/6307) == city_idx
+ * takes the join path (consume settler + city_grow, LIVE in
+ * unit_do_found_city); else the new-city path (map tile claim via
+ * map_get_tile/map_set_tile @ 11e8:0dcf/0e19 + 1420:5500 alloc + Win16
+ * dialog, UNSUPPORTED tail). Returns 1 join / 0 new-city. */
+int unit_found_join_ok(int type, int home, int city_idx);
+
+/* Orig City_SpotReveal @ 11c0:0000 record gate -> city_spot_valid. 1:1:
+ * valid (@ 1420:5502, 0xff/-1 = empty) != empty (sibling
+ * City_FindByTile @ 11c8:00c4 scans 0x80 0x1c records the same way;
+ * seen-bit/diplomacy/minimap tails stay Win16 in city_spot_reveal,
+ * STUB). Returns 1 city present / 0 empty. */
+int city_spot_valid(int valid);
+
+/* Orig Unit_ShowInfoPopup @ 11f0:468c occupancy tail ->
+ * unit_popup_has_pollution. 1:1: (occ & 0x40) != 0 draws the Pollution
+ * @ 1420:4845 line (Map_GetOccupancyFlags @ 1110:199b bits; siblings
+ * 0x10 Railroad @ 481d else 0x08 @ 4828, 0x02 Irrigation @ 482f else
+ * 0x04 Mining @ 483c, 0x01 city-guard badge path; GDI DrawDirect + h
+ * step tails stay in unit_show_info_popup, STUB). Returns 1/0. */
+int unit_popup_has_pollution(unsigned occ_flags);
+
 #endif /* CIVLIN_GAME_H */

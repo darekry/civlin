@@ -4507,3 +4507,100 @@ int demo_life_clamp(int impr)
         v = 99;
     return v;
 }
+
+/* --- Turn-loop frontier gates (2026-10-16): OS-free 1:1 LIVE heads for
+ * STUB parents (Win16/GDI/dialog tails stay CIV_ERR_UNSUPPORTED in the
+ * parents with TODO Orig). No globals, no Win16, no exit(), C17. Ref:
+ * unpacked/civ.exe read-only (never edited; civ1win/ untouched). */
+
+int city_disaster_city_ok(int valid, int pop, int size)
+{
+    /* Orig City_ProcessDisaster @ 1040:068e pick (called 2x per
+     * Game_TurnLoopTick @ 1088:0000 pass once g_nTurn > 0x32): valid @
+     * 1420:5502 != -1 (0xff empty slot, cf. city_found_free_slot) + pop
+     * @ 1420:3efe > 1 + size @ 1420:5503 > 4 (Rng_Range @ 11c8:003d 0x80
+     * draws + messages @ 1420:07f0/0839 + viewer Pic_PlayShared @
+     * 1030:0000 + dialog @ 1220:00d2 + Map_CenterOnTile @ 1110:03ae stay
+     * caller-side in city_process_disaster, STUB). */
+    if (((unsigned)valid & 0xffu) == 0xffu)
+        return 0;
+    if (pop <= 1)
+        return 0;
+    if (size <= 4)
+        return 0;
+    return 1;
+}
+
+int city_disaster_has_building(unsigned mask, unsigned bit)
+{
+    /* Orig same switch Rng_Range(10): building-flag checks on the 0x1c
+     * city mask @ 1420:54fc (bits 0x10/0x100/0x80/0x08/0x04/0x02/0x40
+     * gate the GRANARY/TEMPLE/COURTHOUSE/MARKETPLACE/CATHEDRAL demands +
+     * 0x860/0x873/0x87a/0x885/0x891/0x89b tails). */
+    if (bit == 0u)
+        return 0;
+    return (mask & bit) != 0u ? 1 : 0;
+}
+
+int game_status_milestone_due(int prev_tier, int tier, int flag14e6)
+{
+    /* Orig Game_UpdateStatusPanel @ 1088:13d5 tail: Dialog_ShowMessage @
+     * 1220:00d2 fires when the pop tier rises and DAT_1420_14e6 > -2
+     * ("00,000 citizens." @ 1420:172b tail; string verified present in
+     * unpacked/civ.exe via strings, read-only). Dialog tail stays Win16
+     * in game_update_status_panel (STUB). */
+    if (tier <= prev_tier)
+        return 0;
+    return (flag14e6 > -2) ? 1 : 0;
+}
+
+int status_lcg_pick(unsigned seed)
+{
+    /* Orig Status_DrawTechIcons @ 1088:1a82 AI-fake step (other civs;
+     * player copies live rows 0xdc/0xc4): pick (seed & 0xff) % 9, seed
+     * iterated by status_lcg_next (seed*5+1 from DAT_13c0_0000*civ)
+     * under adjacency + budget (status_tech_count_ok/height_ok) + 999-try
+     * cap gates in status_draw_tech_icons (STUB). */
+    return (int)((seed & 0xffu) % 9u);
+}
+
+int gfx_tech_icon_valid(int index)
+{
+    /* Orig Gfx_DrawTechIcon @ 11a8:0cb1 (9-icon blitter called from
+     * status_draw_tech_icons @ 1088:1a82; SELECTPALETTE + BITBLT tail
+     * stays Win16 in gfx_draw_tech_icon, STUB). */
+    return (index >= 0 && index <= 8) ? 1 : 0;
+}
+
+int unit_found_join_ok(int type, int home, int city_idx)
+{
+    /* Orig Unit_FoundCityIfHome @ 11c0:16a4 gate, mirrors the join branch
+     * LIVE in unit_do_found_city (PARTIAL): type 0x1a settler (1420:62ff)
+     * with home-city +10/6307 == city_idx consumes (type -> 0xff, moves
+     * -> 0) + city_grow; else the new-city path (map claim via
+     * map_get_tile/map_set_tile @ 11e8:0dcf/0e19 + 1420:5500 alloc +
+     * Win16 dialog, UNSUPPORTED tail). */
+    if (type != CIV_UNIT_TYPE_SETTLER)
+        return 0;
+    return (home == city_idx) ? 1 : 0;
+}
+
+int city_spot_valid(int valid)
+{
+    /* Orig City_SpotReveal @ 11c0:0000 gate in the Unit_UpdateVisibility
+     * @ 11c0:0395 tail (via Map_FindUnitAt @ 1110:180e + Map_GetTileOwner
+     * @ 1110:16ee; sibling City_UpdateVisibility @ 11c8:00c4 + City_FindBy
+     * Tile @ 11c8:00c4 scan 0x80 0x1c records @ 1420:5500 the same way).
+     * Seen-bit/diplomacy/minimap tails stay in city_spot_reveal (STUB). */
+    return (((unsigned)valid & 0xffu) == 0xffu) ? 0 : 1;
+}
+
+int unit_popup_has_pollution(unsigned occ_flags)
+{
+    /* Orig Unit_ShowInfoPopup @ 11f0:468c occupancy tail
+     * (Map_GetOccupancyFlags @ 1110:199b): 0x40 Pollution @ 1420:4845
+     * line (each DrawDirect + h step; GDI tail stays in
+     * unit_show_info_popup, STUB). Siblings: 0x10 Railroad @ 481d else
+     * 0x08 @ 4828; 0x02 Irrigation @ 482f else 0x04 Mining @ 483c. */
+    return (occ_flags & 0x40u) != 0u ? 1 : 0;
+}

@@ -3069,3 +3069,91 @@ int anim_opcode_is_text(int op)
      * 5/7/8/9 above). */
     return (op == 7) ? 1 : 0;
 }
+
+/* --- Chain 2026-10-16 (32): tracked/anim/diplo/menu/text gates (task). ---
+ * See dialog.h block. OS-free 1:1 LIVE (no Win16, no globals, no exit()).
+ * Win16/GDI/USER tails stay CIV_ERR_UNSUPPORTED / WIN16_MSG_DEFAULT with
+ * TODO Orig in the STUBs above (dialog_menuz @ 1220:0156, dlg_create_tracked
+ * @ 1098:124f, anim_open_sequence @ 10b0:008a, anim_advance_frames @
+ * 10b0:0461, diplomacy_post_contact @ 1168:0a07, text_draw_aligned @
+ * 1098:0ed1). */
+
+int dlg_preset_w(int dlg_id)
+{
+    /* Orig Dlg_CreateTracked @ 1098:124f: 0x94/0x8f preset 002e = 0x200. */
+    if (dlg_id == 0x94 || dlg_id == 0x8f)
+        return CIV_DLG_PRESET_W;
+    return -1;
+}
+
+int dlg_preset_h(int dlg_id)
+{
+    /* Orig same: 0x94/0x8f preset 002c = 0x140. */
+    if (dlg_id == 0x94 || dlg_id == 0x8f)
+        return CIV_DLG_PRESET_H;
+    return -1;
+}
+
+int anim_seq_resolve_count(int param_3, int counted)
+{
+    /* Orig Anim_OpenSequence @ 10b0:008a: param_3 == 0 -> count recs until
+     * opcode 0 (anim_seq_count_frames), else the passed count. */
+    if (param_3 != 0)
+        return param_3;
+    return counted;
+}
+
+int anim_seq_ctx_size(void)
+{
+    /* Orig Anim_OpenSequence @ 10b0:008a: mem_alloc_lock 0xa6 ctx. */
+    return CIV_ANIM_SEQ_CTX_SIZE;
+}
+
+int anim_tick_is_due(long start, long tick, int len)
+{
+    /* Orig Anim_AdvanceFrames @ 10b0:0461 cases 11/14: (tick - start) %
+     * len == 0 timed blit/rotate gate. */
+    long diff;
+
+    if (len <= 0)
+        return -1;
+    diff = tick - start;
+    return ((diff % (long)len) == 0L) ? 1 : 0;
+}
+
+int diplo_contact_stamp_due(int turn, int stamp)
+{
+    /* Orig Diplo_PostContact @ 1168:0a07: contacted bit 0x01 is fresh while
+     * turn - stamp <= 0xf (392b+3 stamp); stale above that re-contacts. */
+    return ((turn - stamp) > 0x0f) ? 1 : 0;
+}
+
+int dialog_menuz_item_disabled(int mask, int index)
+{
+    /* Orig Dialog_MenuZ_Modal @ 1220:0156: DISABLE when the DAT_12d8_24da
+     * bit for the 500+i slot is set. */
+    unsigned u;
+
+    if (index < 0 || index >= 32)
+        return -1;
+    u = (unsigned)mask;
+    return (((u >> (unsigned)index) & 1u) != 0u) ? 1 : 0;
+}
+
+int dialog_menuz_id_is_valid(int button_id, int count)
+{
+    /* Orig same: RanDoMRadio 500+i fan-out for i < count (cap 0x18 via
+     * dialog_split_menu_count; base 500 via dialog_menuz_id_to_index). */
+    if (count <= 0)
+        return 0;
+    if (button_id < CIV_DIALOG_MENUZ_BASE_ID)
+        return 0;
+    return ((button_id - CIV_DIALOG_MENUZ_BASE_ID) < count) ? 1 : 0;
+}
+
+int text_shadow_passes(void)
+{
+    /* Orig Text_DrawAligned @ 1098:0ed1: shadow TEXTOUT x3, then the main
+     * TEXTOUT (gate in text_needs_shadow). */
+    return 3;
+}

@@ -425,6 +425,15 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `dialog_refresh_view_count` | LIVE | 1220:00d2, 1220:0eb8, 12b0:0004 |  |
 | `dialog_refresh_msg` | LIVE | 1220:0eb8 |  |
 | `anim_opcode_is_text` | LIVE | 1000:36b2, 1098:0ed1, 1098:1104, 10b0:0461, 10d0:0854, 1100:078a |  |
+| `dlg_preset_w` | LIVE | 1098:124f |  |
+| `dlg_preset_h` | LIVE |  |  |
+| `anim_seq_resolve_count` | LIVE | 10b0:008a |  |
+| `anim_seq_ctx_size` | LIVE | 10b0:008a |  |
+| `anim_tick_is_due` | LIVE | 10b0:0461 |  |
+| `diplo_contact_stamp_due` | LIVE | 1168:0a07, 1168:0f47 |  |
+| `dialog_menuz_item_disabled` | LIVE | 1220:0156 |  |
+| `dialog_menuz_id_is_valid` | LIVE |  |  |
+| `text_shadow_passes` | LIVE | 1098:0e0b, 1098:0ed1 |  |
 
 ### `src/game.c`
 
@@ -753,6 +762,14 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `demo_productivity` | LIVE | 1188:123a |  |
 | `demo_family_raw` | LIVE | 1188:123a |  |
 | `demo_life_clamp` | LIVE | 1188:123a, 11c8:0063 |  |
+| `city_disaster_city_ok` | LIVE | 1030:0000, 1040:068e, 1088:0000, 11c8:003d, 1220:00d2, 1420:07f0, 1420:3efe, 1420:5502, 1420:5503 |  |
+| `city_disaster_has_building` | LIVE | 1030:0000, 1110:03ae, 11c8:003d, 1220:00d2, 1420:07f0, 1420:54fc |  |
+| `game_status_milestone_due` | LIVE | 1088:13d5, 1220:00d2, 1420:172b |  |
+| `status_lcg_pick` | LIVE | 1088:1a82 |  |
+| `gfx_tech_icon_valid` | LIVE | 1088:1a82, 11a8:0cb1 |  |
+| `unit_found_join_ok` | LIVE | 11c0:16a4, 11e8:0dcf, 1420:5500, 1420:62ff |  |
+| `city_spot_valid` | LIVE | 1110:16ee, 1110:180e, 11c0:0000, 11c0:0395, 11c8:00c4, 1420:5500, 1420:5502 |  |
+| `unit_popup_has_pollution` | LIVE | 1110:199b, 11f0:468c, 1420:4845 |  |
 
 ### `src/gfx_indexed.c`
 
@@ -1202,13 +1219,19 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `file_write_buffered` | STUB | 1000:2c9c, 1000:2cba, 1000:2e85, 1000:3fc4, 1420:4cd0 | has TODO |
 | `file_put_char_buffered` | STUB | 1000:2152, 1000:2cd8, 1000:3fc4, 1420:4cd0 | has TODO |
 | `file_emit_char` | STUB | 1000:2cba, 1000:2cd8, 1000:2e85 | has TODO |
+| `file_buffered_is_direct` | LIVE | 1000:2152, 1000:2cd8, 1000:2e85, 1420:4cd0 |  |
+| `file_is_text_mode` | LIVE | 1000:1750, 1000:33c0, 1000:3e70, 1000:3fc4 |  |
 | `dos_map_error` | STUB | 1000:151a, 1420:4e7c | has TODO |
 | `dos_map_error_lookup` | LIVE | 1000:151a, 1420:4e7c |  |
 | `dos_is_char_device` | STUB | 1000:1566, 1000:1750, 1000:3fc4, 1420:4fc4, 1420:4fc8 | has TODO |
+| `dos_is_char_device_bit` | LIVE | 1000:1566, 1000:1750, 1000:3fc4, 1420:4fc4 |  |
 | `dos_seek` | STUB | 1000:161c | has TODO |
+| `dos_seek_origin_ok` | LIVE | 1000:151a, 1000:161c |  |
 | `dos_read` | STUB | 1000:1750, 1000:33c0, 1140:019d, 1420:4fc4 | has TODO |
+| `dos_read_is_blocked` | LIVE | 1000:151a, 1000:1566, 1000:1750, 1420:4fc4 |  |
 | `dos_unlink` | STUB | 1000:19a6 | has TODO |
 | `dos_file_attr` | STUB | 1000:1f5c, 1000:2ad9 | has TODO |
+| `dos_file_attr_func_ok` | LIVE | 1000:1f5c, 1000:2ad9 |  |
 | `dos_close` | STUB | 1000:1f7c, 1000:1fa6 | has TODO |
 | `dos_is_eof` | STUB | 1000:201e | has TODO |
 | `dos_eof_at_end` | LIVE | 1000:201e |  |
@@ -1218,7 +1241,9 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `dos_open_mode_map` | LIVE | 1000:2c4a |  |
 | `dos_open_table_word` | LIVE | 1000:2c4a |  |
 | `dos_write` | STUB | 1000:3e70, 1000:3fc4, 1140:0245, 1420:4fc8 | has TODO |
+| `dos_write_is_blocked` | LIVE | 1000:151a, 1000:1566, 1000:3fc4, 1420:4fc8 |  |
 | `dos_ioctl` | STUB | 1000:4252 | has TODO |
+| `dos_ioctl_is_direct` | LIVE | 1000:151a, 1000:4252 |  |
 | `dos_get_current_drive` | LIVE | 1000:1252 |  |
 | `dos_get_current_drive_index` | LIVE | 1000:13e6 |  |
 | `dos_get_current_dir` | LIVE | 1000:139c |  |
