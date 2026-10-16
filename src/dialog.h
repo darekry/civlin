@@ -535,9 +535,34 @@ civ_error_t help_open_topic(const char *topic);
  *   script, opcodes 1..0xe: palette fades/selects, offscreen blits,
  *   sound triggers (Sound_PlayId @ 1150:00c9 bridge), port switches
  *   (GR port layer, see video.h). Returns nonzero when the sequence is
- *   finished. Full script engine -> SDL TBD; stub (reports done). */
+ *   finished. Full script engine -> SDL TBD; stub (reports done).
+ * Orig: FUN_10b0_008a @ 10b0:008a -> Anim_OpenSequence. mem_alloc_lock
+ *   0xa6 ctx + GETCLIENTRECT + Sys_GetTickScaled @ 1100:02e1 base +
+ *   max-end scan + GfxPort_Create x2 (offs +9/+0x62) + FUN_1000_14f8 /
+ *   FUN_1100_0876 setup + DAT_1420_1f40 = ctx. Win16/GfxPort -> SDL TBD;
+ *   stub CIV_ERR_UNSUPPORTED (OS-free count/max halves LIVE below).
+ * Orig: FUN_10b0_0287 @ 10b0:0287 -> Anim_CloseSequence. Frees slots
+ *   3/4 via Anim_FreeSlot @ 10a8:00b4 + slot 7 via GfxPort_Close +
+ *   both ports + GLOBALFREE + Mem_DisposePtr + 1420:1f40 = 0. Win16 ->
+ *   SDL TBD; stub (void).
+ * Orig: FUN_10b0_0026 @ 10b0:0026 -> Anim_IsActive. Returns
+ *   DAT_1420_1f40 (nonzero = sequence active, pumped by
+ *   Anim_PumpIfActive). OS-free gate LIVE below. */
 civ_error_t anim_pump_if_active(void);
 int anim_advance_frames(void);
+civ_error_t anim_open_sequence(void);
+void anim_close_sequence(void);
+/* Orig Anim_OpenSequence @ 10b0:008a count half (param_3 == 0 -> count
+ * recs until opcode 0, stride 0xf words) -> anim_seq_count_frames.
+ * 1:1 count of opcodes before the first 0 (cap bounds the scan).
+ * NULL opcodes -> -1. No globals. */
+int anim_seq_count_frames(const int *opcodes, size_t cap);
+/* Orig same max-end half (max of rec[7] longs + 1) -> anim_seq_max_end.
+ * 1:1 max(ends[]) + 1 (empty -> 1, orig 0 + 1). NULL with n > 0 -> -1. */
+long anim_seq_max_end(const long *ends, size_t n);
+/* Orig Anim_IsActive @ 10b0:0026 gate -> anim_seq_is_active.
+ * 1:1 nonzero (1) when active != 0. */
+int anim_seq_is_active(long active);
 
 /* --- diplomacy + wait-prompt (packet D 2026-10-15) ---
  * Posted from unit_update_visibility @ 11c0:0395 tail (contact when a unit

@@ -213,6 +213,75 @@ int anim_advance_frames(void)
     return 1;
 }
 
+civ_error_t anim_open_sequence(void)
+{
+    /* Orig: FUN_10b0_008a @ 10b0:008a -> Anim_OpenSequence (decompiled
+     * this pass: mem_alloc_lock 0xa6 ctx [0xfff4 on NULL] + opcode-0
+     * count when param_3 == 0 + GETCLIENTRECT + *ctx = param_1 +
+     * ctx[4] = timeline + ctx[5] = count + Sys_GetTickScaled @ 1100:02e1
+     * base at +0x1a minus param_2 + +0x16 = 0 + max-end scan over
+     * rec[7] longs + 1 + per-rec [13]/[14] = 0 + GfxPort_Create x2 at
+     * +9/+0x62 with FUN_1000_14f8/FUN_1100_0876 setup + DAT_1420_1f40 =
+     * ctx; callers Main_RunStartupSequence @ 11e0:0000 + MainMenu_WndProc
+     * @ 11e0:0221 sequence 0x91e path).
+     * TODO: GfxPort_Create x2 + GETCLIENTRECT rect + tick-base wiring ->
+     * SDL3 bridge TBD. OS-free halves live in anim_seq_count_frames /
+     * anim_seq_max_end below. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+void anim_close_sequence(void)
+{
+    /* Orig: FUN_10b0_0287 @ 10b0:0287 -> Anim_CloseSequence (decompiled
+     * this pass: per-rec free of opcode 3/4 slots via Anim_FreeSlot @
+     * 10a8:00b4 + opcode 7 via GfxPort_Close + Mem_DisposePtr, then
+     * GfxPort_ClearActive/Close x2 at +0x24/+0x62 + GLOBALFREE palette
+     * when DAT_12d8_28fc == 0 + Mem_DisposePtr ctx + DAT_1420_1f40 = 0;
+     * callers Main_RunStartupSequence @ 11e0:0000 + MainMenu_WndProc @
+     * 11e0:0221).
+     * TODO: GfxPort/Mem handle teardown -> SDL3 TBD. Intentionally void
+     * (orig void; no-op until the bridge lands). */
+}
+
+int anim_seq_count_frames(const int *opcodes, size_t cap)
+{
+    /* Orig Anim_OpenSequence @ 10b0:008a: while (*piVar2 != 0) param_3++
+     * with +0xf stride (15-word timeline recs, [0] = opcode). */
+    size_t n = 0;
+
+    if (!opcodes)
+        return -1;
+    while (n < cap) {
+        if (opcodes[n] == 0)
+            break;
+        n++;
+    }
+    return (int)n;
+}
+
+long anim_seq_max_end(const long *ends, size_t n)
+{
+    /* Orig same: max over rec[7] longs (start at 0) then + 1. */
+    long m = 0L;
+    size_t i;
+
+    if (!ends && n > 0)
+        return -1L;
+    for (i = 0; i < n; i++) {
+        if (ends[i] > m)
+            m = ends[i];
+    }
+    return m + 1L;
+}
+
+int anim_seq_is_active(long active)
+{
+    /* Orig FUN_10b0_0026 @ 10b0:0026: return DAT_1420_1f40 (active ctx
+     * or 0); pumped by Anim_PumpIfActive @ 10b0:0000 via Sys_Yield @
+     * 1098:0157. */
+    return (active != 0L) ? 1 : 0;
+}
+
 civ_error_t dlg_center_window(const dlg_rect_t *parent, const dlg_rect_t *dlg,
                               dlg_rect_t *out)
 {
