@@ -1455,4 +1455,598 @@ int city_transfer_treasury(int treas, int amount, int is_winner);
  * CIV_ERR_UNSUPPORTED; bad order/civ/unit -> RANGE/NOENT. No globals. */
 civ_error_t civ_unit_turn_step(int civ, int unit_idx, int order);
 
+/* --- Chain 2026-10-16 (3): production dialog pump + tile family + AI + reveal ---
+ * Orig (civ.exe, x86:LE:16:Protected Mode), renamed this pass:
+ *   City_PumpProductionDialog @ 1170:1f84 (already named; sole caller
+ *     City_ChooseProduction @ 1170:05ca dialog tail). Modal Win16 pump:
+ *     MAKEPROCINSTANCE + SETWINDOWLONG hook, PEEKMESSAGE loop on
+ *     DAT_12d8_0030, ISDIALOGMESSAGE, then hook restore + FREEPROCINSTANCE;
+ *     writes *param_2 = DAT_12d8_0030, returns 0. Result codes come from
+ *     the ChooseProduction tail loop: do { Pump(); SENDMESSAGE 0x409 list
+ *     sel -> local_e8[sel+1]; } while (local_2e != 0x66 && != 0x65):
+ *     0x66 = accept (returns local_e8[0] current prod), 0x65 = cancel
+ *     (returns the newly picked iVar4). Actions in the loop: list-select
+ *     change production, "?" help via FUN_1020_0000 + Pic 1030:9203,
+ *     advisor compare (Military/Domestic text via 11d0:0115/022d +
+ *     1068:2072/255a when g_nOptionFlags&1 and local_24/local_22 set).
+ *     Scoring relation: the advisor pair (local_24 best unit, local_22
+ *     best building/wonder) and overall best (local_10/local_c minima)
+ *     are the argmin picks below; the human dialog shows them as advisor
+ *     text while the AI takes local_22 (or local_10 when human-automated).
+ *   Map_CheckTileBounds @ 1110:168f + Map_CheckTileImproved @ 1110:1c72 +
+ *     Map_GetOccupancyFlags @ 1110:199b + Map_GetTile @ 11e8:0dcf +
+ *     Map_SetTile @ 11e8:0e19 + Map_GetContinentId @ 1110:1d99 (full tile
+ *     family; see map.h for the LIVE ports + reader fan-out).
+ *   Unit_ChooseOrder @ 1078:1480 (renamed from FUN_1078_1480; 0x300e B AI
+ *     brain; sole caller Civ_ProcessUnitMoves @ 11f0:0000): civ==0
+ *     delegates to Unit_AIPlayerTurn @ 1078:4f0f; 0x0f+timer<1 -> 0x68;
+ *     0x0e+no-goal -> nearest visible player diplomat (Map_WrapStepDist @
+ *     11c8:02ec, unit_find_diplomat_target LIVE) or staging city else
+ *     0x20; 0x19 -> bribe-target scan (power/tech/diplo, 0x80 cities) else
+ *     0x20; 0x1a+no-goal+home -> Unit_FoundCityIfHome @ 11c0:16a4; then
+ *     hut-hunt (tile+0x50), difficulty snipe, city-defense 0x66, stack /
+ *     settler (local_3a class 0/2/3/5), combat odds via Combat_CalcOdds @
+ *     11c0:1bc3 + Combat_ResolveAttack @ 1050:0000, explorer walk.
+ *   Unit_StepTowardGoal @ 1128:0000 (renamed from FUN_1128_0000):
+ *     player-adjacent (|dx|<2,|dy|<2) via Util_SignStep @ 1110:1c4b, else
+ *     corridor FUN_1128_10de(999) + passability FUN_1128_081c, then
+ *     8-neighbour score (Chebyshev-remaining + 1420:17d4*3-or-3, river 1,
+ *     anti-reverse 6304 penalty; sea/land, ZOC, occupancy, ocean>4 gates).
+ *     Returns dir 1..8 / 0 arrived / 0xffff no-path (clears 6302/6304).
+ *   Unit_AIPlayerTurn @ 1078:4f0f (renamed from FUN_1078_4f0f; civ==0
+ *     delegate): barbarian-shore landing (0x75), city-garrison 0x66,
+ *     neighbour best-score walk, settler escort/found, diplomat/bribe
+ *     interplay with Unit_ChooseOrder. Calls Unit_StepTowardGoal @
+ *     1128:0000 at 1078:55d3.
+ *   Unit_UpdateVisibility @ 11c0:0395 (renamed from FUN_11c0_0395; x, y,
+ *     civ, unit, redraw): player gets the 0x19-tile diamond (offsets via
+ *     Map_WrapX @ 1128:177e table, far 9.. gated on unit 0x1a46&2 +
+ *     domain 0x1a3a vs sea 10); others get 8 near + 0x10 far (0x1a46&2
+ *     gate). Seen-bits at x*0x32+y+10 |= 1<<civ (fog-of-war; City_DoRevolt
+ *     @ 11b8:0f26 flips the same bytes on revolt). City contact via
+ *     Map_FindUnitAt @ 1110:180e + Map_GetTileOwner @ 1110:16ee ->
+ *     City_SpotReveal @ 11c0:0000 / City_FindByTile @ 11c8:00c4, goal flips
+ *     via 11c0:1ee1, diplomacy via 1168:0a07 + Unit_QueueOrder @ 1078:455c,
+ *     minimap via Map_SetTile(x+0xf0, 1/2). Called per unit from
+ *     Civ_ProcessUnitMoves @ 11f0:0259/3688 and from Unit_SpawnUnit.
+ *   Unit_SpawnUnit @ 11c0:12c8 (renamed from FUN_11c0_12c8; NOT a reveal
+ *     wrapper: unit factory): scans 0x80 slots for type -1 (else the
+ *     FIRSTUNIT message + -1), inits x/y/type/seen/goal 0xff/timer from
+ *     0x1a3e/home via City_FindNearest @ 11c8:0124, count++, Map 1110:171f
+ *     /1767 place, seen-bit OR, then Unit_UpdateVisibility when
+ *     DAT_13b8_0000 == 0 + FIRSTUNIT1/2 tutorial messages for the player.
+ * OS-free predicates/kernels below are LIVE 1:1 on explicit params (no
+ * globals, no Win16, read-only); Win16 modal/map/city/diplomacy tails stay
+ * STUB with TODO Orig refs. */
+
+/* Orig City_PumpProductionDialog @ 1170:1f84 modal pump -> result codes.
+ * OS-free 1:1 (implemented predicates): accept == (code == 0x66),
+ * cancel == (code == 0x65) (the ChooseProduction do/while exit keys).
+ * Takes the DAT_12d8_0030/modal result code explicitly. No globals. */
+int city_pump_result_is_accept(int code);
+int city_pump_result_is_cancel(int code);
+
+/* Orig City_ChooseProduction @ 1170:05ca best-pick loop (local_c/local_28/
+ * local_26 minima over the local_e8 eligible list) -> argmin.
+ * OS-free 1:1 (implemented): returns the index 0..n-1 of the minimum
+ * score (ties break to the lower index, like the orig strict-< loop);
+ * -1 on NULL scores or n <= 0. Callers map the index back through
+ * local_e8 (positive = unit 0x00..0x1b, negative = -building/-wonder).
+ * The human dialog shows the same minima as advisor text (local_24 unit
+ * vs local_22 building/wonder vs local_10 overall); the AI takes the
+ * corresponding minimum directly. No globals. */
+int city_production_best_pick(const int *scores, int n);
+
+/* Orig City_PumpProductionDialog @ 1170:1f84 -> city_pump_production_dialog.
+ * Win16 modal pump (MAKEPROCINSTANCE + SETWINDOWLONG hook + PEEKMESSAGE /
+ * ISDIALOGMESSAGE loop on DAT_12d8_0030 + restore + FREEPROCINSTANCE).
+ * Needs Win16 message state + Dlg_CreateTracked @ 1098:124f dialog; stub
+ * returns CIV_ERR_UNSUPPORTED (result_out untouched). NOENT on NULL. */
+civ_error_t city_pump_production_dialog(int *result_out);
+
+/* Orig Unit_ChooseOrder @ 1078:1480 head branches (OS-free 1:1 predicates,
+ * implemented): civ==0 delegates to Unit_AIPlayerTurn @ 1078:4f0f (the
+ * human-civ order path); type 0x0f with build timer < 1 parks as sentry
+ * 0x68; type 0x0e with no goal (0xff/-1) hunts the nearest visible player
+ * diplomat (unit_find_diplomat_target @ 11c8:02ec) or a staging city else
+ * 0x20. goal uses the 6302 byte (0xff = none, -1 when read signed).
+ * Returns nonzero (1) when the branch fires. No globals. */
+int unit_choose_delegates_to_player(int civ);
+int unit_needs_sentry_idle(int type, int timer);
+int unit_diplomat_needs_goal(int type, int goal);
+
+/* Orig Unit_AIPlayerTurn @ 1078:4f0f + Unit_StepTowardGoal @ 1128:0000
+ * neighbour scoring (OS-free 1:1 kernels, implemented): best-pick is the
+ * argmax over the 8-neighbour scores (ties break to the lower dir, like
+ * the orig strict-> loop; dirs 1..8, 1=N clockwise per map_resolve_direct
+ * @ 1110:1c4b); reverse_penalty is the 6304 anti-reverse term
+ * (0 when last_dir is 0xff/0/0xffff or move_dir OOR 1..8, else
+ * dist4(move-last)^2 where dist4 folds >4 to 8-dist, cf. the 1128:0000
+ * local_26 block). Returns index/dir or penalty. No globals. */
+int unit_ai_best_dir(const int *scores, int n);
+int unit_ai_reverse_penalty(int move_dir, int last_dir);
+
+/* Orig Unit_UpdateVisibility @ 11c0:0395 seen/minimap kernels (OS-free 1:1,
+ * implemented): seen_index = x*0x32+y+10 (the fog byte for the tile; the
+ * same x*0x32+y+10 bytes City_DoRevolt @ 11b8:0f26 flips); seen_bit =
+ * 1<<civ (civ masked &0x1f like orig; -1 on civ OOR 0..31); minimap_value
+ * = (tile == 1) ? 1 : 2 (Map_SetTile(x+0xf0, y, v) in the redraw tail);
+ * sight_far_allowed = ((range_flags & 2) != 0) && (domain != 2 ||
+ * tile_is_sea != 0) (the 0x1a46&2 + 0x1a3a-vs-10 gate for the 0x10 far
+ * ring; player diamond is 0x19 tiles, others 8 near + 0x10 far).
+ * sight_count folds it: player != 0 -> 0x19, else far_allowed ? 0x18
+ * (8+0x10) : 8. No globals. */
+int unit_seen_index(int x, int y);
+int unit_seen_bit(int civ);
+int unit_reveal_minimap_value(int tile);
+int unit_sight_far_allowed(int range_flags, int domain, int tile_is_sea);
+int unit_sight_count(int is_player, int range_flags, int domain,
+                     int tile_is_sea);
+
+/* Orig Unit_SpawnUnit @ 11c0:12c8 slot scan + City_FindByTile @ 11c8:00c4 /
+ * City_FindNearest @ 11c8:0124 (OS-free 1:1, implemented on explicit
+ * arrays, no globals, read-only): free_slot = first i with types[i] ==
+ * -1/0xff (the 0x80 1420:62ff scan; -1 when full/NULL/n <= 0); find_by_tile
+ * = first i with valid[i] != -1 && xs[i] == x && ys[i] == y (the 0x80 0x1c
+ * city scan; -1 when none); nearest = argmin Map_WrapStepDist @ 11c8:02ec
+ * (map_wrap_step_dist, see map.h) with dist_out the winning distance
+ * (DAT_1420_b386 in orig; -1/NULL-safe, dist_out may be NULL). */
+int unit_find_free_slot(const int *types, int n);
+int city_find_by_tile(const int *xs, const int *ys, const int *valids, int n,
+                      int x, int y);
+int city_find_nearest(int ux, int uy, const int *xs, const int *ys,
+                      const int *valids, int n, int *dist_out);
+
+/* --- Chain 2026-10-16 (4): combat/ZOC/spawn/queue/visibility ---
+ * Anchors (civ.exe, x86:LE:16:Protected Mode), renamed this pass:
+ *   Unit_IterateStack @ 11c0:1ee1 (stack walk: next 0x6306 chain from
+ *     param_2, callback param_3 per node, stop on -1 / loop-back / >9
+ *     steps; backs Combat_CalcOdds @ 11c0:1bc3, Unit_CountDefenders @
+ *     11c0:1d70, Unit_UpdateVisibility @ 11c0:0395 goal flips, Combat_
+ *     ResolveAttack @ 1050:0000 tails).
+ *   Unit_PickStackTop @ 11c0:1a2c (top resolve via IterateStack into
+ *     DAT_1420_b380/b37e; backs Unit_DrawStacked @ 1110:1516).
+ *   Combat_ScoreAdjacent @ 1050:13af (diplomat 0x19 area tally: 8-neighbour
+ *     Map_FindUnitAt @ 1110:180e + city 0x10000 gate + Combat_CalcOdds per
+ *     node + IterateStack; called from Combat_ResolveAttack when atk type
+ *     0x19).
+ *   Unit_QueueShift @ 1078:4837 (make-room shift in the 0x20 AI queue:
+ *     rows 0x1e..slot shift +1 when prio != 0; backs Unit_QueueOrder).
+ *   Map_MirrorOccupancy @ 1110:1a2f (copy (x,y+100)->(x+0x50,y+100) +
+ *     (x,y+0x96)->(x+0x50,y+0x96); backs visibility/ZOC tails).
+ *   Map_SetTileOwner @ 1110:171f (tile(x+0xa0,y) = (old&8)|civ; backs
+ *     Unit_SpawnUnit place + City_DoRevolt moves).
+ *   Map_PlaceUnitAt @ 1110:1767 (Map_FindUnitAt + Unit_LinkStack @
+ *     1050:1105 + SetTile(civ|8); backs Unit_SpawnUnit place).
+ *   Unit_LinkStack @ 1050:1105 (insert into the 0x6306 next chain).
+ *   Diplo_PostContact @ 1168:0a07 (diplomacy post on land contact in the
+ *     0395 tail; needs diplo bits @ 12d8:3a0a + dialogs -> STUB).
+ *   Unit_DrawStacked @ 1110:1516 (pick-top via 11c0:1a2c + Unit_DrawSingle
+ *     @ 1110:0dba; needs GfxPort -> STUB) + Unit_DrawSingle @ 1110:0dba
+ *     (sprite blit via 1208:2061 + Gfx_DrawTechIcon @ 11a8:0cb1 -> SDL TBD).
+ * Combat (callers of Combat_CalcOdds @ 11c0:1bc3: Combat_ResolveAttack @
+ *   1050:0000, Diplomat_BribeUnit @ 11b8:07c2, FUN_1050_13af=Combat_
+ *   ScoreAdjacent above, FUN_1128_10de corridor @ 1128:10de, Unit_
+ *   ChooseOrder @ 1078:1480): CalcOdds itself only stores atk/def globals
+ *   + IterateStack + returns DAT_1420_b37c (formula lives in ResolveAttack
+ *   below); CountDefenders @ 11c0:1d70 only zeroes DAT_13b8_0002 +
+ *   IterateStack + returns it (tally is inside the 1ee1 callback, exact
+ *   predicate TBD); Unit_FindAtTile @ 11c8:01ab is the nearest-unit scan
+ *   (0x80 62ff active, exclude idx, argmin Map_WrapStepDist @ 11c8:02ec,
+ *   DAT_1420_b386 = winning dist; sibling of City_FindNearest @ 11c8:0124).
+ *   ResolveAttack @ 1050:0000 formula (decoded 2026-10-16): atk =
+ *   1a40[type]<<3; def = 1a42[type]*4*terrain(17d5) (*3/2 fortified 0x08,
+ *   *2 city 0x20, *3 walls 0x80+!0x0c vs non-1a3a==1, flat <<3 for air/sea
+ *   1a3a 1/2); city 3efe==1 -> atk 0 when atk civ == 0; palace 54fc&1 halves
+ *   atk; vet 0x20 +50% both; moves<3 scales atk *moves/3; preview when
+ *   param_5==0 is (atk<<3)/(def+1) else Rng_Range(atk) vs Rng_Range(def)
+ *   rolls (+ city-holder reroll local_22). Difficulty: civ==0 attacker
+ *   halves/quarters vs player (g_nDifficulty+1)/4 or /2; param_5!=0 halves
+ *   vs player when diff<2 and doubles player atk when diff==0. Tables
+ *   1a40/1a42/17d5/1a3a/1a46 exact bytes TBD vs dump (no fake values here).
+ * ZOC (Map_CheckZOC @ 11c0:23fd + Map_ScanZOCDetail @ 11c0:2437): Check is
+ *   the occupancy gate (Map_GetOccupancyFlags @ 1110:199b &1 city -> 0, else
+ *   ScanDetail); ScanDetail is the 8-neighbour enemy scan (offsets via the
+ *   local_6*2 table + Map_WrapX @ 1128:177e, Y unwrapped): sea match
+ *   (GetTileClass @ 1110:16c0 == 10 both sides), Map_GetUnitAt @ 1110:18ce
+ *   != -1 with owner != self -> 1 (blocked) + player reveal side effects
+ *   (seen-bit OR + Map_RevealCenter @ 1110:1461 + city 5504=5503 + 1110:1a2f
+ *   when player; Win16). No diplomat/caravan/sea exceptions in the scan
+ *   itself: sea/land match is the only domain gate, occupancy/city/ocean
+ *   gates stay in Unit_StepTowardGoal @ 1128:0000 / Unit_CanEnter. Callers:
+ *   Unit_StepTowardGoal neighbour scoring, Unit_ChooseOrder, Unit_
+ *   AIPlayerTurn @ 1078:4f0f, FUN_1078_0000 @ 1078:0000, Game_SpawnUprisings
+ *   @ 1088:0be9.
+ * Spawn (Unit_SpawnUnit @ 11c0:12c8 factory, NOT a reveal wrapper): scans
+ *   0x80 62ff slots for -1 (full past 0x7e -> FIRSTUNIT message once +
+ *   -1), inits x/y/type/seen(1<<civ)/goal 0xff/last-dir 0xff/next 0xff via
+ *   Map 1110:171f/1767 place + seen-bit OR, timer from type*0x16+0x1a3e
+ *   (-1 once when nonzero), home via City_FindNearest @ 11c8:0124 (foreign
+ *   owner -> 0xff), count++, then Unit_UpdateVisibility when DAT_13b8_0000
+ *   == 0 + FIRSTUNIT1/2 tutorial for the player. Callers: production @
+ *   10e8:12b5/1d48, revolt @ 11b8:0f26, bribe @ 11b8:07c2, uprisings @
+ *   1088:0be9, hut 11c0:2677, City_SpotReveal @ 11c0:0000 (player-city unit
+ *   pair) ; relation to Unit_FoundCityIfHome @ 11c0:16a4 (consume: desert
+ *   count--, type -> 0xff, moves -> 0, 1110:17bc unlink + reveal; settler
+ *   0x17/sea-10 gates via IterateStack messages stay Win16).
+ * Queue->visibility (Unit_QueueOrder @ 1078:455c 0x20 slots/civ at
+ *   0x612/0x512/0x412/0x312 x/y/kind/prio: dup (same x/y/kind, stored prio
+ *   <= new) -> drop; AI intercept (13f0:000c==civ != player, kind 3/4:
+ *   same-continent in-range unit gets goal + 62fc|0x10&0xf0); else first
+ *   kind==-1 or prio<new via Unit_QueueShift, then store): kinds 1/2/3/4
+ *   are contact orders (1 = attack/contact, 2 = defend?, 3 = naval?, 4 =
+ *   prio; exact semantics TBD, never faked). Visibility @ 11c0:0395 fans
+ *   out per unit (diamond above) into City_SpotReveal (player-city pair
+ *   spawn + 5502|4), Diplo_PostContact, QueueOrder(1..4), minimap
+ *   (Map_SetTile x+0xf0 1/2 via unit_reveal_minimap_value) and view
+ *   (Map_RevealCenter @ 1110:1461 -> Map_RefreshTileView @ 1110:0448 GfxPort
+ *   blit; needs SDL view state -> STUB). Reveal radius: player 0x19,
+ *   others 8 near + 0x10 far (0x1a46&2 + 0x1a3a-vs-10 gate) via
+ *   unit_sight_count (LIVE already).
+ * Wrap/lookup (Map_WrapX @ 1128:177e single-step +-0x50 on X only, Y never
+ *   wraps; Map_GetUnitAt @ 1110:18ce = civ slot from tile(x+0xa0,y): bit3
+ *   clear -> -1 else bits0-2; Map_FindUnitAt @ 1110:180e = owner verify:
+ *   GetUnitAt slot -> linear 0x80 scan for x/y match (sets 12d8:4304/4306,
+ *   clears stale tile to 0) else -1; Map_GetTileOwner @ 1110:16ee =
+ *   tile(x+0xa0,y)&7 tile-owner nibble (map layer) vs city owner @
+ *   1420:5507 (record) vs unit owner (slot civ): tile nibble is the fast
+ *   path, records are authoritative.
+ * OS-free kernels below are LIVE 1:1 on explicit params (no globals, no
+ * Win16, read-only except stated writes); Win16/GDI/dialog/city-state
+ * tails stay CIV_ERR_UNSUPPORTED with TODO Orig refs. */
+#define CIV_UNIT_QUEUE_LEN 0x20
+
+/* Orig Combat_ResolveAttack @ 1050:0000 atk kernel -> combat_effective_attack.
+ * 1:1: atk = base<<3; veteran (0x20 @ 62fc) -> atk += atk/2; moves (+3 @
+ * 6300) < 3 -> atk = atk*moves/3. base is the 1420:1a40[type] entry
+ * (caller reads the table; exact bytes TBD, never faked here). Difficulty
+ * (civ==0 vs player, (diff+1)/4 or /2, diff<2 halves, diff==0 doubles) and
+ * city 3efe==1 -> 0 stay in the caller (need game state). Returns atk >= 0,
+ * -1 on base < 0 or moves < 0. No globals, no exit(). */
+int combat_effective_attack(int base, int veteran, int moves_left);
+
+/* Orig Combat_ResolveAttack @ 1050:0000 def kernel -> combat_effective_defense.
+ * 1:1: flat (air/sea domain 1a3a 1/2) -> base<<3 (terrain/fort/city ignored);
+ * else def = base*4*terrain_mult (terrain_mult is the 1420:17d5 tile entry,
+ * caller reads it); fortified (0x08 @ 62fc) -> def = def*3/2; city_mult 2
+ * (city 0x20 occupancy, no walls) -> *2, 3 (walls 0x80 + atk != 0x0c,
+ * non-air) -> *3 (caller picks 1/2/3, 1 = open); veteran (0x20) ->
+ * def += def/2. base is 1420:1a42[type]. Returns def >= 0, -1 on
+ * base < 0, terrain_mult < 0, city_mult < 1, or flat/veteran/fortified
+ * outside 0/1. No globals, no exit(). */
+int combat_effective_defense(int base, int terrain_mult, int fortified,
+                             int city_mult, int flat, int veteran);
+
+/* Orig Combat_ResolveAttack @ 1050:0000 preview (param_5 == 0) ->
+ * combat_preview_score. 1:1 (local_10<<3)/(local_12+1) on the effective
+ * strengths above. Returns score >= 0, -1 on either < 0 or def == -1
+ * (div-by-zero guard; orig def >= 0 so def+1 >= 1). No globals. */
+int combat_preview_score(int atk_eff, int def_eff);
+
+/* Orig Unit_IterateStack @ 11c0:1ee1 count shape -> unit_count_stack.
+ * 1:1 walk of the 0x6306 next chain: count start + follows until 0xff,
+ * loop-back to start, OOR, or >9 extra steps (orig local_8 > 9 cap, i.e.
+ * at most 10 nodes past start? this port counts start + up to 10 follows,
+ * matching the cap). next[i] is 0xff none or 0..n-1. Returns count >= 1,
+ * -1 on NULL, n <= 0, or start OOR. No globals, read-only. */
+int unit_count_stack(const uint8_t *next, int n, int start);
+
+/* Orig Unit_LinkStack @ 1050:1105 insert -> unit_stack_insert.
+ * 1:1 link fresh after head: next[fresh] = next[head], next[head] = fresh
+ * (head already linked or 0xff keeps fresh tail 0xff). Returns CIV_OK,
+ * NOENT on NULL, RANGE on n <= 0 or head/fresh OOR or head == fresh.
+ * Exact orig param order (civ/new/head) TBD vs decompiler; this port takes
+ * the chain explicitly. No globals, no exit(). */
+civ_error_t unit_stack_insert(uint8_t *next, int n, int head, int fresh);
+
+/* Orig Unit_FindAtTile @ 11c8:01ab nearest (sibling of City_FindNearest @
+ * 11c8:0124) -> unit_find_nearest_at_tile. 1:1 argmin Map_WrapStepDist @
+ * 11c8:02ec (map_wrap_step_dist) over i in 0..n-1 with valids[i] != -1
+ * (NULL valids = all live) && i != exclude, DAT_1420_b386 = winning dist.
+ * dist_out may be NULL (else -1 when none). Returns unit index, -1 when
+ * none/NULL/n <= 0. No globals, read-only. */
+int unit_find_nearest_at_tile(const int *xs, const int *ys,
+                               const int *valids, int n, int exclude,
+                               int x, int y, int *dist_out);
+
+/* Orig Unit_SpawnUnit @ 11c0:12c8 alloc/init -> unit_spawn_unit.
+ * 1:1 on the caller-owned per-civ slice (0x80 x 0xc, see header top):
+ * first idx with rec[TYPE] == 0xff else -1 (orig past 0x7e shows FIRSTUNIT
+ * once + -1; message tail stays Win16). Inits rec[X]=x, rec[Y]=y,
+ * rec[TYPE]=type, rec[MOVES]=0, rec[GOAL_X]=rec[GOAL_Y]=rec[LAST_DIR]=0xff,
+ * rec[NEXT]=0xff, rec[SEEN]=(uint8_t)seen_bit, rec[HOME]=(uint8_t)home
+ * (caller passes City_FindNearest result or 0xff; foreign-owner 0xff rule
+ * stays in caller), rec[TIMER]=table[type] (0 when table NULL/OOR) minus 1
+ * when nonzero (orig -1 once). Flags (+11) untouched (orig leaves them;
+ * City_SpotReveal ORs 8/0x20 after). Returns slot 0..n-1, -1 on NULL,
+ * n <= 0, type < 0, x/y < 0, or full. No globals, no exit(). */
+int unit_spawn_unit(uint8_t *units, int n_units, int type, int x, int y,
+                    int home, const uint8_t *timer_table, int timer_n,
+                    int seen_bit);
+
+/* Orig Unit_QueueOrder @ 1078:455c dup gate -> unit_queue_is_duplicate.
+ * 1:1: nonzero (1) when any i has qx[i]==x && qy[i]==y && qk[i]==kind &&
+ * (uint8_t)qp[i] <= (uint8_t)prio (stored prio at/below new -> drop).
+ * qx/qy/qk/qp are CIV_UNIT_QUEUE_LEN parallel arrays (0x612/0x512/0x412/
+ * 0x312 bases); kind 1..4 contact orders, prio 1..4 (exact semantics TBD).
+ * NULL arrays or n <= 0 -> 0. No globals, read-only. */
+int unit_queue_is_duplicate(const uint8_t *qx, const uint8_t *qy,
+                             const uint8_t *qk, const uint8_t *qp, int n,
+                             int x, int y, int kind, int prio);
+
+/* Orig Unit_QueueOrder @ 1078:455c slot pick -> unit_queue_pick_slot.
+ * 1:1 first i with kinds[i] == 0xff (-1 empty) or (int8_t)prios[i] < prio
+ * (lower prio evicted; Unit_QueueShift @ 1078:4837 makes room first).
+ * kinds/prios are int8_t images (0xff empty, else kind/prio bytes).
+ * Returns slot 0..n-1, -1 when full/NULL/n <= 0. No globals. */
+int unit_queue_pick_slot(const int8_t *kinds, const int8_t *prios, int n,
+                         int prio);
+
+/* Orig Unit_QueueShift @ 1078:4837 make-room -> unit_queue_shift.
+ * 1:1 shift rows [at..n-2] to [at+1..n-1] (orig loops 0x1e..at down when
+ * qp[row] != 0) on the explicit parallel arrays; frees [at] for the new
+ * entry (caller stores x/y/kind/prio after). Returns CIV_OK, NOENT on
+ * NULL, RANGE on n <= 0 or at OOR. No globals, no exit(). */
+civ_error_t unit_queue_shift(uint8_t *qx, uint8_t *qy, uint8_t *qk,
+                             uint8_t *qp, int n, int at);
+
+/* --- Chain 2026-10-16 (5): combat rolls/promotion/difficulty + stack walk/
+ * defender pick + draw-layer pick + adjacent tally (task goals 1/2/4/5) ---
+ * Anchors (civ.exe, x86:LE:16:Protected Mode), renamed this pass:
+ *   Combat_ResolveAttack @ 1050:0000 (full flow decoded: effective atk/def
+ *     kernels above, then preview (param_5 == 0) else real rolls via
+ *     Rng_Range @ 11c8:003d + city-holder reroll, animation/sound/Gfx tails
+ *     via Unit_EnsureOnScreen @ 11c0:231d + Map_RefreshTileView @ 1110:0448
+ *     + Sound_PlayId @ 1150:00c9 + Gfx_DrawTechIcon @ 11a8:0cb1 + GfxPort
+ *     blits @ 10d0:0854/0956, diplo tails via Combat_CheckPeaceBlock @
+ *     1050:12be + Diplo_SetWar @ 1168:0e8e, outcomes: diplomat 0x19 ->
+ *     Combat_ScoreAdjacent @ 1050:13af, defender wins -> 396a++ +
+ *     Unit_FoundCityIfHome @ 11c0:16a4 + veteran Rng_Range(2), attacker
+ *     wins -> pillage/settler-capture/city-holder reroll + 396a += CalcOdds
+ *     + IterateStack + message tails, both -> veteran Rng_Range(2)).
+ *     Caller: Unit_ChooseOrder @ 1078:1480 (sole xref). OS-free roll/difficulty
+ *     kernels below are LIVE 1:1 on explicit params (rolls via rng_range in
+ *     sys.c, no globals); animation/sound/dialog/city-state tails stay
+ *     CIV_ERR_UNSUPPORTED with TODO Orig in combat_resolve_attack.
+ *   Combat_CheckPeaceBlock @ 1050:12be (peace-bit gate vs player: no peace
+ *     bit -> 0; else message + 1/0xffff by city count; backs ResolveAttack).
+ *   Unit_IterateStack @ 11c0:1ee1 (0x6306 next-chain walk: callback per node,
+ *     stop on 0xff/-1, loop-back to start, or >9 extra steps; backs
+ *     Combat_CalcOdds @ 11c0:1bc3, Unit_CountDefenders @ 11c0:1d70,
+ *     Unit_UpdateVisibility @ 11c0:0395 goal flips, ResolveAttack tails).
+ *     Structure: singly-linked next chain (next = +9/0x6306 byte, 0xff none);
+ *     NOT next-prev double links (no prev field in the 0xc record); max ~11
+ *     nodes visited (start + up to 10 follows, local_8 > 9 cap).
+ *   Unit_PickStackTop @ 11c0:1a2c (top resolve: when next[start] != -1, seed
+ *     DAT_1420_b380 = start / DAT_1420_b37e = 0xffff then IterateStack with
+ *     Unit_ScoreStackDefender @ 11c0:1a81, result = b380; backs
+ *     Unit_DrawStacked @ 1110:1516).
+ *   Unit_ScoreStackDefender @ 11c0:1a81 (defender score per node: sea tile
+ *     (Map_GetTileClass @ 1110:16c0 == 10) skips unless domain @ 1a3a == 2;
+ *     land domain 0: def*8*terrain*(fort 0x08 ? 3 : 2); sea/air else:
+ *     def<<4; vet 0x20 -> += /2; argmax strict > into b380/b37e).
+ *   Combat_ScoreStackCallback @ 11c0:1bfd (CalcOdds per-node tally: mode
+ *     b37a 0 = += cost @ 1a44, 1 = += def @ 1a42, 2 = count++, 3 = += atk @
+ *     1a40, 4 = count++ when idx < b378 && domain @ 1a4a == 2).
+ *   Unit_LinkStack @ 1050:1105 (chain insert for Map_PlaceUnitAt @ 1110:1767;
+ *     alone dst (next == -1) forms a 2-cycle dst<->fresh, else splices fresh
+ *     after head; unit_stack_insert above keeps the 0xff-tail single-link
+ *     form used by Map_PlaceUnitAt fresh place, circular pair stays TODO).
+ *   Unit_DrawStacked @ 1110:1516 (stack pick: land/single -> PickStackTop;
+ *     sea tile + stack: head domain == 2 -> PickStackTop, else first
+ *     domain-2 node in chain, else head; then Unit_DrawSingle @ 1110:0dba).
+ *   Unit_DrawSingle @ 1110:0dba (single blit: view clip via Gfx_ClipTileRect
+ *     @ 1208:2061 (was FUN_1208_2061: SETRECT tile 0x20 + clip call; 0 =
+ *     off-screen skip); sea tile + occupant flag &1 + domain != 2 -> hidden;
+ *     else stacked badge via Gfx_DrawTechIcon @ 11a8:0cb1 (frame
+ *     (civ*0x20+type)*2-0x6c30) + Unit_DrawStatusBadge @ 1110:0ff6 (was
+ *     FUN_1110_0ff6: civ-color flag icon type*0x20+civ+0x40, fort 0x1d /
+ *     move-goal markers, 0xc2 status letters with civ colors, frame rect)).
+ *     What is drawn: unit type icon + civ flag color + stacked badge when
+ *     next != -1 + status letters (fort/sentry/move/visibility); HP is NOT
+ *     drawn (no HP field in the 0xc record: combat is one-roll kill, veteran
+ *     flag 0x20 is the only persistent combat state). Blit via GfxPort
+ *     (SELECTPALETTE/BITBLT) -> SDL TBD (see video.h video_draw_unit_sprite
+ *     STUB). Enum helpers below are LIVE 1:1 (type/frame/pos pick, no
+ *     Win16); blit stays STUB.
+ *   Combat_ScoreAdjacent @ 1050:13af (diplomat 0x19 area tally, called from
+ *     ResolveAttack when atk type 0x19: message unless player, pillage via
+ *     11b8:0c3d, then 8-neighbour loop: Map_FindUnitAt @ 1110:180e +
+ *     Map_GetOccupancyFlags @ 1110:199b city 0x10000 gate (city message +
+ *     skip), else Combat_CalcOdds(owner,unit,2) += into 396a power table +
+ *     IterateStack count + owner != atk -> diplo |= 0x88; tail 1050:158a.
+ *     Purpose: diplomat-attack threat assess for the AI (accumulates the
+ *     neighbouring stacks' power into the 396a table Unit_ChooseOrder @
+ *     1078:1480 reads for bribe-target scoring, and marks contact bits).
+ *     Neighbour + accum helpers below are LIVE 1:1; city/dialog tails stay
+ *     STUB.
+ *   Unit_QueueShift @ 1078:4837 (make-room shift, unit_queue_shift LIVE
+ *     already: rows 0x1e..slot shift +1 when prio != 0; backs Unit_QueueOrder
+ *     @ 1078:455c slot store).
+ * OS-free kernels below are LIVE 1:1 on explicit params (no globals, no
+ * Win16, read-only except the walker ctx); Win16/GDI/dialog tails stay
+ * CIV_ERR_UNSUPPORTED with TODO Orig refs. */
+
+/* Orig Combat_ResolveAttack @ 1050:0000 real-fight rolls -> combat_roll_winner.
+ * 1:1: atk_tentative = (def_roll < atk_roll); when city_holder != 0 and the
+ * attacker tentatively wins, reroll once: defender wins when atk_roll2 <
+ * def_roll2 (city-holder second chance). Rolls are Rng_Range @ 11c8:003d
+ * draws (rng_range in sys.c); caller passes atk in [0,atk_eff) style values.
+ * Returns 1 attacker wins, 0 defender wins, -1 on atk_eff/def_eff < 0. No
+ * globals, no exit(). */
+int combat_roll_winner(int atk_eff, int def_eff, unsigned atk_roll,
+                       unsigned def_roll, unsigned atk_roll2,
+                       unsigned def_roll2, int city_holder);
+
+/* Orig Combat_ResolveAttack @ 1050:0000 veteran tails (both outcomes via
+ * Rng_Range(2) @ 11c8:003d: defender-wins promotes defender, attacker-wins
+ * promotes attacker) -> combat_should_promote. 1:1: nonzero (1) when
+ * rand2 != 0 (unit gets flag 0x20 @ 62fc). Takes the Rng_Range(2) draw
+ * explicitly (rng_range(2) in sys.c). No globals. */
+int combat_should_promote(unsigned rand2);
+
+/* Orig Combat_ResolveAttack @ 1050:0000 difficulty scaling (two sites) ->
+ * combat_difficulty_scale. 1:1: when real_fight == 0 (odds-setup site,
+ * atk civ == 0 only): player defends -> atk = atk*(diff+1)/4 else atk /= 2.
+ * When real_fight != 0 (post-roll site, atk civ != 0 only): diff < 2 and
+ * player == def -> atk /= 2; diff == 0 and player == atk -> atk *= 2. Other
+ * civ combos pass through. Returns scaled atk (>= 0), -1 on atk < 0 or
+ * difficulty outside 0..4. No globals. */
+int combat_difficulty_scale(int atk, int atk_civ, int def_civ, int player_civ,
+                            int difficulty, int real_fight);
+
+/* Orig Unit_IterateStack @ 11c0:1ee1 generic walk -> unit_iterate_stack.
+ * 1:1 on the explicit next[] chain (0xff/-1 none, else 0..n-1): visits start
+ * then follows until 0xff/-1, OOR, loop-back to start, or >9 extra steps
+ * (local_8 > 9 cap, i.e. at most 10 nodes: start + 9 follows, same shape
+ * as unit_count_stack above). cb(idx, ctx) runs per visited node (may be
+ * NULL = count only); nonzero cb return stops early. Returns visits >= 0
+ * (0 when cb stops at once, else like unit_count_stack), -1 on NULL next,
+ * n <= 0, or start OOR. No globals, no exit(). */
+typedef int (*unit_stack_visit_fn)(int idx, void *ctx);
+int unit_iterate_stack(const uint8_t *next, int n, int start,
+                       unit_stack_visit_fn cb, void *ctx);
+
+/* Orig Unit_ScoreStackDefender @ 11c0:1a81 per-node score ->
+ * unit_stack_defense_score. 1:1: sea tile (tile_is_sea != 0) with non-sea
+ * domain (domain_is_sea == 0) -> -1 skip; land domain (!domain_is_sea):
+ * base*8*terrain*(fortified ? 3 : 2); sea/air domain: base<<4; vet 0x20
+ * (veteran != 0) -> += /2. base is 1420:1a42[type], terrain is 1420:17d5
+ * tile entry (caller reads tables; exact bytes TBD). Returns score >= 0,
+ * -1 on skip or base/terrain < 0 or bad flags. No globals. */
+int unit_stack_defense_score(int base_def, int terrain_mult, int fortified,
+                             int veteran, int tile_is_sea,
+                             int domain_is_sea);
+
+/* Orig Unit_PickStackTop @ 11c0:1a2c argmax (DAT_1420_b37e strict <) ->
+ * unit_stack_best. 1:1 index of the maximum score (ties break to the lower
+ * index, like the orig strict-< loop; seed b37e = 0xffff so negatives never
+ * win: all-negative -> -1). scores is n entries (read-only). Returns index
+ * or -1 on NULL/n <= 0/none. No globals. */
+int unit_stack_best(const int *scores, int n);
+
+/* Orig Unit_DrawStacked @ 1110:1516 pick -> unit_stack_draw_pick. 1:1 which
+ * chain index to draw: land tile (!tile_is_sea) or no stack (!has_stack) ->
+ * head (caller runs PickStackTop scoring first via unit_stack_best); sea
+ * tile + stack: head sea-domain (head_domain_is_sea) -> head (PickStackTop);
+ * else first i in domains[] with sea domain, else head. domains is the chain
+ * order head-first, n entries of 0/1 (sea domain?). Returns the picked index
+ * 0..n-1, -1 on NULL/empty/head OOR. No globals. */
+int unit_stack_draw_pick(int tile_is_sea, int head_domain_is_sea,
+                         const int *domains, int n, int head, int has_stack);
+
+/* Orig Unit_DrawSingle @ 1110:0dba visibility/badge layer ->
+ * unit_draw_single_layer. 1:1: clipped (off-screen via Gfx_ClipTileRect @
+ * 1208:2061) -> 0 hidden; sea tile + occupant flag (flag & 1, land-unit on
+ * ship?) with non-sea domain -> 0 hidden; else 1 visible, with *badge_out =
+ * has_stack (stacked badge via Gfx_DrawTechIcon when next != -1; badge_out
+ * may be NULL). Returns 1 draw / 0 skip. No globals. */
+int unit_draw_single_layer(int clipped, int tile_is_sea, int occupant_flag,
+                           int domain_is_sea, int has_stack, int *badge_out);
+
+/* Orig Combat_ScoreAdjacent @ 1050:13af accum -> combat_adjacent_add. 1:1
+ * power-table add: score + odds (Combat_CalcOdds @ 11c0:1bc3 mode-2 tally per
+ * adjacent enemy stack into 396a). Negative odds clamp to 0 (orig tallies
+ * are non-negative counts). No globals. */
+int combat_adjacent_add(int score, int odds);
+
+/* Orig Combat_ScoreAdjacent @ 1050:13af contact mark -> combat_adjacent_flag.
+ * 1:1 diplo mark when the adjacent stack owner differs from the attacker:
+ * owner != atk -> 0x88 else 0x00 (ORed into 3a0a by the caller). No globals. */
+int combat_adjacent_diplo_flag(int owner, int atk);
+
+/* Orig Diplo_NearestPalaceDist @ 1168:12c1 -> diplo_nearest_palace_dist.
+ * 1:1 min Map_WrapStepDist @ 11c8:02ec (map_wrap_step_dist, see map.h) over
+ * palace cities (city_palace[i] != 0, i.e. 1420:54fc & 1) owned by civ,
+ * seed 0x10. city_xs/ys/owners/palace are parallel n_cities arrays
+ * (read-only; caller filters valid 5502 != -1). Feeds diplomat_revolt_cost
+ * + diplomat_bribe_cost dist params. Returns dist (0x10 when none/NULL).
+ * No globals, no exit(). */
+int diplo_nearest_palace_dist(int civ, const int *city_xs,
+                              const int *city_ys, const int *city_owners,
+                              const int *city_palace, int n_cities, int x,
+                              int y);
+
+/* --- Chain 2026-10-16 (6): peace-block gate + stacked sea-search (goals 4/5) ---
+ * Anchors (civ.exe, x86:LE:16:Protected Mode):
+ *   Combat_CheckPeaceBlock @ 1050:12be (peace-bit gate vs player, caller
+ *     Combat_ResolveAttack @ 1050:0000 real-fight site + Diplomat_CityAction @
+ *     11b8:0000: no peace bit (player-vs-target & 2 == 0) -> 0 free attack;
+ *     else Dialog_ShowMessage @ 1220:00d2 Yes/No (0x50,0x50 via 24fa/12d8 +
+ *     0xa24/0xa4c strings); choice != 1 -> 0xffff treaty-break allowed; choice
+ *     == 1 and government @ 3b77+0x13 < 4 (despotism/monarchy) -> 1 senate
+ *     block; else second message (0xa6b) + 0xffff allowed. Returns int, not
+ *     bool: 0 free, 1 blocked, 0xffff allowed-after-warning).
+ *   Unit_ScoreStackDefender @ 11c0:1a81 (per-node defender score, LIVE as
+ *     unit_stack_defense_score above; invoked indirectly via Unit_IterateStack
+ *     @ 11c0:1ee1 callback from Unit_PickStackTop @ 11c0:1a2c, hence Ghidra
+ *     shows no direct callers: PickStackTop seeds b380/b37e then IterateStack
+ *     with the 1a81 callback; other IterateStack users: Combat_CalcOdds @
+ *     11c0:1bc3, Unit_CountDefenders @ 11c0:1d70, Unit_UpdateVisibility @
+ *     11c0:0395 goal flips, Combat_ResolveAttack @ 1050:0000 tails).
+ *   Unit_DrawStacked @ 1110:1516 layer order (decomposed, terrain comes from
+ *     Map_RefreshTileView @ 1110:0448 underneath, not drawn here): 1 terrain
+ *     (map tile, Map_GetTileClass @ 1110:16c0 sea == 10 gate), 2 city/palace
+ *     underlay (occupancy, not a sprite), 3 unit type icon via Gfx_DrawTechIcon
+ *     @ 11a8:0cb1 (frame (civ*0x20+type), see video_unit_frame_index), 4 status
+ *     badge via Unit_DrawStatusBadge @ 1110:0ff6 (flag icon type*0x20+civ+0x40
+ *     via Unit_DrawFlagIcon @ 11c8:008a + fort/move letters; HP NOT drawn:
+ *     one-roll kill, veteran 0x20 is the only combat state). Sea tile + stack
+ *     with land head searches the chain for the first sea-domain node first
+ *     (unit_stack_draw_pick LIVE); clip via Gfx_ClipTileRect @ 1208:2061
+ *     (video_unit_tile_box + video_clip_rect LIVE, off-screen skips).
+ * OS-free gate/branch math below is LIVE 1:1 (no globals, no Win16);
+ * dialog/GfxPort blit tails stay STUB with TODO Orig. */
+
+/* Orig Combat_CheckPeaceBlock @ 1050:12be gate -> combat_check_peace_block.
+ * 1:1 on explicit params (no globals): peace_flags is the player-vs-target
+ * diplo word @ 12d8:3a0a (bit 0x02 peace); gov is the government id @
+ * 3b77+0x13 (0 anarchy .. 5 communism); choice is the Dialog_ShowMessage @
+ * 1220:00d2 result (1 = Yes insist). Returns 0 free attack (no peace bit, or
+ * peace + choice != 1 path falls through to 0xffff? no: orig returns 0xffff
+ * allowed-after-warning, see below), 1 senate-blocked (peace + choice == 1 +
+ * gov < 4), 0xffff allowed-after-warning (peace + (choice != 1 or gov >= 4)).
+ * As int: 0, 1, 0xffff (65535). No globals, no exit(). */
+int combat_check_peace_block(int peace_flags, int gov, int choice);
+
+/* Orig Unit_DrawStacked @ 1110:1516 sea-search branch ->
+ * unit_stack_draw_needs_sea_search. 1:1 when the stacked sea-tile path must
+ * scan the 0x6306 chain for the first sea-domain (1a3a == 2) node: tile_is_sea
+ * && has_stack && !head_domain_is_sea -> 1 search, else 0 (land/single or sea
+ * head goes straight to Unit_PickStackTop @ 11c0:1a2c scoring via
+ * unit_stack_best). Complements unit_stack_draw_pick (which returns the picked
+ * index). No globals. */
+int unit_stack_draw_needs_sea_search(int tile_is_sea, int has_stack,
+                                     int head_domain_is_sea);
+
+/* --- Chain 2026-10-16 (7): census flag-icon views (goal 4) ---
+ * Anchors (civ.exe, x86:LE:16:Protected Mode), renamed this pass:
+ *   Census_ShowTechBars @ 1018:03f0 (tech-progress bars: Res 0x8a/5 title via
+ *     City_OpenCensusView @ 1018:0000 + bar width via Util_Clamp(0x980/
+ *     (val+1),1,0x40) segments drawn with Unit_DrawFlagIcon @ 11c8:008a id
+ *     0x0c per segment + tech list Res 0x82 with owner color; close via
+ *     City_CloseCensusView @ 1018:0380).
+ *   Census_ShowUnitList @ 1018:067b (per-unit rows 0x1b entries: counts at
+ *     4121+0xd/3f5c+0x12 per civ*0x38 + Unit_DrawFlagIcon civ*0x20+unit+0x40
+ *     via unit_flag_icon_index (see video.h) + Res 0x84 names + atk/def/moves
+ *     at 1a40/1a42/1a3c; chained from Census_ShowTechBars tail).
+ *   Census_ShowTerrainCounts @ 1018:09cc (per-terrain rows 0x1b: any-civ
+ *     nonzero at 2b90 per 0x38 + same flag icons + Res 0x84 names + per-civ
+ *     counts; closes the census chain).
+ * All three are Win16 dialog/GDI (ResMgr strings + GfxPort blits + Sys
+ * wait) -> SDL TBD; STUBs below. Flag-index math lives in
+ * unit_flag_icon_index (video.h, LIVE). No globals, no exit(). */
+
+/* Orig Census_ShowTechBars @ 1018:03f0 -> census_show_tech_bars.
+ * Tech-progress bars + tech list. Win16 dialog/GDI -> SDL TBD. */
+civ_error_t census_show_tech_bars(int civ);
+
+/* Orig Census_ShowUnitList @ 1018:067b -> census_show_unit_list.
+ * Per-unit census rows with flag icons. Win16 -> SDL TBD. */
+civ_error_t census_show_unit_list(int civ);
+
+/* Orig Census_ShowTerrainCounts @ 1018:09cc -> census_show_terrain_counts.
+ * Per-terrain census rows with flag icons. Win16 -> SDL TBD. */
+civ_error_t census_show_terrain_counts(int civ);
+
 #endif /* CIVLIN_GAME_H */

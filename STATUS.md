@@ -196,7 +196,7 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `help_hlp_decompress` | PARTIAL | 10f8:040a | has TODO |
 | `help_topic_get_full` | PARTIAL |  | has TODO |
 | `help_open_topic` | LIVE |  |  |
-| `diplomacy_post_contact` | STUB | 1168:0a07, 11c0:0395, 1420:62fc | has TODO |
+| `diplomacy_post_contact` | STUB | 1168:0a07, 1168:0dda, 1168:0e8e, 1168:0f47, 1168:1220, 11c0:0395, 1420:62fc | has TODO |
 | `diplomacy_eval_bribe` | STUB | 1078:1480, 1078:455c, 11c0:0395 | has TODO |
 | `ui_draw_end_turn_prompt` | STUB | 10d0:0854, 10d8:00e0, 1110:0448, 11c0:0ec2, 1210:07ae | has TODO |
 | `dialog_menuz_id_to_index` | LIVE | 1220:0156 |  |
@@ -219,6 +219,35 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `text_set_dlg_item_text` | STUB | 1098:2796, 1100:0053, 1100:0947 | has TODO |
 | `text_draw_dlg_item_string` | STUB | 1098:2796, 10f0:0066, 1100:03ff, 1100:0947 | has TODO |
 | `text_fill_res_string_list` | STUB | 1068:0295, 1098:1f4f, 1100:0053, 1100:078a | has TODO |
+| `diplo_contact_flags` | LIVE | 1168:0a07, 1168:0dda |  |
+| `diplo_is_peace` | LIVE | 1168:0a07 |  |
+| `diplo_is_contact` | LIVE |  |  |
+| `diplo_has_embassy` | LIVE |  |  |
+| `diplo_apply_peace` | LIVE | 1168:0dda |  |
+| `diplo_apply_war` | LIVE | 1168:0e8e |  |
+| `diplo_tribute_amount` | LIVE | 1160:328e, 1168:0000, 11c8:0063 |  |
+| `diplo_should_exchange` | LIVE | 1168:1220, 1170:2aaa, 1170:3181 |  |
+| `diplo_government_tick` | LIVE | 1168:0000, 1168:06c1 |  |
+| `diplo_spy_decay_step` | LIVE | 1168:0000, 11c8:003d |  |
+| `diplo_war_end_tick` | LIVE | 1168:0000 |  |
+| `diplo_war_end_clear` | LIVE | 1168:0000 |  |
+| `diplo_tribute_turn` | LIVE | 1168:0000 |  |
+| `diplo_government_factor` | LIVE | 1168:06c1 |  |
+| `diplo_government_needs_tech` | LIVE | 1030:7e57, 1168:06c1, 1170:3181 |  |
+| `diplo_government_available` | LIVE | 1168:06c1 |  |
+| `diplo_peace_forced` | LIVE | 1168:0f47, 1168:1366, 1168:13b4 |  |
+| `diplo_tech_table_off` | LIVE | 1168:1366, 1168:138d, 12d8:3c9c |  |
+| `diplo_tech_value_at` | LIVE | 1168:1366, 12d8:3c9c |  |
+| `diplo_tech_cost_at` | LIVE | 1168:138d, 12d8:3d9c |  |
+| `diplo_military_at` | LIVE | 1168:13b4, 12d8:4160 |  |
+| `diplo_contact_tribute_scaled` | LIVE | 1160:0000, 11c8:0063 |  |
+| `diplo_contact_afford_snap` | LIVE |  |  |
+| `diplo_mercenary_amount` | LIVE | 1160:0000 |  |
+| `diplo_threat_gold` | LIVE | 1160:0000 |  |
+| `diplo_peace_stamp` | LIVE | 1160:0000 |  |
+| `diplo_open_contact_dialog` | STUB | 1030:7e57, 1160:0000, 1168:1366, 1168:13b4 | has TODO |
+| `diplo_prompt_contact` | STUB | 1098:124f, 1150:019e, 1160:20c0 | has TODO |
+| `diplo_run_contact_menu` | STUB | 1160:328e, 1220:0156, 1420:31b4 | has TODO |
 
 ### `src/game.c`
 
@@ -254,7 +283,7 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `sys_drain_input` | STUB | 11c0:0395, 11f0:06d2, 11f0:4ea0, 12b0:004c, 1420:1d44 | has TODO |
 | `game_calc_progress_threshold` | LIVE | 1088:1d99 |  |
 | `unit_show_info_popup` | STUB | 1098:0dda, 11f0:468c, 11f0:4754, 1218:0801, 1220:0156, 1420:62fc | has TODO |
-| `combat_resolve_attack` | STUB | 1078:1480, 11c0:1bc3 | has TODO |
+| `combat_resolve_attack` | STUB | 1050:0000, 1078:1480, 11c0:1bc3 | has TODO |
 | `combat_calc_odds` | LIVE | 1078:1480, 11c0:1bc3 |  |
 | `unit_found_city_if_home` | STUB | 11c0:16a4, 1420:5500, 1420:62fc | has TODO |
 | `map_check_zoc` | LIVE | 1110:16c0, 1110:18ce, 1110:1dbd, 1128:0000, 11c0:23fd |  |
@@ -305,6 +334,9 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `demo_show_demographics` | STUB | 1018:0380, 1110:16c0, 1110:16ee, 1188:123a, 1188:220a, 1420:5500 | has TODO |
 | `demo_rank_row` | STUB | 1188:220a, 1420:3ced | has TODO |
 | `city_show_census_report` | STUB | 1018:0000, 1018:0380, 1018:1d5b, 1018:202a, 1030:0000 | has TODO |
+| `census_show_tech_bars` | STUB | 1018:0000, 1018:0380, 1018:03f0, 11c8:008a | has TODO |
+| `census_show_unit_list` | STUB | 1018:067b, 11c8:008a | has TODO |
+| `census_show_terrain_counts` | STUB | 1018:09cc | has TODO |
 | `trade_calc_bonus` | LIVE | 1038:0d09, 1110:1d99, 1170:3181, 11c8:02ec, 11e8:0dcf, 1420:5506 |  |
 | `trade_route_value` | LIVE | 1038:0d09, 1420:5513 |  |
 | `trade_deliver_caravan_goods` | STUB | 1038:0d09, 1088:13d5, 11c0:16a4, 1220:00d2, 1420:5500 | has TODO |
@@ -347,6 +379,46 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `unit_order_is_move` | LIVE | 11f0:0000 |  |
 | `city_transfer_treasury` | LIVE | 1038:0000, 1420:43b8 |  |
 | `civ_unit_turn_step` | PARTIAL | 1078:1480, 1110:1461, 1128:0000, 11c0:0395, 11c0:12c8, 11f0:0000, 11f0:44d4, 1420:62fc |  |
+| `city_pump_result_is_accept` | LIVE | 1170:05ca, 1170:1f84 |  |
+| `city_pump_result_is_cancel` | LIVE |  |  |
+| `city_production_best_pick` | LIVE | 1170:05ca |  |
+| `city_pump_production_dialog` | STUB | 1098:124f, 1170:1f84 | has TODO |
+| `unit_choose_delegates_to_player` | LIVE | 1078:1480, 1078:4f0f, 11c8:02ec |  |
+| `unit_needs_sentry_idle` | LIVE | 1078:1480 |  |
+| `unit_diplomat_needs_goal` | LIVE | 1078:1480, 11c8:02ec |  |
+| `unit_ai_best_dir` | LIVE | 1078:4f0f, 1110:1c4b, 1128:0000 |  |
+| `unit_ai_reverse_penalty` | LIVE | 1128:0000 |  |
+| `unit_seen_index` | LIVE | 11b8:0f26, 11c0:0395 |  |
+| `unit_seen_bit` | LIVE |  |  |
+| `unit_reveal_minimap_value` | LIVE | 1110:03e9, 11c0:0395, 1210:09b4 |  |
+| `unit_sight_far_allowed` | LIVE | 1110:16c0, 11c0:0395 |  |
+| `unit_sight_count` | LIVE | 1128:177e |  |
+| `unit_find_free_slot` | LIVE | 11c0:12c8, 11c8:00c4, 11c8:0124, 11c8:02ec, 1420:62ff |  |
+| `city_find_by_tile` | LIVE | 11c0:0000, 11c8:00c4, 11c8:0124 |  |
+| `city_find_nearest` | LIVE | 11c8:0124, 11c8:02ec |  |
+| `combat_effective_attack` | LIVE | 1050:0000, 1420:1a40 |  |
+| `combat_effective_defense` | LIVE | 1050:0000, 1420:17d5, 1420:1a42 |  |
+| `combat_preview_score` | LIVE | 1050:0000, 11c8:003d |  |
+| `unit_count_stack` | LIVE | 11c0:1ee1 |  |
+| `unit_stack_insert` | LIVE | 1050:1105 |  |
+| `unit_find_nearest_at_tile` | LIVE | 11c8:0124, 11c8:01ab, 11c8:02ec |  |
+| `unit_spawn_unit` | LIVE | 1110:171f, 11c0:0395, 11c0:12c8, 11c8:0124 |  |
+| `unit_queue_is_duplicate` | LIVE | 1078:455c |  |
+| `unit_queue_pick_slot` | LIVE | 1078:455c, 1078:4837 |  |
+| `unit_queue_shift` | LIVE | 1078:4837 |  |
+| `combat_roll_winner` | LIVE | 1050:0000, 11c8:003d |  |
+| `combat_should_promote` | LIVE | 1050:0000, 11c8:003d |  |
+| `combat_difficulty_scale` | LIVE | 1050:0000 |  |
+| `unit_iterate_stack` | LIVE | 11c0:1ee1 |  |
+| `unit_stack_defense_score` | LIVE | 1110:16c0, 11c0:1a81, 1420:17d5, 1420:1a42 |  |
+| `unit_stack_best` | LIVE | 11c0:1a2c |  |
+| `unit_stack_draw_pick` | LIVE | 1110:1516 |  |
+| `unit_draw_single_layer` | LIVE | 1110:0dba, 1110:0ff6, 11a8:0cb1, 1208:2061 |  |
+| `combat_adjacent_add` | LIVE | 1050:13af, 1078:1480, 11c0:1bc3 |  |
+| `combat_adjacent_diplo_flag` | LIVE | 1050:13af |  |
+| `diplo_nearest_palace_dist` | LIVE | 1168:12c1, 11c8:02ec, 1420:54fc |  |
+| `combat_check_peace_block` | LIVE | 1050:12be, 1220:00d2, 12d8:3a0a |  |
+| `unit_stack_draw_needs_sea_search` | LIVE | 1110:0dba, 1110:1516, 11a8:0cb1, 11c0:1a2c |  |
 
 ### `src/gfx_indexed.c`
 
@@ -477,6 +549,27 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `tile_move_cost` | LIVE | 1128:0000, 1420:17d4 |  |
 | `map_step_dist` | LIVE | 11c8:025d |  |
 | `map_wrap_step_dist` | LIVE | 1180:1096, 11c8:025d, 11c8:02ec |  |
+| `map_check_tile_bounds` | LIVE | 1110:168f, 11e8:0dcf |  |
+| `map_check_tile_improved` | LIVE | 1030:7c28, 1110:16c0, 1110:1c72 |  |
+| `map_get_occupancy_flags` | LIVE | 1030:7c28, 1110:199b |  |
+| `map_get_continent_id` | LIVE | 1110:1d99, 1110:1dbd, 1170:05ca |  |
+| `map_sign_step` | LIVE | 1078:4f0f, 1110:1c4b, 1128:0000 |  |
+| `map_clear_occupancy_bits` | LIVE | 1110:1b36, 11e8:0e19 |  |
+| `map_wrap_x` | LIVE | 1110:0dba, 1128:177e, 11c0:0395, 11c0:2437 |  |
+| `map_unit_slot_from_tile` | LIVE | 1110:18ce |  |
+| `map_tile_owner_from_tile` | LIVE | 1110:16ee, 11c8:00c4, 1420:5507 |  |
+| `map_scan_zoc_detail` | LIVE | 1110:1461, 1110:16c0, 1110:18ce, 11c0:23fd, 11c0:2437 |  |
+| `map_mirror_occupancy` | LIVE | 1110:1a2f, 11e8:0e19 |  |
+| `map_set_tile_owner` | LIVE | 1110:171f |  |
+| `map_place_unit_marker` | LIVE | 1050:1105, 1110:1767 |  |
+| `map_set_view_origin` | LIVE | 1208:20b1, 1208:213b |  |
+| `map_clamp_view_x` | LIVE | 1128:177e, 1208:213b |  |
+| `map_clamp_view_y_plain` | LIVE | 1170:3181, 1208:213b |  |
+| `map_clamp_view_y_scroll` | LIVE | 1170:3181, 1208:213b, 1408:00c4 |  |
+| `map_clamp_view_scroll` | STUB | 1000:137f, 1208:213b | has TODO |
+| `map_paint_tiles_clipped` | STUB | 10d0:0854, 1100:0685, 1110:1461, 1208:1534, 1208:1f64, 1330:4010, 1408:00c6 | has TODO |
+| `map_repaint_view_shuffled` | STUB | 1100:0685, 11c8:003d, 1208:1866 | has TODO |
+| `map_draw_city_labels` | STUB | 1098:0ed1, 1100:0685, 1208:1f64 | has TODO |
 
 ### `src/newgame.c`
 
@@ -781,6 +874,15 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `video_shutdown_display` | NOOP | 1008:0329, 1008:0e99, 10d0:0854, 10d0:08f1, 10d0:0cfa, 1420:00a4 |  |
 | `font_blit_glyph` | LIVE | 1008:0e99, 10d0:0854, 10d0:08f1 |  |
 | `art_progress_fill_x` | LIVE | 10b8:062d |  |
+| `video_unit_frame_index` | LIVE | 1110:0dba, 1110:0ff6 |  |
+| `video_unit_tile_box` | LIVE | 1100:0685, 1128:177e, 1208:2061 |  |
+| `video_draw_unit_sprite` | STUB | 10d0:0854, 10d0:0956, 1110:0dba, 1110:0ff6, 11a8:0cb1 | has TODO |
+| `video_clip_rect` | LIVE | 1100:0685, 1110:0dba, 1208:2061 |  |
+| `unit_flag_icon_index` | LIVE | 1018:067b, 1110:0ff6, 11c8:008a |  |
+| `gfx_icon_cell_box` | LIVE | 1100:0685, 11e8:0674 |  |
+| `gfx_draw_icon_clipped` | STUB | 10d0:0854, 1100:0685, 11a8:0cb1, 11e8:0674 | has TODO |
+| `gfx_present_tile_rect` | STUB | 10d0:0854, 1100:0685, 11e8:07c3 | has TODO |
+| `city_draw_tile_view` | STUB | 1100:0685, 1110:04d0, 11a8:0cb1 | has TODO |
 | `art_load_frame` | STUB | 10b8:079d, 10b8:0aa8, 10b8:0e00, 10b8:0e36, 10b8:11bc, 10b8:158c, 10d0:0000, 10f8:040a | has TODO |
 
 ### `src/worldgen.c`

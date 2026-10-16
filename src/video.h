@@ -392,4 +392,155 @@ civ_error_t art_load_frame(int frame_id, gfx_port_t **out);
  * 10d0:0cfa / PresentRect @ 10d0:0854 impls untouched. */
 void video_shutdown_display(void);
 
+/* --- Chain 2026-10-16 (5): unit sprite present (task goal 4) ---
+ * Anchors (civ.exe, x86:LE:16:Protected Mode):
+ *   Unit_DrawStacked @ 1110:1516 (stack pick, see game.h
+ *     unit_stack_draw_pick LIVE) + Unit_DrawSingle @ 1110:0dba (single
+ *     layer, see game.h unit_draw_single_layer LIVE: type icon + civ flag
+ *     color + stacked badge when next != -1 + status letters; HP NOT drawn:
+ *     one-roll kill, veteran 0x20 is the only combat state).
+ *   Gfx_ClipTileRect @ 1208:2061 (was FUN_1208_2061: SETRECT tile 0x20 box +
+ *     clip query @ 1100:0685; 0 = off-screen, caller skips).
+ *   Gfx_DrawTechIcon @ 11a8:0cb1 (badge blit, see game.h gfx_draw_tech_icon
+ *     STUB) + Unit_DrawStatusBadge @ 1110:0ff6 (flag/status badge, see
+ *     game.h badge layer).
+ *   Blitter link (gfx_indexed.c / video.c): indexed frames via
+ *   gfx_indexed_to_texture @ 10d0:0854-family + SDL_RenderTexture present
+ *   (see gfx_port_present_rect @ 10d0:0854 / gfx_port_blit @ 10d0:08f1).
+ * What-to-draw enumeration (type/frame/pos) below is LIVE 1:1 (icon frame =
+ * (civ*0x20+type) table index, tile 0x20 px box at view origin); the SDL
+ * blit stays STUB with TODO Orig until the frame table lands. No globals,
+ * no exit(), C17. */
+
+/* Orig Unit_DrawSingle @ 1110:0dba icon frame -> video_unit_frame_index.
+ * 1:1 table index civ*0x20+type (orig (civ*0x20+type)*2-0x6c30 word fetch;
+ * badge variant +0x40 in Unit_DrawStatusBadge @ 1110:0ff6 stays caller-side).
+ * Returns index >= 0, -1 on civ/type < 0. No globals. */
+int video_unit_frame_index(int civ, int type);
+
+/* Orig Gfx_ClipTileRect @ 1208:2061 tile box -> video_unit_tile_box. 1:1 the
+ * 0x20 px tile box at the scrolled view origin: out = (x0, y0, x0+0x20,
+ * y0+0x20) with x0 = (view_x)*0x20 - dx, y0 = (view_y)*0x20 - dy (orig
+ * Map_WrapX(x - DAT_1330_4010)*0x20 - DAT_1408_00c6 per axis; wrap lives in
+ * map_wrap_x, see map.h, caller passes the wrapped delta). NOENT on NULL
+ * out. Else CIV_OK. No globals. */
+civ_error_t video_unit_tile_box(int dx, int dy, int view_x, int view_y,
+                                int *x0_out, int *y0_out);
+
+/* Orig Unit_DrawSingle @ 1110:0dba + Unit_DrawStatusBadge @ 1110:0ff6 blit
+ * tail -> video_draw_unit_sprite. GfxPort blit (SELECTPALETTE + BITBLT via
+ * 10d0:0854/08f1 + Gfx_DrawTechIcon @ 11a8:0cb1 icon cell + badge) -> SDL
+ * texture blit TBD (needs the icon-cell source rects + INDEX8 frames, see
+ * gfx_indexed.h). NULL port -> NOENT; otherwise CIV_ERR_UNSUPPORTED. */
+civ_error_t video_draw_unit_sprite(gfx_port_t *port, int frame, int x, int y);
+
+/* --- Chain 2026-10-16 (6): clip-rect intersect (task goal 3) ---
+ * Anchors (civ.exe, x86:LE:16:Protected Mode):
+ *   Gfx_ClipTileRect @ 1208:2061 (SETRECT tile 0x20 box at (x,y) + clip query
+ *     Gfx_IntersectRect @ 1100:0685; 0 = off-screen, caller Unit_DrawSingle @
+ *     1110:0dba skips; callers Unit_DrawSingle + FUN_11f0_4e26).
+ *   Gfx_IntersectRect @ 1100:0685 (was FUN_1100_0685: rect intersect via
+ *     Util_MemCopyFar @ 1000:137f of the clip rect then max(left,top) +
+ *     min(right,bottom) + empty -> 0; 8 callers incl. Gfx_ClipTileRect,
+ *     GfxPort_ChangeColor @ 10d0:09ee, FUN_1110_04d0/11e8:0674/07c3,
+ *     FUN_1208_1534/1866/1f64).
+ *   Gfx_DrawTechIcon @ 11a8:0cb1 (badge blit: param_1 == 0 skips, else
+ *     FUN_11a8_0f56 with palette 0x14/param_6 or 0x1a when DAT_1420_17a8 == 1;
+ *     20+ callers incl. Unit_DrawSingle, Status_DrawTechIcons @ 1088:1a82,
+ *     Combat_ResolveAttack @ 1050:0000 animation; blit stays STUB in
+ *     gfx_draw_tech_icon, see game.h).
+ *   GfxPort_PresentRect @ 10d0:0854 (BITBLT rop 0xcc0020 SRCCOPY present of
+ *     the clipped rect; VALIDATERECT no-op; STUB tail stays in
+ *     gfx_port_present_rect above).
+ * Viewport/zoom: no zoom in Civ1 (fixed 0x20 px tiles, see
+ * video_unit_tile_box: x0 = view*0x20 - dx; Map_SetViewOrigin @ 1208:20b1
+ * sets DAT_1330_4010/400e tile origin + DAT_1408_00c6/c4 pixel offsets, then
+ * FUN_1208_213b scroll-clamps; wrap on X via map_wrap_x). The box below is
+ * the 0x20 tile rect at the scrolled origin; the intersect below is the
+ * viewport clip (map window client rect). OS-free 1:1 LIVE, no Win16. */
+
+/* Orig Gfx_IntersectRect @ 1100:0685 + Gfx_ClipTileRect @ 1208:2061 clip ->
+ * video_clip_rect. 1:1 max(a.left,b.left), max(a.top,b.top),
+ * min(a.right,b.right), min(a.bottom,b.bottom); empty (right <= left or
+ * bottom <= top) -> *visible_out = 0 with *out zeroed, else *out holds the
+ * intersection and *visible_out = 1. Returns CIV_OK; NULL a/b/out/visible ->
+ * NOENT. No globals, no exit(). */
+civ_error_t video_clip_rect(const SDL_Rect *a, const SDL_Rect *b,
+                            SDL_Rect *out, int *visible_out);
+
+/* --- Chain 2026-10-16 (7): flag icons + clip callers (goals 4/5) ---
+ * Anchors (civ.exe, x86:LE:16:Protected Mode), renamed this pass:
+ *   Unit_DrawFlagIcon @ 11c8:008a (Gfx_DrawIconClipped @ 11e8:0674 tail with
+ *     the icon handle DAT_1420_9350[param_1]; param_1 is the flag index).
+ *   City_DrawTileView @ 1110:04d0 (was FUN_1110_04d0: city tile (x,y)->(px,py)
+ *     view: tile class/occupancy/wonder icons + owner frame + IntersectRect
+ *     clip + PresentRect when DAT_12b0_009a; GfxPort blits -> STUB).
+ *   Gfx_DrawIconClipped @ 11e8:0674 (was FUN_11e8_0674: Gfx_DrawTechIcon then
+ *     IntersectRect-clipped PresentRect of the icon cell when DAT_12b0_009a;
+ *     icon present path -> STUB, cell math LIVE below).
+ *   Gfx_PresentTileRect @ 11e8:07c3 (was FUN_11e8_07c3: IntersectRect-clipped
+ *     PresentRect of the 0x20 tile box at (x,y); same STUB split).
+ * Flag-icon index (LIVE below, 1:1): badge variant in Unit_DrawStatusBadge @
+ *   1110:0ff6 is civ*0x20+type+0x40 (vs map icon civ*0x20+type in
+ *   Unit_DrawSingle @ 1110:0dba via video_unit_frame_index above); the
+ *   DAT_1420_9350[param_1] handle is the icon-cell source (blit stays STUB).
+ * What the icons ARE: civ-colored unit flags (census lists + map badges):
+ *   callers Unit_DrawStatusBadge @ 1110:0ff6 x2 (map badge: normal icon +
+ *   0x1d fortify icon when flag & 8) + Census_ShowTechBars @ 1018:03f0
+ *   (0x0c progress-bar segments), Census_ShowUnitList @ 1018:067b +
+ *   Census_ShowTerrainCounts @ 1018:09cc (civ*0x20+unit+0x40 per row; see
+ *   game.h census STUBs). Relation to video_unit_frame_index: same
+ *   civ*0x20+type base, +0x40 selects the flag sheet (badge/census) vs the
+ *   map sprite sheet. No globals, no exit(), C17.
+ * What IntersectRect clips per caller (Gfx_IntersectRect @ 1100:0685 is the
+ *   shared clip query, LIVE as video_clip_rect above; each site clips its
+ *   own rect vs the port clip rect, 0 = off-screen skip):
+ *   GfxPort_ChangeColor @ 10d0:09ee: port bitmap rect (w/h at +0xc/+0xe)
+ *     before the GETBITMAPBITS index-remap scan (old->new in 0..255).
+ *   City_DrawTileView @ 1110:04d0: 0x20 city-tile box at (px,py) before the
+ *     tile/city blits + label PresentRect when DAT_12b0_009a != 0.
+ *   Gfx_DrawIconClipped @ 11e8:0674: icon cell box (w/h from the icon
+ *     resource via GLOBALLOCK) at (px,py) before PresentRect.
+ *   Gfx_PresentTileRect @ 11e8:07c3: 0x20 tile box at (x,y) before
+ *     PresentRect (unconditional repaint helper).
+ *   Map_PaintTilesClipped @ 1208:1534: per-tile 0x20 boxes over the paint
+ *     range (view origin + offsets) before RevealCenter/blank.
+ *   Map_RepaintViewShuffled @ 1208:1866 x3: same per-tile boxes in the
+ *     shuffled (mode 1) + row-major (mode 0) loops + the port-rect sync at
+ *     the head (mode-agnostic clip).
+ *   Map_DrawCityLabels @ 1208:1f64: per-label rects over DAT_1408_0000
+ *     entries before Text_DrawAligned.
+ *   Gfx_ClipTileRect @ 1208:2061: the 0x20 tile box at the scrolled origin
+ *     (video_unit_tile_box + clip; 0 = Unit_DrawSingle skips).
+ * OS-free index/cell math below is LIVE 1:1; blit/present tails stay STUB. */
+
+/* Orig Unit_DrawFlagIcon @ 11c8:008a index + Unit_DrawStatusBadge @ 1110:0ff6
+ * badge (+0x40) + Census_ShowUnitList/TerrainCounts @ 1018:067b/09cc
+ * (civ*0x20+unit+0x40) -> unit_flag_icon_index. 1:1 civ*0x20+type+0x40.
+ * Returns index >= 0, -1 on civ/type < 0. No globals. */
+int unit_flag_icon_index(int civ, int type);
+
+/* Orig Gfx_DrawIconClipped @ 11e8:0674 cell -> gfx_icon_cell_box. 1:1 the
+ * icon-cell rect at (px,py): out = (px, py, px+cell_w, py+cell_h) (orig
+ * SETRECT from the GLOBALLOCK'd icon w/h + OFFSETRECT to px/py; caller
+ * passes cell_w/h explicitly, no handles). NOENT on NULL out; RANGE on
+ * cell_w/h <= 0; else CIV_OK. The IntersectRect clip itself stays in
+ * video_clip_rect above. No globals. */
+civ_error_t gfx_icon_cell_box(int px, int py, int cell_w, int cell_h,
+                              SDL_Rect *out);
+
+/* Orig Gfx_DrawIconClipped @ 11e8:0674 -> gfx_draw_icon_clipped.
+ * Icon blit + clipped present (Gfx_DrawTechIcon @ 11a8:0cb1 + PresentRect
+ * @ 10d0:0854 when DAT_12b0_009a). SDL bridge TBD. */
+civ_error_t gfx_draw_icon_clipped(int icon, int px, int py);
+
+/* Orig Gfx_PresentTileRect @ 11e8:07c3 -> gfx_present_tile_rect.
+ * Clipped present of the 0x20 tile box. SDL bridge TBD. */
+civ_error_t gfx_present_tile_rect(int x, int y);
+
+/* Orig City_DrawTileView @ 1110:04d0 -> city_draw_tile_view.
+ * City tile (tx,ty)->(px,py) view (class/occupancy/wonder/owner + clip +
+ * label present). GfxPort blits -> SDL TBD. */
+civ_error_t city_draw_tile_view(int tx, int ty, int px, int py);
+
 #endif /* CIVLIN_VIDEO_H */

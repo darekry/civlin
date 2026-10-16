@@ -603,3 +603,320 @@ int map_wrap_step_dist(int x1, int x2, int y1, int y2)
     dy = dy < 0 ? -dy : dy;
     return map_step_dist(dx, dy);
 }
+
+/* --- Tile access family (2026-10-16): OS-free 1:1. No globals. */
+
+int map_check_tile_bounds(int x, int y)
+{
+    /* Orig Map_CheckTileBounds @ 1110:168f: (x<0 || 0x4f<x || y<0 ||
+     * 0x31<y) ? 0 : 1. Game-map window 0x50 x 0x32 (cf. the 0x140 x 200
+     * Map_GetTile @ 11e8:0dcf buffer gated by map_in_bounds above). */
+    if (x < 0 || x > 0x4f || y < 0 || y > 0x31)
+        return 0;
+    return 1;
+}
+
+int map_check_tile_improved(int tile, int x, int y, int seed)
+{
+    /* Orig Map_CheckTileImproved @ 1110:1c72: (y<2 || 0x2f<y ||
+     * (x&3)*4+(y&3) != (seed+(x>>2)*0xd+(y>>2)*0xb & 0xf)) ? 0 : 1.
+     * tile (Map_GetTileClass @ 1110:16c0 kind) is kept for parity but
+     * unused in the predicate (orig ignores param_1, see decompile).
+     * seed is DAT_13c0_0000. Selects the 0x1836 irrigated table in
+     * City_TileYield @ 1030:7c28 (see city_tile_base_yield). */
+    int want;
+    int have;
+
+    (void)tile;
+    if (y < 2 || y > 0x2f)
+        return 0;
+    want = (x & 3) * 4 + (y & 3);
+    have = (seed + (x >> 2) * 0xd + (y >> 2) * 0xb) & 0xf;
+    return want == have ? 1 : 0;
+}
+
+int map_get_occupancy_flags(int x, int y)
+{
+    /* Orig Map_GetOccupancyFlags @ 1110:199b: lo = Map_GetTile(x,y+100),
+     * hi = Map_GetTile(x,y+0x96); return lo + hi*0x10. Bit contract per
+     * City_TileYield @ 1030:7c28: &1 city/occupied, &2 food, &4 shield,
+     * &8 road, &0x10 holders, &0x40 pollution (upper layer). OOB (-1)
+     * folds to 0 here (orig reads the 0x2e sentinel byte, exact value
+     * TBD vs dump, never faked as real occupancy). */
+    int lo = map_get_tile(x, y + 100);
+    int hi = map_get_tile(x, y + 0x96);
+
+    if (lo < 0)
+        lo = 0;
+    if (hi < 0)
+        hi = 0;
+    return (lo & 0xff) + (hi & 0xff) * 0x10;
+}
+
+int map_get_continent_id(int x, int y)
+{
+    /* Orig Map_GetContinentId @ 1110:1d99: Map_GetTile(x,y+0x32) (the
+     * continent layer; game map is 0x50 x 0x32 so +0x32 rows lands on
+     * the id plane). OOB -> -1 (orig sentinel TBD). Feeds
+     * City_ChooseProduction @ 1170:05ca gates + Map_GetOceanOrContVal @
+     * 1110:1dbd. */
+    return map_get_tile(x, y + 0x32);
+}
+
+int map_sign_step(int d)
+{
+    /* Orig Util_SignStep @ 1110:1c4b: d<1 ? (d<0 ? -1 : 0) : 1. Used by
+     * Unit_StepTowardGoal @ 1128:0000 (player-adjacent resolve) and
+     * Unit_AIPlayerTurn @ 1078:4f0f (home-delta steering via
+     * Map_GetContinentId-matched city deltas). */
+    if (d < 1)
+        return d < 0 ? -1 : 0;
+    return 1;
+}
+
+civ_error_t map_clear_occupancy_bits(int x, int y, unsigned mask)
+{
+    /* Orig Map_ClearOccupancyBits @ 1110:1b36: if (mask&0xf)
+     * Map_SetTile(x,y+100, tile&~(mask&0xf)); if (mask&0xf0)
+     * Map_SetTile(x,y+0x96, tile&~((mask>>4)&0xf)). Read-modify-write
+     * via map_get_tile/map_set_tile; OOB silently ignored (same as
+     * map_set_tile @ 11e8:0e19). */
+    int lo;
+    int hi;
+
+    if ((mask & 0xfu) != 0u) {
+        lo = map_get_tile(x, y + 100);
+        if (lo >= 0)
+            map_set_tile(x, y + 100,
+                         (uint8_t)((unsigned)lo & ~(mask & 0xfu)));
+    }
+    if ((mask & 0xf0u) != 0u) {
+        hi = map_get_tile(x, y + 0x96);
+        if (hi >= 0)
+            map_set_tile(x, y + 0x96,
+                         (uint8_t)((unsigned)hi & ~((mask >> 4) & 0xfu)));
+    }
+    return CIV_OK;
+}
+
+/* --- Chain 2026-10-16 (4): wrap/lookup/ZOC-detail/mirror/owner ---
+ * OS-free 1:1 LIVE ports. No globals, no exit(), C17. See map.h chain
+ * block for callers/callees/addrs. */
+
+int map_wrap_x(int x)
+{
+    /* Orig Map_WrapX @ 1128:177e: single-step X wrap on the 0x50 game-map
+     * width (Y never wraps; NOT a modulo: +-0x100 stays OOB by design).
+     * Callers: ScanZOCDetail @ 11c0:2437 + UpdateVisibility @ 11c0:0395
+     * neighbour tables, ResolveAttack animation wrap, DrawSingle @
+     * 1110:0dba. */
+    if (x < 0)
+        x += CIV_MAP_WRAP_W;
+    else if (x > 0x4f)
+        x -= CIV_MAP_WRAP_W;
+    return x;
+}
+
+int map_unit_slot_from_tile(int tile)
+{
+    /* Orig Map_GetUnitAt @ 1110:18ce: tile(x+0xa0,y) hint (bit3 set -> civ
+     * slot bits0-2, else -1). Stale hints (unit moved without tile clear)
+     * must be verified via the Find path (0x80 x/y scan, clears to 0). */
+    if (tile < 0)
+        return -1;
+    if ((tile & 8) == 0)
+        return -1;
+    return tile & 7;
+}
+
+int map_tile_owner_from_tile(int tile)
+{
+    /* Orig Map_GetTileOwner @ 1110:16ee: tile(x+0xa0,y)&7 map-layer owner
+     * (fast path for the 0395 tail City_FindByTile @ 11c8:00c4 gate); city
+     * @ 1420:5507 + unit slot civ authoritative. */
+    if (tile < 0)
+        return -1;
+    return tile & 7;
+}
+
+int map_scan_zoc_detail(int self_civ, int self_is_sea,
+                        const int *nbr_is_sea, const int *nbr_has_unit,
+                        const int *nbr_civ, int n)
+{
+    /* Orig Map_ScanZOCDetail @ 11c0:2437 enemy rule (occupancy &1 city gate
+     * stays in Map_CheckZOC @ 11c0:23fd caller, LIVE in game.h): 8-neighbour
+     * scan with sea match (GetTileClass @ 1110:16c0 == 10) + GetUnitAt @
+     * 1110:18ce != -1 + owner != self -> 1. No diplomat/caravan/sea
+     * exceptions beyond the sea match; ZOC/occupancy/ocean gates stay in
+     * Unit_StepTowardGoal @ 1128:0000. Player reveal side effects
+     * (seen-bit OR + Map_RevealCenter @ 1110:1461) stay Win16. */
+    int i;
+    int self_sea;
+
+    if (!nbr_is_sea || !nbr_has_unit || !nbr_civ || n != 8)
+        return -1;
+    self_sea = self_is_sea != 0;
+    for (i = 0; i < 8; i++) {
+        int sea;
+
+        if (!nbr_has_unit[i])
+            continue;
+        sea = nbr_is_sea[i] != 0;
+        if (sea != self_sea)
+            continue;
+        if (nbr_civ[i] == self_civ)
+            continue;
+        return 1;
+    }
+    return 0;
+}
+
+civ_error_t map_mirror_occupancy(int x, int y)
+{
+    /* Orig Map_MirrorOccupancy @ 1110:1a2f: tile(x+0x50,y+100) =
+     * tile(x,y+100), tile(x+0x50,y+0x96) = tile(x,y+0x96). OOB sides fold
+     * via map_get_tile (-1 skipped) / map_set_tile (ignored). */
+    int lo = map_get_tile(x, y + 100);
+    int hi = map_get_tile(x, y + 0x96);
+
+    if (lo >= 0)
+        map_set_tile(x + 0x50, y + 100, (uint8_t)lo);
+    if (hi >= 0)
+        map_set_tile(x + 0x50, y + 0x96, (uint8_t)hi);
+    return CIV_OK;
+}
+
+civ_error_t map_set_tile_owner(int x, int y, int civ)
+{
+    /* Orig Map_SetTileOwner @ 1110:171f: tile(x+0xa0,y) = (old&8)|civ.
+     * Backs Unit_SpawnUnit place + City_DoRevolt moves. OOB read folds to
+     * civ alone (sentinel TBD); OOB write ignored like Map_SetTile. */
+    int old;
+
+    if (civ < 0 || civ > 7)
+        return CIV_ERR_RANGE;
+    old = map_get_tile(x + 0xa0, y);
+    if (old < 0)
+        old = 0;
+    map_set_tile(x + 0xa0, y, (uint8_t)((old & 8) | civ));
+    return CIV_OK;
+}
+
+civ_error_t map_place_unit_marker(int x, int y, int civ)
+{
+    /* Orig Map_PlaceUnitAt @ 1110:1767 marker half: tile(x+0xa0,y) =
+     * (civ|8) (FindUnitAt verify + Unit_LinkStack @ 1050:1105 link need
+     * unit records -> game.h unit_stack_insert). OOB ignored. */
+    if (civ < 0 || civ > 7)
+        return CIV_ERR_RANGE;
+    map_set_tile(x + 0xa0, y, (uint8_t)(civ | 8));
+    return CIV_OK;
+}
+
+/* --- Chain 2026-10-16 (7): view origin + scroll clamp. --- */
+
+civ_error_t map_set_view_origin(int px, int py, int *tile_x_out,
+                                int *tile_y_out, int *off_x_out,
+                                int *off_y_out)
+{
+    /* Orig Map_SetViewOrigin @ 1208:20b1: DAT_1330_4010 = px/0x20,
+     * DAT_1330_400e = py/0x20, DAT_1408_00c6 = px%0x20, DAT_1408_00c4 =
+     * py%0x20 (x86 IDIV trunc toward zero; C / and % match). Clamp tail
+     * Map_ClampViewScroll @ 1208:213b lives below. */
+    if (!tile_x_out || !tile_y_out || !off_x_out || !off_y_out)
+        return CIV_ERR_NOENT;
+    *tile_x_out = px / 0x20;
+    *tile_y_out = py / 0x20;
+    *off_x_out = px % 0x20;
+    *off_y_out = py % 0x20;
+    return CIV_OK;
+}
+
+int map_clamp_view_x(int tx)
+{
+    /* Orig Map_ClampViewScroll @ 1208:213b X: < 0 -> +0x50, > 0x4f ->
+     * -0x50 (single-step, NOT modulo; Y never wraps). Same as map_wrap_x
+     * @ 1128:177e (kept separate for RE-map fidelity). */
+    if (tx < 0)
+        return tx + 0x50;
+    if (tx > 0x4f)
+        return tx - 0x50;
+    return tx;
+}
+
+int map_clamp_view_y_plain(int ty)
+{
+    /* Orig same without Tech 8 (Tech_HasTech @ 1170:3181(pciv,8) == 0):
+     * < -0x19 -> -0x19, > 0x4b -> 0x4b. */
+    if (ty < -0x19)
+        return -0x19;
+    if (ty > 0x4b)
+        return 0x4b;
+    return ty;
+}
+
+civ_error_t map_clamp_view_y_scroll(int ty, int pix_off, int scroll_max,
+                                    int *ty_out, int *off_out)
+{
+    /* Orig same with Tech 8: GETSCROLLRANGE max + SETSCROLLPOS sync
+     * (Win16 handles stay caller-side); pure clamp: ty < 0 -> 0, then
+     * ty*0x20+off > max -> ty = max/0x20, off = max%0x20. */
+    long pos;
+
+    if (!ty_out || !off_out)
+        return CIV_ERR_NOENT;
+    if (scroll_max < 0)
+        return CIV_ERR_RANGE;
+    if (ty < 0)
+        ty = 0;
+    pos = (long)ty * 0x20L + (long)pix_off;
+    if (pos > (long)scroll_max) {
+        ty = scroll_max / 0x20;
+        pix_off = scroll_max % 0x20;
+    }
+    *ty_out = ty;
+    *off_out = pix_off;
+    return CIV_OK;
+}
+
+civ_error_t map_clamp_view_scroll(int tx, int ty)
+{
+    (void)tx;
+    (void)ty;
+    /* TODO: Orig Map_ClampViewScroll @ 1208:213b (Menu_CheckCityNameId +
+     * GLOBALLOCK port rect + GETSCROLLRANGE/SETSCROLLPOS + Tech 8 branch +
+     * Util_MemCopyFar @ 1000:137f). Win16 scroll handles -> SDL view TBD.
+     * Pure X/Y halves live in map_clamp_view_x/y_* above (LIVE). */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t map_paint_tiles_clipped(int left, int top, int right, int bottom)
+{
+    (void)left;
+    (void)top;
+    (void)right;
+    (void)bottom;
+    /* TODO: Orig Map_PaintTilesClipped @ 1208:1534 (tile-range paint from
+     * 1330:4010/400e + 1408:00c6/c4: per-tile SETRECT 0x20 + clip @
+     * 1100:0685 + OOB/fog blank vs Map_RevealCenter @ 1110:1461 +
+     * Map_DrawCityLabels @ 1208:1f64 + PresentRect @ 10d0:0854). GfxPort
+     * blits -> SDL TBD. Clip math lives in video_clip_rect (LIVE). */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t map_repaint_view_shuffled(int mode)
+{
+    (void)mode;
+    /* TODO: Orig Map_RepaintViewShuffled @ 1208:1866 (mode 2 present / 1
+     * shuffled via mem_alloc_lock + Rng_Range @ 11c8:003d + 0 clip @
+     * 1100:0685 + RevealCenter/fill + scroll sync). GfxPort -> SDL TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t map_draw_city_labels(void)
+{
+    /* TODO: Orig Map_DrawCityLabels @ 1208:1f64 (labels over DAT_1408_0000
+     * via IntersectRect @ 1100:0685 + Text_DrawAligned @ 1098:0ed1).
+     * GDI text -> SDL_ttf TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}

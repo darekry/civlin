@@ -668,6 +668,155 @@ int art_progress_fill_x(int bar_w, int done, int total)
     return (int)(((long)bar_w * (long)done) / (long)total);
 }
 
+int video_unit_frame_index(int civ, int type)
+{
+    /* Orig Unit_DrawSingle @ 1110:0dba icon fetch: (civ*0x20+type)*2-0x6c30
+     * word (badge variant in Unit_DrawStatusBadge @ 1110:0ff6 adds +0x40 to
+     * the type term; caller-side). HP is not drawn (one-roll kill). */
+    if (civ < 0 || type < 0)
+        return -1;
+    return civ * 0x20 + type;
+}
+
+civ_error_t video_unit_tile_box(int dx, int dy, int view_x, int view_y,
+                                int *x0_out, int *y0_out)
+{
+    /* Orig Gfx_ClipTileRect @ 1208:2061: SETRECT tile 0x20 box + clip query
+     * @ 1100:0685 (0 = off-screen skip in Unit_DrawSingle). Wrap (Map_WrapX
+     * @ 1128:177e) lives in map_wrap_x, see map.h; caller passes wrapped dx. */
+    if (!x0_out || !y0_out)
+        return CIV_ERR_NOENT;
+    *x0_out = view_x * 0x20 - dx;
+    *y0_out = view_y * 0x20 - dy;
+    return CIV_OK;
+}
+
+civ_error_t video_draw_unit_sprite(gfx_port_t *port, int frame, int x, int y)
+{
+    (void)frame;
+    (void)x;
+    (void)y;
+    /* TODO: Orig Unit_DrawSingle @ 1110:0dba + Unit_DrawStatusBadge @
+     * 1110:0ff6 blit tail (GfxPort_SetActive @ 10d0:0956 +
+     * Gfx_DrawTechIcon @ 11a8:0cb1 icon cell + badge + BITBLT @ 10d0:0854/
+     * 08f1). Needs the icon-cell source rects + INDEX8 frames (see
+     * gfx_indexed.h gfx_indexed_to_texture + gfx_port_present_rect/blit).
+     * What-to-draw (video_unit_frame_index/box + game.h
+     * unit_stack_draw_pick/unit_draw_single_layer LIVE) is done caller-side. */
+    if (!port)
+        return CIV_ERR_NOENT;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+/* --- Chain 2026-10-16 (6): clip-rect intersect (goal 3). OS-free 1:1 LIVE. */
+
+civ_error_t video_clip_rect(const SDL_Rect *a, const SDL_Rect *b,
+                            SDL_Rect *out, int *visible_out)
+{
+    /* Orig Gfx_IntersectRect @ 1100:0685: Util_MemCopyFar clip copy, then
+     * left/top = max, right/bottom = min; empty (right <= left or bottom <=
+     * top, orig zeroes the rect) -> 0 off-screen skip in Gfx_ClipTileRect @
+     * 1208:2061 / Unit_DrawSingle @ 1110:0dba. SDL_Rect x/y/w/h adapted:
+     * right = x + w, bottom = y + h. */
+    int al, at, ar, ab;
+    int bl, bt, br, bb;
+    int l, t, r, bo;
+
+    if (!a || !b || !out || !visible_out)
+        return CIV_ERR_NOENT;
+    al = a->x;
+    at = a->y;
+    ar = a->x + a->w;
+    ab = a->y + a->h;
+    bl = b->x;
+    bt = b->y;
+    br = b->x + b->w;
+    bb = b->y + b->h;
+    l = (al > bl) ? al : bl;
+    t = (at > bt) ? at : bt;
+    r = (ar < br) ? ar : br;
+    bo = (ab < bb) ? ab : bb;
+    if (r <= l || bo <= t) {
+        out->x = 0;
+        out->y = 0;
+        out->w = 0;
+        out->h = 0;
+        *visible_out = 0;
+        return CIV_OK;
+    }
+    out->x = l;
+    out->y = t;
+    out->w = r - l;
+    out->h = bo - t;
+    *visible_out = 1;
+    return CIV_OK;
+}
+
+int unit_flag_icon_index(int civ, int type)
+{
+    /* Orig Unit_DrawFlagIcon @ 11c8:008a index via Unit_DrawStatusBadge @
+     * 1110:0ff6 (civ*0x20+type+0x40) + Census_ShowUnitList/TerrainCounts @
+     * 1018:067b/09cc (same +0x40 per row) + 0x1d fortify / 0x0c bar ids
+     * stay caller-side. Vs video_unit_frame_index (map sprite, no +0x40). */
+    if (civ < 0 || type < 0)
+        return -1;
+    return civ * 0x20 + type + 0x40;
+}
+
+civ_error_t gfx_icon_cell_box(int px, int py, int cell_w, int cell_h,
+                              SDL_Rect *out)
+{
+    /* Orig Gfx_DrawIconClipped @ 11e8:0674 cell: SETRECT from the icon w/h
+     * (GLOBALLOCK) + OFFSETRECT to (px,py); clip itself is video_clip_rect
+     * (Gfx_IntersectRect @ 1100:0685) caller-side. */
+    if (!out)
+        return CIV_ERR_NOENT;
+    if (cell_w <= 0 || cell_h <= 0)
+        return CIV_ERR_RANGE;
+    out->x = px;
+    out->y = py;
+    out->w = cell_w;
+    out->h = cell_h;
+    return CIV_OK;
+}
+
+civ_error_t gfx_draw_icon_clipped(int icon, int px, int py)
+{
+    (void)icon;
+    (void)px;
+    (void)py;
+    /* TODO: Orig Gfx_DrawIconClipped @ 11e8:0674 (Gfx_DrawTechIcon @
+     * 11a8:0cb1 icon blit + IntersectRect @ 1100:0685 clip + PresentRect @
+     * 10d0:0854 when DAT_12b0_009a; FUN_1220_0f2f visibility gate).
+     * SDL indexed blit TBD (see gfx_port_present_rect). Cell math lives in
+     * gfx_icon_cell_box above (LIVE). */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t gfx_present_tile_rect(int x, int y)
+{
+    (void)x;
+    (void)y;
+    /* TODO: Orig Gfx_PresentTileRect @ 11e8:07c3 (SETRECT 0x20 box at (x,y)
+     * + IntersectRect @ 1100:0685 clip + PresentRect @ 10d0:0854 when
+     * DAT_12b0_009a; FUN_1220_0f2f gate). SDL present TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t city_draw_tile_view(int tx, int ty, int px, int py)
+{
+    (void)tx;
+    (void)ty;
+    (void)px;
+    (void)py;
+    /* TODO: Orig City_DrawTileView @ 1110:04d0 (city tile (tx,ty)->(px,py):
+     * class/occupancy/wonder icons via Gfx_DrawTechIcon @ 11a8:0cb1 +
+     * owner frame + IntersectRect @ 1100:0685 clip + label PresentRect when
+     * DAT_12b0_009a). GfxPort blits -> SDL TBD. Clip math lives in
+     * video_clip_rect (LIVE). */
+    return CIV_ERR_UNSUPPORTED;
+}
+
 civ_error_t art_load_frame(int frame_id, gfx_port_t **out)
 {
     (void)frame_id;

@@ -944,9 +944,13 @@ civ_error_t diplomacy_post_contact(int civ, int unit_idx)
 {
     (void)civ;
     (void)unit_idx;
-    /* TODO: Orig FUN_1168_0a07 @ 1168:0a07 (Diplomacy_PostContact: posts
-     * first-contact diplomacy from unit_update_visibility @ 11c0:0395;
-     * needs Win16 modal dialog + SDL bridge). */
+    /* TODO: Orig Diplo_PostContact @ 1168:0a07 (tail of Unit_UpdateVisibility
+     * @ 11c0:0395: player dialog via FUN_1160_0000 unless contacted+fresh
+     * stamp @ 392b+3, both dirs |= 0x11, AI-AI via Diplo_ShouldMakePeace @
+     * 1168:0f47 -> Diplo_ExchangeTechs @ 1168:1220 + Diplo_SetPeace @
+     * 1168:0dda / Diplo_SetWar @ 1168:0e8e + Dialog_ShowMessage @ 1220:00d2
+     * embassy tails; needs diplo bits @ 12d8:3a0a + Win16 modal + SDL).
+     * OS-free bit helpers below (diplo_* LIVE) cover the state math. */
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -1285,5 +1289,327 @@ civ_error_t text_fill_res_string_list(int res_id, int first, int last)
      * blobs (see rsc_loader.h res_get_string_copy STUB) + caller heap. */
     if (last < first)
         return CIV_ERR_RANGE;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+/* --- Chain 2026-10-16 (5): diplomacy state bits + tribute + tech exchange
+ * (segment 1168). OS-free 1:1 LIVE ports. No globals, no exit(), C17. */
+
+int diplo_contact_flags(int cur)
+{
+    /* Orig Diplo_PostContact @ 1168:0a07: both dirs |= 0x11. */
+    return cur | 0x11;
+}
+
+int diplo_is_peace(int flags)
+{
+    /* Orig peace-bit @ 1168:0a07/0dda/0e8e/0f47 tests (& 2). */
+    return (flags & 0x02) != 0 ? 1 : 0;
+}
+
+int diplo_is_contact(int flags)
+{
+    /* Orig contacted-bit (& 1) gate with the 392b+3 turn stamp. */
+    return (flags & 0x01) != 0 ? 1 : 0;
+}
+
+int diplo_has_embassy(int flags)
+{
+    /* Orig embassy-bit (& 0x40) message gate in PostContact/ProcessTurn. */
+    return (flags & 0x40) != 0 ? 1 : 0;
+}
+
+int diplo_apply_peace(int cur)
+{
+    /* Orig Diplo_SetPeace @ 1168:0dda: |= param_3 (0x02) then & ~0x20. */
+    cur |= 0x02;
+    cur &= ~0x20;
+    return cur;
+}
+
+int diplo_apply_war(int cur)
+{
+    /* Orig Diplo_SetWar @ 1168:0e8e: &= ~param_3 (0x02) then & ~0x04. */
+    cur &= ~0x02;
+    cur &= ~0x04;
+    return cur;
+}
+
+int diplo_tribute_amount(int gold)
+{
+    /* Orig Diplo_ProcessTurn @ 1168:0000: iVar2 = Util_Clamp(gold/100,1,10)
+     * * 0x32 (Util_Clamp @ 11c8:0063 inlined: lo 1, hi 10). Remainder
+     * gold % 100 is kept by the demander, not paid. */
+    int q;
+
+    if (gold < 0)
+        return -1;
+    q = gold / 100;
+    if (q < 1)
+        q = 1;
+    if (q > 10)
+        q = 10;
+    return q * 0x32;
+}
+
+int diplo_should_exchange(int a_exclusive, int b_exclusive)
+{
+    /* Orig Diplo_ExchangeTechs @ 1168:1220: uVar3 == 3 (both directions own
+     * an exclusive tech among 0..0x48) -> swap pair via 1170:2aaa. */
+    return (a_exclusive != 0 && b_exclusive != 0) ? 1 : 0;
+}
+
+/* --- Chain 2026-10-16 (6): diplo turn tick + government rules (task goals 1/2).
+ * Caller/callee: Game_TurnLoopTick @ 1088:0000 -> Diplo_ProcessTurn @ 1168:0000
+ * (per-civ turn) -> Diplo_ChangeGovernment @ 1168:06c1 + Diplo_SetPeace/SetWar
+ * @ 1168:0dda/0e8e; PostContact @ 1168:0a07 is the per-contact-event sibling
+ * (Unit_UpdateVisibility @ 11c0:0395 tail). OS-free 1:1 LIVE, no globals. */
+
+int diplo_government_tick(int turn)
+{
+    /* Orig Diplo_ProcessTurn @ 1168:0000: (g_nTurn & 3) == 0. */
+    return ((turn & 3) == 0) ? 1 : 0;
+}
+
+int diplo_spy_decay_step(int cur, int rng3)
+{
+    /* Orig Diplo_ProcessTurn @ 1168:0000: (flags & 0x100) && Rng_Range @
+     * 11c8:003d (3) == 0 -> &= ~0x100, &= ~0x02, |= 0x200. */
+    if ((cur & 0x100) != 0 && rng3 == 0) {
+        cur &= ~0x100;
+        cur &= ~0x02;
+        cur |= 0x200;
+    }
+    return cur;
+}
+
+int diplo_war_end_tick(int turn)
+{
+    /* Orig Diplo_ProcessTurn @ 1168:0000: (g_nTurn & 0xf) == 0. */
+    return ((turn & 0x0f) == 0) ? 1 : 0;
+}
+
+int diplo_war_end_clear(int cur)
+{
+    /* Orig Diplo_ProcessTurn @ 1168:0000 sweep: &= ~0x01 (contact both dirs)
+     * + &= ~0x10 (seen both dirs). */
+    cur &= ~0x01;
+    cur &= ~0x10;
+    return cur;
+}
+
+int diplo_tribute_turn(int civ, int turn)
+{
+    /* Orig Diplo_ProcessTurn @ 1168:0000: param_1 != 0 && param_1 << 2 ==
+     * (g_nTurn & 0x1f) (player-exclusion g_nPlayerCiv != param_1 stays
+     * caller-side). */
+    if (civ <= 0)
+        return 0;
+    return (((civ << 2) == (turn & 0x1f)) ? 1 : 0);
+}
+
+int diplo_government_factor(int gov)
+{
+    /* Orig Diplo_ChangeGovernment @ 1168:06c1: 4 - param_2 / 2 at 39f3+7. */
+    if (gov < 0)
+        return -1;
+    return 4 - gov / 2;
+}
+
+int diplo_government_needs_tech(int gov)
+{
+    /* Orig Diplo_ChangeGovernment @ 1168:06c1 gates via Tech_HasTech @
+     * 1170:3181 (wonder-1 bypass stays caller-side). */
+    switch (gov) {
+    case 2:
+        return 5;
+    case 3:
+        return 0x2b;
+    case 4:
+        return 0x2c;
+    case 5:
+        return 4;
+    default:
+        return -1;
+    }
+}
+
+int diplo_government_available(int gov, int has_req_tech, int wonder_open)
+{
+    /* Orig same: gov 0/1 always; else wonder 1 open bypasses, else tech. */
+    if (gov <= 1 && gov >= 0)
+        return 1;
+    if (gov < 0)
+        return 0;
+    if (wonder_open != 0)
+        return 1;
+    return (has_req_tech != 0) ? 1 : 0;
+}
+
+int diplo_peace_forced(int opt_flag)
+{
+    /* Orig Diplo_ShouldMakePeace @ 1168:0f47 head: (DAT_12d8_3e9c & 1) == 0
+     * -> 1 (peace forced, skip rank/military/tech-trade tables). */
+    return ((opt_flag & 1) == 0) ? 1 : 0;
+}
+
+/* --- Chain 2026-10-16 (7): contact dialog + tech/military tables. --- */
+
+int diplo_tech_table_off(int civ, int tech)
+{
+    /* Orig Diplo_GetTechValue @ 1168:1366 / Diplo_GetTechCost @ 1168:138d:
+     * BX = civ*0x20 + tech*2 past 12d8:3c9c/3d9c (ES=0x12d8 per disasm
+     * MOV AX,0x12d8 / MOV ES,AX; Ghidra 1420: labels are the same offsets
+     * 0x3c9c = 0x3c97+5, 0x3d9c = 0x3d88+0x14, real seg is 12d8). */
+    if (civ < 0 || tech < 0 || tech >= CIV_DIPLO_TECH_COUNT)
+        return -1;
+    return civ * CIV_DIPLO_TECH_CIV_STRIDE + tech;
+}
+
+int diplo_tech_value_at(const short *table, int nwords, int civ, int tech)
+{
+    /* Orig Diplo_GetTechValue @ 1168:1366 word read on the runtime BSS. */
+    int off;
+
+    if (!table || nwords <= 0)
+        return -1;
+    off = diplo_tech_table_off(civ, tech);
+    if (off < 0 || off >= nwords)
+        return -1;
+    return (int)table[off];
+}
+
+int diplo_tech_cost_at(const short *table, int nwords, int civ, int tech)
+{
+    /* Orig Diplo_GetTechCost @ 1168:138d word read, same stride past
+     * 12d8:3d9c. */
+    int off;
+
+    if (!table || nwords <= 0)
+        return -1;
+    off = diplo_tech_table_off(civ, tech);
+    if (off < 0 || off >= nwords)
+        return -1;
+    return (int)table[off];
+}
+
+int diplo_military_at(const uint8_t *row, int row_len)
+{
+    /* Orig Diplo_GetMilitaryScore @ 1168:13b4: ES:[civ*0x38+0x4160] word
+     * (0x4160 = 0x4155+0xb); +0xb is UNALIGNED (bytes 0xb/0xc), x86 OK.
+     * LE decode, no alignment assumption. */
+    if (!row || row_len < CIV_DIPLO_MIL_SCORE_OFF + 2)
+        return -1;
+    return (int)row[CIV_DIPLO_MIL_SCORE_OFF] |
+           ((int)row[CIV_DIPLO_MIL_SCORE_OFF + 1] << 8);
+}
+
+int diplo_contact_tribute_scaled(int base, int difficulty)
+{
+    /* Orig Diplo_OpenContactDialog @ 1160:0000: iVar6 =
+     * Util_Clamp((iVar6*(diff+1))/0x20,0,0x14)*0x32 (Util_Clamp @
+     * 11c8:0063 inlined, lo 0 hi 0x14). */
+    long v;
+
+    if (base < 0 || difficulty < 0)
+        return -1;
+    v = ((long)base * (long)(difficulty + 1)) / 0x20L;
+    if (v < 0)
+        v = 0;
+    if (v > 0x14)
+        v = 0x14;
+    return (int)(v * 0x32L);
+}
+
+int diplo_contact_afford_snap(int demand, int gold)
+{
+    /* Orig same: gold < demand <= gold*2 && gold > 0x31 ->
+     * demand = (gold/0x32)*0x32 (round down to tribute units). */
+    if (gold < 0 || demand < 0)
+        return -1;
+    if (gold < demand && demand <= gold * 2 && gold > 0x31)
+        return (gold / 0x32) * 0x32;
+    return demand;
+}
+
+int diplo_mercenary_amount(int rank_target, int gold_foe)
+{
+    /* Orig MERCENARY branch @ 1160:0000: iVar6 = (rank/2)*(gold/100);
+     * Util_Clamp(iVar6/0x32,2,9999)*0x32. */
+    long v;
+    long q;
+
+    if (rank_target < 0 || gold_foe < 0)
+        return -1;
+    v = (long)(rank_target / 2) * (long)(gold_foe / 100);
+    q = v / 0x32L;
+    if (q < 2)
+        q = 2;
+    if (q > 9999)
+        q = 9999;
+    return (int)(q * 0x32L);
+}
+
+int diplo_threat_gold(int score16, int gold_foe)
+{
+    /* Orig THREAT/GIVEMORE @ 1160:0000: Util_Clamp(local16,0,gold/0x32)
+     * *0x32 (0 when the foe holds nothing). */
+    int cap;
+
+    if (score16 < 0 || gold_foe < 0)
+        return -1;
+    cap = gold_foe / 0x32;
+    if (score16 > cap)
+        score16 = cap;
+    return score16 * 0x32;
+}
+
+int diplo_peace_stamp(int turn)
+{
+    /* Orig PEACE accept @ 1160:0000: *(392b+3+civ*2) = g_nTurn+0x10 via
+     * FUN_1160_257a/25fa pair. */
+    return turn + 0x10;
+}
+
+civ_error_t diplo_open_contact_dialog(int civ, int x, int y, int mode)
+{
+    (void)civ;
+    (void)x;
+    (void)y;
+    (void)mode;
+    /* TODO: Orig Diplo_OpenContactDialog @ 1160:0000 (tribute scan 1..0xe via
+     * Diplo_GetTechValue/Cost @ 1168:1366/138d + military gates via
+     * Diplo_GetMilitaryScore @ 1168:13b4 + wonder gates via
+     * City_IsWonderOpen @ 1030:7e57 + option menus EXCHANGE/TAKECIV/TRIBUTE/
+     * REJECT/PROVOKE/PEACE/GIVE/GROVEL/MOBILIZE/ATTITUDE/THREAT/MERCENARY via
+     * Diplo_PromptContact @ 1160:20c0 + Diplo_RunContactMenu @ 1160:328e +
+     * Diplo_SetPeace/SetWar @ 1168:0dda/0e8e + FUN_1170_2aaa grants +
+     * Dialog_ShowMessage @ 1220:00d2 + replay logs; treasuries 43b8+0x8c).
+     * Win16 MenuZ/dialog -> SDL modal TBD. Pure tribute/tech math lives in
+     * diplo_tribute_amount/diplo_contact_tribute_scaled/diplo_tech_value_at/
+     * diplo_tech_cost_at/diplo_military_at above (LIVE). */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t diplo_prompt_contact(int civ, int x, int y)
+{
+    (void)civ;
+    (void)x;
+    (void)y;
+    /* TODO: Orig Diplo_PromptContact @ 1160:20c0 (emissary Yes/No message on
+     * 24fa/12d8 + embassy Check-Intelligence tail + leader portrait dialog
+     * 0x8e via Dlg_CreateTracked @ 1098:124f + FUN_1160_2a38/233c + Sound
+     * @ 1150:019e). Win16 dialog -> SDL modal TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t diplo_run_contact_menu(int *out_choice)
+{
+    if (!out_choice)
+        return CIV_ERR_NOENT;
+    *out_choice = -1;
+    /* TODO: Orig Diplo_RunContactMenu @ 1160:328e (MenuZ modal on 1420:31b4
+     * via Dialog_MenuZ_Modal @ 1220:0156 + port save/restore + present).
+     * Win16 modal -> SDL TBD. */
     return CIV_ERR_UNSUPPORTED;
 }
