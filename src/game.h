@@ -1558,12 +1558,31 @@ int city_transfer_treasury(int treas, int amount, int is_winner);
 /* Orig Civ_ProcessUnitMoves @ 11f0:0000 loop order -> civ_unit_turn_step.
  * PARTIAL dispatcher (implemented classify + STUB tails): documents the
  * per-civ 0x80-unit outer / per-pass do-while inner (bVar5 dirty +
- * local_38 wrap + DAT_1310_0002 gate) with per-unit order visibility
- * (Unit_RevealArea @ 11c0:12c8 / update @ 11c0:0395) -> centering
- * (Unit_MaybeCenterView @ 11f0:44d4) -> choose/step (1078:1480 /
- * 1128:0000) -> jump tables -> reveal/dialog. IDLE (0x00) returns CIV_OK
- * (no work); all other orders hit Win16/map/city tails -> STUB
- * CIV_ERR_UNSUPPORTED; bad order/civ/unit -> RANGE/NOENT. No globals. */
+ * local_38 wrap + DAT_1310_0002 gate) with per-unit order:
+ *   (1) visibility: LIVE kernels unit_seen_index/bit/minimap/sight_*
+ *     (11c0:0395 math) + STUB unit_update_visibility @ 11c0:0395
+ *     (verified Ghidra name) / unit_reveal_area @ 11c0:12c8 (Unit_SpawnUnit
+ *     factory per chain-3, reveal fan-out TBD) + map_spot_city (map.h,
+ *     parallel-owned);
+ *   (2) centering: LIVE unit_should_center_view + STUB unit_maybe_center_view
+ *     @ 11f0:44d4 (Ghidra still FUN_11f0_44d4, rename pending) ->
+ *     Map_RevealCenter @ 1110:1461 (verified) / Map_CenterOnTile @
+ *     1110:03ae (map.h, SDL view/scroll TBD);
+ *   (3) orders-dialog: LIVE unit_wait_blink_phase + STUB unit_wait_for_orders
+ *     @ 11c0:0ec2 (Ghidra still FUN_11c0_0ec2, rename pending) -> SDL modal
+ *     bridge TBD (dialog.h Dialog_ShowMessage @ 1220:00d2, sys.h
+ *     Sys_WaitForInput @ 1038:0c1d);
+ *   (4) move-animation: Unit_EnsureOnScreen @ 11c0:231d (verified callers
+ *     Combat_ResolveAttack @ 1050:0000 / Unit_AIPlayerTurn @ 1078:4f0f /
+ *     Unit_DoMove @ 1038:0000) + Unit_PlayMoveAnimation @ 11c0:2c32
+ *     (move-path tail, no direct xref) -> map/video SDL owners TBD, no
+ *     game-side predicate (no fake).
+ * IDLE (0x00) returns CIV_OK (no work); all other known orders hit the
+ * Win16/map/city/dialog tails above -> STUB CIV_ERR_UNSUPPORTED; bad
+ * order/civ/unit -> RANGE/NOENT. No globals. Ref: unpacked/civ.exe
+ * read-only (civ1win/ untouched); direct Civ_ProcessUnitMoves callees
+ * verified via get_function_callees (0395/44d4/0ec2/03ae/1480/1128:0000/
+ * 4ea0 present). */
 civ_error_t civ_unit_turn_step(int civ, int unit_idx, int order);
 
 /* --- Chain 2026-10-16 (3): production dialog pump + tile family + AI + reveal ---

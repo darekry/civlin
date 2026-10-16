@@ -156,7 +156,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `boot_run` | LIVE | 1000:11bb, 1000:2826, 1008:0000, 1008:059a, 1008:0b4a, 1008:0d68, 1008:0e99, 1088:0000, 1090:0488, 1098:06f8, 1098:096c, 10b8:0000, 10e8:2d46, 1190:0000, 11e8:0000, 11e8:0337 |  |
 | `boot_shutdown` | LIVE | 1008:0329, 1008:0d68, 12d8:28fa, 12d8:460e |  |
 | `art_maybe_convert_artwork` | LIVE | 1090:0488, 10b8:0000, 10b8:04df, 10b8:062d, 10b8:06a0, 10b8:076a, 10b8:079d, 10b8:0aa8, 10b8:0c1c, 10b8:0ded, 10b8:0e36, 10b8:11bc, 10b8:158c, 10d0:0cfa, 1420:20a9 |  |
-| `main_run_startup_sequence` | PARTIAL | 1008:0329, 1098:124f, 1098:1612, 10b0:008a, 10b0:0461, 10b8:079d, 10d0:0000, 10e8:0000, 1108:0243, 1130:000e, 11e0:0000, 11e0:0221, 1420:435b | has TODO |
+| `main_run_startup_sequence` | PARTIAL | 1008:0329, 1098:124f, 1098:1612, 10b0:008a, 10b0:0461, 10b8:079d, 10d0:0000, 10e8:0000, 1108:0243, 1130:000e, 11e0:0000, 11e0:0221, 1220:0156, 1420:435b | has TODO |
 | `config_prefs_defaults` | LIVE | 1008:0b4a, 1008:0bbf, 1150:00c9, 12d0:0064 |  |
 | `config_prefs_sounds_on` | LIVE |  |  |
 | `boot_video_caps_count` | LIVE | 1008:059a, 1420:0af4 |  |
@@ -611,7 +611,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `unit_order_is_found` | LIVE | 11f0:0000 |  |
 | `unit_order_is_move` | LIVE | 11f0:0000 |  |
 | `city_transfer_treasury` | LIVE | 1038:0000, 1420:43b8 |  |
-| `civ_unit_turn_step` | PARTIAL | 1078:1480, 1110:1461, 1128:0000, 11c0:0395, 11c0:12c8, 11f0:0000, 11f0:44d4, 1420:62fc | has TODO |
+| `civ_unit_turn_step` | PARTIAL | 1038:0000, 1038:0c1d, 1050:0000, 1078:4f0f, 1110:03ae, 1110:1461, 1128:0000, 11c0:0395, 11c0:0ec2, 11c0:12c8, 11c0:231d, 11c0:2c32, 11f0:0000, 11f0:44d4, 1220:00d2, 1420:62fc | has TODO |
 | `city_pump_result_is_accept` | LIVE | 1170:05ca, 1170:1f84 |  |
 | `city_pump_result_is_cancel` | LIVE |  |  |
 | `city_production_best_pick` | LIVE | 1170:05ca |  |

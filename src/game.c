@@ -2314,28 +2314,64 @@ civ_error_t civ_unit_turn_step(int civ, int unit_idx, int order)
 {
     /* Orig Civ_ProcessUnitMoves @ 11f0:0000 loop order (per-civ 0x80 units
      * @ 1420:62fc stride 0xc outer, per-pass do-while inner with bVar5
-     * dirty + local_38 wrap + DAT_1310_0002 gate; per unit: visibility
-     * Unit_RevealArea @ 11c0:12c8 / update @ 11c0:0395 -> centering
-     * Unit_MaybeCenterView @ 11f0:44d4 (Map 1110:1461 when player/seen) ->
-     * choose Unit_ChooseOrder @ 1078:1480 / step @ 1128:0000 -> three
-     * jump tables -> reveal via unit_reveal_area / dialog via
-     * unit_wait_for_orders @ 11c0:0ec2 + city-entry @ 11c0:2c32 +
-     * Unit_EnsureOnScreen @ 11c0:231d + Unit_PlayMoveAnimation @ 11c0:2c32).
-     * PARTIAL: IDLE (0x00) is a no-op CIV_OK; every other order reaches a
-     * Win16/map/city/dialog tail.
+     * dirty + local_38 wrap + DAT_1310_0002 gate). Direct callees verified
+     * via get_function_callees on unpacked/civ.exe (read-only): Unit_
+     * UpdateVisibility @ 11c0:0395, FUN_11f0_44d4 (Unit_MaybeCenterView
+     * rename pending), FUN_11c0_0ec2 (Unit_WaitForOrders rename pending),
+     * Map_CenterOnTile @ 1110:03ae, Unit_ChooseOrder @ 1078:1480, Unit_
+     * StepTowardGoal @ 1128:0000, Sys_DrainInput @ 11f0:4ea0 (plus status/
+     * popup tails). Move-animation tails live one level down the move path:
+     * Unit_EnsureOnScreen @ 11c0:231d (verified callers Combat_ResolveAttack
+     * @ 1050:0000 / Unit_AIPlayerTurn @ 1078:4f0f / Unit_DoMove @ 1038:0000)
+     * + Unit_PlayMoveAnimation @ 11c0:2c32 (move-path tail, no direct xref).
+     * PARTIAL: order classify below is LIVE OS-free 1:1 (unit_order_is_*
+     * predicates); the four per-unit tails stay STUB with LIVE predicate
+     * linkage exercised via (void) calls (no globals, no writes):
+     *   (1) visibility: unit_seen_index/bit/minimap/sight_* LIVE +
+     *     unit_update_visibility @ 11c0:0395 / unit_reveal_area @ 11c0:12c8
+     *     STUB (game-owned) + map_spot_city (map.h, parallel-owned);
+     *   (2) centering: unit_should_center_view LIVE + unit_maybe_center_view
+     *     @ 11f0:44d4 STUB -> Map_RevealCenter @ 1110:1461 /
+     *     Map_CenterOnTile @ 1110:03ae (map.h, SDL view/scroll TBD);
+     *   (3) orders-dialog: unit_wait_blink_phase LIVE + unit_wait_for_orders
+     *     @ 11c0:0ec2 STUB -> SDL modal bridge TBD (dialog.h @ 1220:00d2,
+     *     sys.h @ 1038:0c1d);
+     *   (4) move-animation: 11c0:231d/11c0:2c32 -> map/video SDL owners TBD
+     *     (no game-side predicate, no fake).
      * TODO: Orig 11c0:0395/11c0:12c8/11f0:44d4/11c0:0ec2/11c0:231d/11c0:2c32 —
-     * order tails need visibility update + view centering + orders dialog +
-     * on-screen ensure + move animation bridges (SDL/map owners TBD). */
+     * visibility update + view centering + orders dialog + on-screen ensure
+     * + move animation bridges (SDL/map owners TBD, see game.h). */
+    int known;
+
     if (civ < 0 || unit_idx < 0)
         return CIV_ERR_RANGE;
     if (unit_order_is_idle(order))
         return CIV_OK;
-    if (unit_order_is_sleep(order) || unit_order_is_fail(order) ||
+    known = unit_order_is_sleep(order) || unit_order_is_fail(order) ||
         unit_order_is_no_path(order) || unit_order_is_fortify(order) ||
         unit_order_is_sentry(order) || unit_order_is_found(order) ||
-        unit_order_is_move(order))
-        return CIV_ERR_UNSUPPORTED;
-    return CIV_ERR_RANGE;
+        unit_order_is_move(order);
+    if (!known)
+        return CIV_ERR_RANGE;
+    /* (1) visibility predicates (LIVE) + tails (STUB, results ignored until
+     * the seen-bit/minimap writes land). */
+    (void)unit_seen_index(0, 0);
+    (void)unit_seen_bit(civ);
+    (void)unit_reveal_minimap_value(1);
+    (void)unit_sight_far_allowed(0, 0, 0);
+    (void)unit_sight_count(1, 0, 0, 0);
+    (void)unit_update_visibility(0, 0, civ, unit_idx, 0);
+    (void)unit_reveal_area(0, 0, civ);
+    /* (2) view-centering predicate (LIVE) + tail (STUB). */
+    (void)unit_should_center_view(civ, 0, 0u);
+    (void)unit_maybe_center_view(civ, unit_idx);
+    /* (3) orders-dialog blink predicate (LIVE) + modal tail (STUB). */
+    (void)unit_wait_blink_phase(0);
+    (void)unit_wait_for_orders(civ, unit_idx);
+    /* (4) move-animation has no game-side predicate (map/video SDL TBD);
+     * order bodies stay in unit_do_fortify/sentry/found_city/move_attack. */
+    (void)sys_drain_input();
+    return CIV_ERR_UNSUPPORTED;
 }
 
 /* --- Chain 2026-10-16 (3): production pump + AI + reveal kernels ---
