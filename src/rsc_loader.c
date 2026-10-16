@@ -752,7 +752,9 @@ rsc_error_t rsc_decode_gdat(const uint8_t *data, size_t size,
      * tables hypothesis: terrain? cf. weights @ 1420:17d6). Layout TBD via
      * Ghidra 1198 compare; caller logs rsc_record_data slice head 16 B via
      * gfx_probe_head_hex (read-only, no asset writes). No fake: *out
-     * untouched on UNSUPPORTED. No SDL/exit/globals, borrowed slice. */
+     * untouched on UNSUPPORTED. No SDL/exit/globals, borrowed slice.
+     * TODO: Orig FUN_1198_xxxx @ 1198:xxxx compare vs 1198 decoder before
+     * any field split (endian/stride unknown; ref unpacked/civ.exe). */
     if (!data || !out)
         return RSC_ERR_NOENT;
     if (size == 0)
@@ -767,7 +769,9 @@ rsc_error_t rsc_decode_kdat(const uint8_t *data, size_t size,
      * hypothesis, stride unknown). Layout TBD via Ghidra 1198 compare;
      * caller logs rsc_record_data slice head 16 B via gfx_probe_head_hex
      * (read-only, no asset writes). No fake: *out untouched on
-     * UNSUPPORTED. No SDL/exit/globals, borrowed slice. */
+     * UNSUPPORTED. No SDL/exit/globals, borrowed slice.
+     * TODO: Orig FUN_1198_xxxx @ 1198:xxxx compare vs 1198 decoder before
+     * any field split (ref unpacked/civ.exe). */
     if (!data || !out)
         return RSC_ERR_NOENT;
     if (size == 0)
@@ -786,7 +790,9 @@ rsc_error_t rsc_decode_cvpc(const uint8_t *data, size_t size,
      * slice head 16 B via gfx_probe_head_hex (gfx_indexed.h, OS-free,
      * read-only, no asset writes) + probe reason, then Ghidra compares vs
      * the 1198 RLE/tagged-frame decoder. *out untouched on UNSUPPORTED.
-     * No SDL/exit/globals, borrowed slice. */
+     * No SDL/exit/globals, borrowed slice.
+     * TODO: Orig FUN_1198_xxxx @ 1198:xxxx compare vs 1198 RLE/tagged-frame
+     * decoder (ref unpacked/civ.exe). */
     if (!data || !out)
         return RSC_ERR_NOENT;
     if (size == 0)
@@ -883,7 +889,9 @@ rsc_error_t rsc_gdat_detail(const uint8_t *data, size_t size,
      * hypothesis: weights @ 1420:17d6 *3 + 1420:17d8, moisture @
      * 1420:12b8/1420:12bc). Stride TBD via Ghidra 1198 compare; no fake:
      * *entry / *entry_len untouched on UNSUPPORTED. Borrowed slice, no
-     * SDL/exit/globals, C17. */
+     * SDL/exit/globals, C17.
+     * TODO: Orig FUN_1198_xxxx @ 1198:xxxx compare vs 1198 table decoder
+     * (ref unpacked/civ.exe). */
     (void)index;
     if (!data || !entry || !entry_len)
         return RSC_ERR_NOENT;
@@ -900,7 +908,9 @@ rsc_error_t rsc_kdat_detail(const uint8_t *data, size_t size,
      * hypothesis, stride unknown). Layout TBD via Ghidra 1198 compare;
      * caller logs rsc_record_data slice head 16 B via gfx_probe_head_hex
      * (read-only, no asset writes). No fake: *entry / *entry_len untouched
-     * on UNSUPPORTED. Borrowed slice, no SDL/exit/globals, C17. */
+     * on UNSUPPORTED. Borrowed slice, no SDL/exit/globals, C17.
+     * TODO: Orig FUN_1198_xxxx @ 1198:xxxx compare vs 1198 table decoder
+     * (ref unpacked/civ.exe). */
     (void)index;
     if (!data || !entry || !entry_len)
         return RSC_ERR_NOENT;
@@ -2441,7 +2451,9 @@ rsc_error_t rsc_gdat_stride(const uint8_t *data, size_t size,
      * 1420:17d6 *3 + 1420:17d8 hypothesis, moisture @ 1420:12b8/12bc).
      * Candidate RSC_GDAT_STRIDE_HYP (0x18) from weights[0x18] is
      * documented, not returned: stride TBD via Ghidra 1198 compare, so
-     * *stride_out stays untouched on UNSUPPORTED (no decode fake). */
+     * *stride_out stays untouched on UNSUPPORTED (no decode fake).
+     * TODO: Orig FUN_1198_xxxx @ 1198:xxxx compare vs 1198 decoder
+     * (ref unpacked/civ.exe). */
     (void)RSC_GDAT_STRIDE_HYP;
     if (!data || !stride_out)
         return RSC_ERR_NOENT;
@@ -2457,7 +2469,9 @@ rsc_error_t rsc_kdat_stride(const uint8_t *data, size_t size,
      * hypothesis, stride unknown). Layout TBD via Ghidra 1198 compare;
      * caller logs the rsc_record_data slice head 16 B via
      * gfx_probe_head_hex (read-only). No fake: *stride_out untouched on
-     * UNSUPPORTED. Borrowed slice, no SDL/exit/globals, C17. */
+     * UNSUPPORTED. Borrowed slice, no SDL/exit/globals, C17.
+     * TODO: Orig FUN_1198_xxxx @ 1198:xxxx compare vs 1198 decoder
+     * (ref unpacked/civ.exe). */
     if (!data || !stride_out)
         return RSC_ERR_NOENT;
     if (size == 0)

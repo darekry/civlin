@@ -1132,4 +1132,38 @@ int boot_runtime_needs_first_warning(long free_bytes, int res1, int res0,
 int boot_runtime_needs_final_warning(long free_bytes, int res1, int res0,
                                       int warned_once, int warned_final);
 
+/* --- Chain 2026-10-16 (28): startup IDs + rebase ticks (goal 5) ---
+ * Orig Main_RunStartupSequence @ 11e0:0000 (civ.exe, x86:LE:16:Protected
+ * Mode), decompiled this pass (ref unpacked/civ.exe):
+ *   Dlg_CreateTracked(0x94,0x41) loop#1 intro host (dialog 0x94 + flags
+ *   0x41: center + show via dlg_create_should_center/show, preset size via
+ *   dlg_id_needs_preset_size, ctls via dlg_ctl_is_tracked_init; see
+ *   dialog.h) + Anim_OpenSequence @ 10b0:008a + Sound_PlayId(3,0) intro +
+ *   loop#1 Anim_AdvanceFrames @ 10b0:0461 while(c == 0) + Close + Sound(1,0)
+ *   + [choice 0/2/3:] Sys_DrainInput @ 11f0:4ea0 + Anim_OpenSequence seq
+ *   0x91e (loop#2 earth-prepare id, NOT a dialog id) + Anim_RebaseClock @
+ *   10b0:005b (1000 ticks: skips the intro-overlay/map-gen time) +
+ *   WorldGen_PrepareEarth @ 1108:01bc + loop#2 Advance (until DAT_13e0_001e
+ *   via main_startup_should_break) + Close + Sound(1,0) +
+ *   Dlg_DestroyTracked @ 1098:1612 + NewGame_Wizard @ 10e8:0000; else
+ *   DestroyTracked only. main_run_startup_sequence stays STUB (SDL
+ *   modal/event bridge TBD); IDs/ticks below are LIVE 1:1 constants on
+ *   explicit params (no Win16, no globals, read-only). No exit(), C17. */
+
+/* Orig same Dlg_CreateTracked(0x94,0x41) param_1 -> main_startup_intro_dialog_id.
+ * 1:1 0x94 (intro/PIC host dialog; earth-custom is 0x8f, wizard 0x90). */
+int main_startup_intro_dialog_id(void);
+
+/* Orig same param_2 -> main_startup_intro_dialog_flags. 1:1 0x41. */
+int main_startup_intro_dialog_flags(void);
+
+/* Orig same loop#2 Anim_OpenSequence seq id -> main_startup_earth_seq_id.
+ * 1:1 0x91e (sequence id, NOT a dialog id; 0x94 above is the dialog). */
+int main_startup_earth_seq_id(void);
+
+/* Orig same loop#2 Anim_RebaseClock param -> main_startup_rebase_ticks.
+ * 1:1 1000 (menu idle uses 100000 / 0x48c via MainMenu_WndProc @ 11e0:0221,
+ * owned by mainmenu, not here). */
+int main_startup_rebase_ticks(void);
+
 #endif /* CIVLIN_BOOT_H */

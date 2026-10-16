@@ -478,3 +478,30 @@ civ_error_t title_mplogo_show(SDL_Window *win, SDL_Renderer *ren,
     free(px);
     return CIV_OK;
 }
+
+/* --- Chain 2026-10-16 (28): intro predicates + loop gate (goal 5). See
+ * title.h. OS-free 1:1 LIVE (no Win16, no globals, no exit()). Ref
+ * unpacked/civ.exe Main_RunStartupSequence @ 11e0:0000 + Anim_OpenSequence
+ * @ 10b0:008a / Anim_AdvanceFrames @ 10b0:0461 decompiles. */
+
+int title_dialog_is_intro(int dlg_id)
+{
+    /* Orig Main_RunStartupSequence @ 11e0:0000 loop#1 host test
+     * (Dlg_CreateTracked @ 1098:124f param_1 == 0x94). */
+    return (dlg_id == 0x94) ? 1 : 0;
+}
+
+int title_seq_is_earth(int seq_id)
+{
+    /* Orig same loop#2 seq test (Anim_OpenSequence @ 10b0:008a seq ==
+     * 0x91e; sequence id, NOT a dialog id). */
+    return (seq_id == 0x91e) ? 1 : 0;
+}
+
+int title_intro_should_continue(int adv_ret)
+{
+    /* Orig same loop#1/loop#2 pump gate (do { c = Anim_AdvanceFrames @
+     * 10b0:0461 } while (c == 0); loop#2 DAT_13e0_001e break stays in
+     * main_startup_should_break in boot.h). */
+    return (adv_ret == 0) ? 1 : 0;
+}

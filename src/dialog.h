@@ -56,9 +56,17 @@ win16_msg_result_t dlg_proc(int msg, long wparam, long lparam);
 win16_msg_result_t civ_dialog_proc(int msg, long wparam, long lparam);
 void dialog_shutdown(void);
 
-/* Modal choice dialog (Dialog_MenuZ_Modal @ 1220:0156). items[] are the
- * '_' -separated entries; preselect is DAT_1418_0002 (-1 = none).
- * Returns CIV_OK + *out_index on pick, CIV_ERR_* on cancel/error. */
+/* Modal choice dialog (Dialog_MenuZ_Modal @ 1220:0156). PARTIAL dispatcher:
+ * OS-free gates LIVE 1:1 (count via dialog_split_menu_count @ 1220:0000,
+ * preselect via dialog_menuz_preselect_ok, id math via
+ * dialog_menuz_id_to_index/index_to_id/id_is_valid, disable via
+ * dialog_menuz_item_disabled, timer 100 via dialog_menuz_timer_ms,
+ * cancel -1 via dialog_menuz_cancel_code); the PEEKMESSAGE/ISDIALOGMESSAGE
+ * modal pump stays CIV_ERR_UNSUPPORTED (never fake CIV_OK).
+ * items_text is the '_' buffer (title + items, e.g. text @ 1420:435b;
+ * leading '_' = empty title); title is the SDL display title; preselect is
+ * DAT_1418_0002 (-1 = none, < -1 = RANGE). *out_index preset to the cancel
+ * code (-1) on entry; NOENT on NULL, RANGE on empty/OOR. */
 civ_error_t dialog_menuz(const char *title, const char *items_text,
                          int preselect, int *out_index);
 
@@ -109,7 +117,7 @@ win16_msg_result_t dialog_ctrl_static_proc(int msg, long wparam, long lparam);
 win16_msg_result_t dialog_ctrl_user_proc(int msg, long wparam, long lparam);
 win16_msg_result_t dialog_ctrl_region_proc(int msg, long wparam, long lparam);
 
-/* Tracked dialog layer (stubs; dialog ctx stack TBD).
+/* Tracked dialog layer (PARTIAL dispatcher + LIVE math; dialog ctx stack TBD).
  *
  * Orig: FUN_1098_124f @ 1098:124f -> Dlg_CreateTracked. CREATEDIALOG +
  *   MAKEPROCINSTANCE(DLGPROC @ 1098:16e2 / CIVDIALOGPROC @ 1098:1838) +
@@ -125,7 +133,8 @@ win16_msg_result_t dialog_ctrl_region_proc(int msg, long wparam, long lparam);
  *   Dlg_CreateTracked(0x94,0x41), City_OpenCensusView @ 1018:0000,
  *   Pic_PlayShared @ 1030:0000, HoF_Show @ 1080:0119, MainMenu_WndProc @
  *   11e0:0221, NewGame_Wizard @ 10e8:0000, Dialog_ShowMessage @ 1220:00d2).
- *   Win16 USER/GDI -> SDL3 window TBD; stub CIV_ERR_UNSUPPORTED.
+ *   Win16 USER/GDI -> SDL3 window TBD; PARTIAL dispatcher (OS-free
+ *   flag/preset/ctl/stack gates wired, modal tail CIV_ERR_UNSUPPORTED).
  *   Dialog 0x94 lifecycle (Main_RunStartupSequence @ 11e0:0000, decompiled
  *   this pass): Dlg_CreateTracked(0x94,0x41) + Gfx_StoreDC + Palette_
  *   AnimateRange @ 1090:0376 + Anim_OpenSequence @ 10b0:008a + Sound_PlayId

@@ -186,6 +186,10 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `boot_free_memory_is_low` | LIVE | 11e8:0000 |  |
 | `boot_runtime_needs_first_warning` | LIVE | 1088:0000, 11e8:0075 |  |
 | `boot_runtime_needs_final_warning` | LIVE |  |  |
+| `main_startup_intro_dialog_id` | LIVE | 1098:124f, 11e0:0000 |  |
+| `main_startup_intro_dialog_flags` | LIVE |  |  |
+| `main_startup_earth_seq_id` | LIVE | 10b0:008a |  |
+| `main_startup_rebase_ticks` | LIVE | 10b0:005b, 11e0:0221 |  |
 
 ### `src/civ_common.c`
 
@@ -220,7 +224,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `dlg_proc` | LIVE | 1098:124f, 1098:16e2, 1420:1ea0 |  |
 | `civ_dialog_proc` | LIVE | 1098:124f, 1098:1838 |  |
 | `dialog_shutdown` | NOOP |  |  |
-| `dialog_menuz` | STUB | 1220:0000, 1220:0156 | has TODO |
+| `dialog_menuz` | PARTIAL | 1220:0000, 1220:0156, 1420:435b, 1420:4a41 | has TODO |
 | `dialog_ctrl_register` | STUB | 1058:0000, 1058:0440, 1058:04f6, 1058:0b4d, 1058:0d71, 1058:0e7f | has TODO |
 | `dialog_ctrl_free` | NOOP | 1058:0d71 |  |
 | `dialog_ctrl_radio_set` | PARTIAL | 1058:0e7f | has TODO |
@@ -233,7 +237,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `dialog_ctrl_static_proc` | LIVE | 1058:081a |  |
 | `dialog_ctrl_user_proc` | LIVE | 1058:0921 |  |
 | `dialog_ctrl_region_proc` | LIVE | 1058:09f6 |  |
-| `dlg_create_tracked` | STUB | 1000:137f, 1018:0000, 1030:0000, 1070:02b5, 1080:0119, 1090:0376, 1098:096c, 1098:0a5b, 1098:0ae0, 1098:0b67, 1098:1104, 1098:124f, 1098:1612, 1098:16e2, 1098:1838, 1098:201d, 10b0:008a, 10b0:0287, 10b0:0461, 10d0:0854, 10d0:09a2, 10e8:0000, 1100:03ff, 1100:060b, 1100:09a9, 1108:01bc, 1150:00c9, 1180:0297, 11e0:0000, 11e0:0221, 11f8:0000, 1220:00d2, 1420:17aa, 1420:1ea0, 1420:1ec8, 1420:9948, 1420:9960 | has TODO |
+| `dlg_create_tracked` | PARTIAL | 1000:137f, 1018:0000, 1030:0000, 1070:02b5, 1080:0119, 1090:0376, 1098:096c, 1098:0a5b, 1098:0ae0, 1098:0b67, 1098:1104, 1098:124f, 1098:1612, 1098:16e2, 1098:1838, 1098:201d, 10b0:008a, 10b0:0287, 10b0:0461, 10d0:0854, 10d0:09a2, 10e8:0000, 1100:03ff, 1100:060b, 1100:09a9, 1108:01bc, 1150:00c9, 1180:0297, 11e0:0000, 11e0:0221, 11f8:0000, 1220:00d2, 1420:17aa, 1420:1ea0, 1420:1ec8, 1420:9948, 1420:9960 | has TODO |
 | `dlg_destroy_tracked` | NOOP | 1098:1612, 1100:060b, 1420:17aa, 1420:1ea0, 1420:9960 |  |
 | `dlg_create_should_center` | LIVE | 1098:124f |  |
 | `dlg_create_should_show` | LIVE |  |  |
@@ -893,7 +897,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | Function | State | Orig addr | Note |
 |---|---|---|---|
 | `mainmenu_run` | STUB | 1000:36b2, 11e0:0221, 1220:0156, 1420:435b | has TODO |
-| `mainmenu_item_count` | LIVE | 1000:36b2, 11e0:0221, 1220:0156, 1420:435b |  |
+| `mainmenu_item_count` | LIVE | 1000:36b2, 11e0:0221, 1220:0000, 1220:0156, 1420:435b |  |
 | `mainmenu_item_at` | LIVE | 1000:36b2, 1220:0156, 1420:435b |  |
 | `mainmenu_dispatch` | PARTIAL | 1108:0243, 1130:000e | has TODO |
 | `menu_dispatch_count` | LIVE | 1048:01e4 |  |
@@ -1115,14 +1119,14 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `rsc_decode_bitmap` | LIVE |  |  |
 | `rsc_decode_strlist` | LIVE | 1190:1953 |  |
 | `rsc_decode_text` | LIVE | 1420:435b |  |
-| `rsc_decode_gdat` | STUB | 1420:17d6 |  |
-| `rsc_decode_kdat` | STUB |  |  |
-| `rsc_decode_cvpc` | STUB |  |  |
+| `rsc_decode_gdat` | STUB | 1420:17d6 | has TODO |
+| `rsc_decode_kdat` | STUB |  | has TODO |
+| `rsc_decode_cvpc` | STUB |  | has TODO |
 | `rsc_strlist_count` | LIVE | 1190:1953 |  |
 | `rsc_strlist_get` | LIVE |  |  |
 | `rsc_text_find` | LIVE | 1420:2a5a, 1420:435b |  |
-| `rsc_gdat_detail` | STUB | 1420:12b8, 1420:12bc, 1420:17d6, 1420:17d8 |  |
-| `rsc_kdat_detail` | STUB |  |  |
+| `rsc_gdat_detail` | STUB | 1420:12b8, 1420:12bc, 1420:17d6, 1420:17d8 | has TODO |
+| `rsc_kdat_detail` | STUB |  | has TODO |
 | `rsc_string_lookup` | PARTIAL | 1190:1533, 1420:2a5a, 1420:435b |  |
 | `rsc_get_blob_string` | LIVE | 1048:0101, 10e8:03c6, 1100:0053, 1100:078a, 1190:09ed, 1190:0aea, 1190:1953, 1198:00a3, 11e0:0221, 11f8:0080, 11f8:00c5, 11f8:014a |  |
 | `rsc_mgr_new` | LIVE | 1420:b2bc |  |
@@ -1154,8 +1158,8 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `rsc_dump_stats` | LIVE | 1000:2c9c, 1190:17d0 |  |
 | `rsc_dispose_manager` | LIVE | 1000:1f7c, 1190:0c92 |  |
 | `rsc_cvpc_head_off` | LIVE |  |  |
-| `rsc_gdat_stride` | STUB | 1420:12b8, 1420:12bc, 1420:17d6, 1420:17d8 |  |
-| `rsc_kdat_stride` | STUB |  |  |
+| `rsc_gdat_stride` | STUB | 1420:12b8, 1420:12bc, 1420:17d6, 1420:17d8 | has TODO |
+| `rsc_kdat_stride` | STUB |  | has TODO |
 | `rsc_text_index` | LIVE |  |  |
 | `rsc_strlist_all` | LIVE |  |  |
 | `rsc_cvpc_is_compressed` | LIVE |  |  |
@@ -1195,13 +1199,13 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `file_seek_wrapper` | LIVE | 1000:1f7c, 1000:272a, 1000:2ad9, 1140:0295, 1190:0fda |  |
 | `save_serialize` | LIVE | 10f8:02bd, 10f8:090c, 1420:2cac |  |
 | `save_deserialize` | LIVE | 1028:162c, 10f8:0000, 1140:0139, 1140:019d, 1140:0295 |  |
-| `save_pack` | STUB | 10f8:02bd, 10f8:05da |  |
-| `save_unpack` | STUB | 10f8:0000, 10f8:040a |  |
+| `save_pack` | STUB | 10f8:02bd, 10f8:05da | has TODO |
+| `save_unpack` | STUB | 10f8:0000, 10f8:040a | has TODO |
 | `save_pack_buffer` | LIVE | 10f8:0000, 10f8:02bd, 10f8:040a, 10f8:05da |  |
 | `save_unpack_buffer` | LIVE | 10f8:0000, 10f8:02bd, 10f8:040a, 10f8:05da |  |
 | `save_build_filename` | LIVE | 1000:2928, 1000:363e, 1000:36b2, 1080:0119, 1198:0000, 1198:00a3, 1420:173c |  |
-| `save_rll_encode` | LIVE |  |  |
-| `save_rll_decode` | LIVE |  |  |
+| `save_rll_encode` | LIVE | 10f8:0000, 10f8:02bd, 10f8:040a, 10f8:05da |  |
+| `save_rll_decode` | LIVE | 10f8:0000, 10f8:02bd, 10f8:040a, 10f8:05da |  |
 | `marshal_seek` | LIVE |  |  |
 | `save_marshal_fields` | LIVE | 10f8:090c, 1310:0000, 1310:0008, 1420:a2d6, 1420:a2da |  |
 | `xfer_reserve` | LIVE |  |  |
@@ -1379,6 +1383,9 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `title_max_ms` | LIVE |  |  |
 | `title_play_intro_sdl` | LIVE | 1030:0000 |  |
 | `title_mplogo_show` | PARTIAL |  |  |
+| `title_dialog_is_intro` | LIVE | 1098:124f, 11e0:0000 |  |
+| `title_seq_is_earth` | LIVE | 10b0:008a |  |
+| `title_intro_should_continue` | LIVE | 10b0:0461 |  |
 
 ### `src/video.c`
 

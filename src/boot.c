@@ -1353,3 +1353,34 @@ int boot_runtime_needs_final_warning(long free_bytes, int res1, int res0,
         return 0;
     return (warned_final == 0) ? 1 : 0;
 }
+
+/* --- Chain 2026-10-16 (28): startup IDs + rebase ticks (goal 5). See
+ * boot.h. OS-free 1:1 LIVE (no Win16, no globals, no exit()). Ref
+ * unpacked/civ.exe Main_RunStartupSequence @ 11e0:0000 decompile. */
+
+int main_startup_intro_dialog_id(void)
+{
+    /* Orig Main_RunStartupSequence @ 11e0:0000 loop#1 Dlg_CreateTracked @
+     * 1098:124f param_1 (intro/PIC host dialog). */
+    return 0x94;
+}
+
+int main_startup_intro_dialog_flags(void)
+{
+    /* Orig same param_2 (center + show; see dlg_create_should_center/show
+     * in dialog.h). */
+    return 0x41;
+}
+
+int main_startup_earth_seq_id(void)
+{
+    /* Orig same loop#2 Anim_OpenSequence @ 10b0:008a seq id (earth-prepare;
+     * NOT a dialog id: dialog host stays 0x94 above). */
+    return 0x91e;
+}
+
+int main_startup_rebase_ticks(void)
+{
+    /* Orig same loop#2 Anim_RebaseClock @ 10b0:005b param (1000 ticks). */
+    return 1000;
+}

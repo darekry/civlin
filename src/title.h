@@ -133,4 +133,35 @@ civ_error_t title_play_intro_sdl(SDL_Window *win, SDL_Renderer *ren);
 civ_error_t title_mplogo_show(SDL_Window *win, SDL_Renderer *ren,
                               const char *path);
 
+/* --- Chain 2026-10-16 (28): intro predicates + loop gate (goal 5) ---
+ * Orig Main_RunStartupSequence @ 11e0:0000 intro side (civ.exe,
+ * x86:LE:16:Protected Mode), decompiled this pass (ref unpacked/civ.exe):
+ *   loop#1 Dlg_CreateTracked(0x94,0x41) host + Anim_OpenSequence @ 10b0:008a
+ *   + Sound_PlayId(3,0) + loop Anim_AdvanceFrames @ 10b0:0461 while(c == 0)
+ *   + Close + Sound(1,0); loop#2 seq 0x91e + Anim_RebaseClock @ 10b0:005b
+ *   (1000) + WorldGen_PrepareEarth @ 1108:01bc + Advance (until DAT_13e0_001e)
+ *   + Close + Sound(1,0). IDs owned by boot.h (main_startup_intro_dialog_id
+ *   0x94 / flags 0x41, earth_seq_id 0x91e, rebase_ticks 1000); predicates
+ *   below are the title-owned (intro player) LIVE 1:1 halves on explicit
+ *   params (no Win16, no globals, read-only). Win16 frame present/player
+ *   tails stay in title_play_intro / title_play_anim_loop / title_decode_
+ *   frame / title_load_opening_frame / pic_read_header STUBs below with
+ *   TODO Orig. No exit(), C17. */
+
+/* Orig same loop#1 host test (Dlg_CreateTracked param_1 == 0x94) ->
+ * title_dialog_is_intro. 1:1 nonzero (1) when dlg_id == 0x94 (earth-custom
+ * 0x8f / wizard 0x90 / menu 0x8b are not intro). */
+int title_dialog_is_intro(int dlg_id);
+
+/* Orig same loop#2 seq test (Anim_OpenSequence seq == 0x91e) ->
+ * title_seq_is_earth. 1:1 nonzero (1) when seq_id == 0x91e (sequence id,
+ * NOT a dialog id). */
+int title_seq_is_earth(int seq_id);
+
+/* Orig same loop#1/loop#2 pump gate (do { c = Anim_AdvanceFrames } while
+ * (c == 0); loop#2 also breaks on DAT_13e0_001e via main_startup_should_
+ * break in boot.h) -> title_intro_should_continue. 1:1 nonzero (1) when
+ * adv_ret == 0 (busy, keep pumping); 0 when done. */
+int title_intro_should_continue(int adv_ret);
+
 #endif /* CIVLIN_TITLE_H */

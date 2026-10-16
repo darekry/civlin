@@ -255,7 +255,13 @@ civ_error_t save_unpack_buffer(const uint8_t *src, size_t src_len,
 civ_error_t save_build_filename(const char *civname, int year, char *out,
                                 size_t cap);
 
-/* --- RLL codec, native form (new API, implemented next) --- */
+/* --- RLL codec, native form (new API, implemented next) ---
+ * Orig: FUN_10f8_05da @ 10f8:05da (save_pack RLL core, called from
+ *   save_serialize @ 10f8:02bd) -> save_rll_encode; Orig: FUN_10f8_040a
+ *   @ 10f8:040a (save_unpack RLL core, called from save_deserialize @
+ *   10f8:0000) -> save_rll_decode. Tag scheme verified ref
+ *   unpacked/civ.exe: <0x80 repeat next byte N times, >=0x80 copy
+ *   N-0x80 literals, 0x7f chunk cap. */
 
 civ_error_t save_rll_encode(const uint8_t *src, size_t src_len,
                             uint8_t *dst, size_t dst_cap, size_t *out_len);

@@ -100,8 +100,9 @@ int mainmenu_dialog_y_offset(int flag_28fc);
  * 1000:36b2 over CIV_MAINMENU_TEXT @ 1420:435b, verified in unpacked/civ.exe
  * at file offset 0xbb35c: "_Start a New Game_..._Quit") feeding
  * Dialog_MenuZ_Modal @ 1220:0156 -> mainmenu_item_count / mainmenu_item_at.
- * OS-free 1:1 '_' split (leading '_' yields item 0 after it; no empty
- * items): count = number of '_' separators after the leading one (6 for
+ * OS-free 1:1 '_' split, same shape as Dialog_SplitMenuText @ 1220:0000
+ * (leading '_' ends the empty title; each later '_'/'\0' closes one item;
+ * no empty items): count = separators after the leading one + 1 (6 for
  * the shipped text). at() copies the index-th item (0-based MenuZ index,
  * same numbering as the raw choice in mainmenu_run) NUL-terminated.
  * NOENT on NULL out, RANGE on index OOR / cap == 0 / text does not fit.

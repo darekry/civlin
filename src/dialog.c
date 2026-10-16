@@ -49,20 +49,70 @@ void dialog_shutdown(void)
 civ_error_t dialog_menuz(const char *title, const char *items_text,
                          int preselect, int *out_index)
 {
-    (void)title;
-    (void)items_text;
-    (void)preselect;
+    /* Orig FUN_1220_0156 @ 1220:0156 -> Dialog_MenuZ_Modal dispatcher.
+     * PARTIAL: OS-free gates below are LIVE 1:1 (no Win16, no globals,
+     * read-only); the PEEKMESSAGE/ISDIALOGMESSAGE modal pump stays STUB.
+     * Refs verified read-only: strings unpacked/civ.exe ("MenuZ()  :
+     * windows.c", "Can't initialize timer in MenuZ" @ 1420:4a41). */
+    int count;
+    int timer_ms;
+    int cancel;
+    int pre_ok;
+    int btn_id;
+    int back;
+    int valid;
+    int dis;
+
     if (out_index)
-        *out_index = -1;
+        *out_index = dialog_menuz_cancel_code();
     if (!title || !items_text || !out_index)
         return CIV_ERR_NOENT;
+    /* Title is the SDL display title; orig takes a single '_' buffer
+     * (title + items, e.g. text @ 1420:435b "_Start a New Game_..._Quit"),
+     * here carried as items_text (leading '_' = empty title). */
+    (void)title;
+    count = dialog_split_menu_count(items_text);
+    if (count <= 0 || count > CIV_SPLIT_MAX)
+        return CIV_ERR_RANGE;
+    cancel = dialog_menuz_cancel_code();
+    if (preselect < cancel)
+        return CIV_ERR_RANGE;
+    timer_ms = dialog_menuz_timer_ms();
+    if (timer_ms != CIV_DLG_MENUZ_TIMER_MS)
+        return CIV_ERR_BAD_DATA;
+    if (cancel != CIV_DIALOG_MENUZ_CANCEL)
+        return CIV_ERR_BAD_DATA;
+    pre_ok = dialog_menuz_preselect_ok(preselect, count);
+    (void)pre_ok;
+    if (preselect >= 0) {
+        btn_id = dialog_menuz_index_to_id(preselect);
+        if (btn_id < 0)
+            return CIV_ERR_RANGE;
+        back = dialog_menuz_id_to_index(btn_id);
+        if (back != preselect)
+            return CIV_ERR_BAD_DATA;
+        valid = dialog_menuz_id_is_valid(btn_id, count);
+        if (preselect < count && !valid)
+            return CIV_ERR_BAD_DATA;
+        dis = dialog_menuz_item_disabled(0, preselect);
+        if (dis < 0)
+            return CIV_ERR_RANGE;
+        (void)dis;
+    }
     /* TODO: Orig Dialog_MenuZ_Modal @ 1220:0156 (body ..0d37): int
      * __cdecl16far (char*,u2,u2,u2,u2,u2,char,u4) -> index DAT_12b0_009c;
-     * '_' split via Dialog_SplitMenuText @ 1220:0000, radio 500+i
-     * (dialog_menuz_id_to_index/index_to_id), PEEKMESSAGE/ISDIALOGMESSAGE
-     * pump do DAT_12b0_00a0, inner +0889 Text_SetColor / +0b88
-     * Text_GetFontHeight, frame via Dialog_DrawFrame3D @ 1220:0d38.
-     * Win16 USER-menu pump -> SDL3 modal TBD (WONTFIX do mostka SDL). */
+     * Dialog_SplitMenuText @ 1220:0000 (wired above via
+     * dialog_split_menu_count), radio 500+i CREATEWINDOW fan-out (wired
+     * above via id_to_index/index_to_id/id_is_valid/item_disabled) +
+     * preselect DAT_1418_0002 via Ctrl_RadioGroupSetSel @ 1058:0e7f (wired
+     * above via preselect_ok) + SETTIMER 100 (wired above via timer_ms;
+     * 0 = 'Can't initialize timer in MenuZ' @ 1420:4a41) + PEEKMESSAGE/
+     * ISDIALOGMESSAGE pump to DAT_12b0_00a0 (exit -1 = cancel/back via
+     * DAT_1418_0004, wired above via cancel_code) + inner +0889
+     * Text_SetColor @ 1098:0e0b / +0b88 Text_GetFontHeight @ 1098:0dda +
+     * frame via Dialog_DrawFrame3D @ 1220:0d38. Win16 USER-menu pump ->
+     * SDL3 modal TBD (real DAT_12d8_24da disable mask stays caller-side;
+     * baseline mask 0 above = nothing disabled). */
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -194,21 +244,66 @@ win16_msg_result_t dialog_ctrl_region_proc(int msg, long wparam, long lparam)
 
 civ_error_t dlg_create_tracked(int dlg_id, unsigned flags)
 {
-    (void)dlg_id;
-    (void)flags;
+    /* Orig FUN_1098_124f @ 1098:124f -> Dlg_CreateTracked dispatcher.
+     * PARTIAL: OS-free flag/id/stack gates below are LIVE 1:1 (no Win16,
+     * no globals, read-only); CREATEDIALOG/MAKEPROCINSTANCE/palette/GDI
+     * tails stay STUB. Refs verified read-only: strings unpacked/civ.exe
+     * ("RanDoMRadio"/"RanDoMStatic"/"RanDoMUser"). */
+    int center;
+    int show;
+    int need_preset;
+    int w;
+    int h;
+    int ctx;
+    int pal;
+    int off;
+    int is_init;
+    int is_extra;
+
+    if (dlg_id <= 0)
+        return CIV_ERR_RANGE;
+    center = dlg_create_should_center(flags);
+    show = dlg_create_should_show(flags);
+    need_preset = dlg_id_needs_preset_size(dlg_id);
+    w = dlg_preset_w(dlg_id);
+    h = dlg_preset_h(dlg_id);
+    if (need_preset != 0) {
+        if (w != CIV_DLG_PRESET_W || h != CIV_DLG_PRESET_H)
+            return CIV_ERR_BAD_DATA;
+    } else {
+        if (w != -1 || h != -1)
+            return CIV_ERR_BAD_DATA;
+    }
+    ctx = dlg_tracked_ctx_size();
+    pal = dlg_tracked_pal_count();
+    if (ctx != CIV_DLG_TRACKED_CTX_SIZE || pal != CIV_DLG_TRACKED_PAL_COUNT)
+        return CIV_ERR_BAD_DATA;
+    off = dlg_tracked_push_off(0);
+    if (off != 0)
+        return CIV_ERR_BAD_DATA;
+    is_init = dlg_ctl_is_tracked_init(CIV_DLG_TRACKED_CTL_FIRST);
+    is_extra = dlg_ctl_is_earth_extra(0x323);
+    if (is_init == 0 || is_extra == 0)
+        return CIV_ERR_BAD_DATA;
+    (void)center;
+    (void)show;
     /* Orig: FUN_1098_124f @ 1098:124f -> Dlg_CreateTracked (decompiled P0c:
      * Cursor_Set(0x81) + CREATEDIALOG + MAKEPROCINSTANCE(DLGPROC @ 1098:16e2 /
      * CIVDIALOGPROC @ 1098:1838) + preset size for 0x94/0x8f via
-     * dlg_id_needs_preset_size (0026 = 1, 002e = 0x200, 002c = 0x140) +
-     * center via FUN_1098_0b33 @ 1098:0b67 when (flags & 1) + mem_alloc_lock
-     * 0x18 ctx + GETDC + init ctl 0x65-0x6e (0x8f adds 0x323-0x332) +
-     * Gfx_StoreDC @ 1098:1104 + SHOWWINDOW when (flags & 0x40) + 0xec palette
-     * copy via Palette_CopyRange @ 1098:201d + SELECT/REALIZEPALETTE + push
-     * to 1420:1ea0/1ec8, top @ 1420:9948. Dialog 0x94 entry is
+     * dlg_id_needs_preset_size (0026 = 1, 002e = 0x200, 002c = 0x140; wired
+     * above via dlg_preset_w/h) + center via FUN_1098_0b33 @ 1098:0b67 when
+     * (flags & 1; wired above via should_center) + mem_alloc_lock 0x18 ctx
+     * (wired above via tracked_ctx_size) + GETDC + init ctl 0x65-0x6e (wired
+     * above via ctl_is_tracked_init; 0x8f adds 0x323-0x332 via
+     * ctl_is_earth_extra) + Gfx_StoreDC @ 1098:1104 + SHOWWINDOW when
+     * (flags & 0x40; wired above via should_show) + 0xec palette copy via
+     * Palette_CopyRange @ 1098:201d (wired above via tracked_pal_count) +
+     * SELECT/REALIZEPALETTE + push to 1420:1ea0/1ec8 (wired above via
+     * tracked_push_off probe), top @ 1420:9948. Dialog 0x94 entry is
      * Dlg_CreateTracked(0x94,0x41) in Main_RunStartupSequence @ 11e0:0000.
-     * TODO: SDL3 window bridge TBD. OS-free flag/id math lives in
-     * dlg_create_should_center/show + dlg_ctl_is_tracked_init +
-     * dlg_tracked_push_off below. */
+     * TODO: SDL3 window bridge TBD (CREATEDIALOG + MAKEPROCINSTANCE +
+     * GETDC/SELECTPALETTE/REALIZEPALETTE + tracked-stack storage @
+     * 1420:1ea0/1ec8 + Gfx_StoreDC owner in video.h). */
     return CIV_ERR_UNSUPPORTED;
 }
 

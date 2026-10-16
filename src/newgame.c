@@ -47,7 +47,7 @@ int newgame_civ_count_from_index(int modal_index)
 int newgame_alive_mask(int civ_count)
 {
     /* Orig sub-expression: g_nCivAliveMask @ 12d8:42f8 = 0xff >> (6-count).
-     * Count 2..6 -> 0x03,0x07,0x0f,0x3f,0xff; out-of-range -> -1. */
+     * Count 2..6 -> 0x0f,0x1f,0x3f,0x7f,0xff; out-of-range -> -1. */
     if (civ_count < CIV_NEWGAME_MIN_CIVS || civ_count > CIV_NEWGAME_MAX_CIVS)
         return -1;
     return 0xff >> (CIV_NEWGAME_MAX_CIVS - civ_count);

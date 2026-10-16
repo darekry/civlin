@@ -455,7 +455,9 @@ civ_error_t save_pack(const uint8_t **out_image, size_t *out_len)
      * image, packing is save_rll_encode(image, 0x1a2ba, dst, dst_cap,
      * out_len). Legacy (out_image, out_len) carries no caller dst/cap, so
      * no trivial delegate fits this signature — heap owner + dst wiring
-     * land with save_serialize. Validates params only; read-only. */
+     * land with save_serialize. Validates params only; read-only.
+     * TODO: Orig FUN_10f8_05da @ 10f8:05da wrapper delegate once the
+     * marshal flat image + heap owner are wired (ref unpacked/civ.exe). */
     if (!out_image || !out_len)
         return CIV_ERR_NOENT;
     return CIV_ERR_UNSUPPORTED;
@@ -470,7 +472,9 @@ civ_error_t save_unpack(const uint8_t *image, size_t len)
      * save_rll_decode(image, len, dst, CIV_SAVE_BUF_SIZE, &flat_len) with
      * the 0x1a2ba/0x1a2b8/0x18de0 size gate in save_deserialize. Legacy
      * (image, len) carries no caller dst, so no trivial delegate fits —
-     * dst wiring lands with save_deserialize. Validates params only. */
+     * dst wiring lands with save_deserialize. Validates params only.
+     * TODO: Orig FUN_10f8_040a @ 10f8:040a wrapper delegate once dst
+     * wiring lands (ref unpacked/civ.exe). */
     if (!image)
         return CIV_ERR_NOENT;
     if (len == 0)

@@ -26,17 +26,23 @@ civ_error_t mainmenu_run(civ_mainmenu_choice_t *out)
 
 int mainmenu_item_count(void)
 {
-    /* Orig packet-N split @ 11e0:0221 / 1420:435b (see mainmenu.h): count
-     * '_' separators after the leading one. Shipped text has 6 items. */
+    /* Orig packet-N split @ 11e0:0221 / 1420:435b (see mainmenu.h), same
+     * shape as Dialog_SplitMenuText @ 1220:0000: leading '_' ends the
+     * (empty) title, each later '_'/'\0' closes one item. Shipped text
+     * (verified at unpacked/civ.exe offset 0xbb35c) has 6 items, so
+     * count = separators after the leading one + 1 (the '\0'-closed
+     * tail, e.g. Quit). */
     const char *t = CIV_MAINMENU_TEXT;
     int n = 0;
     int i = 0;
 
+    if (t[0] == '\0')
+        return 0;
     for (i = 0; t[i] != '\0'; i++) {
         if (t[i] == '_' && i > 0)
             n++;
     }
-    return n;
+    return n + 1;
 }
 
 civ_error_t mainmenu_item_at(int index, char *out, size_t cap)
