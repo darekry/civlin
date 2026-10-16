@@ -156,7 +156,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `boot_run` | LIVE | 1000:11bb, 1000:2826, 1008:0000, 1008:059a, 1008:0b4a, 1008:0d68, 1008:0e99, 1088:0000, 1090:0488, 1098:06f8, 1098:096c, 10b8:0000, 10e8:2d46, 1190:0000, 11e8:0000, 11e8:0337 |  |
 | `boot_shutdown` | LIVE | 1008:0000, 1008:0329, 1008:0d68, 1208:0af1 |  |
 | `art_maybe_convert_artwork` | LIVE | 1090:0488, 10b8:0000, 10b8:04df, 10b8:062d, 10b8:06a0, 10b8:076a, 10b8:079d, 10b8:0aa8, 10b8:0c1c, 10b8:0ded, 10b8:0e36, 10b8:11bc, 10b8:158c, 10d0:0cfa, 1420:20a9 |  |
-| `main_run_startup_sequence` | STUB | 1008:0329, 1090:0376, 1098:096c, 1098:1104, 1098:124f, 10b0:008a, 10b0:0461, 10e8:0000, 1108:0243, 1130:000e, 1150:00c9, 11e0:0000, 11e0:0221, 1420:435b |  |
+| `main_run_startup_sequence` | STUB | 1008:0329, 1098:124f, 10e8:0000, 1108:0243, 1130:000e, 11e0:0000, 11e0:0221, 1420:435b |  |
 | `config_prefs_defaults` | LIVE | 1008:0b4a, 1008:0bbf, 1150:00c9, 12d0:0064 |  |
 | `config_prefs_sounds_on` | LIVE |  |  |
 | `boot_video_caps_count` | LIVE | 1008:059a, 1420:0af4 |  |
@@ -219,7 +219,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `dlg_proc` | LIVE | 1098:124f, 1098:16e2, 1420:1ea0 |  |
 | `civ_dialog_proc` | LIVE | 1098:124f, 1098:1838 |  |
 | `dialog_shutdown` | NOOP |  |  |
-| `dialog_menuz` | STUB | 1220:0156 | has TODO |
+| `dialog_menuz` | STUB | 1220:0000, 1220:0156 | has TODO |
 | `dialog_ctrl_register` | STUB | 1058:0000, 1058:0440, 1058:04f6, 1058:0b4d, 1058:0d71, 1058:0e7f | has TODO |
 | `dialog_ctrl_free` | NOOP | 1058:0d71 |  |
 | `dialog_ctrl_radio_set` | STUB | 1058:0e7f | has TODO |
@@ -230,10 +230,22 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `dialog_ctrl_static_proc` | LIVE | 1058:081a |  |
 | `dialog_ctrl_user_proc` | LIVE | 1058:0921 |  |
 | `dialog_ctrl_region_proc` | LIVE | 1058:09f6 |  |
-| `dlg_create_tracked` | STUB | 1098:124f, 1098:1612, 1420:1ea0, 1420:1ec8 | has TODO |
-| `dlg_destroy_tracked` | NOOP | 1098:1612, 1420:1ea0 |  |
-| `anim_pump_if_active` | STUB | 1098:0157, 10a8:0000, 10a8:00b4, 10a8:00fc, 10a8:0228, 10b0:0000, 10b0:0461, 10b0:151b, 1150:00c9, 1420:1f40 | has TODO |
+| `dlg_create_tracked` | STUB | 1000:137f, 1018:0000, 1030:0000, 1070:02b5, 1080:0119, 1090:0376, 1098:096c, 1098:0a5b, 1098:0ae0, 1098:0b67, 1098:1104, 1098:124f, 1098:1612, 1098:16e2, 1098:1838, 1098:201d, 10b0:008a, 10b0:0287, 10b0:0461, 10d0:0854, 10d0:09a2, 10e8:0000, 1100:03ff, 1100:060b, 1100:09a9, 1108:01bc, 1150:00c9, 1180:0297, 11e0:0000, 11e0:0221, 11f8:0000, 1220:00d2, 1420:17aa, 1420:1ea0, 1420:1ec8, 1420:9948, 1420:9960 | has TODO |
+| `dlg_destroy_tracked` | NOOP | 1098:1612, 1100:060b, 1420:17aa, 1420:1ea0, 1420:9960 |  |
+| `dlg_create_should_center` | LIVE | 1098:124f |  |
+| `dlg_create_should_show` | LIVE |  |  |
+| `dlg_ctl_is_tracked_init` | LIVE |  |  |
+| `dlg_tracked_push_off` | LIVE | 1420:1ea0 |  |
+| `dlg_tracked_pop_count` | LIVE | 1098:1612 |  |
+| `dlg_move_extent` | LIVE | 1098:0a5b, 1098:0ae0, 1098:0b67 |  |
+| `dlg_move_should_use_default` | LIVE | 1098:0b67 |  |
+| `anim_pump_if_active` | STUB | 1098:0157, 10a8:0000, 10a8:00b4, 10a8:00fc, 10a8:0228, 10b0:0000, 10b0:0026, 10b0:008a, 10b0:0287, 10b0:0461, 10b0:151b, 1100:02e1, 1150:00c9, 1420:1f40 | has TODO |
 | `anim_advance_frames` | STUB | 10b0:0461, 1150:00c9 | has TODO |
+| `anim_open_sequence` | STUB | 10b0:008a, 1100:02e1 | has TODO |
+| `anim_close_sequence` | NOOP | 10a8:00b4, 10b0:0287 |  |
+| `anim_seq_count_frames` | LIVE | 10b0:008a |  |
+| `anim_seq_max_end` | LIVE |  |  |
+| `anim_seq_is_active` | LIVE | 1098:0157, 10b0:0000, 10b0:0026 |  |
 | `dlg_center_window` | PARTIAL | 1218:0956 | has TODO |
 | `dialog_open_help` | STUB |  | has TODO |
 | `help_hlp_parse` | LIVE |  |  |
@@ -313,6 +325,8 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `text_shadow_offset` | LIVE | 10d8:02df |  |
 | `text_centered_x` | LIVE | 10d8:0495, 10d8:0528 |  |
 | `text_measure_scaled` | LIVE | 10d8:05b8, 1100:00a1 |  |
+| `text_resolve_color` | LIVE | 10d8:002d, 10d8:00e0 |  |
+| `text_shadow_pos` | LIVE | 10d8:02df |  |
 | `text_pascal_len` | LIVE | 1100:0000 |  |
 | `text_font_table` | LIVE | 11e8:0d1d |  |
 | `text_font_table_lookup` | LIVE | 11e8:0b40, 11e8:0d1d |  |
@@ -394,7 +408,10 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `game_init` | LIVE | 1008:0000, 12d8:24ee, 12d8:3b9a, 12d8:42f6, 12d8:42f8, 12d8:42fa, 12d8:42fe, 12d8:4300, 12d8:44e2 |  |
 | `game_new` | STUB | 1028:0000, 10e8:0000 | has TODO |
 | `game_tick` | PARTIAL | 1008:0000, 1008:0329, 1008:0d68, 1088:0000, 1098:0157, 1108:0000, 1208:0af1 | has TODO |
-| `game_turn_tick` | STUB | 1088:0000, 1088:1d99, 11f0:0000 | has TODO |
+| `game_turn_year_step` | LIVE | 1088:0000, 12d8:42fa |  |
+| `game_turn_should_score` | LIVE |  |  |
+| `game_uprising_due` | LIVE | 1088:0be9, 1110:16c0, 1110:18ce, 11c8:003d |  |
+| `game_turn_tick` | PARTIAL | 1008:0000, 1040:068e, 1088:0000, 1088:0b6d, 1088:0be9, 1088:108a, 1088:13d5, 1088:1d99, 1088:1e32, 1110:03e9, 1138:0000, 1168:0000, 1178:0000, 1198:00a3, 11c0:3beb, 11e8:0075, 11f0:0000, 12d8:42f8 | has TODO |
 | `game_process_game_end` | STUB | 1040:1137, 1088:0b6d, 1180:0000, 1188:07ad | has TODO |
 | `game_spawn_uprisings` | STUB | 1088:0be9, 1110:16c0, 1110:18ce, 1110:1dbd, 11c0:12c8, 11c8:003d | has TODO |
 | `game_uprising_rng_scale` | LIVE | 1088:0be9, 11c8:003d |  |
@@ -418,7 +435,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `unit_maybe_center_view` | STUB | 1110:1461, 11f0:030c, 11f0:44d4 | has TODO |
 | `unit_ai_player_turn` | LIVE | 1078:1480, 1078:4f0f, 1078:55d3, 1128:0000 |  |
 | `unit_reveal_area` | STUB | 11c0:0395, 11c0:12c8 | has TODO |
-| `sys_drain_input` | STUB | 11c0:0395, 11f0:06d2, 11f0:4ea0, 12b0:004c, 1420:1d44 | has TODO |
+| `sys_drain_input` | STUB | 1038:0c1d, 1108:0000, 11c0:0395, 11f0:0000, 11f0:06d2, 11f0:4ea0, 12b0:004c, 1420:1d44 | has TODO |
 | `game_calc_progress_threshold` | LIVE | 1088:1d99 |  |
 | `unit_show_info_popup` | STUB | 1098:0dda, 11f0:468c, 11f0:4754, 1218:0801, 1220:0156, 1420:62fc | has TODO |
 | `unit_popup_is_end_of_turn` | LIVE | 1000:36b2, 1018:067b, 1030:0000, 1038:0bba, 1038:0c1d, 1080:0119, 1098:0000, 1098:00b5, 1098:0dda, 1098:0e0b, 1098:1104, 10d0:0854, 10d0:09a2, 10d8:00e0, 10e8:0000, 1100:0a33, 1110:0ff6, 1110:16c0, 1110:199b, 1180:0000, 11c8:00c4, 11f0:468c, 11f0:4808, 11f0:4a76, 11f8:0080, 11f8:0278, 1218:0abf, 1420:1a3c, 1420:47dd, 1420:47e9, 1420:47f6, 1420:4803, 1420:480b, 1420:481d, 1420:482f, 1420:483c, 1420:4845 |  |
@@ -611,6 +628,10 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `sys_drain_state_words` | LIVE | 11f0:4ea0, 12b0:004c, 1420:1d44 |  |
 | `sys_drain_queue_cap` | LIVE | 1008:0a8d, 11e8:02fb |  |
 | `sys_drain_queue_reset` | LIVE | 11f0:4ea0 |  |
+| `sys_drain_peek_key_first` | LIVE | 1038:0c1d, 1108:0000, 11e8:02fb, 11f0:0000, 11f0:4ea0, 1420:1d44 |  |
+| `sys_drain_peek_key_last` | LIVE |  |  |
+| `sys_drain_peek_mouse_first` | LIVE |  |  |
+| `sys_drain_peek_mouse_last` | LIVE |  |  |
 | `pic_paint_port_id` | LIVE | 1030:900d, 1030:94d2 |  |
 | `pic_paint_w` | LIVE |  |  |
 | `pic_paint_h` | LIVE |  |  |
@@ -714,6 +735,8 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `gfx_bmp_load_indexed` | LIVE |  |  |
 | `font_glyph_to_surface` | LIVE | 1008:0e99 |  |
 | `gfx_try_custom_stub` | LIVE |  |  |
+| `gfx_godpal_range_len` | LIVE | 1090:015e, 1090:02d2, 1090:0376, 1090:0670, 1090:06fd, 1200:00a8 |  |
+| `gfx_godpal_flag_for_mono` | LIVE | 1090:0376, 1090:0488, 1090:0670, 1090:06fd |  |
 
 ### `src/halloffame.c`
 
@@ -801,7 +824,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `wdwstatus_is_dirty` | LIVE | 1218:063e, 1218:0801 |  |
 | `wdwstatus_frame_metrics` | LIVE | 1218:0956 |  |
 | `path_find_corridor` | LIVE | 1128:0000, 1128:10de, 1420:62fc |  |
-| `path_is_passable` | LIVE | 1110:16c0, 1110:18ce, 1128:0000, 1128:081c, 11c0:23fd |  |
+| `path_is_passable` | LIVE | 1110:168f, 1128:0000, 1128:081c, 1128:0ea3 |  |
 | `map_is_sea_land` | LIVE | 1110:16c0, 1128:0000 |  |
 | `map_is_occupied` | LIVE | 1110:18ce, 1128:0000, 1420:62fc |  |
 | `map_is_city_blocked` | LIVE | 1110:18ce, 1110:199b, 1128:0000, 1420:5500 |  |
@@ -853,6 +876,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `map_repaint_mode_is_present` | LIVE | 10d0:0854, 10d0:09a2, 11c8:003d, 1208:1866 |  |
 | `map_repaint_mode_is_shuffled` | LIVE | 11c8:003d |  |
 | `map_repaint_mode_is_rowmajor` | LIVE | 1208:1f64 |  |
+| `map_repaint_needed` | LIVE | 1208:17da, 1208:1866 |  |
 | `map_shuffle_grid_count` | LIVE | 1208:1866, 1408:00c6 |  |
 | `map_shuffle_tile_at` | LIVE |  |  |
 | `map_shuffle_px` | LIVE | 1408:00c6 |  |
@@ -1235,9 +1259,10 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `palette_init` | LIVE | 1090:0488 |  |
 | `gfx_brush_is_solid` | LIVE | 1098:00b5 |  |
 | `gfx_color_table_kind` | LIVE | 1098:01b0 |  |
-| `gfx_port_create` | STUB | 10d0:0000, 10d0:0cfa | has TODO |
+| `gfx_port_create` | LIVE | 10d0:0000, 10d0:0cfa |  |
+| `gfx_port_destroy` | LIVE | 10d0:0000, 10d0:0172 |  |
 | `gfx_port_alloc_bitmap` | LIVE | 10d0:0000, 10d0:08f1, 10d0:0cfa |  |
-| `gfx_port_set_active` | STUB | 10d0:0956 | has TODO |
+| `gfx_port_set_active` | PARTIAL | 10d0:0956, 12d8:44ff |  |
 | `gfx_port_present_rect` | LIVE | 1080:0119, 1080:06ff, 10d0:0854, 10d0:08f1, 10d0:0cfa |  |
 | `gfx_port_blit` | PARTIAL | 10d0:0000, 10d0:0854, 10d0:08f1, 10d0:0cfa | has TODO |
 | `mainport_get_or_create` | STUB | 1098:114a, 10d0:0956, 1208:0af1, 1210:025b, 1218:0386 | has TODO |
@@ -1247,7 +1272,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `gfx_port_change_color` | STUB | 10d0:0000, 10d0:0854, 10d0:08f1, 10d0:0956, 10d0:09ee, 10d0:0cfa | has TODO |
 | `gfx_port_get_dc` | STUB | 1098:114a, 10d0:0000 | has TODO |
 | `gfx_port_release_dc` | STUB | 1098:114a, 10d0:0000 | has TODO |
-| `gfx_port_create_compatible` | PARTIAL | 10d0:0000, 10d0:0cfa | has TODO |
+| `gfx_port_create_compatible` | LIVE | 10d0:0000, 10d0:0cfa |  |
 | `palette_apply_to_port` | LIVE | 1080:0119, 1080:06ff, 1090:0376, 10b0:0461, 10d0:0854, 1200:00a8 |  |
 | `video_shutdown_display` | NOOP | 1008:0329, 1008:0e99, 10d0:0854, 10d0:08f1, 10d0:0cfa, 1420:00a4 |  |
 | `font_blit_glyph` | LIVE | 1008:0e99, 10d0:0854, 10d0:08f1 |  |
@@ -1321,6 +1346,8 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `gfx_store_order_is_save_first` | LIVE | 1098:00b5, 10d0:0854 |  |
 | `palette_dispose` | NOOP | 1090:0488, 1090:0596 |  |
 | `palette_handle_is_live` | LIVE | 1090:0596 |  |
+| `palette_animate_clamp` | LIVE | 1090:015e, 1090:02d2, 1090:0376, 10b0:0461, 1200:00a8 |  |
+| `palette_flag_for_mono` | LIVE | 1090:0488, 1090:0670, 1090:06fd |  |
 
 ### `src/win16.c`
 
