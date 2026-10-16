@@ -64,16 +64,76 @@ civ_error_t game_tick(civ_game_t *g)
     return CIV_ERR_UNSUPPORTED;
 }
 
+int game_turn_year_step(int year, int opt_flags)
+{
+    /* Orig Game_TurnLoopTick @ 1088:0000 year-step tail (g_nYear @ 12d8:42fa,
+     * gate DAT_12d0_00b6 & 0xfe). OS-free 1:1, no globals. */
+    if ((opt_flags & 0xfe) != 0)
+        return year;
+    if (year < 1000)
+        return year + 0x14;
+    if (year < 0x5dc)
+        return year + 10;
+    if (year < 0x6d6)
+        return year + 5;
+    if (year < 0x73a)
+        return year + 2;
+    return year + 1;
+}
+
+int game_turn_should_score(int turn, int player_civ)
+{
+    /* Orig same 0x32 branch (g_nTurn % 0x32 == 0, g_nPlayerCiv != 0xffff). */
+    if (player_civ == 0xffff)
+        return 0;
+    return (turn % 0x32 == 0) ? 1 : 0;
+}
+
+int game_uprising_due(int difficulty, int turn)
+{
+    /* Orig Game_SpawnUprisings @ 1088:0be9 head: iVar8 = (5-diff)*0x1e. */
+    int limit = (5 - difficulty) * 0x1e;
+
+    if (limit - turn == 0)
+        return 1;
+    return (limit < turn) ? 1 : 0;
+}
+
 civ_error_t game_turn_tick(civ_game_t *g)
 {
     if (!g)
         return CIV_ERR_NOENT;
-    /* TODO: Game_TurnLoopTick @ 1088:0000 (civ iteration via
-     * Civ_ProcessUnitMoves @ 11f0:0000, year steps, scoring branch every
-     * 0x32 turns via Game_CalcProgressThreshold @ 1088:1d99
-     * (game_calc_progress_threshold, implemented: sum i*(7-diff)/2+1),
-     * HoF endings setting quit_flag). Scoring branch covered here once
-     * the per-civ loop lands; threshold math itself is done. */
+    /* P3 skeleton of Game_TurnLoopTick @ 1088:0000 (sole caller WinMain @
+     * 1008:0000; callees: Diplo_ProcessTurn @ 1168:0000, FUN_1078_0000/448f,
+     * FUN_1158_0000, FUN_1170_0000, Civ_ProcessUnitMoves @ 11f0:0000 (=1 pump
+     * -> early return), Sys_CheckRuntimeMemory @ 11e8:0075 per-civ, then
+     * Game_SpawnUprisings @ 1088:0be9, Game_DoPollutionAndWonderRace @
+     * 1088:1e32, 2x City_ProcessDisaster @ 1040:068e (turn > 0x32),
+     * Game_UpdatePowerRankings @ 1088:108a, treasury<100 memory-warning branch
+     * (Dialog_ShowMessage @ 1220:00d2 via FUN_11d0_01f7), turn++/year-step,
+     * 0-year doubling + 0x15->0x14 fixups, 0x32 scoring (Quiz @ 1178:0000 +
+     * Map_RefreshAllViews @ 1110:03e9, Save @ 1198:00a3 + RefreshViews @
+     * 1220:0eb8, Replay_AppendLog @ 11c0:3beb 0xb, threshold @ 1088:1d99),
+     * endings via Game_ProcessGameEnd @ 1088:0b6d (HoF path, quit_flag).
+     * Live here on caller-owned state: turn++ + year-step + score/uprising
+     * predicates (helpers above; threshold/power/pollution/uprising-scale
+     * already LIVE). Per-civ/diplo/map/dialog/quiz/save/HoF tails need
+     * DGROUP + Win16 -> CIV_ERR_UNSUPPORTED.
+     * TODO: Orig per-civ loop + disaster draws (Rng_Range @ 11c8:003d 0x80) +
+     *  Win16 message/view tails. */
+    g->turn += 1;
+    g->year = game_turn_year_step(g->year, 0);
+    if (g->year == 0)
+        g->year = 1;
+    if (g->year == 0x15)
+        g->year = 0x14;
+    /* Exercise linkage for the frontier (results ignored until the per-civ
+     * loop lands); keeps nm -g symbols wired without globals. */
+    (void)game_turn_should_score(g->turn, g->player_civ);
+    (void)game_uprising_due(g->difficulty, g->turn);
+    (void)game_spawn_uprisings();
+    (void)game_do_pollution_and_wonder_race();
+    (void)game_update_power_rankings(NULL, 0, NULL, NULL);
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -404,7 +464,14 @@ civ_error_t unit_reveal_area(int x, int y, int civ)
 
 civ_error_t sys_drain_input(void)
 {
-    /* TODO: FUN_11f0_4ea0 @ 11f0:4ea0 (clear 1d44.. + PEEKMESSAGE drain). */
+    /* TODO: Orig Sys_DrainInput @ 11f0:4ea0 (P3 drain format, 22 callers incl.
+     * Civ_ProcessUnitMoves @ 11f0:0000, Sys_PumpMessages @ 1108:0000,
+     * Sys_WaitForInput @ 1038:0c1d): DAT_1420_1d44/1d46/1d48/1d4e/1d4c/1d50
+     * = 0 (6 slow, see sys_drain_state_words) + PEEKMESSAGE(...,0x108,0x100)
+     * drain + PEEKMESSAGE(...,0x209,0x200) drain + DAT_12b0_004c = 0 (cap 10,
+     * see sys_drain_queue_cap/reset; emptied by Main_DrainMessages @
+     * 11e8:02fb). Win16 PEEKMESSAGE queues have no SDL equivalent here
+     * (SDL pump lives in sys_pump_messages @ 1108:0000, LIVE) -> stub. */
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -3517,6 +3584,31 @@ int sys_drain_queue_reset(void)
 {
     /* Orig Sys_DrainInput @ 11f0:4ea0 tail: DAT_12b0_004c = 0. */
     return 0;
+}
+
+int sys_drain_peek_key_first(void)
+{
+    /* Orig same drain1: PEEKMESSAGE wMsgFilterMin 0x108. */
+    return 0x108;
+}
+
+int sys_drain_peek_key_last(void)
+{
+    /* Orig same drain1: wMsgFilterMax 0x100 (min > max = current-message
+     * drain idiom; exact Win16 filter quirk TBD, value kept verbatim). */
+    return 0x100;
+}
+
+int sys_drain_peek_mouse_first(void)
+{
+    /* Orig same drain2: wMsgFilterMin 0x209. */
+    return 0x209;
+}
+
+int sys_drain_peek_mouse_last(void)
+{
+    /* Orig same drain2: wMsgFilterMax 0x200 (same idiom as above). */
+    return 0x200;
 }
 
 int pic_paint_port_id(void)

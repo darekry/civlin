@@ -85,12 +85,49 @@ civ_error_t game_new(civ_game_t *g);
  * NOENT, quit_flag set -> CIV_OK (no work). No globals, no exit(). */
 civ_error_t game_tick(civ_game_t *g);
 
-/* One Game_TurnLoopTick @ 1088:0000 pass: iterate civs, bump g_nTurn/g_nYear,
- * scoring every 0x32 turns, endings via HoF path (sets quit_flag).
- * Scoring branch (every 0x32 turns) scales via Game_CalcProgressThreshold
- * @ 1088:1d99 (game_calc_progress_threshold below, implemented: sum
- * i*(7-diff)/2+1); stub covers the branch via the TODO in game.c. */
+/* One Game_TurnLoopTick @ 1088:0000 pass (P3 skeleton, decompiled
+ * 2026-10-16; callees verified via get_function_callees: Diplo_ProcessTurn @
+ * 1168:0000, FUN_1078_0000/448f, FUN_1158_0000, FUN_1170_0000,
+ * Civ_ProcessUnitMoves @ 11f0:0000, Sys_CheckRuntimeMemory @ 11e8:0075,
+ * Game_SpawnUprisings @ 1088:0be9, Game_DoPollutionAndWonderRace @ 1088:1e32,
+ * City_ProcessDisaster @ 1040:068e (2x, g_nTurn > 0x32), Game_UpdatePowerRankings
+ * @ 1088:108a, Game_CalcProgressThreshold @ 1088:1d99, Status_FormatMainRow @
+ * 1138:0000, Game_UpdateStatusPanel @ 1088:13d5, Game_ProcessGameEnd @
+ * 1088:0b6d, Quiz_RunQuizPair @ 1178:0000, Map_RefreshAllViews @ 1110:03e9,
+ * Replay_AppendLog @ 11c0:3beb, Save_SaveGame @ 1198:00a3; sole caller WinMain @
+ * 1008:0000):
+ *   per-civ loop (alive mask 12d8:42f8): Diplo + 1078 pair + 1158/1170 +
+ *     Sys_CheckRuntimeMemory (per-civ, przed Civ_ProcessUnitMoves) + Civ moves
+ *     (1 = needs UI pump -> early return); potem SpawnUprisings + Pollution/
+ *     WonderRace + 2x Disaster (turn > 0x32) + PowerRankings + memory-warning
+ *     branch (treasury < 100) + turn++/year-step + 0-year doubling + 0x32
+ *     scoring branch (Quiz/Map_RefreshAllViews, Save/RefreshViews gdy
+ *     option&2 i year != diff*-0x14+0x834, Replay log 0xb) + endings via HoF.
+ * Live skeleton on caller-owned civ_game_t: turn++ + year-step + score/uprising
+ * predicates below; per-civ/diplo/map/dialog/quiz/save/HoF tails stay STUB via
+ * the TODO in game.c (PARTIAL). */
 civ_error_t game_turn_tick(civ_game_t *g);
+
+/* Orig Game_TurnLoopTick @ 1088:0000 year-step tail -> game_turn_year_step.
+ * OS-free 1:1 (implemented): era ladder gated on (opt_flags & 0xfe) == 0
+ * (DAT_12d0_00b6 quiz/launch bits; nonzero = frozen year): year < 1000 -> +20
+ * (0x14); else year < 0x5dc (1500) -> +10; else year < 0x6d6 (1752) -> +5;
+ * else year < 0x73a (1852) -> +2; else +1. Follow-ups caller-side (orig
+ * inline): year == 0 -> double treasuries + year = 1; year == 0x15 (21) ->
+ * year = 0x14 (20). Takes year/opt_flags explicitly; no globals. */
+int game_turn_year_step(int year, int opt_flags);
+
+/* Orig same 0x32 scoring branch -> game_turn_should_score. OS-free 1:1
+ * (implemented): (turn % 0x32 == 0) && player_civ != 0xffff. Quiz sub-gate
+ * ((opt & 1) == 0 && year < 0) stays caller-side. No globals. */
+int game_turn_should_score(int turn, int player_civ);
+
+/* Orig Game_SpawnUprisings @ 1088:0be9 head gate -> game_uprising_due.
+ * OS-free 1:1 (implemented): limit = (5 - difficulty) * 0x1e; due (1) when
+ * limit - turn == 0 || limit < turn, else 0. Tile gates (Map_GetTileClass @
+ * 1110:16c0 == 10 ocean, Map_GetUnitAt @ 1110:18ce == -1, Map_GetOceanOrContVal
+ * >= 0x10) + Rng_Range @ 11c8:003d draws stay caller-side. No globals. */
+int game_uprising_due(int difficulty, int turn);
 
 /* --- Game-end / turn batch (frontier 2026-10-15) ---
  * OS-free logic is ported 1:1 with explicit params (no globals, no Win16);
@@ -2458,6 +2495,21 @@ int sys_drain_queue_cap(void);
 /* Orig Sys_DrainInput @ 11f0:4ea0 reset (DAT_12b0_004c = 0) ->
  * sys_drain_queue_reset. 1:1 wartosc wpisywana do head (zawsze 0). */
 int sys_drain_queue_reset(void);
+
+/* Orig Sys_DrainInput @ 11f0:4ea0 PEEKMESSAGE ranges (P3 drain format,
+ * decompiled 2026-10-16; 22 callers incl. Civ_ProcessUnitMoves @ 11f0:0000,
+ * Sys_PumpMessages @ 1108:0000, Sys_WaitForInput @ 1038:0c1d):
+ *   head: 6 slow 1420:1d44/1d46/1d48/1d4e/1d4c/1d50 = 0 (sys_drain_state_words),
+ *   drain1: PEEKMESSAGE(...,0x108,0x100,0,...) az 0 (key range),
+ *   drain2: PEEKMESSAGE(...,0x209,0x200,0,...) az 0 (mouse range),
+ *   tail: DAT_12b0_004c = 0 (res-string queue head, cap 10 via
+ *   sys_drain_queue_cap, oprozniana przez Main_DrainMessages @ 11e8:02fb).
+ * PEEKMESSAGE ogony Win16 -> STUB (sys_drain_input UNSUPPORTED); zakresy
+ * ponizej LIVE 1:1 (no Win16, no globals). */
+int sys_drain_peek_key_first(void);
+int sys_drain_peek_key_last(void);
+int sys_drain_peek_mouse_first(void);
+int sys_drain_peek_mouse_last(void);
 
 /* Orig Pic_PresentOnPaint @ 1030:900d geometry -> pic_paint_port_id/w/h.
  * 1:1: port 0x70, box 0x140 x 0x200 (SETRECT przed PresentRect; tail

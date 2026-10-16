@@ -211,19 +211,31 @@ int path_find_corridor(int civ, int unit_idx, int max_steps)
     (void)civ;
     (void)unit_idx;
     (void)max_steps;
-    /* TODO: Orig FUN_1128_10de @ 1128:10de (corridor grid search with a
-     * max_steps budget, 999 from unit_step_toward_goal @ 1128:0000;
-     * writes the corridor + falls back to 0xffff/no-path clearing
-     * 6302/6304). Pure tile-buffer logic, no Win16; decode pending. */
+    /* TODO: Orig Path_FindCorridor @ 1128:10de (P3, decompiled 2026-10-16):
+     * BFS/Dijkstra-FIFO over the 16x16 window around the goal DAT_1338_0002/
+     * 0000 (+-8 tiles): visited/cost bytes at s_Support+4 (0x100 B), ring
+     * queue DAT_1420_afaa/aeaa 256 entries (& 0xff), stop at empty or 0xe1
+     * iters; start = goal tile, target = unit tile (62fd/62fe); cost: road&8
+     * both (Map_GetOccupancyFlags & 8) -> +1 else fast-unit (1420:1a3c==1) ?
+     * +3 : +tile_cost(1420:17d4[class])*3; gate (tileClass==10)==(domain
+     * 1a3a==2) OR occupancy&1 (city bridge); callers Path_CheckContinentLink
+     * @ 1128:16d0 (budget 0x14) + Unit_StepTowardGoal @ 1128:0000 (budget
+     * 999). Pure tile-buffer logic, no Win16; full port TBD (returns 0xffff
+     * no-path like orig, clearing 6302/6304 caller-side). */
     return 0xffff;
 }
 
 int path_is_passable(int civ, int x, int y)
 {
-    /* Path_IsPassable @ 1128:081c (v1 pure port): bounds gate only.
-     * The full sea/land/ZOC/occupancy gating lives in the caller
+    /* NOTE: Ghidra decompile 2026-10-16 shows @ 1128:081c is actually
+     * Path_FindLinkRoute (link-entry BFS via Path_FindLinkEntry @ 1128:0ea3,
+     * 0x104 table, DAT_1338 goal scratch; see map.h chain 29/30 kernels),
+     * not a single-tile predicate. This v1 pure port keeps only its OOB leg
+     * (OOB = blocked, cf. Map_CheckTileBounds @ 1110:168f): bounds gate.
+     * Full sea/land/ZOC/occupancy gating lives in the caller
      * (unit_step_toward_goal @ 1128:0000: 0x1a3a vs 1110:16c0 sea match,
-     * 11c0:23fd ZOC, 1110:18ce/16ee occupancy); TBD here. */
+     * 11c0:23fd ZOC, 1110:18ce/16ee occupancy); link-route port TBD via the
+     * path_link_* kernels (parallel-owned, see map.h). */
     (void)civ;
     return map_get_tile(x, y) != -1;
 }
