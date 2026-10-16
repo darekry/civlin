@@ -2535,3 +2535,82 @@ civ_error_t text_draw_aligned_list_free(int handle, int mode)
      * Free gate is LIVE in text_aligned_list_needs_unlock above. */
     return CIV_ERR_UNSUPPORTED;
 }
+
+/* --- Chain 2026-10-16 (29): Text_BuildWrappedList wrap rules (goal 1). ---
+ * See dialog.h block. OS-free 1:1 LIVE (no Win16, no globals, no exit()). */
+
+int text_wrap_is_space(int c)
+{
+    /* Orig Text_BuildWrappedList @ 1068:2072 inner word gate (*p == ' ')
+     * break + leading/trailing space loops (myslniki nie lamia). */
+    return (c == ' ') ? 1 : 0;
+}
+
+int text_wrap_is_hard_break(int c)
+{
+    /* Orig Text_BuildWrappedList @ 1068:2072 hard break: *p == '\0' (koniec
+     * tekstu, finalizuje wysokosc row_h*count + top + MemCopyFar) ||
+     * *p == '\r' (koniec wiersza, konsumowany +1 gdy overflow == 0). */
+    return (c == '\0' || c == '\r') ? 1 : 0;
+}
+
+int text_wrapped_char_fix(int c)
+{
+    /* Orig Text_BuildWrappedList @ 1068:2072 remap: if (*local_14 == -0x6b)
+     * *local_14 = -5 (signed char 0x95 -> 0xFB przed GETTEXTEXTENT; exact
+     * glyph-page TBD). */
+    signed char sc = (signed char)c;
+
+    if (sc == (signed char)(-0x6b))
+        return -5;
+    return c;
+}
+
+int text_wrapped_overflows(int width, int measured)
+{
+    /* Orig Text_BuildWrappedList @ 1068:2072 width gate: if (local_c <= iVar2)
+     * local_20 = 1 (overflow; wiersz cofa sie do ostatniego breaka local_1c;
+     * pojedyncze slowo i tak w wierszu via fallback local_1c = local_14). */
+    return (width <= measured) ? 1 : 0;
+}
+
+int text_wrapped_trim_trailing(const char *s, int len)
+{
+    /* Orig Text_BuildWrappedList @ 1068:2072 backtrack: while ([local_1c-1]
+     * == ' ' ) local_1c-- (iVar5-- petla). s to wiersz, len to surowa dlugosc
+     * (end - start). */
+    if (!s || len <= 0)
+        return 0;
+    while (len > 0 && s[len - 1] == ' ')
+        len--;
+    return len;
+}
+
+int text_wrapped_skip_leading(const char *s, int pos, int n)
+{
+    /* Orig Text_BuildWrappedList @ 1068:2072 leading skip: while (*local_14
+     * == ' ' ) local_14++ (przed kazdym wierszem). Zwraca liczbe pomijanych
+     * spacji (0 gdy s NULL / pos OOR / n <= pos). */
+    int k = 0;
+
+    if (!s || pos < 0 || n <= pos)
+        return 0;
+    while (pos + k < n && s[pos + k] == ' ')
+        k++;
+    return k;
+}
+
+civ_error_t text_wrapped_row_span(int base_off, int cur_off, int start_off,
+                                  int end_off, int *off_out, int *len_out)
+{
+    /* Orig Text_BuildWrappedList @ 1068:2072 row store: *(base+0x9a+i*2) =
+     * cur - (base+0x11a) (off), *(base+0x1a+i*2) = end - start (len); count
+     * at +0x18++. */
+    if (!off_out || !len_out)
+        return CIV_ERR_NOENT;
+    if (cur_off < base_off || end_off < start_off)
+        return CIV_ERR_RANGE;
+    *off_out = cur_off - base_off;
+    *len_out = end_off - start_off;
+    return CIV_OK;
+}

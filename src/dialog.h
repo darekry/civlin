@@ -2000,4 +2000,70 @@ civ_error_t text_draw_aligned_list(int handle, int mode);
  * text_aligned_list_needs_unlock above (LIVE). */
 civ_error_t text_draw_aligned_list_free(int handle, int mode);
 
+/* --- Chain 2026-10-16 (29): Text_BuildWrappedList wrap rules (task goal 1) ---
+ * Orig Text_BuildWrappedList @ 1068:2072 (civ.exe, x86:LE:16:Protected Mode),
+ * decompiled this pass (GLOBALALLOC 0x51a + GLOBALLOCK + GETTEXTMETRICS
+ * row_h at +0x10 + wrap vs width local_c = rect_w + rows count at +0x18,
+ * len u16 at +0x1a, off u16 at +0x9a, text base at +0x11a; returns handle).
+ * Reguly lamania (decompile):
+ *   - wiodace spacje pomijane (while *p == ' ' p++);
+ *   - slowa zbierane do spacji / '\r' / NUL (wewnetrzna petla do break na
+ *     ' '; '\r' konczy wiersz, NUL konczy tekst);
+ *   - myflniki NIE lamia (brak '-' gate; tylko ' ' + '\r');
+ *   - max-width via GETTEXTEXTENT vs local_c: local_c <= measured -> overflow
+ *     (text_wrapped_overflows); wiersz cofa sie do ostatniego breaka;
+ *   - trailing spaces ciecie wstecz (while last == ' ' len--);
+ *   - pojedyncze slowo szersze niz width i tak zajmuje wiersz (fallback
+ *     local_1c = local_14 gdy overflow==0 lub NUL/'\r' lub jedno slowo);
+ *   - char remap: byte -0x6b (0x95) -> -5 (0xFB) in-place przed measure
+ *     (text_wrapped_char_fix; exact glyph-page TBD, never faked beyond byte);
+ *   - '\r' konsumowany jako 1 bajt po wierszu (local_14++ gdy overflow==0).
+ * Kto wola (14 xrefs, NE scan): Dialog_MenuZ_Modal @ 1220:050f (tytul/akapit
+ *   local_27a gdy non-empty, mode 2 = left w redraw + GLOBALFREE na koncu),
+ *   Text_ShowTextByName @ 1068:1dd7 (ResMgr_GetByName civilopedia/help text),
+ *   NewGame_CustomHelpDialog @ 10e0:0497 (help customize), Status_FormatMainRow
+ *   @ 1138:0370 (status/census akapit z 24fa), City_ChooseProduction @
+ *   1170:1abc/1b8b/1de6/1eb5 (production/tech/city akapity x4),
+ *   Tech_ChooseResearch @ 1170:2531 (tech dialog), Quiz_RunCivilizationQuiz @
+ *   1178:01bb/065a/0731 (quiz CORRECT/INCORRECT/question x3),
+ *   NewGame_Wizard @ 10e8:1201 (wizard screens), Text_ShowWrappedBuffer @
+ *   11d0:00b0 (24fa buffer box). ShowMessage @ 1220:00d2 NIE wola wprost
+ *   (modal 0x88/0x91 via MenuZ, wrap w MenuZ powyzej). Census akapity ida
+ *   przez Status_FormatMainRow/ShowTextByName, nie osobny census-wrap.
+ * Port regul -> LIVE ponizej (no Win16, no globals, read-only poza out);
+ *   GETTEXTEXTENT/GETTEXTMETRICS/GLOBALALLOCpixel tails stay STUB. No exit(),
+ *   C17. */
+
+/* Orig wrap char gate (*p == ' ') -> text_wrap_is_space. 1:1. */
+int text_wrap_is_space(int c);
+
+/* Orig wrap hard break (*p == '\0' || *p == '\r') -> text_wrap_is_hard_break.
+ * 1:1 1 gdy koniec wiersza/teksu, 0 wpp. */
+int text_wrap_is_hard_break(int c);
+
+/* Orig in-place byte remap (*p == -0x6b -> -5) -> text_wrapped_char_fix.
+ * 1:1 ((char)-0x6b) ? -5 : c (porownanie na signed char, jak orig). */
+int text_wrapped_char_fix(int c);
+
+/* Orig width gate (local_c <= GETTEXTEXTENT -> overflow) ->
+ * text_wrapped_overflows. 1:1 width <= measured (width = local_c rect_w).
+ * Ujemne dozwolone (orig signed int compare). */
+int text_wrapped_overflows(int width, int measured);
+
+/* Orig trailing-space backtrack (while [local_1c-1] == ' ' local_1c--) ->
+ * text_wrapped_trim_trailing. 1:1 usuwa koncowe spacje z dlugosci wiersza
+ * (len sans trailing ' '; start_idx/base dla off+len jak +0x9a/+0x1a).
+ * Zwraca przycieta dlugosc (0..len). NULL s -> 0. */
+int text_wrapped_trim_trailing(const char *s, int len);
+
+/* Orig leading-space skip (while *p == ' ' p++) -> text_wrapped_skip_leading.
+ * 1:1 liczba wiodacych spacji od pos (0 gdy s NULL lub pos OOR). */
+int text_wrapped_skip_leading(const char *s, int pos, int n);
+
+/* Orig row store (off = cur - base, len = end - start) -> text_wrapped_row_span.
+ * 1:1 off = cur_off - base_off, len via out (NOENT on NULL len_out).
+ * RANGE gdy cur < base lub end < start. */
+civ_error_t text_wrapped_row_span(int base_off, int cur_off, int start_off,
+                                  int end_off, int *off_out, int *len_out);
+
 #endif /* CIVLIN_DIALOG_H */

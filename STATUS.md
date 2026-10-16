@@ -350,6 +350,13 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `text_wrapped_list_cap` | LIVE | 1068:2072 |  |
 | `text_draw_aligned_list` | STUB | 1068:258f, 1100:00ea, 1608:01cc | has TODO |
 | `text_draw_aligned_list_free` | STUB | 1068:255a | has TODO |
+| `text_wrap_is_space` | LIVE | 1068:2072 |  |
+| `text_wrap_is_hard_break` | LIVE | 1068:2072 |  |
+| `text_wrapped_char_fix` | LIVE | 1068:2072 |  |
+| `text_wrapped_overflows` | LIVE | 1068:2072 |  |
+| `text_wrapped_trim_trailing` | LIVE | 1068:2072 |  |
+| `text_wrapped_skip_leading` | LIVE | 1068:2072 |  |
+| `text_wrapped_row_span` | LIVE | 1068:2072 |  |
 
 ### `src/game.c`
 
@@ -810,7 +817,19 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `path_corridor_queue_adv` | LIVE | 1128:10de |  |
 | `path_corridor_should_relax` | LIVE | 1128:10de |  |
 | `path_continent_link_result` | LIVE | 1128:16d0 |  |
-| `map_get_ocean_or_cont_val` | LIVE | 1110:16c0, 1110:1d99, 1110:1dbd, 1420:43b4 |  |
+| `map_get_ocean_or_cont_val` | LIVE | 1028:0a93, 1110:16c0, 1110:1d99, 1110:1dbd, 12d8:4334, 12d8:43b4 |  |
+| `path_link_block` | LIVE | 1128:0ea3 |  |
+| `path_link_table_idx` | LIVE | 1028:12c6, 1128:0ea3 |  |
+| `path_link_has_link` | LIVE | 1128:0ea3 |  |
+| `path_link_is_better` | LIVE | 1128:0ea3, 11c8:025d |  |
+| `path_link_corner_ok` | LIVE | 1110:16c0, 1128:0ea3, 1128:16d0 |  |
+| `path_link_entry_budget` | LIVE | 1028:12c6, 1128:0ea3, 1128:10de, 1128:16d0 |  |
+| `map_ocean_is_navigable` | LIVE | 1110:1dbd, 1128:0651 |  |
+| `map_ocean_is_spawnable` | LIVE | 1088:0be9, 1110:1dbd |  |
+| `map_ocean_is_coastal` | LIVE | 1040:03f6, 1110:1dbd |  |
+| `map_city_coastal_should_set` | LIVE | 1040:03f6 |  |
+| `map_cont_size_class` | LIVE | 10e8:212a, 1110:1dbd |  |
+| `map_cont_size_remainder` | LIVE | 10e8:212a |  |
 
 ### `src/newgame.c`
 

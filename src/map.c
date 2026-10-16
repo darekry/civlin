@@ -1302,8 +1302,11 @@ int map_get_ocean_or_cont_val(int is_sea, int continent,
                               int n)
 {
     /* Orig Map_GetOceanOrContVal @ 1110:1dbd: class = Map_GetTileClass @
-     * 1110:16c0; sea (== 10) -> u16 1420:43b4[cont] (cont = Map_GetContinentId
-     * @ 1110:1d99), land -> u16 0x4334 + cont*2. OOR/NULL -> -1. */
+     * 1110:16c0; sea (== 10) -> u16 12d8:43b4[cont], land -> u16 12d8:4334 +
+     * cont*2 per disasm ES=0x12d8 (Ghidra DAT_1420_43b4 = ten sam offset,
+     * real seg 12d8; cont = Map_GetContinentId @ 1110:1d99). Wartosc =
+     * rozmiar (tile count) z Map_LabelContinents @ 1028:0a93. OOR/NULL
+     * -> -1. */
     if (!sea_vals || !land_vals)
         return -1;
     if (continent < 0 || continent >= n)
@@ -1311,4 +1314,135 @@ int map_get_ocean_or_cont_val(int is_sea, int continent,
     if (is_sea != 0)
         return sea_vals[continent];
     return land_vals[continent];
+}
+
+/* --- Chain 2026-10-16 (29): Path_FindLinkEntry kernels (goal 2). ---
+ * See map.h block. OS-free 1:1 LIVE (no Win16, no globals, no exit()). */
+
+int path_link_block(int v)
+{
+    /* Orig Path_FindLinkEntry @ 1128:0ea3 head: iVar1 = param_1/4 (IDIV BX=4;
+     * bloki 4x4 jak BuildContinentLinks 0x14 x 0x0d). Tile >= 0 wiec C / == IDIV. */
+    return v / 4;
+}
+
+int path_link_table_idx(int bx, int by)
+{
+    /* Orig Path_FindLinkEntry @ 1128:0ea3 idx: BX = bx*0xd+by w ES=0x1248
+     * (+4 land / +0x108 ocean caller-side; grid W 0x14 H 0x0d jak
+     * worldgen_link_grid_w/h @ 1028:12c6). */
+    if (bx < 0 || bx > 0x13 || by < 0 || by > 0x0c)
+        return -1;
+    return bx * 0x0d + by;
+}
+
+int path_link_has_link(int cell)
+{
+    /* Orig Path_FindLinkEntry @ 1128:0ea3 link gate: *(link+off) != '\0'
+     * (ES=0x1248, +4 land / +0x108 ocean). */
+    return (cell != 0) ? 1 : 0;
+}
+
+int path_link_is_better(int dist, int best)
+{
+    /* Orig Path_FindLinkEntry @ 1128:0ea3 best gate: Map_StepDist @
+     * 11c8:025d < local_6 (init 99) -> kandydat. */
+    return (dist < best) ? 1 : 0;
+}
+
+int path_link_corner_ok(int s0, int s1, int s2, int s3, int want_sea)
+{
+    /* Orig Path_FindLinkEntry @ 1128:0ea3 4-corner domain: (tile==10) ==
+     * param_3 na rogach (bx*4+1,bx*4+2) x (by*4+1,by*4+2) via
+     * Map_GetTileClass @ 1110:16c0; zagniezdzone ify przepadaja gdy KTORYS
+     * pasuje (falls through do CheckContinentLink @ 1128:16d0), skip (goto
+     * 1082) tylko gdy wszystkie 4 !=. */
+    int want = (want_sea != 0) ? 1 : 0;
+    int a0 = (s0 != 0) ? 1 : 0;
+    int a1 = (s1 != 0) ? 1 : 0;
+    int a2 = (s2 != 0) ? 1 : 0;
+    int a3 = (s3 != 0) ? 1 : 0;
+
+    if (a0 == want)
+        return 1;
+    if (a1 == want)
+        return 1;
+    if (a2 == want)
+        return 1;
+    if (a3 == want)
+        return 1;
+    return 0;
+}
+
+int path_link_entry_budget(void)
+{
+    /* Orig Path_FindLinkEntry @ 1128:0ea3 probe: PUSH 0x12 do
+     * Path_CheckContinentLink @ 1128:16d0 (vs 0x14 w BuildContinentLinks @
+     * 1028:12c6; limit = budzet korytarza FindCorridor @ 1128:10de, nie
+     * liczba kontynentow). */
+    return 0x12;
+}
+
+/* --- Chain 2026-10-16 (29): Ocean/cont thresholds (goals 3/5). ---
+ * See map.h block. OS-free 1:1 LIVE (no globals). */
+
+int map_ocean_is_navigable(int v)
+{
+    /* Orig Unit_StepTowardGoal @ 1128:0651 gate: (iVar8 != 10 || 4 < OceanVal
+     * @ 1110:1dbd) — sea wymaga rozmiaru > 4 (kaluza vs morze; trirema /
+     * caravel w 1a3a domain + cost, nie tu). */
+    return (v > 4) ? 1 : 0;
+}
+
+int map_ocean_is_spawnable(int v)
+{
+    /* Orig Game_SpawnUprisings @ 1088:0be9 gate: reroll gdy OceanVal @
+     * 1110:1dbd < 0x10 (male oceany < 16 bez barbarzyncow). */
+    return (v >= 0x10) ? 1 : 0;
+}
+
+int map_ocean_is_coastal(int v)
+{
+    /* Orig City_FoundCity @ 1040:03f6 gate: 0x100 < OceanVal @ 1110:1dbd
+     * (male zatoki <= 0x100 licza sie tylko dla gracza, patrz ponizej). */
+    return (v > 0x100) ? 1 : 0;
+}
+
+int map_city_coastal_should_set(int is_sea, int ocean_val, int is_player)
+{
+    /* Orig City_FoundCity @ 1040:03f6 flag: (tile == 10) && (0x100 < val ||
+     * player) -> 5502 |= 2 (coastal-bit; czytelnik Trade/City production). */
+    if (is_sea == 0)
+        return 0;
+    if (map_ocean_is_coastal(ocean_val))
+        return 1;
+    return (is_player != 0) ? 1 : 0;
+}
+
+int map_cont_size_class(int v)
+{
+    /* Orig NewGame_RateStartPositions @ 10e8:212a switch (val / 0x32 via
+     * Map_GetOceanOrContVal @ 1110:1dbd): 0 small island / 1 large island /
+     * 2 small continent / 3 medium / default large (opisy small_island__/
+     * large_island__/small_continent__/medium_continent__/large_continent__
+     * @ 2b9d..2bdc + score iVar6). */
+    int q;
+
+    if (v < 0)
+        return -1;
+    q = v / 0x32;
+    if (q < 0)
+        return -1;
+    if (q > 4)
+        return 4;
+    return q;
+}
+
+int map_cont_size_remainder(int v)
+{
+    /* Orig NewGame_RateStartPositions @ 10e8:212a remainder: in_DX = val %
+     * 0x32 (EDX, nieuzywany dalej; zachowany dla fidelity). */
+    if (v < 0)
+        return -1;
+    return v % 0x32;
 }
