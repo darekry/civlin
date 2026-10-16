@@ -621,20 +621,23 @@ civ_error_t help_open_topic(const char *topic);
  * Orig: FUN_10b0_0000 @ 10b0:0000 -> Anim_PumpIfActive. Runs
  *   Anim_AdvanceFrames while a sequence is active (flag @ 1420:1f40);
  *   wrapped by Sys_Yield @ 1098:0157 (see sys.h). Timer/frame pump ->
- *   SDL timer TBD; PARTIAL dispatcher (OS-free active/phase gates
- *   wired, pump tail CIV_ERR_UNSUPPORTED).
+ *   SDL timer TBD; PARTIAL dispatcher (OS-free timed gates wired:
+ *   active/phase/clamp/period/finish + StoreDC-pump/ret/slot/caption/
+ *   dissolve/present/animate/sound/rebase, pump tail CIV_ERR_UNSUPPORTED).
  * Orig: FUN_10b0_0461 @ 10b0:0461 -> Anim_AdvanceFrames. Timed frame
  *   script, opcodes 1..0xe: palette fades/selects, offscreen blits,
  *   sound triggers (Sound_PlayId @ 1150:00c9 bridge), port switches
  *   (GR port layer, see video.h). Returns nonzero when the sequence is
  *   finished. Full script engine -> SDL TBD; PARTIAL dispatcher
- *   (OS-free opcode/tick/ret gates wired, reports done until the
- *   Win16 ctx bridge lands).
+ *   (OS-free opcode 1..0xe/tick/ret/slot/caption/dissolve/present/
+ *   animate/sound gates wired, reports done until the Win16 ctx bridge
+ *   lands).
  * Orig: FUN_10b0_008a @ 10b0:008a -> Anim_OpenSequence. mem_alloc_lock
  *   0xa6 ctx + GETCLIENTRECT + Sys_GetTickScaled @ 1100:02e1 base +
  *   max-end scan + GfxPort_Create x2 (offs +9/+0x62) + FUN_1000_14f8 /
  *   FUN_1100_0876 setup + DAT_1420_1f40 = ctx. Win16/GfxPort -> SDL TBD;
- *   PARTIAL dispatcher (OS-free count/resolve/ctx/max gates wired,
+ *   PARTIAL dispatcher (OS-free count/resolve/ctx/max + active/phase/
+ *   period/pump/opcode-tails/slot/dissolve/rebase gates wired,
  *   alloc/port tails CIV_ERR_UNSUPPORTED; halves LIVE below).
  * Orig: FUN_10b0_0287 @ 10b0:0287 -> Anim_CloseSequence. Frees slots
  *   3/4 via Anim_FreeSlot @ 10a8:00b4 + slot 7 via GfxPort_Close +

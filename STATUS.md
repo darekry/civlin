@@ -156,7 +156,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `boot_run` | LIVE | 1000:11bb, 1000:2826, 1008:0000, 1008:059a, 1008:0b4a, 1008:0d68, 1008:0e99, 1088:0000, 1090:0488, 1098:06f8, 1098:096c, 10b8:0000, 10e8:2d46, 1190:0000, 11e8:0000, 11e8:0337 |  |
 | `boot_shutdown` | LIVE | 1008:0329, 1008:0d68, 12d8:28fa, 12d8:460e |  |
 | `art_maybe_convert_artwork` | LIVE | 1090:0488, 10b8:0000, 10b8:04df, 10b8:062d, 10b8:06a0, 10b8:076a, 10b8:079d, 10b8:0aa8, 10b8:0c1c, 10b8:0ded, 10b8:0e36, 10b8:11bc, 10b8:158c, 10d0:0cfa, 1420:20a9 |  |
-| `main_run_startup_sequence` | PARTIAL | 1008:0329, 1098:124f, 10e8:0000, 1108:0243, 1130:000e, 11e0:0000, 11e0:0221, 1420:435b | has TODO |
+| `main_run_startup_sequence` | PARTIAL | 1008:0329, 1098:124f, 10b0:008a, 10b0:0461, 10e8:0000, 1108:0243, 1130:000e, 11e0:0000, 11e0:0221, 1420:435b | has TODO |
 | `config_prefs_defaults` | LIVE | 1008:0b4a, 1008:0bbf, 1150:00c9, 12d0:0064 |  |
 | `config_prefs_sounds_on` | LIVE |  |  |
 | `boot_video_caps_count` | LIVE | 1008:059a, 1420:0af4 |  |

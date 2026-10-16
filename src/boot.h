@@ -731,14 +731,18 @@ civ_error_t dos_set_path(int drive, const char *path);
 civ_error_t art_maybe_convert_artwork(void);
 
 /* Orig: FUN_11e0_0000 @ 11e0:0000 -> main_run_startup_sequence
- * (Main_RunStartupSequence). Dispatcher for the MainMenu_WndProc @
+ * (Main_RunStartupSequence). PARTIAL dispatcher for the MainMenu_WndProc @
  * 11e0:0221 choices over CIV_MAINMENU_TEXT @ 1420:435b (see mainmenu.h
  * mainmenu_run/mainmenu_dispatch): new-game paths -> NewGame_Wizard @
  * 10e8:0000 via newgame_wizard_run (see newgame.h), Load -> save prompt
  * @ 1130:000e, EARTH -> WorldGen_LoadEarth @ 1108:0243 (see worldgen.h),
  * Hall -> HoF, Quit -> WinMain_Shutdown @ 1008:0329 (boot_shutdown
- * above). SDL modal/event bridge TBD -> stub CIV_ERR_UNSUPPORTED. No
- * globals, no exit(), read-only. */
+ * above). Drives Anim_OpenSequence @ 10b0:008a + the Anim_AdvanceFrames @
+ * 10b0:0461 loop over the 0x94 procedural host (preset 0x200x0x140, see
+ * main_startup_intro_proc_w/h + procedural_ready below); OS-free
+ * ID/count/tick halves are LIVE 1:1 (ref unpacked/civ.exe @ 11e0:0000).
+ * SDL modal/event bridge TBD -> overall PARTIAL CIV_ERR_UNSUPPORTED,
+ * never fake CIV_OK. No globals, no exit(), read-only. */
 civ_error_t main_run_startup_sequence(void);
 
 /* Config prefs defaults (civ.prf via Config_LoadPrefs @ 1008:0b4a /

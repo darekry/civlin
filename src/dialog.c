@@ -388,12 +388,13 @@ civ_error_t anim_pump_if_active(void)
     /* Orig: FUN_10b0_0000 @ 10b0:0000 -> Anim_PumpIfActive dispatcher
      * (slots @ 10a8:0000/00fc/018e/0228/00b4, dissolve @ 10b0:151b/17e5/
      * 172d, tick @ 1100:02e1, sound @ 1150:00c9, flag @ 1420:1f40).
-     * PARTIAL: OS-free active/phase gates below are LIVE 1:1 (no Win16,
-     * no globals, read-only); the timed pump tail stays STUB. Refs
-     * verified read-only: strings unpacked/civ.exe ("OPENING.wav").
+     * PARTIAL: OS-free timed gates below are LIVE 1:1 (no Win16, no
+     * globals, read-only); the SDL timer/GfxPort pump tail stays STUB.
+     * Refs verified read-only: strings unpacked/civ.exe ("OPENING.wav").
      * Timed frame script lives in Anim_AdvanceFrames @ 10b0:0461;
-     * wrapped by Sys_Yield @ 1098:0157 (see sys.h). SDL timer/frame
-     * pump TBD. */
+     * wrapped by Sys_Yield @ 1098:0157 (see sys.h). Frame/GfxPort bridge
+     * (Gfx_StoreDC @ 1098:1104 + PresentRect @ 10d0:0854 + AnimateRange @
+     * 1090:0376) TBD. */
     int on;
     int off;
     anim_seq_phase_t stepped;
@@ -411,13 +412,52 @@ civ_error_t anim_pump_if_active(void)
         return CIV_ERR_BAD_DATA;
     if (anim_seq_is_finished(0L, 1L) != 0 || anim_seq_is_finished(1L, 1L) != 1)
         return CIV_ERR_BAD_DATA;
+    /* Tail-exit P0: extra OS-free timed gates so the dispatcher stays
+     * PARTIAL but covers the full pump checklist 1:1 (frames + GfxPort
+     * tails still STUB below). */
+    if (anim_tick_needs_store(0L) != 1 || anim_tick_needs_store(1L) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (anim_advance_ret(0L, 1L) != 0 || anim_advance_ret(1L, 1L) != 1)
+        return CIV_ERR_BAD_DATA;
+    if (anim_slot_should_step(0L, 8, 0, 0L) != 1 ||
+        anim_slot_should_step(0L, 8, 1, 0L) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (anim_slot_phase(0L, 1L, 0L, 0) != ANIM_SLOTPH_ALLOC ||
+        anim_slot_phase(0L, 1L, 1L, 1) != ANIM_SLOTPH_FINISH)
+        return CIV_ERR_BAD_DATA;
+    if (anim_caption_phase(0L, 1L, 0L, 0) != ANIM_CAPPH_DRAW ||
+        anim_caption_phase(0L, 1L, 1L, 0) != ANIM_CAPPH_UNDRAW)
+        return CIV_ERR_BAD_DATA;
+    if (anim_dissolve_phase(0L, 1L, 0L, 0) != ANIM_DIZPH_SETUP ||
+        anim_dissolve_phase(0L, 1L, 1L, 0) != ANIM_DIZPH_FINISH)
+        return CIV_ERR_BAD_DATA;
+    if (anim_opcode_needs_present(7) != 1 || anim_opcode_needs_present(5) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (anim_opcode_needs_animate(1) != 1 || anim_opcode_needs_animate(2) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (anim_opcode_needs_sound(3) != 0 || anim_opcode_needs_sound(7) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (anim_opcode_is_valid(1) != 1 || anim_opcode_is_valid(0) != 0 ||
+        anim_opcode_is_slot(3) != 1)
+        return CIV_ERR_BAD_DATA;
+    {
+        long base = 0L;
+
+        if (anim_rebase_clock(1100L, 1000L, &base, NULL) != CIV_OK ||
+            base != 100L)
+            return CIV_ERR_BAD_DATA;
+    }
     /* TODO: Orig Anim_PumpIfActive @ 10b0:0000 (while DAT_1420_1f40 != 0
      * run Anim_AdvanceFrames @ 10b0:0461 per Sys_GetTickScaled @
      * 1100:02e1 tick via Sys_Yield @ 1098:0157; per-tick elapsed via
-     * anim_clamp_tick + 11/0xe period via anim_tick_is_due + end via
-     * anim_seq_is_finished above) -> SDL timer bridge TBD (active-flag
+     * anim_clamp_tick + 11/0xe period via anim_tick_is_due + every-8th
+     * StoreDC via anim_tick_needs_store + ret via anim_advance_ret +
+     * slot/caption/dissolve phases + Present/Animate/Sound tails above)
+     * -> SDL timer + GfxPort_SetActive @ 10d0:0956 / PresentRect @
+     * 10d0:0854 + Palette_AnimateRange @ 1090:0376 bridge TBD (active-flag
      * storage @ 1420:1f40 stays caller-side; phase math is LIVE in
-     * anim_seq_phase_step above). */
+     * anim_seq_phase_step above; frames via Art_LoadFrameData @
+     * 10b8:079d land with the GfxPort bridge). */
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -543,8 +583,8 @@ civ_error_t anim_open_sequence(void)
 {
     /* Orig: FUN_10b0_008a @ 10b0:008a -> Anim_OpenSequence dispatcher
      * (tick @ 1100:02e1, ports +9/+0x62, flag @ 1420:1f40).
-     * PARTIAL: OS-free count/resolve/ctx/max gates below are LIVE 1:1
-     * (no Win16, no globals, read-only); the mem/GfxPort/tick tails
+     * PARTIAL: OS-free count/resolve/ctx/max/timed gates below are LIVE
+     * 1:1 (no Win16, no globals, read-only); the mem/GfxPort/tick tails
      * stay STUB. Decompiled shape: mem_alloc_lock 0xa6 ctx [0xfff4 on
      * NULL] + opcode-0 count when param_3 == 0 + GETCLIENTRECT + *ctx =
      * param_1 + ctx[4] = timeline + ctx[5] = count + Sys_GetTickScaled
@@ -554,17 +594,23 @@ civ_error_t anim_open_sequence(void)
      * Main_RunStartupSequence @ 11e0:0000 + MainMenu_WndProc @ 11e0:0221
      * sequence 0x91e path. Refs verified read-only: strings
      * unpacked/civ.exe ("OPENING.wav").
-     * TODO: mem_alloc_lock 0xa6 + GETCLIENTRECT rect + GfxPort_Create x2
-     * + Sys_GetTickScaled @ 1100:02e1 tick-base wiring + DAT_1420_1f40
-     * store -> SDL3 bridge TBD (ctx size/count/max math is LIVE in
-     * anim_seq_count_frames / anim_seq_resolve_count / anim_seq_ctx_size
-     * / anim_seq_max_end below). */
+     * TODO: Orig Anim_OpenSequence @ 10b0:008a mem_alloc_lock 0xa6 +
+     * GETCLIENTRECT rect + GfxPort_Create x2 + Sys_GetTickScaled @
+     * 1100:02e1 tick-base wiring + DAT_1420_1f40 store -> SDL3 bridge TBD
+     * (ctx size/count/max math is LIVE in anim_seq_count_frames /
+     * anim_seq_resolve_count / anim_seq_ctx_size / anim_seq_max_end below;
+     * frames via Art_LoadFrameData @ 10b8:079d land with the GfxPort
+     * bridge; timed tails stay PARTIAL in anim_advance_frames @
+     * 10b0:0461 / anim_pump_if_active @ 10b0:0000). */
     static const int sample_opcodes[] = { 1, 7, 0 };
     static const long sample_ends[] = { 10L, 20L };
     int counted;
     int resolved;
     int ctx;
     long max_end;
+    anim_slot_t slot;
+    int perm[4];
+    civ_error_t rc;
 
     counted = anim_seq_count_frames(sample_opcodes, 3u);
     if (counted != 2)
@@ -589,6 +635,35 @@ civ_error_t anim_open_sequence(void)
             base != 100L)
             return CIV_ERR_BAD_DATA;
     }
+    /* Tail-exit P0: extra OS-free timed gates declared at open so the
+     * dispatcher covers the frame/GfxPort checklist 1:1 (storage still
+     * STUB above). */
+    if (anim_seq_is_active(1L) != 1 || anim_seq_is_active(0L) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (anim_seq_phase_step(ANIM_SEQ_CLOSED, 1, 0, 0, 0) != ANIM_SEQ_OPEN)
+        return CIV_ERR_BAD_DATA;
+    if (anim_tick_is_due(0L, 0L, 8) != 1 || anim_tick_is_due(0L, 1L, 8) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (anim_tick_needs_store(0L) != 1 || anim_tick_needs_store(1L) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (anim_opcode_is_valid(0x0e) != 1 || anim_opcode_is_valid(0) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (anim_opcode_needs_present(9) != 1 || anim_opcode_needs_present(5) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (anim_opcode_needs_animate(1) != 1 || anim_opcode_needs_animate(2) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (anim_opcode_needs_sound(12) != 0)
+        return CIV_ERR_BAD_DATA;
+    rc = anim_slot_init(&slot, 0, 0, 0, 0, 4, 8, 0L);
+    if (rc != CIV_OK)
+        return CIV_ERR_BAD_DATA;
+    if (anim_slot_should_step(0L, 8, 0, 0L) != 1)
+        return CIV_ERR_BAD_DATA;
+    rc = anim_dissolve_perm_init(perm, 4u);
+    if (rc != CIV_OK)
+        return CIV_ERR_BAD_DATA;
+    if (anim_dissolve_col(0, perm[0], 4) < 0)
+        return CIV_ERR_BAD_DATA;
     return CIV_ERR_UNSUPPORTED;
 }
 

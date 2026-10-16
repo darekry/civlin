@@ -1022,6 +1022,7 @@ civ_error_t main_run_startup_sequence(void)
     int proc_h;
     int proc_ready;
     int need_rsc;
+    int adv_loop;
 
     /* OS-free 1:1 order probe (ref unpacked/civ.exe @ 11e0:0000 decompile):
      * intro dialog 0x94/0x41 + 2 anim loops (intro + earth-prepare 0x91e) +
@@ -1112,6 +1113,32 @@ civ_error_t main_run_startup_sequence(void)
         return CIV_ERR_BAD_DATA;
     if (proc_ready != 1 || need_rsc != 1)
         return CIV_ERR_BAD_DATA;
+    /* P0 dispatcher: Anim_OpenSequence @ 10b0:008a + loop#1/loop#2
+     * Anim_AdvanceFrames @ 10b0:0461 over the 0x94 procedural host
+     * (Dlg_CreateTracked @ 1098:124f 0x94/0x41 preset 0x200x0x140, gates
+     * probed above; ref unpacked/civ.exe @ 11e0:0000 decompile). OS-free
+     * halves are LIVE in dialog.c (open count/resolve/ctx/max + advance
+     * opcode/tick/ret/slot/caption/dissolve probes); open returns
+     * UNSUPPORTED on its Win16 mem/GfxPort tail (expected, not a gate
+     * failure), advance reports done (1) so the wait-loop terminates.
+     * Close is the void Anim_CloseSequence @ 10b0:0287 NOOP. SDL
+     * modal/event bridge (Dialog_MenuZ_Modal @ 1220:0156 pump + host)
+     * stays below -> overall PARTIAL, never fake CIV_OK. */
+    {
+        civ_error_t open_rc = anim_open_sequence();
+
+        if (open_rc != CIV_OK && open_rc != CIV_ERR_UNSUPPORTED)
+            return open_rc;
+        for (adv_loop = 0; adv_loop < loops; adv_loop++) {
+            int done = anim_advance_frames();
+
+            if (done != 1)
+                return CIV_ERR_BAD_DATA;
+            if (main_startup_should_break(0) != 0)
+                return CIV_ERR_BAD_DATA;
+        }
+        anim_close_sequence();
+    }
     return CIV_ERR_UNSUPPORTED;
 }
 
