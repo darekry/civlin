@@ -4,12 +4,17 @@
 
 #include "win16.h"
 
+#include <errno.h>
 #include <math.h>
 #include <limits.h>
 #include <stdarg.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+
+#include <sys/stat.h>
+#include <sys/types.h>
 
 #include <SDL3/SDL.h>
 
@@ -143,12 +148,11 @@ civ_error_t file_put_char_buffered(int c)
 
 civ_error_t file_emit_char(char c)
 {
-    (void)c;
-    /* TODO: Orig FUN_1000_2cba @ 1000:2cba (File_EmitChar: count -1 then
-     * File_PutCharBuffered @ 1000:2cd8; overflow path of
-     * File_WriteBuffered @ 1000:2e85). Same stream/DOS dependency.
-     * Live twin: file_write_chunk single byte (fwrite). */
-    return CIV_ERR_UNSUPPORTED;
+    /* Orig FUN_1000_2cba @ 1000:2cba (File_EmitChar: count -1 then
+     * File_PutCharBuffered @ 1000:2cd8; overflow path of File_WriteBuffered
+     * @ 1000:2e85). Linux LIVE thin delegate to file_put_char_buffered
+     * (same single-byte overflow shape, buffered stdio). */
+    return file_put_char_buffered((int)(unsigned char)c);
 }
 
 int file_buffered_is_direct(unsigned flags)
@@ -169,7 +173,7 @@ int file_is_text_mode(unsigned flags)
     return ((flags & 0x4000u) != 0u) ? 1 : 0;
 }
 
-/* --- DOS-file primitives (raw INT 21h; all STUB, contracts in sys.h) --- */
+/* --- DOS-file primitives (INT 21h effect port via stdio/POSIX) --- */
 
 /* DAT_1420_0010 / DAT_1420_4e7a images (odblokowanie 2026-10-16):
  * DOS errno words written by Dos_MapError @ 1000:151a on every CF=1 path.
@@ -266,15 +270,36 @@ int dos_is_char_device_bit(unsigned dx)
     return ((dx & 0x80u) != 0u) ? 1 : 0;
 }
 
+static civ_error_t dos_error_from_errno(int e)
+{
+    /* errno -> civ_error_t for dos_* failure paths. NOTE: dos_map_error
+     * stages the DAT_1420_0010/4e7a images and reports CIV_OK = staged
+     * (orig AX 0xffff), so it must NOT be a failure-path return value;
+     * callers stage via (void)dos_map_error(e) then return this mapping:
+     * ENOENT -> NOENT, ENOMEM -> NOMEM, everything else -> IO. */
+    if (e == ENOENT)
+        return CIV_ERR_NOENT;
+    if (e == ENOMEM)
+        return CIV_ERR_NOMEM;
+    return CIV_ERR_IO;
+}
+
 civ_error_t dos_seek(int fd, long offset, int origin)
 {
-    (void)fd;
-    (void)offset;
-    (void)origin;
-    /* TODO: Orig FUN_1000_161c @ 1000:161c (Dos_Seek: INT 21h AH=0x42,
-     * AL=origin, CX:DX=offset; live twin file_seek_wrapper in save.c).
-     * Pure origin kernel: dos_seek_origin_ok below (LIVE). */
-    return CIV_ERR_UNSUPPORTED;
+    /* Orig FUN_1000_161c @ 1000:161c (Dos_Seek: INT 21h AH=0x42, AL=origin,
+     * CX:DX=offset; live twin file_seek_wrapper in save.h). Linux LIVE via
+     * lseek (fseek twin; DOS 0/1/2 == SEEK_SET/SEEK_CUR/SEEK_END, the
+     * 0x4e4e-table bit-0x200 clear has no Linux equivalent). No globals. */
+    off_t r;
+
+    if (fd < 0)
+        return CIV_ERR_RANGE;
+    if (!dos_seek_origin_ok(origin))
+        return CIV_ERR_RANGE;
+    r = lseek(fd, (off_t)offset, origin);
+    if (r == (off_t)-1)
+        { int e = errno; (void)dos_map_error(e); return dos_error_from_errno(e); }
+    return CIV_OK;
 }
 
 int dos_seek_origin_ok(int origin)
@@ -287,14 +312,41 @@ int dos_seek_origin_ok(int origin)
 
 civ_error_t dos_read(int fd, void *buf, unsigned len)
 {
-    (void)fd;
+    /* Orig FUN_1000_1750 @ 1000:1750 (Dos_Read: INT 21h AH=0x3f; live twin
+     * save_file_read @ 1140:019d chunked 0x8000). Linux LIVE via read
+     * (fread twin; 0x8000 chunk shape like save_file_read, EINTR retried;
+     * 0x4e4e-table bit-1 guard via dos_read_is_blocked has no table on
+     * Linux and is skipped, hook 1420:4fc4 + text-mode 0x4000 live one
+     * level up). No globals. */
+    uint8_t *dst;
+    unsigned total = 0;
+
     if (!buf)
         return CIV_ERR_NOENT;
-    /* TODO: Orig FUN_1000_1750 @ 1000:1750 (Dos_Read: INT 21h AH=0x3f;
-     * live twin save_file_read @ 1140:019d in save.c).
-     * Pure guard kernel: dos_read_is_blocked below (LIVE). */
-    (void)len;
-    return CIV_ERR_UNSUPPORTED;
+    if (len == 0)
+        return CIV_OK;
+    if (fd < 0)
+        return CIV_ERR_RANGE;
+    dst = (uint8_t *)buf;
+    while (total < len) {
+        unsigned left = len - total;
+        unsigned want = left > 0x8000u ? 0x8000u : left;
+        ssize_t n = read(fd, dst + total, (size_t)want);
+
+        if (n < 0) {
+            if (errno == EINTR)
+                continue;
+            { int e = errno; (void)dos_map_error(e); return dos_error_from_errno(e); }
+        }
+        if (n == 0)
+            break;
+        total += (unsigned)n;
+        if ((unsigned)n < want)
+            break;
+    }
+    if (total == len)
+        return CIV_OK;
+    return CIV_ERR_TRUNCATED;
 }
 
 int dos_read_is_blocked(unsigned flags)
@@ -307,6 +359,8 @@ int dos_read_is_blocked(unsigned flags)
 
 civ_error_t dos_unlink(const char *path)
 {
+    /* Orig FUN_1000_19a6 @ 1000:19a6 (Dos_Unlink: INT 21h AH=0x41,
+     * DS:DX=path). Linux LIVE via remove (unlink twin). No globals. */
     if (!path)
         return CIV_ERR_NOENT;
     /* TODO: Orig FUN_1000_19a6 @ 1000:19a6 (Dos_Unlink: INT 21h AH=0x41,
@@ -317,13 +371,35 @@ civ_error_t dos_unlink(const char *path)
 
 civ_error_t dos_file_attr(const char *path, int func, int attrs)
 {
+    /* Orig FUN_1000_1f5c @ 1000:1f5c (Dos_FileAttr: INT 21h AH=0x43,
+     * AL=func, CX=attrs). Linux LIVE via stat (get) / chmod (set): func
+     * validated via dos_file_attr_func_ok @ 1000:1f5c; get returns CIV_OK
+     * when stat succeeds (real query, no mutation); set maps DOS 0x01
+     * read-only to owner-write clear/set preserving other mode bits
+     * (File_Open @ 1000:2ad9 uses func 0 probe + func 1 arg 1 restore).
+     * No globals. */
+    struct stat st;
+
     if (!path)
         return CIV_ERR_NOENT;
-    /* TODO: Orig FUN_1000_1f5c @ 1000:1f5c (Dos_FileAttr: INT 21h AH=0x43,
-     * AL=func, CX=attrs). Pure func kernel: dos_file_attr_func_ok (LIVE). */
-    (void)func;
-    (void)attrs;
-    return CIV_ERR_UNSUPPORTED;
+    if (*path == '\0')
+        return CIV_ERR_NOENT;
+    if (!dos_file_attr_func_ok(func))
+        return CIV_ERR_RANGE;
+    if (func == 0) {
+        if (stat(path, &st) == 0)
+            return CIV_OK;
+        { int e = errno; (void)dos_map_error(e); return dos_error_from_errno(e); }
+    }
+    if (stat(path, &st) != 0)
+        { int e = errno; (void)dos_map_error(e); return dos_error_from_errno(e); }
+    if ((attrs & 1) != 0)
+        st.st_mode &= (mode_t) ~(S_IWUSR | S_IWGRP | S_IWOTH);
+    else
+        st.st_mode |= (mode_t)S_IWUSR;
+    if (chmod(path, st.st_mode) == 0)
+        return CIV_OK;
+    { int e = errno; (void)dos_map_error(e); return dos_error_from_errno(e); }
 }
 
 int dos_file_attr_func_ok(int func)
@@ -336,22 +412,41 @@ int dos_file_attr_func_ok(int func)
 
 civ_error_t dos_close(int fd)
 {
-    (void)fd;
-    /* TODO: Orig FUN_1000_1fa6 @ 1000:1fa6 (Dos_Close: INT 21h AH=0x3e +
-     * 0x4e4e-table clear; live twin save_file_close in save.c). */
-    return CIV_ERR_UNSUPPORTED;
+    /* Orig FUN_1000_1fa6 @ 1000:1fa6 (Dos_Close: INT 21h AH=0x3e +
+     * 0x4e4e-table clear; live twin save_file_close in save.h). Linux
+     * LIVE via close (fclose twin; no table clear on Linux). No globals. */
+    if (fd < 0)
+        return CIV_ERR_RANGE;
+    if (close(fd) == 0)
+        return CIV_OK;
+    { int e = errno; (void)dos_map_error(e); return dos_error_from_errno(e); }
 }
 
 civ_error_t dos_is_eof(int fd, int *out_eof)
 {
-    (void)fd;
+    /* Orig FUN_1000_201e @ 1000:201e (Dos_IsEof: 4400-device gate +
+     * 4201/4202/4200 tell/end/restore probe). Linux LIVE via the same
+     * lseek triple (fseek/ftell twin file_seek_wrapper; table/high-water/
+     * char-device gates skipped, tail compare via dos_eof_at_end @
+     * 1000:201e). No globals. */
+    off_t cur;
+    off_t end;
+
     if (!out_eof)
         return CIV_ERR_NOENT;
     *out_eof = 0;
-    /* TODO: Orig FUN_1000_201e @ 1000:201e (Dos_IsEof: 4400-device gate +
-     * 4201/4202/4200 tell/end/restore probe). Needs DOS seeks. Pure tail
-     * compare: dos_eof_at_end below (LIVE). */
-    return CIV_ERR_UNSUPPORTED;
+    if (fd < 0)
+        return CIV_ERR_RANGE;
+    cur = lseek(fd, (off_t)0, SEEK_CUR);
+    if (cur == (off_t)-1)
+        { int e = errno; (void)dos_map_error(e); return dos_error_from_errno(e); }
+    end = lseek(fd, (off_t)0, SEEK_END);
+    if (end == (off_t)-1)
+        { int e = errno; (void)dos_map_error(e); return dos_error_from_errno(e); }
+    if (lseek(fd, cur, SEEK_SET) == (off_t)-1)
+        { int e = errno; (void)dos_map_error(e); return dos_error_from_errno(e); }
+    *out_eof = dos_eof_at_end((long)cur, (long)end);
+    return CIV_OK;
 }
 
 int dos_eof_at_end(long cur, long end)
@@ -383,13 +478,29 @@ civ_error_t dos_truncate(int fd)
 
 civ_error_t dos_open(const char *path, int mode_flags)
 {
+    /* Orig FUN_1000_2c4a @ 1000:2c4a (Dos_Open: INT 21h AH=0x3d, AL=mode
+     * from flags; live twin save_file_open O_RDONLY in save.h). Linux
+     * LIVE existence/readability probe via fopen (no create/truncate like
+     * the orig; mode via dos_open_mode_map @ 1000:2c4a: base 0 -> "rb",
+     * 1/2 -> "r+b"; table word via dos_open_table_word for RE-map
+     * fidelity, no table write on Linux). Opens then closes immediately:
+     * CIV_OK when open succeeded, else dos_map_error(errno). No globals. */
+    int m;
+    const char *fmode;
+    FILE *fp;
+
     if (!path)
         return CIV_ERR_NOENT;
-    /* TODO: Orig FUN_1000_2c4a @ 1000:2c4a (Dos_Open: INT 21h AH=0x3d,
-     * AL=mode from flags; live twin save_file_open O_RDONLY in save.c).
-     * Pure mode/table kernels: dos_open_mode_map/table_word below. */
-    (void)mode_flags;
-    return CIV_ERR_UNSUPPORTED;
+    if (*path == '\0')
+        return CIV_ERR_NOENT;
+    m = dos_open_mode_map(mode_flags);
+    (void)dos_open_table_word(mode_flags);
+    fmode = ((m & 3) == 0) ? "rb" : "r+b";
+    fp = fopen(path, fmode);
+    if (!fp)
+        { int e = errno; (void)dos_map_error(e); return dos_error_from_errno(e); }
+    (void)fclose(fp);
+    return CIV_OK;
 }
 
 int dos_open_mode_map(int flags)
@@ -417,14 +528,41 @@ unsigned dos_open_table_word(int flags)
 
 civ_error_t dos_write(int fd, const void *buf, unsigned len)
 {
-    (void)fd;
+    /* Orig FUN_1000_3fc4 @ 1000:3fc4 (Dos_Write: INT 21h AH=0x40; live
+     * twin save_file_write @ 1140:0245 chunked 0x8000). Linux LIVE via
+     * write (fwrite twin; 0x8000 chunk shape like save_file_write, EINTR
+     * retried; 0x4e4e-table bit-0 guard via dos_write_is_blocked has no
+     * table on Linux and is skipped, hook 1420:4fc8 + text-mode 0x4000
+     * live one level up). No globals. */
+    const uint8_t *src;
+    unsigned total = 0;
+
     if (!buf)
         return CIV_ERR_NOENT;
-    /* TODO: Orig FUN_1000_3fc4 @ 1000:3fc4 (Dos_Write: INT 21h AH=0x40;
-     * live twin save_file_write @ 1140:0245 in save.c).
-     * Pure guard kernel: dos_write_is_blocked below (LIVE). */
-    (void)len;
-    return CIV_ERR_UNSUPPORTED;
+    if (len == 0)
+        return CIV_OK;
+    if (fd < 0)
+        return CIV_ERR_RANGE;
+    src = (const uint8_t *)buf;
+    while (total < len) {
+        unsigned left = len - total;
+        unsigned want = left > 0x8000u ? 0x8000u : left;
+        ssize_t n = write(fd, src + total, (size_t)want);
+
+        if (n < 0) {
+            if (errno == EINTR)
+                continue;
+            { int e = errno; (void)dos_map_error(e); return dos_error_from_errno(e); }
+        }
+        if (n == 0)
+            break;
+        total += (unsigned)n;
+        if ((unsigned)n < want)
+            break;
+    }
+    if (total == len)
+        return CIV_OK;
+    return CIV_ERR_TRUNCATED;
 }
 
 int dos_write_is_blocked(unsigned flags)
@@ -437,12 +575,24 @@ int dos_write_is_blocked(unsigned flags)
 
 civ_error_t dos_ioctl(int fd, int func)
 {
-    (void)fd;
-    (void)func;
-    /* TODO: Orig FUN_1000_4252 @ 1000:4252 (Dos_Ioctl: INT 21h AH=0x44
-     * subfunction dispatch with verr() gate). Console/device only.
-     * Pure whitelist kernel: dos_ioctl_is_direct below (LIVE). */
-    return CIV_ERR_UNSUPPORTED;
+    /* Orig FUN_1000_4252 @ 1000:4252 (Dos_Ioctl: INT 21h AH=0x44
+     * subfunction dispatch with verr() gate). Linux PARTIAL via
+     * isatty/fstat console/device query (no verr/DGROUP on Linux):
+     * non-direct funcs keep CIV_ERR_UNSUPPORTED (no real effect, Fala H);
+     * direct funcs (0/6/7/8/9/10/0xe/0xf via dos_ioctl_is_direct @
+     * 1000:4252) validate fd via fstat (func 0 additionally queries
+     * isatty) and return CIV_OK on a successful query. No globals. */
+    struct stat st;
+
+    if (fd < 0)
+        return CIV_ERR_RANGE;
+    if (!dos_ioctl_is_direct(func))
+        return CIV_ERR_UNSUPPORTED;
+    if (func == 0)
+        (void)isatty(fd);
+    if (fstat(fd, &st) != 0)
+        { int e = errno; (void)dos_map_error(e); return dos_error_from_errno(e); }
+    return CIV_OK;
 }
 
 int dos_ioctl_is_direct(int func)

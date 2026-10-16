@@ -96,13 +96,19 @@ civ_error_t save_save_dialog(char *out_path, size_t cap)
 
 civ_error_t save_save_game(const char *path)
 {
+    /* Orig FUN_1198_00a3 @ 1198:00a3 (Save_SaveGame: "civname+year" filename
+     * via Util_StrAppend @ 1000:363e + Util_IntToDec @ 1000:2928, prompt
+     * via Save_SaveDialog @ 1098:26d4, write via save_serialize @ 10f8:02bd).
+     * Linux LIVE without dialogs: filename head is save_build_filename
+     * (civname filter + year + BC/AD, OS-free); prompts stay STUB
+     * (save_save_dialog @ 1098:26d4 and save_prompt_save @ 1130:0194 keep
+     * CIV_ERR_UNSUPPORTED); write delegates directly to save_serialize
+     * (real .sav file effect, zeros image until live ctx maps). */
     if (!path)
         return CIV_ERR_NOENT;
-    /* TODO: Orig FUN_1198_00a3 @ 1198:00a3 (Save_SaveGame: "civname+year"
-     * filename via Util_StrAppend @ 1000:363e + Util_IntToDec @
-     * 1000:2928, prompt via Save_SaveDialog @ 1098:26d4, write via
-     * save_serialize @ 10f8:02bd). Needs dialogs + live ctx. */
-    return CIV_ERR_UNSUPPORTED;
+    if (*path == '\0')
+        return CIV_ERR_NOENT;
+    return save_serialize(path);
 }
 
 civ_error_t save_sanitize_filename(char *path)
@@ -449,37 +455,93 @@ civ_error_t save_deserialize(const char *path)
 civ_error_t save_pack(const uint8_t **out_image, size_t *out_len)
 {
     /* Save_Pack, Orig FUN_10f8_05da @ 10f8:05da (RLLEncode, called from
-     * save_serialize @ 10f8:02bd). Thin legacy wrapper over the ported
-     * save_rll_encode below (same <0x80 repeat / 0x80|n literal tags, same
-     * 0x7f chunk cap): once save_marshal_fields yields the flat 0x1a2ba
-     * image, packing is save_rll_encode(image, 0x1a2ba, dst, dst_cap,
-     * out_len). Legacy (out_image, out_len) carries no caller dst/cap, so
-     * no trivial delegate fits this signature — heap owner + dst wiring
-     * land with save_serialize. Validates params only; read-only.
-     * TODO: Orig FUN_10f8_05da @ 10f8:05da wrapper delegate once the
-     * marshal flat image + heap owner are wired (ref unpacked/civ.exe). */
+     * save_serialize @ 10f8:02bd). OS-free 1:1 heap-owner wrapper over
+     * save_rll_encode (same <0x80 repeat / 0x80|n literal tags, same 0x7f
+     * chunk cap): builds the canonical 0x1a2ba flat (calloc zeros +
+     * save_marshal_fields @ 10f8:090c reservation, live ctx TODO zeros)
+     * then RLL-encodes into a malloc'd wire (worst-case flat + flat/127 +
+     * 16; scratch 0xa2ba is the GLOBALALLOC RLL window in save_deserialize
+     * @ 10f8:0000, chunk 0x8000 is the save_file_write @ 1140:0245 file
+     * chunking). NOENT on NULL outs, NOMEM on alloc failure, else CIV_OK
+     * with malloc'd wire in *out_image (caller frees with free()) and wire
+     * len in *out_len. No Win16, no globals, no exit(). */
+    uint8_t *flat = NULL;
+    uint8_t *wire = NULL;
+    size_t wire_cap = 0;
+    size_t wire_len = 0;
+    civ_error_t rc;
+
     if (!out_image || !out_len)
         return CIV_ERR_NOENT;
-    return CIV_ERR_UNSUPPORTED;
+    *out_image = NULL;
+    *out_len = 0;
+    flat = (uint8_t *)calloc(1, (size_t)CIV_SAVE_BUF_SIZE);
+    if (!flat)
+        return CIV_ERR_NOMEM;
+    rc = save_marshal_fields(flat, (size_t)CIV_SAVE_BUF_SIZE);
+    if (rc != CIV_OK) {
+        free(flat);
+        return rc;
+    }
+    wire_cap = (size_t)CIV_SAVE_BUF_SIZE +
+        (size_t)CIV_SAVE_BUF_SIZE / 127u + 16u;
+    wire = (uint8_t *)malloc(wire_cap);
+    if (!wire) {
+        free(flat);
+        return CIV_ERR_NOMEM;
+    }
+    rc = save_rll_encode(flat, (size_t)CIV_SAVE_BUF_SIZE, wire, wire_cap,
+                         &wire_len);
+    free(flat);
+    if (rc != CIV_OK) {
+        free(wire);
+        return rc;
+    }
+    *out_image = wire;
+    *out_len = wire_len;
+    return CIV_OK;
 }
 
 civ_error_t save_unpack(const uint8_t *image, size_t len)
 {
     /* Save_Unpack, Orig FUN_10f8_040a @ 10f8:040a (RLLDecode, called from
      * save_deserialize @ 10f8:0000; 0x8000-chunked HMEMCPY in orig, plain
-     * bounds-checked copy here). Thin legacy wrapper over the ported
-     * save_rll_decode below: once the wire bytes are read, decoding is
-     * save_rll_decode(image, len, dst, CIV_SAVE_BUF_SIZE, &flat_len) with
-     * the 0x1a2ba/0x1a2b8/0x18de0 size gate in save_deserialize. Legacy
-     * (image, len) carries no caller dst, so no trivial delegate fits —
-     * dst wiring lands with save_deserialize. Validates params only.
-     * TODO: Orig FUN_10f8_040a @ 10f8:040a wrapper delegate once dst
-     * wiring lands (ref unpacked/civ.exe). */
+     * bounds-checked copy here). OS-free 1:1 validator over save_rll_decode:
+     * decodes the wire into a malloc'd 0x1a2ba flat (scratch 0xa2ba is the
+     * GLOBALALLOC RLL window, chunk 0x8000 is the save_file_read @
+     * 1140:019d file chunking), gates the decoded len against 0x1a2ba
+     * canonical / 0x1a2b8 alt / 0x18de0 small-map, then validates via
+     * save_marshal_fields @ 10f8:090c. Legacy (image, len) carries no
+     * caller dst, so the decoded flat is validated then freed (real effect
+     * is decode + gate + validate). NOENT on NULL, TRUNCATED on empty wire,
+     * BAD_DATA on gate miss, else the marshal result. No Win16, no globals,
+     * no exit(). */
+    uint8_t *flat = NULL;
+    size_t flat_len = 0;
+    civ_error_t rc;
+
     if (!image)
         return CIV_ERR_NOENT;
     if (len == 0)
         return CIV_ERR_TRUNCATED;
-    return CIV_ERR_UNSUPPORTED;
+    flat = (uint8_t *)malloc((size_t)CIV_SAVE_BUF_SIZE);
+    if (!flat)
+        return CIV_ERR_NOMEM;
+    rc = save_rll_decode(image, len, flat, (size_t)CIV_SAVE_BUF_SIZE,
+                         &flat_len);
+    if (rc != CIV_OK) {
+        free(flat);
+        return rc;
+    }
+    if (flat_len != (size_t)CIV_SAVE_BUF_SIZE &&
+        flat_len != (size_t)CIV_SAVE_BUF_ALT &&
+        flat_len != (size_t)CIV_SAVE_BUF_MIN) {
+        free(flat);
+        return CIV_ERR_BAD_DATA;
+    }
+    rc = save_marshal_fields(flat, (size_t)CIV_SAVE_BUF_SIZE);
+    free(flat);
+    return rc;
 }
 
 civ_error_t save_pack_buffer(const uint8_t *src, size_t src_len,
