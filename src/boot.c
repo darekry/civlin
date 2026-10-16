@@ -963,20 +963,24 @@ civ_error_t art_maybe_convert_artwork(void)
 civ_error_t main_run_startup_sequence(void)
 {
     /* Orig: FUN_11e0_0000 @ 11e0:0000 -> Main_RunStartupSequence (full order
-     * 2026-10-16: Dlg_CreateTracked @ 1098:124f (0x94,0x41) + Gfx_StoreDC @
-     * 1098:1104 + Palette_AnimateRange @ 1090:0376 + Anim_OpenSequence @
-     * 10b0:008a + DAT_13e0_001e = 0 + Sound_PlayId @ 1150:00c9 (3,0) +
-     * FILLRECT + Cursor_Set @ 1098:096c + loop#1 Anim_AdvanceFrames @
-     * 10b0:0461 + Anim_CloseSequence @ 10b0:0287 + Sound (1,0) +
-     * [main_startup_should_run_wizard above, g_nMenuChoice @ 12d8:44e2:]
-     * Sys_DrainInput @ 11f0:4ea0 + Anim_OpenSequence (0x91e) +
+     * 2026-10-16, P0c verified: Dlg_CreateTracked @ 1098:124f (0x94,0x41 =
+     * CIV_DLG_INTRO_ID/CIV_DLG_INTRO_FLAGS, see dialog.h: center + show via
+     * dlg_create_should_center/show, preset size via dlg_id_needs_preset_size,
+     * ctl 0x65-0x6e via dlg_ctl_is_tracked_init, push via dlg_tracked_push_off)
+     * + Gfx_StoreDC @ 1098:1104 (Gfx_SetCurrentDC @ 1100:09a9; SDL owner
+     * gfx_store_dc, see video.h) + Palette_AnimateRange @ 1090:0376 +
+     * Anim_OpenSequence @ 10b0:008a + DAT_13e0_001e = 0 + Sound_PlayId @
+     * 1150:00c9 (3,0) + FILLRECT + Cursor_Set @ 1098:096c + loop#1
+     * Anim_AdvanceFrames @ 10b0:0461 + Anim_CloseSequence @ 10b0:0287 +
+     * Sound (1,0) + [main_startup_should_run_wizard above, g_nMenuChoice @
+     * 12d8:44e2:] Sys_DrainInput @ 11f0:4ea0 + Anim_OpenSequence (0x91e) +
      * Anim_RebaseClock @ 10b0:005b (1000) + WorldGen_PrepareEarth @
      * 1108:01bc + loop#2 Advance + Close + Sound (1,0) +
-     * Dlg_DestroyTracked @ 1098:1612 + NewGame_Wizard @ 10e8:0000; else
-     * DestroyTracked only. Dispatcher for MainMenu_WndProc @ 11e0:0221
-     * choices over CIV_MAINMENU_TEXT @ 1420:435b (see mainmenu.h).
-     * SDL modal/event bridge TBD -> stub CIV_ERR_UNSUPPORTED. No globals,
-     * no exit(), read-only. */
+     * Dlg_DestroyTracked @ 1098:1612 (pop via dlg_tracked_pop_count) +
+     * NewGame_Wizard @ 10e8:0000; else DestroyTracked only. Dispatcher for
+     * MainMenu_WndProc @ 11e0:0221 choices over CIV_MAINMENU_TEXT @
+     * 1420:435b (see mainmenu.h). SDL modal/event bridge TBD -> stub
+     * CIV_ERR_UNSUPPORTED. No globals, no exit(), read-only. */
     return CIV_ERR_UNSUPPORTED;
 }
 

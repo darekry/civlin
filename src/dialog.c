@@ -176,19 +176,84 @@ civ_error_t dlg_create_tracked(int dlg_id, unsigned flags)
 {
     (void)dlg_id;
     (void)flags;
-    /* Orig: FUN_1098_124f @ 1098:124f -> Dlg_CreateTracked.
-     * TODO: CREATEDIALOG + MAKEPROCINSTANCE(DLGPROC/CIVDIALOGPROC) +
-     * centering + GETDC/SELECTPALETTE/REALIZEPALETTE copy + push HWND/ctx
-     * onto the tracked stack @ 1420:1ea0, count @ 1420:1ec8 (30+ callers)
-     * -> SDL3 window TBD. */
+    /* Orig: FUN_1098_124f @ 1098:124f -> Dlg_CreateTracked (decompiled P0c:
+     * Cursor_Set(0x81) + CREATEDIALOG + MAKEPROCINSTANCE(DLGPROC @ 1098:16e2 /
+     * CIVDIALOGPROC @ 1098:1838) + preset size for 0x94/0x8f via
+     * dlg_id_needs_preset_size (0026 = 1, 002e = 0x200, 002c = 0x140) +
+     * center via FUN_1098_0b33 @ 1098:0b67 when (flags & 1) + mem_alloc_lock
+     * 0x18 ctx + GETDC + init ctl 0x65-0x6e (0x8f adds 0x323-0x332) +
+     * Gfx_StoreDC @ 1098:1104 + SHOWWINDOW when (flags & 0x40) + 0xec palette
+     * copy via Palette_CopyRange @ 1098:201d + SELECT/REALIZEPALETTE + push
+     * to 1420:1ea0/1ec8, top @ 1420:9948. Dialog 0x94 entry is
+     * Dlg_CreateTracked(0x94,0x41) in Main_RunStartupSequence @ 11e0:0000.
+     * TODO: SDL3 window bridge TBD. OS-free flag/id math lives in
+     * dlg_create_should_center/show + dlg_ctl_is_tracked_init +
+     * dlg_tracked_push_off below. */
     return CIV_ERR_UNSUPPORTED;
 }
 
 void dlg_destroy_tracked(void)
 {
-    /* Orig: FUN_1098_1612 @ 1098:1612 -> Dlg_DestroyTracked.
-     * TODO: DESTROYWINDOW + FREEPROCINSTANCE + GLOBALFREE of the ctx +
-     * pop from 1420:1ea0/1ec8 -> SDL3 TBD. */
+    /* Orig: FUN_1098_1612 @ 1098:1612 -> Dlg_DestroyTracked (decompiled P0c:
+     * DESTROYWINDOW + pop 1420:1ea0/1ec8 via dlg_tracked_pop_count below +
+     * FREEPROCINSTANCE + GLOBALFREE + Mem_DisposePtr @ 1100:060b + refresh
+     * via FUN_1208_14d5; 1420:17aa = 0, 1420:9960 cleared when dying).
+     * TODO: SDL3 TBD. */
+}
+
+int dlg_create_should_center(unsigned flags)
+{
+    /* Orig Dlg_CreateTracked @ 1098:124f: if ((param_2 & 1) != 0)
+     * FUN_1098_0b33 (center + MOVEWINDOW exact). */
+    return ((flags & CIV_DLG_CREATE_CENTER) != 0u) ? 1 : 0;
+}
+
+int dlg_create_should_show(unsigned flags)
+{
+    /* Orig same: if ((param_2 & 0x40) != 0) SHOWWINDOW (0x94 intro passes
+     * 0x41 = center + show). */
+    return ((flags & CIV_DLG_CREATE_SHOW) != 0u) ? 1 : 0;
+}
+
+int dlg_ctl_is_tracked_init(int ctl_id)
+{
+    /* Orig same loop: iVar6 = 0x65; while (<= 0x6e) GETDLGITEM-guarded
+     * SENDMESSAGE 0x30 per ctl. */
+    return (ctl_id >= (int)CIV_DLG_TRACKED_CTL_FIRST &&
+        ctl_id <= (int)CIV_DLG_TRACKED_CTL_LAST) ? 1 : 0;
+}
+
+int dlg_tracked_push_off(int count)
+{
+    /* Orig same push: iVar6 = DAT_1420_1ec8 * 4 (far-pair slots at
+     * 0x1ea0/0x1ea2); DAT_1420_1ec8++. No cap guard in orig. */
+    if (count < 0)
+        return -1;
+    return count * 4;
+}
+
+int dlg_tracked_pop_count(int count)
+{
+    /* Orig Dlg_DestroyTracked @ 1098:1612 pop: DAT_1420_1ec8 += -1 (0 clamps
+     * at empty with DAT_1420_9948 = 0, else the count-2 slot becomes top). */
+    if (count <= 0)
+        return 0;
+    return count - 1;
+}
+
+int dlg_move_extent(int size, int padded)
+{
+    /* Orig FUN_1098_0a0d @ 1098:0a5b exact (local_e - local_12) vs
+     * FUN_1098_0aa4 @ 1098:0ae0 padded ((local_e - local_12) + 1);
+     * FUN_1098_0b33 @ 1098:0b67 is the exact fixed-origin form. */
+    return (padded != 0) ? size + 1 : size;
+}
+
+int dlg_move_should_use_default(int param)
+{
+    /* Orig 0a0d/0aa4 gate: if (param_2 == 0) param_2 = local_14 (same for
+     * param_3/local_12); 0b33 skips the gate (always measured origin). */
+    return (param == 0) ? 1 : 0;
 }
 
 civ_error_t anim_pump_if_active(void)

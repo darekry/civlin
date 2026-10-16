@@ -105,15 +105,86 @@ win16_msg_result_t dialog_ctrl_region_proc(int msg, long wparam, long lparam);
 /* Tracked dialog layer (stubs; dialog ctx stack TBD).
  *
  * Orig: FUN_1098_124f @ 1098:124f -> Dlg_CreateTracked. CREATEDIALOG +
- *   MAKEPROCINSTANCE(DLGPROC/CIVDIALOGPROC) + palette copy (GETDC/
- *   SELECTPALETTE/REALIZEPALETTE) + centering + push HWND/ctx onto the
- *   tracked stack @ 1420:1ea0, count @ 1420:1ec8. 30+ callers.
+ *   MAKEPROCINSTANCE(DLGPROC @ 1098:16e2 / CIVDIALOGPROC @ 1098:1838) +
+ *   palette copy (GETDC/SELECTPALETTE/REALIZEPALETTE, 0xec entries via
+ *   Palette_CopyRange @ 1098:201d) + centering (Dlg_CenterRect @ 11f8:0000
+ *   shape + MOVEWINDOW variants FUN_1098_0a0d @ 1098:0a5b / FUN_1098_0aa4 @
+ *   1098:0ae0 / FUN_1098_0b33 @ 1098:0b67 below) + init ctl 0x65-0x6e
+ *   (GETDLGITEM + Dialog_GetItemRect @ 1100:03ff + SENDMESSAGE 0x30; 0x8f
+ *   adds 0x323-0x332) + Gfx_StoreDC @ 1098:1104 (Gfx_SetCurrentDC @
+ *   1100:09a9) + push HWND/ctx onto the tracked stack @ 1420:1ea0, count @
+ *   1420:1ec8 (top cached @ 1420:9948). 30+ callers (callers/xrefs verified
+ *   2026-10-16: 31 create sites incl. Main_RunStartupSequence @ 11e0:0000
+ *   Dlg_CreateTracked(0x94,0x41), City_OpenCensusView @ 1018:0000,
+ *   Pic_PlayShared @ 1030:0000, HoF_Show @ 1080:0119, MainMenu_WndProc @
+ *   11e0:0221, NewGame_Wizard @ 10e8:0000, Dialog_ShowMessage @ 1220:00d2).
  *   Win16 USER/GDI -> SDL3 window TBD; stub CIV_ERR_UNSUPPORTED.
+ *   Dialog 0x94 lifecycle (Main_RunStartupSequence @ 11e0:0000, decompiled
+ *   this pass): Dlg_CreateTracked(0x94,0x41) + Gfx_StoreDC + Palette_
+ *   AnimateRange @ 1090:0376 + Anim_OpenSequence @ 10b0:008a + Sound_PlayId
+ *   @ 1150:00c9 (3,0) + FILLRECT + Cursor_Set @ 1098:096c + loop
+ *   Anim_AdvanceFrames @ 10b0:0461 + Anim_CloseSequence @ 10b0:0287 +
+ *   Sound (1,0) + [choice 0/2/3: drain + open 0x91e seq + rebase 1000 +
+ *   WorldGen_PrepareEarth @ 1108:01bc + loop#2 + close + Sound (1,0) +
+ *   Dlg_DestroyTracked + NewGame_Wizard @ 10e8:0000; else Destroy only].
  * Orig: FUN_1098_1612 @ 1098:1612 -> Dlg_DestroyTracked. DESTROYWINDOW +
- *   FREEPROCINSTANCE + GLOBALFREE of the ctx + pop from 1420:1ea0/1ec8.
- *   Stub (void). */
+ *   FREEPROCINSTANCE + GLOBALFREE of the ctx + pop from 1420:1ea0/1ec8
+ *   (top restored to count-2 slot, 0 when empty; 1420:17aa = 0,
+ *   1420:9960 cleared when it is the dying ctx) + Mem_DisposePtr @
+ *   1100:060b + refresh via FUN_1208_14d5. 37 destroy sites (mirrors the
+ *   create list + Ship_CloseView @ 1070:02b5 / Replay_CloseView @
+ *   1180:0297 tails). Stub (void).
+ * Orig: FUN_1098_1104 @ 1098:1104 -> Gfx_StoreDC. Thin wrapper over
+ *   Gfx_SetCurrentDC @ 1100:09a9 (save-DCs before draw; restore via
+ *   GfxPort_PresentRect @ 10d0:0854 + ClearActive @ 10d0:09a2). 28+ callers
+ *   incl. the Anim frame-pump every 8. tick (tick & 7) == 0 + MemCopyFar @
+ *   1000:137f, opcodes 5/7/8/9 direct, and Dlg_CreateTracked itself.
+ *   SDL owner is gfx_store_dc (see video.h); dialog side keeps only the
+ *   OS-free flag/id math below (no SDL here).
+ * OS-free math below is LIVE 1:1 on explicit params (no Win16, no globals,
+ * read-only); handle/stack-storage tails stay STUB with TODO Orig. */
 civ_error_t dlg_create_tracked(int dlg_id, unsigned flags);
 void dlg_destroy_tracked(void);
+
+/* P0c tracked-lifecycle constants (Dlg_CreateTracked @ 1098:124f shape). */
+#define CIV_DLG_INTRO_ID 0x94
+#define CIV_DLG_EARTH_CUSTOM_ID 0x8f
+#define CIV_DLG_CREATE_CENTER 0x01u
+#define CIV_DLG_CREATE_SHOW 0x40u
+#define CIV_DLG_INTRO_FLAGS 0x41u
+#define CIV_DLG_TRACKED_CTL_FIRST 0x65
+#define CIV_DLG_TRACKED_CTL_LAST 0x6eu
+#define CIV_DLG_TRACKED_CTX_SIZE 0x18
+#define CIV_DLG_TRACKED_PAL_COUNT 0xec
+
+/* Orig Dlg_CreateTracked @ 1098:124f flag branches -> predicates. 1:1
+ * (param_2 & 1) centers via FUN_1098_0b33, (param_2 & 0x40) SHOWWINDOWs.
+ * No globals. */
+int dlg_create_should_center(unsigned flags);
+int dlg_create_should_show(unsigned flags);
+
+/* Orig same ctl-init loop (iVar6 = 0x65; while (<= 0x6e)) -> predicate.
+ * 1:1 0x65 <= id <= 0x6e (GETDLGITEM-guarded SENDMESSAGE 0x30 per item).
+ * No globals. */
+int dlg_ctl_is_tracked_init(int ctl_id);
+
+/* Orig tracked-stack push/pop @ 1420:1ea0/1ec8 -> index math. 1:1 push slot
+ * byte offset = count * 4 (each entry is a far HWND/ctx pair: off at +0x1ea0,
+ * seg at +0x1ea2); pop count = count - 1 (0 clamps at empty, orig writes
+ * DAT_1420_9948 = 0 when count - 1 == 0 else the count-2 slot). -1 on
+ * count < 0. No globals (storage stays Win16 GLOBALALLOC/Mem_DisposePtr). */
+int dlg_tracked_push_off(int count);
+int dlg_tracked_pop_count(int count);
+
+/* Orig FUN_1098_0a0d @ 1098:0a5b / FUN_1098_0aa4 @ 1098:0ae0 extent half ->
+ * dlg_move_extent. 1:1 exact (0a0d/0b33: w/h) vs padded (0aa4: w+1/h+1 via
+ * (local_e - local_12) + 1). padded != 0 adds one pixel per axis. */
+int dlg_move_extent(int size, int padded);
+
+/* Orig same default-origin gate (param_2 == 0 -> local_14, param_3 == 0 ->
+ * local_12; FUN_1098_0b33 @ 1098:0b67 always uses the measured origin) ->
+ * dlg_move_should_use_default. 1:1 nonzero (1) when param == 0. */
+int dlg_move_should_use_default(int param);
 
 /* --- dialog centering (packet R2) ---
  * Orig: FUN_10a0_xxxx @ 10a0:xxxx -> Dlg_CenterWindow. GETCLIENTRECT +
