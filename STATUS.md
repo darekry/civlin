@@ -154,7 +154,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `config_load_prefs` | STUB | 1008:0b4a, 12d0:0064, 1420:010b | has TODO |
 | `config_save_prefs` | STUB | 1000:116a, 1000:1184, 1008:0bbf, 1420:0113 | has TODO |
 | `boot_run` | LIVE | 1000:11bb, 1000:2826, 1008:0000, 1008:059a, 1008:0b4a, 1008:0d68, 1008:0e99, 1088:0000, 1090:0488, 1098:06f8, 1098:096c, 10b8:0000, 10e8:2d46, 1190:0000, 11e8:0000, 11e8:0337 |  |
-| `boot_shutdown` | LIVE | 1008:0000, 1008:0329, 1008:0d68, 1208:0af1 |  |
+| `boot_shutdown` | LIVE | 1008:0329, 1008:0d68, 12d8:28fa, 12d8:460e |  |
 | `art_maybe_convert_artwork` | LIVE | 1090:0488, 10b8:0000, 10b8:04df, 10b8:062d, 10b8:06a0, 10b8:076a, 10b8:079d, 10b8:0aa8, 10b8:0c1c, 10b8:0ded, 10b8:0e36, 10b8:11bc, 10b8:158c, 10d0:0cfa, 1420:20a9 |  |
 | `main_run_startup_sequence` | STUB | 1008:0329, 1098:124f, 10e8:0000, 1108:0243, 1130:000e, 11e0:0000, 11e0:0221, 1420:435b | has TODO |
 | `config_prefs_defaults` | LIVE | 1008:0b4a, 1008:0bbf, 1150:00c9, 12d0:0064 |  |
@@ -178,6 +178,8 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `main_pump_until_flag_should_continue` | LIVE | 11e8:02a4 |  |
 | `main_pump_timer_tick` | LIVE | 1008:0d68 |  |
 | `boot_timer_proc_interval_ms` | LIVE | 1008:0000, 1008:00cd, 1008:0329, 1008:0d68, 12d8:460e |  |
+| `app_timer_interval_ms` | LIVE | 1008:0329, 1098:06f8, 1098:0948, 12d8:28fa, 1608:008c |  |
+| `menuz_timer_interval_ms` | LIVE | 11e8:02fb, 1220:0156, 1220:0202, 1220:0cfd, 1420:4a41, 1608:008c, 1608:0134 |  |
 | `main_startup_anim_loops` | LIVE | 10b0:008a, 10b0:0461, 10e8:0000, 1108:01bc, 11e0:0000 |  |
 | `main_startup_intro_sound` | LIVE | 1420:3114 |  |
 | `main_startup_stop_sound` | LIVE |  |  |
@@ -461,7 +463,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 |---|---|---|---|
 | `game_init` | LIVE | 1008:0000, 12d8:24ee, 12d8:3b9a, 12d8:42f6, 12d8:42f8, 12d8:42fa, 12d8:42fe, 12d8:4300, 12d8:44e2 |  |
 | `game_new` | STUB | 1028:0000, 10e8:0000 | has TODO |
-| `game_tick` | PARTIAL | 1008:0000, 1008:0329, 1008:0d68, 1088:0000, 1098:0157, 1108:0000, 1208:0af1 | has TODO |
+| `game_tick` | PARTIAL | 1008:0304, 1008:0329, 1008:0d68, 1088:0000, 1098:0157, 1108:0000, 12d8:24ee | has TODO |
 | `game_turn_year_step` | LIVE | 1088:0000, 12d8:42fa |  |
 | `game_turn_should_score` | LIVE |  |  |
 | `game_uprising_due` | LIVE | 1088:0be9, 1110:16c0, 1110:18ce, 11c8:003d |  |
@@ -890,6 +892,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 
 | Function | State | Orig addr | Note |
 |---|---|---|---|
+| `main_max_ticks` | LIVE |  |  |
 | `main` | LIVE |  |  |
 
 ### `src/mainmenu.c`
@@ -926,7 +929,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `map_wndproc_main` | LIVE | 1008:0329, 1008:0d68, 1098:06f8, 10d0:0854, 1110:03e9, 1208:0054, 1208:0af1 |  |
 | `map_wndproc_small` | LIVE | 1110:03ae, 1110:03e9, 1210:0000, 1210:025b, 1210:09b4 |  |
 | `map_wndproc_status` | LIVE | 1088:13d5, 11f8:0278, 1218:0000, 1218:0386, 1218:0801, 1218:0956 |  |
-| `map_timer_proc` | STUB | 1008:0000, 1008:0329, 1008:0d68, 1088:0000, 1208:0af1 | has TODO |
+| `map_timer_proc` | STUB | 1008:0000, 1008:0329, 1008:0d68, 1088:0000, 1208:0054, 1208:0af1 | has TODO |
 | `map_timer_interval_ms` | LIVE | 1008:0000, 1008:0329, 1208:0054, 1208:0af1, 1208:0e7b |  |
 | `map_shutdown` | NOOP |  |  |
 | `wdwstatus_calc_upper_rect` | STUB | 1088:1479, 1218:0956 | has TODO |
@@ -1049,7 +1052,16 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `newgame_civ_count_from_index` | LIVE | 12d8:3b9a |  |
 | `newgame_alive_mask` | LIVE | 12d8:42f8 |  |
 | `newgame_pick_tribe` | STUB | 10e8:0000, 11f8:0080, 1220:0156, 12d8:4300, 1420:2ad2, 1420:2ae5 | has TODO |
-| `tribe_get_name_list` | STUB | 10e8:0000, 10e8:2d46, 1100:078a, 11f8:0080, 1420:2ad2, 1420:2ae5 | has TODO |
+| `tribe_name_count` | LIVE | 11f8:0080 |  |
+| `tribe_leader_count` | LIVE |  |  |
+| `tribe_adj_count` | LIVE |  |  |
+| `tribe_get_name_list` | LIVE | 10e8:0000, 1100:078a, 11f8:0080, 1420:2ad2, 1420:2ae5 |  |
+| `tribe_get_leader_name` | LIVE | 10e8:0000, 11f8:0080 |  |
+| `tribe_get_adjective` | LIVE | 10e8:0000, 11f8:0080 |  |
+| `newgame_unit_font_fixed_count` | LIVE | 10e8:2d46 |  |
+| `newgame_unit_font_alt_count` | LIVE | 10e8:2d46 |  |
+| `newgame_unit_font_fixed_at` | LIVE | 10e8:2d46 |  |
+| `newgame_unit_font_alt_at` | LIVE | 10e8:2d46 |  |
 | `newgame_customize_world` | STUB | 1058:06ab, 1058:081a, 1058:0921, 1058:09f6, 10e8:0000, 1220:0156, 1220:16fd | has TODO |
 | `newgame_custom_world_modal` | STUB | 1058:06ab, 1220:0156, 1220:16fd | has TODO |
 | `newgame_finalize` | PARTIAL | 1028:0000, 10e8:0000, 1150:00c9, 12d8:3b9a, 12d8:42f6, 12d8:42f8, 12d8:42fa, 12d8:4300 | has TODO |
@@ -1290,6 +1302,8 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `sys_base_path` | LIVE | 1228:0004 |  |
 | `sys_yield` | LIVE | 1098:0157, 10b0:0000 |  |
 | `sys_pump_messages` | LIVE | 10b0:0000, 1108:0000, 11c0:0ec2, 11e8:02fb, 1328:0012 |  |
+| `sys_event_requests_quit` | LIVE |  |  |
+| `sys_poll_quit` | LIVE | 1008:0304, 1088:0000, 1098:062f, 1220:0156, 12d8:24ee |  |
 | `sys_wait_for_input` | STUB | 1018:0380, 1018:067b, 1018:0be0, 1018:1d5b, 1018:208f, 1030:0000, 1038:0c1d, 1080:0119, 1080:06ff, 10e8:0000, 1180:0000, 11f0:468c, 11f0:4ea0 | has TODO |
 | `main_pump_message` | STUB | 1008:0329, 1008:0a8d, 1098:0157, 1098:02d1, 1108:0000, 11e8:02fb, 1208:0000, 1608:0134, 1608:013c, 1608:0140 | has TODO |
 | `main_key_to_res_char` | LIVE | 1098:02d1, 1208:0000, 1420:1400, 1420:142c |  |
@@ -1371,17 +1385,17 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 
 | Function | State | Orig addr | Note |
 |---|---|---|---|
-| `title_play_intro` | STUB |  | has TODO |
-| `title_play_anim_loop` | STUB | 1018:0be0, 1018:1d5b, 1018:208f, 1030:0000, 1030:79ce, 1038:0000, 1038:0d09, 1040:068e, 1040:1137, 1080:099b, 1098:124f, 10b8:079d, 1170:0000, 1170:05af, 1170:05ca, 1188:0db8, 1188:123a, 11b8:0f26 | has TODO |
+| `title_play_intro` | STUB | 1030:0000, 1098:1104, 1098:124f, 10b0:008a, 10b0:0287, 10b0:0461, 11e0:0000 | has TODO |
+| `title_play_anim_loop` | PARTIAL | 1018:0be0, 1018:1d5b, 1018:208f, 1030:0000, 1030:79ce, 1038:0000, 1038:0d09, 1040:068e, 1040:1137, 1080:099b, 1098:1104, 1098:124f, 1098:1612, 10b0:005b, 10b0:008a, 10b0:0287, 10b0:0461, 10b8:079d, 1170:0000, 1170:05af, 1170:05ca, 1188:0db8, 1188:123a, 11b8:0f26, 11e0:0000 | has TODO |
 | `title_decode_frame` | STUB | 1018:015d, 1088:1dd0, 1138:0000, 11b0:0000, 11b8:14e5 | has TODO |
 | `pic_decompress_chunk` | LIVE | 10f8:040a, 10f8:05da, 1420:23ce |  |
 | `pic_read_header` | STUB | 10d0:0956, 1140:019d, 1420:2300, 1420:2372 | has TODO |
-| `title_load_opening_frame` | STUB | 1030:0000, 10d0:0956, 1190:0000 | has TODO |
-| `title_event_is_skip` | LIVE | 1030:0000 |  |
-| `title_poll_skip` | LIVE |  |  |
+| `title_load_opening_frame` | STUB | 1030:0000, 10d0:0956, 1190:0000, 11e0:0000 | has TODO |
+| `title_event_is_skip` | LIVE | 1030:0000, 10b0:0461, 11e0:0000 |  |
+| `title_poll_skip` | LIVE | 10b0:0461, 11e0:0000 |  |
 | `title_resolve_asset` | LIVE |  |  |
 | `title_max_ms` | LIVE |  |  |
-| `title_play_intro_sdl` | LIVE | 1030:0000 |  |
+| `title_play_intro_sdl` | LIVE | 1030:0000, 10b0:008a, 10b0:0287, 10b0:0461, 11e0:0000 |  |
 | `title_mplogo_show` | PARTIAL |  |  |
 | `title_dialog_is_intro` | LIVE | 1098:124f, 11e0:0000 |  |
 | `title_seq_is_earth` | LIVE | 10b0:008a |  |

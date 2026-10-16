@@ -67,21 +67,119 @@ civ_error_t newgame_pick_tribe(const civ_newgame_settings_t *ctx, int *civ_out)
     return CIV_ERR_UNSUPPORTED;
 }
 
+/* P2 2026-10-16 dumps (read-only rsc_dump on unpacked/civdata0.rsc;
+ * BE16 count + Pascal walk = rsc_get_blob_string @ 1100:078a shape;
+ * ResMgr/GLOBALLOCK fetch tail stays STUB in res_get_string_copy):
+ *   tribe plurals 0x94 (16) @ file off 6959 (0x1b2f),
+ *   leaders 0x8c (16, empties at NONE slots 0/8) @ file off 6344 (0x18c8),
+ *   adjectives 0x95 (16) @ file off 8851 (0x2293).
+ * Static const (read-only, like worldgen_dir_dx); no globals mutated. */
+const char *const civ_tribe_table[CIV_TRIBE_N] = {
+    "NONE", "Romans", "Babylonians", "Germans", "Egyptians", "Americans",
+    "Greeks", "Indians", "NONE", "Russians", "Zulus", "French", "Aztecs",
+    "Chinese", "English", "Mongols"
+};
+
+const char *const civ_leader_table[CIV_LEADER_N] = {
+    "", "Caesar", "Hammurabi", "Frederick", "Ramesses", "Abe Lincoln",
+    "Alexander", "M.Gandhi", "", "Stalin", "Shaka", "Napoleon", "Montezuma",
+    "Mao Tse Tung", "Elizabeth I", "Genghis Khan"
+};
+
+const char *const civ_tribe_adj_table[CIV_TRIBE_ADJ_N] = {
+    "NONE", "Roman", "Babylonian", "German", "Egyptian", "American",
+    "Greek", "Indian", "NONE", "Russian", "Zulu", "French", "Aztec",
+    "Chinese", "English", "Mongol"
+};
+
+int tribe_name_count(void)
+{
+    /* Orig blob BE count for 0x94 (16 entries, wizard columns i / i+8). */
+    return CIV_TRIBE_N;
+}
+
+int tribe_leader_count(void)
+{
+    /* Orig blob BE count for 0x8c (16, empties at NONE slots 0/8). */
+    return CIV_LEADER_N;
+}
+
+int tribe_adj_count(void)
+{
+    /* Orig blob BE count for 0x95 (16 singular adjectives). */
+    return CIV_TRIBE_ADJ_N;
+}
+
 const char *tribe_get_name_list(int index)
 {
-    (void)index;
-    /* Orig: FUN_11f8_0080 @ 11f8:0080 -> Tribe_GetNameList. Packet I:
-     * seg 1420 dump has no decoded tribe-name block yet (FIRSTMOVE /
-     * PILLAGE / font-map tables also pending via boot_init_unit_font_
-     * tables @ 10e8:2d46), and the 0x94 call-site param meaning is still
-     * TBD (string-table id vs MenuZ buffer length), so no 1:1 table port
-     * is possible. Keeps the NULL stub (also NULL for out-of-range
-     * index); doc extended in newgame.h without breaking this stub.
-     * TODO: Orig Res blob 0x94 entry group (Res_GetStringCopy(0x94,i) /
-     * (0x94,i+8) two-column list) + Res 0x8c leader / 0x95 title dump
-     * needed for the 1:1 table port; ResMgr tail TBD.
+    /* Orig: FUN_11f8_0080 @ 11f8:0080 -> Tribe_GetNameList (Res blob 0x94
+     * entry group via Res_GetStringCopy(0x94, i)/(0x94, i+8) two-column
+     * list in NewGame_Wizard @ 10e8:0000 step 2; ResMgr_GetString @
+     * 1100:078a + Res_GetStringCopy @ 11f8:0080; see newgame.h dump).
+     * OS-free 1:1 on the static table above (0-based; blob N = index+1).
      * Read-only; no globals; no exit(). */
-    return NULL;
+    if (index < 0 || index >= CIV_TRIBE_N)
+        return NULL;
+    return civ_tribe_table[index];
+}
+
+const char *tribe_get_leader_name(int index)
+{
+    /* Orig: Res_GetStringCopy(0x8c, slot) -> 12d8:civ*0x20+0x1da in the
+     * wizard tribe-pick tail. "" at NONE slots 0/8 is the dumped blob
+     * content (not OOR); NULL only on OOR. */
+    if (index < 0 || index >= CIV_LEADER_N)
+        return NULL;
+    return civ_leader_table[index];
+}
+
+const char *tribe_get_adjective(int index)
+{
+    /* Orig: Res_GetStringCopy(0x95, slot) (+ FUN_10d8_0528 plural tail)
+     * in the wizard tribe-pick tail. NULL only on OOR. */
+    if (index < 0 || index >= CIV_TRIBE_ADJ_N)
+        return NULL;
+    return civ_tribe_adj_table[index];
+}
+
+/* P2 2026-10-16: Init_UnitFontTables @ 10e8:2d46 fixed stores (base + alt
+ * branch). Store order follows the decompile; GLOBALLOCK/FUN_10e8_2cc1 /
+ * Gfx_ReplaceIconColor tails stay STUB in boot_init_unit_font_tables
+ * (parallel owner). OS-free 1:1 LIVE here so the wizard entry
+ * (NewGame_Wizard @ 10e8:0000 calls Init_UnitFontTables first) has its
+ * pure bytes without Win16. No globals, no exit(). */
+static const int s_unit_font_fixed[CIV_UNIT_FONT_FIXED_N] = {
+    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+    0xf8, 0xf9, 0xfa, 0xfb, 0xfc, 0xfd, 0xfe, 0xff
+};
+
+static const int s_unit_font_alt[CIV_UNIT_FONT_ALT_N] = {
+    0xff, 0xfb, 0xf9, 0x01, 0x05, 0x04, 0xfc, 0x06,
+    0xfa, 0x02, 0x03, 0xfb, 0x07, 0xf8, 0xf8, 0x00
+};
+
+int newgame_unit_font_fixed_count(void)
+{
+    return CIV_UNIT_FONT_FIXED_N;
+}
+
+int newgame_unit_font_alt_count(void)
+{
+    return CIV_UNIT_FONT_ALT_N;
+}
+
+int newgame_unit_font_fixed_at(int pos)
+{
+    if (pos < 0 || pos >= CIV_UNIT_FONT_FIXED_N)
+        return -1;
+    return s_unit_font_fixed[pos];
+}
+
+int newgame_unit_font_alt_at(int pos)
+{
+    if (pos < 0 || pos >= CIV_UNIT_FONT_ALT_N)
+        return -1;
+    return s_unit_font_alt[pos];
 }
 
 /* Orig: NewGame_Wizard @ 10e8:0000 steps 3/4 -> newgame_customize_world.

@@ -7,8 +7,9 @@
  *   GR_PicRead / LoadGifPicture / PicDecompress : gr_pic.c (1420:2300/2372/23ce)
  *     — candidate frame player for the intro sequence (NOT yet confirmed
  *     which caller drives the pre-menu animation).
- *   Title_PlayAnimLoop @ 1030:0000 (Orig FUN_1030_0000; anim-loop candidate
- *     from title.c:6; drives frames + Sound_PlayId OPENING)
+ *   Pic_PlayShared @ 1030:0000 (Orig FUN_1030_0000; shared PIC/modal player,
+ *     NOT the pre-menu intro loop — see title_play_anim_loop below; Linux
+ *     owner is pic_play_shared in game.h/game.c)
  *   Title_DecodeFrame @ 1018:xxxx (Orig FUN_1018:xxxx wildcard; frame decoder
  *     candidate; same 1018 segment as the 1018:015d caller of
  *     game_append_year_text @ 1088:1dd0 -- see game.h 5-caller chain:
@@ -36,25 +37,36 @@
  * confirmed. */
 civ_error_t title_play_intro(void);
 
-/* Orig: FUN_1030_0000 @ 1030:0000 -> title_play_anim_loop (Title_PlayAnimLoop).
- * CORRECTION 2026-10-15 (verified: size 0x79cd ~31 KB, 13 callers incl.
- * City_ShowTopFive @ 1080:099b, Unit_DoMove @ 1038:0000, City_ProcessDisaster
- * @ 1040:068e, Game score @ 1040:1137 tails, 1170/1188/11b8 families):
- * 1030:0000 is the shared PIC/modal player (Dlg_CreateTracked @ 1098:124f
- * + FILLRECT/FRAMERECT + internal 1030:79ce/7c28/... helpers), NOT the
- * pre-menu intro loop. CONFIRMED 2026-10-16: Ghidra name is Pic_PlayShared
- * @ 1030:0000 with params (city_idx, mode) — mode 1 opens the modal city
- * view, mode 0 runs the background sim tick (incl. the caravan prod-0x1b
- * Trade_DeliverCaravanGoods @ 1038:0d09 call); 13-caller fan-out re-verified
- * (City_DoRevolt @ 11b8:0f26, City_ProcessDisaster @ 1040:068e,
+/* Orig: FUN_1030_0000 @ 1030:0000 -> Pic_PlayShared (NOT Title_PlayAnimLoop).
+ * MAP CORRECTION (verified: size 0x79cd ~31 KB, 13 callers incl.
+ * City_ShowTopFive @ 1080:099b, Unit_DoMove @ 1030:0000? no — @ 1038:0000,
+ * City_ProcessDisaster @ 1040:068e, Game score @ 1040:1137 tails,
+ * 1170/1188/11b8 families): 1030:0000 is the shared PIC/modal player
+ * (Dlg_CreateTracked @ 1098:124f + FILLRECT/FRAMERECT + internal
+ * 1030:79ce/7c28/... helpers), NOT the pre-menu intro loop. CONFIRMED
+ * 2026-10-16: Ghidra name is Pic_PlayShared @ 1030:0000 with params
+ * (city_idx, mode) — mode 1 opens the modal city view (Dlg_CreateTracked @
+ * 1098:124f dialog 0x94 + Gfx_StoreDC @ 1098:1104 save first), mode 0 runs
+ * the background sim tick (incl. the caravan prod-0x1b
+ * Trade_DeliverCaravanGoods @ 1038:0d09 call); 13-caller fan-out
+ * re-verified (City_DoRevolt @ 11b8:0f26, City_ProcessDisaster @ 1040:068e,
  * City_ShowCensusReport @ 1018:1d5b, City_ShowTopFive @ 1080:099b,
  * Demo_ShowDemographics @ 1188:123a, 1018:0be0, 1018:208f, 1040:1137,
  * 1170:0000, 1170:05af, 1170:05ca, 1188:0db8, Unit_DoMove @ 1038:0000);
  * no Art_LoadFrameData @ 10b8:079d frame path inside (city GDI tiles, not
- * RSC frames). Linux owner is pic_play_shared (see game.h/game.c); this
- * stub keeps the intro shape (frames + Sound_PlayId(CIV_SOUND_OPENING) +
- * title_poll_skip()) until the true intro entry is isolated. Win16 frame
- * present -> stub CIV_ERR_UNSUPPORTED. */
+ * RSC frames). Linux owner is pic_play_shared (see game.h/game.c); the
+ * mode split itself is LIVE there (pic_mode_is_modal/pic_mode_is_sim).
+ * This title_play_anim_loop symbol keeps the intro shape (frames +
+ * Sound_PlayId(CIV_SOUND_OPENING) + title_poll_skip()) until the true
+ * intro entry is isolated — it is NOT the Orig 1030:0000 mapping. PARTIAL:
+ * OS-free intro gates below are LIVE 1:1 (title_dialog_is_intro 0x94 +
+ * title_seq_is_earth 0x91e + title_intro_should_continue adv==0, ref
+ * unpacked/civ.exe Main_RunStartupSequence @ 11e0:0000 + Anim_OpenSequence
+ * @ 10b0:008a / Anim_AdvanceFrames @ 10b0:0461); the Win16 modal tails
+ * (Dlg_CreateTracked @ 1098:124f / Dlg_DestroyTracked @ 1098:1612 +
+ * Gfx_StoreDC @ 1098:1104 + Anim_CloseSequence @ 10b0:0287 +
+ * Anim_RebaseClock @ 10b0:005b owners in dialog.c/video.c) stay TODO ->
+ * CIV_ERR_UNSUPPORTED. */
 civ_error_t title_play_anim_loop(void);
 
 /* Orig: FUN_1018_xxxx @ 1018:xxxx -> title_decode_frame (Title_DecodeFrame).
@@ -87,15 +99,17 @@ civ_error_t pic_read_header(const uint8_t *src, size_t len,
 
 /* Orig: FUN_1010_xxxx @ 1010:xxxx / FUN_1020_xxxx @ 1020:xxxx spare ->
  * title_load_opening_frame (Title_LoadOpeningFrame). Frame fetch feeding
- * Title_DecodeFrame @ 1018:xxxx + Title_PlayAnimLoop @ 1030:0000 +
+ * Title_DecodeFrame @ 1018:xxxx + Main_RunStartupSequence @ 11e0:0000
+ * loop#1 (Anim pump; Pic_PlayShared @ 1030:0000 is separate) +
  * Sound_PlayId(CIV_SOUND_OPENING)=OPENING.wav (see audio.h). Stub: needs
  * RSC/NE-resource frame source (RSC entry vs NE bitmap, cf. rsc_loader.h
  * ResMgr_LoadRsc @ 1190:0000) + GfxPort_SetActive @ 10d0:0956 select
  * (cf. video.h). Returns CIV_ERR_UNSUPPORTED. */
 civ_error_t title_load_opening_frame(unsigned frame_index);
 
-/* Orig Title_PlayAnimLoop @ 1030:0000 skip poll (key/mouse/quit each frame;
- * shared PIC/modal player Pic_PlayShared @ 1030:0000 shape, see above) ->
+/* Orig Main_RunStartupSequence @ 11e0:0000 intro-loop skip poll (key/mouse/
+ * quit each Anim_AdvanceFrames @ 10b0:0461 tick; same per-frame shape as
+ * the Pic_PlayShared @ 1030:0000 modal pump, see above) ->
  * title_event_is_skip. OS-free 1:1 predicate over the SDL3 event type:
  * QUIT / KEY_DOWN / MOUSE_BUTTON_DOWN -> 1 (skip), else 0. No SDL calls,
  * no globals, no exit(), C17. */
@@ -106,7 +120,10 @@ int title_event_is_skip(uint32_t ev_type);
  * title_event_is_skip above). */
 int title_poll_skip(void);
 
-/* SDL3 intro player (Title_PlayAnimLoop @ 1030:0000 shape): MPLOGO.BMP
+/* SDL3 intro player (Main_RunStartupSequence @ 11e0:0000 loop#1 shape:
+ * Dlg_CreateTracked(0x94,0x41) host + Anim_OpenSequence @ 10b0:008a +
+ * Anim_AdvanceFrames @ 10b0:0461 pump + Anim_CloseSequence @ 10b0:0287;
+ * distinct from the Pic_PlayShared @ 1030:0000 modal shape): MPLOGO.BMP
  * frame (civ1win/MPLOGO.BMP, read-only; procedural emblem when missing)
  * + Sound_PlayId(CIV_SOUND_OPENING)=OPENING.wav (see audio.h; silent when
  * missing) + title_poll_skip(). Fade-in + float + sweep + starfield;

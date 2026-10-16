@@ -105,14 +105,72 @@ int newgame_alive_mask(int civ_count);
  * tribe list in NewGame_Wizard @ 10e8:0000 step 2 over text 1420:2ad2 +
  * 1420:2ae5 "_Custom"; ResMgr_GetString @ 1100:078a + Res_GetStringCopy
  * @ 11f8:0080; see res_blob_entry_kind()/RES_BLOB_TRIBE in rsc_loader.h).
- * OS-free string table (segment 1420 dump TBD 2026-10-15: no tribe-name
- * block decoded yet, so no 1:1 table port possible; FIRSTMOVE/PILLAGE/
- * font-map tables also pending via boot_init_unit_font_tables @
- * 10e8:2d46): index selects the tribe, returns the NUL-terminated name,
- * NULL when out of range or not yet dumped. Packet I scope: doc-only
- * extension; stub body in newgame.c untouched (still returns NULL).
- * Read-only. */
+ * DUMP 2026-10-16 (rsc_dump read-only on unpacked/civdata0.rsc, BE16 count
+ * + Pascal walk = rsc_get_blob_string @ 1100:078a shape):
+ *   0x94 tribe plurals (16) @ file off 6959 (0x1b2f): NONE Romans
+ *     Babylonians Germans Egyptians Americans Greeks Indians NONE Russians
+ *     Zulus French Aztecs Chinese English Mongols (two wizard columns are
+ *     entries i and i+8, i = 1..count+1 1-based blob N).
+ *   0x8c leaders (16) @ file off 6344 (0x18c8): "" Caesar Hammurabi
+ *     Frederick Ramesses "Abe Lincoln" Alexander "M.Gandhi" "" Stalin Shaka
+ *     Napoleon Montezuma "Mao Tse Tung" "Elizabeth I" "Genghis Khan"
+ *     (empties at the two NONE slots 0/8 align with the tribe table above;
+ *     wizard copies via Res_GetStringCopy(0x8c, slot) to 12d8:civ*0x20+0x1da).
+ *   0x95 adjectives (16) @ file off 8851 (0x2293): NONE Roman Babylonian
+ *     German Egyptian American Greek Indian NONE Russian Zulu French Aztec
+ *     Chinese English Mongol (wizard Res_GetStringCopy(0x95, slot) plural
+ *     tail via FUN_10d8_0528).
+ * Tables below are the OS-free 1:1 port (static const, read-only, no
+ * Win16, no globals mutated, no exit()); ResMgr/GLOBALLOCK fetch tail
+ * stays in res_get_string_copy STUB (see rsc_loader.h ownership note).
+ * tribe_get_name_list is LIVE: 0-based index into the 16-entry tribe
+ * table, NULL when out of range. */
 const char *tribe_get_name_list(int index);
+#define CIV_TRIBE_N 16
+#define CIV_LEADER_N 16
+#define CIV_TRIBE_ADJ_N 16
+extern const char *const civ_tribe_table[CIV_TRIBE_N];
+extern const char *const civ_leader_table[CIV_LEADER_N];
+extern const char *const civ_tribe_adj_table[CIV_TRIBE_ADJ_N];
+/* Counts (1:1 blob BE counts @ 11f8:0080). */
+int tribe_name_count(void);
+int tribe_leader_count(void);
+int tribe_adj_count(void);
+/* 0x8c leader for the same 0-based slot ("" at NONE slots 0/8, NULL OOR).
+ * Orig: Res_GetStringCopy @ 11f8:0080 (0x8c slot) in the wizard
+ * tribe-pick tail @ 10e8:0000. */
+const char *tribe_get_leader_name(int index);
+/* 0x95 adjective for the same 0-based slot (NULL OOR).
+ * Orig: Res_GetStringCopy @ 11f8:0080 (0x95 slot) in the wizard
+ * tribe-pick tail @ 10e8:0000. */
+const char *tribe_get_adjective(int index);
+/* --- P2 2026-10-16: Init_UnitFontTables @ 10e8:2d46 fixed bytes ---
+ * Orig Init_UnitFontTables @ 10e8:2d46 (civ.exe, x86:LE:16:Protected Mode),
+ * decompiled this pass: GLOBALLOCK font resource + FUN_10e8_2cc1 distance
+ * picks for FIRSTMOVE @ 1420:45fc / PILLAGE @ 1420:4606 / font-map loop
+ * (Win16 GLOBALLOCK/UNLOCK + Gfx_ReplaceIconColor tails -> STUB in
+ * boot_init_unit_font_tables, owned by the parallel agent, not redeclared
+ * here) + two OS-free fixed stores ported below LIVE 1:1 (no Win16, no
+ * globals, read-only):
+ *   base (always): 45be=0 45c2=1 45c0=2 45c4=3 45bf=4 45c3=5 45c1=6 45c5=7
+ *     45c6=0xf8 45ca=0xf9 45c8=0xfa 45cc=0xfb 45c7=0xfc 45cb=0xfd
+ *     45c9=0xfe 45cd=0xff (16 B).
+ *   alt (DAT_1420_17a8 != 0 branch): 45ee=0xff 45ef=0xfb 45f0=0xf9 45f1=1
+ *     45f2=5 45f3=4 45f4=0xfc 45f5=6 45f6=0xfa 45f7=2 45f8=3 45f9=0xfb
+ *     45fa=7 45fb=0xf8 45fc=0xf8 45fd=0 (16 B).
+ * Order below follows the decompile store order. No exit(), C17. */
+#define CIV_UNIT_FONT_FIXED_N 16
+#define CIV_UNIT_FONT_ALT_N 16
+/* Orig Init_UnitFontTables @ 10e8:2d46 base store count. */
+int newgame_unit_font_fixed_count(void);
+/* Orig Init_UnitFontTables @ 10e8:2d46 alt store count. */
+int newgame_unit_font_alt_count(void);
+/* Byte at 0-based position in the base store, -1 on OOR.
+ * Orig Init_UnitFontTables @ 10e8:2d46 (base). */
+int newgame_unit_font_fixed_at(int pos);
+/* Byte at 0-based position in the alt store, -1 on OOR.
+ * Orig Init_UnitFontTables @ 10e8:2d46 (alt branch). */
+int newgame_unit_font_alt_at(int pos);
 
 /* Orig: NewGame_Wizard @ 10e8:0000 step 2 -> newgame_pick_tribe.
  * Text 1420:2ad2 ("Pick your tribe...") + 1420:2ae5 ("_Custom.") plus the

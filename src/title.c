@@ -1,6 +1,10 @@
 /* Title / intro: SDL3 MPLOGO.BMP + OPENING.wav player.
  *
- * Orig anchors in title.h (Title_PlayAnimLoop @ 1030:0000,
+ * Orig anchors in title.h (Pic_PlayShared @ 1030:0000 = Orig FUN_1030_0000,
+ * shared modal player, NOT the intro loop; Main_RunStartupSequence @
+ * 11e0:0000 loop#1 = the true intro driver via Anim_OpenSequence @
+ * 10b0:008a / Anim_AdvanceFrames @ 10b0:0461 / Anim_CloseSequence @
+ * 10b0:0287 + Dlg_CreateTracked @ 1098:124f + Gfx_StoreDC @ 1098:1104;
  * Title_DecodeFrame @ 1018:xxxx, gr_pic.c LoadGifPicture/GR_PicRead @
  * 1420:2300/2372/23ce, Sound_PlayId @ 1150:00c9 SI=3 -> 0x83 OPENING.wav).
  * Frame source note: MPLOGO.BMP has NO filename string in the binary (NE
@@ -20,11 +24,17 @@
 
 #include "audio.h"
 #include "gfx_indexed.h"
+#include "sys.h"
 
 civ_error_t title_play_intro(void)
 {
-    /* TODO: confirm frame player (candidates: FUN_1030_0000 anim loop,
-     * FUN_1018_* callers, gr_pic.c LoadGifPicture/GR_PicRead), then
+    /* TODO: confirm frame player (Main_RunStartupSequence @ 11e0:0000 loop#1:
+     * Dlg_CreateTracked(0x94,0x41) @ 1098:124f host + Anim_OpenSequence @
+     * 10b0:008a + Anim_AdvanceFrames @ 10b0:0461 pump + Anim_CloseSequence @
+     * 10b0:0287 + Gfx_StoreDC @ 1098:1104 save-first; Pic_PlayShared @
+     * 1030:0000 is the separate shared modal player, NOT this intro —
+     * see title_play_anim_loop above; FUN_1018_* callers / gr_pic.c
+     * LoadGifPicture/GR_PicRead are frame-decode candidates), then
      * Sound_PlayId(3)=OPENING.wav + frame loop with title_poll_skip().
      * See title_play_anim_loop / title_decode_frame below (packet C).
      * SDL3 path is title_play_intro_sdl() below (needs win/ren, so the
@@ -34,10 +44,29 @@ civ_error_t title_play_intro(void)
 
 civ_error_t title_play_anim_loop(void)
 {
-    /* TODO: Orig FUN_1030_0000 @ 1030:0000 (Title_PlayAnimLoop): frame loop
-     * with Sound_PlayId(CIV_SOUND_OPENING)=OPENING.wav + title_poll_skip().
-     * Frame present (Win16) -> stub. SDL3 loop lives in
-     * title_play_intro_sdl() below. */
+    /* Orig FUN_1030_0000 @ 1030:0000 = Pic_PlayShared (shared PIC/modal
+     * player, NOT the intro loop — see title.h map correction; Linux owner
+     * pic_play_shared in game.h/game.c with the LIVE mode split in
+     * pic_mode_is_modal/pic_mode_is_sim). PARTIAL: OS-free intro gates
+     * below are LIVE 1:1 (ref unpacked/civ.exe Main_RunStartupSequence @
+     * 11e0:0000 + Anim_OpenSequence @ 10b0:008a / Anim_AdvanceFrames @
+     * 10b0:0461 decompiles); the Win16 modal tails stay stubbed.
+     * TODO: Orig Pic_PlayShared @ 1030:0000 modal tails (Dlg_CreateTracked
+     * @ 1098:124f dialog 0x94 + Dlg_DestroyTracked @ 1098:1612 +
+     * Gfx_StoreDC @ 1098:1104 save-first + Anim_CloseSequence @ 10b0:0287
+     * + Anim_RebaseClock @ 10b0:005b owners in dialog.c/video.c + GDI
+     * FILLRECT/FRAMERECT + 1030:79ce/7c28/... tile helpers) -> SDL3 bridge
+     * TBD. Frame present (Win16) -> CIV_ERR_UNSUPPORTED. SDL3 intro loop
+     * lives in title_play_intro_sdl() below. */
+    int is_intro_host;
+    int is_earth_seq;
+    int keep_on_busy;
+
+    is_intro_host = title_dialog_is_intro(0x94);
+    is_earth_seq = title_seq_is_earth(0x91e);
+    keep_on_busy = title_intro_should_continue(0);
+    if (is_intro_host == 0 || is_earth_seq == 0 || keep_on_busy == 0)
+        return CIV_ERR_BAD_DATA;
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -117,7 +146,9 @@ civ_error_t title_load_opening_frame(unsigned frame_index)
     (void)frame_index;
     /* TODO: Orig FUN_1010_xxxx @ 1010:xxxx / FUN_1020_xxxx @ 1020:xxxx
      * spare (Title_LoadOpeningFrame): frame fetch feeding Title_DecodeFrame
-     * @ 1018:xxxx + Title_PlayAnimLoop @ 1030:0000 + Sound_PlayId
+     * @ 1018:xxxx + Main_RunStartupSequence @ 11e0:0000 loop#1 (Anim pump;
+     * Pic_PlayShared @ 1030:0000 is the separate shared modal player) +
+     * Sound_PlayId
      * (CIV_SOUND_OPENING)=OPENING.wav (see audio.h). Needs RSC/NE-resource
      * frame source (cf. rsc_loader.h ResMgr_LoadRsc @ 1190:0000) +
      * GfxPort_SetActive @ 10d0:0956 select (see video.h). MPLOGO.BMP has
@@ -127,8 +158,10 @@ civ_error_t title_load_opening_frame(unsigned frame_index)
 
 int title_event_is_skip(uint32_t ev_type)
 {
-    /* Orig Title_PlayAnimLoop @ 1030:0000 per-frame skip check (key/mouse/
-     * quit; Pic_PlayShared @ 1030:0000 shape, see title.h). OS-free 1:1:
+    /* Orig Main_RunStartupSequence @ 11e0:0000 intro-loop per-frame skip
+     * check (key/mouse/quit each Anim_AdvanceFrames @ 10b0:0461 tick; same
+     * shape as the Pic_PlayShared @ 1030:0000 modal pump, see title.h).
+     * OS-free 1:1:
      * QUIT / KEY_DOWN / MOUSE_BUTTON_DOWN -> skip. No SDL calls. */
     if (ev_type == SDL_EVENT_QUIT)
         return 1;
@@ -141,8 +174,9 @@ int title_event_is_skip(uint32_t ev_type)
 
 int title_poll_skip(void)
 {
-    /* Skippable-intro poll (orig Title_PlayAnimLoop checks key/mouse each
-     * frame). 1 == user asked to skip (keydown/mousedown/quit), 0 == keep
+    /* Skippable-intro poll (orig Main_RunStartupSequence @ 11e0:0000 loop#1
+     * checks key/mouse each Anim_AdvanceFrames @ 10b0:0461 tick). 1 == user
+     * asked to skip (keydown/mousedown/quit), 0 == keep
      * playing. Consumes the polled events (intro owns the loop). Drains
      * via title_event_is_skip above (kernel stays testable without SDL
      * pump). */
@@ -218,7 +252,9 @@ static unsigned title_max_ms(void)
 
 civ_error_t title_play_intro_sdl(SDL_Window *win, SDL_Renderer *ren)
 {
-    /* SDL3 intro (Title_PlayAnimLoop @ 1030:0000 shape): MPLOGO.BMP frame
+    /* SDL3 intro (Main_RunStartupSequence @ 11e0:0000 loop#1 shape: dialog
+     * 0x94 host + Anim_OpenSequence @ 10b0:008a / AdvanceFrames @ 10b0:0461
+     * pump; NOT the Pic_PlayShared @ 1030:0000 modal shape): MPLOGO.BMP frame
      * + Sound_PlayId(CIV_SOUND_OPENING)=OPENING.wav + title_poll_skip().
      * Animation = fade-in + gentle float + gold sweep + twinkling
      * starfield + blinking prompt; skippable any time. Returns CIV_OK on
@@ -235,6 +271,7 @@ civ_error_t title_play_intro_sdl(SDL_Window *win, SDL_Renderer *ren)
     Uint64 t0 = 0;
     unsigned max_ms = 0;
     unsigned frame = 0;
+    unsigned long last_tick = 0;
     civ_error_t audio_rc = CIV_ERR_UNSUPPORTED;
     int audio_started = 0;
     int skipped = 0;
@@ -283,9 +320,15 @@ civ_error_t title_play_intro_sdl(SDL_Window *win, SDL_Renderer *ren)
     max_ms = title_max_ms();
     t0 = SDL_GetTicks();
     frame = 0;
+    /* U1: frame clock = oryginalne ticki gry (Sys_GetTickScaled @ 1100:02e1,
+     * GETTICKCOUNT * 60 / 1000; ta sama jednostka co okresy opkodow Anim @
+     * 10b0:0461 i seed Rng_Init @ 11c8:0000). Jeden tick = jedna klatka;
+     * wall-clock (SDL_GetTicks) zostaje tylko na koniec audio/limity. */
+    last_tick = sys_get_tick_scaled();
     for (;;) {
         Uint64 now = 0;
         unsigned elapsed = 0;
+        unsigned long now_tick = 0;
         float cx = 0.0f;
         float cy = 0.0f;
         int tri = 0;
@@ -297,6 +340,12 @@ civ_error_t title_play_intro_sdl(SDL_Window *win, SDL_Renderer *ren)
             skipped = 1;
             break;
         }
+        now_tick = sys_get_tick_scaled();
+        if (now_tick == last_tick) {
+            SDL_Delay(1);
+            continue;
+        }
+        last_tick = now_tick;
         now = SDL_GetTicks();
         elapsed = (unsigned)(now - t0);
         if (audio_started) {
@@ -411,7 +460,6 @@ civ_error_t title_play_intro_sdl(SDL_Window *win, SDL_Renderer *ren)
         }
 
         SDL_RenderPresent(ren);
-        SDL_Delay(16);
         frame++;
     }
 
