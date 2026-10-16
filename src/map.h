@@ -851,18 +851,6 @@ int smmap_click_tile_delta(int rect_lo, int rect_hi, int click, int scale);
  * Map_RefreshAllViews @ 1110:03e9 STUB). */
 int smmap_center_target(int view, int delta);
 
-/* Orig SmMap_CenterOnClick @ 1210:056e delta -> smmap_click_tile_delta.
- * 1:1 ((lo+hi)/2 - click)/scale (x86 IDIV trunc toward zero, same as C
- * /). lo/hi to 1420:b3cc/b3d0 (X) lub b3ce/b3d2 (Y); scale to
- * DAT_1410_0000 (dump 2). scale == 0 -> 0 (Linux guard; orig faulted
- * DIV0). */
-int smmap_click_tile_delta(int rect_lo, int rect_hi, int click, int scale);
-
-/* Orig same recenter -> smmap_center_target. 1:1 view - delta (view to
- * DAT_1330_4010 (X) lub 1330:400e (Y); wynik wchodzi do
- * Map_RefreshAllViews @ 1110:03e9 STUB). */
-int smmap_center_target(int view, int delta);
-
 /* Orig DAT_1410_0000 (dump: 02 00) -> smmap_click_scale. Zwraca skale
  * px-na-kafel uzywana w delcie powyzej (2). */
 int smmap_click_scale(void);

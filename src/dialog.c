@@ -85,16 +85,36 @@ void dialog_ctrl_free(void)
 civ_error_t dialog_ctrl_radio_set(int first_id, int last_id, int selected_id)
 {
     /* Orig: FUN_1058_0e7f @ 1058:0e7f -> Ctrl_RadioGroupSetSel.
-     * OS-free selection-index math ported 1:1 (empty/inverted range and
-     * out-of-range selection rejected); the BM_SETCHECK fan-out over
+     * OS-free selection-index math ported 1:1 via dialog_ctrl_radio_count /
+     * dialog_ctrl_radio_index above (empty/inverted range and out-of-range
+     * selection rejected with RANGE); the BM_SETCHECK fan-out over
      * first..last via SendDlgItemMessage stays Win16 -> stub. */
-    if (last_id < first_id)
+    int n = dialog_ctrl_radio_count(first_id, last_id);
+    int idx = dialog_ctrl_radio_index(first_id, selected_id);
+
+    if (n <= 0)
         return CIV_ERR_RANGE;
-    if (selected_id < first_id || selected_id > last_id)
+    if (idx < 0 || idx >= n)
         return CIV_ERR_RANGE;
     /* TODO: SendDlgItemMessage(hDlg, id in first..last, BM_SETCHECK,
      * selected ? 1 : 0) -> SDL3 radio-group bridge TBD. */
     return CIV_ERR_UNSUPPORTED;
+}
+
+int dialog_ctrl_radio_count(int first_id, int last_id)
+{
+    /* Orig: FUN_1058_0e7f @ 1058:0e7f -> Ctrl_RadioGroupSetSel count half
+     * (BM_SETCHECK fan-out over first..last). OS-free 1:1, no Win16. */
+    if (last_id < first_id)
+        return 0;
+    return last_id - first_id + 1;
+}
+
+int dialog_ctrl_radio_index(int first_id, int selected_id)
+{
+    /* Orig: FUN_1058_0e7f @ 1058:0e7f -> Ctrl_RadioGroupSetSel index half
+     * (zero-based slot for the SendDlgItemMessage loop). OS-free 1:1. */
+    return selected_id - first_id;
 }
 
 win16_msg_result_t dialog_ctrl_paint_button(int msg, long wparam, long lparam)
@@ -1147,6 +1167,16 @@ int dialog_menuz_index_to_id(int index)
     return CIV_DIALOG_MENUZ_BASE_ID + index;
 }
 
+int dialog_menuz_preselect_ok(int preselect, int count)
+{
+    /* Orig: Dialog_MenuZ_Modal @ 1220:0156 preselect gate (DAT_1418_0002):
+     * 500+preselect preselected via Ctrl_RadioGroupSetSel @ 1058:0e7f;
+     * OOR skips preselect (skip-disabled scan via local_44+1). */
+    if (count <= 0)
+        return 0;
+    return (preselect >= 0 && preselect < count) ? 1 : 0;
+}
+
 int text_align_x(int left, int right, int text_w, int format)
 {
     /* Orig FUN_1098_0ed1 @ 1098:0ed1 -> Text_DrawAligned horizontal math.
@@ -1473,6 +1503,20 @@ int diplo_has_embassy(int flags)
 {
     /* Orig embassy-bit (& 0x40) message gate in PostContact/ProcessTurn. */
     return (flags & 0x40) != 0 ? 1 : 0;
+}
+
+int diplo_is_war(int flags)
+{
+    /* Orig Diplo_SetPeace @ 1168:0dda / Diplo_SetWar @ 1168:0e8e war-bit
+     * (& 0x20): peace set clears it, war path keeps it. */
+    return (flags & 0x20) != 0 ? 1 : 0;
+}
+
+int diplo_is_seen(int flags)
+{
+    /* Orig Diplo_ProcessTurn @ 1168:0000 war-end sweep (& 0x10 seen bit
+     * both dirs via diplo_war_end_clear). */
+    return (flags & 0x10) != 0 ? 1 : 0;
 }
 
 int diplo_apply_peace(int cur)
@@ -2260,6 +2304,20 @@ int anim_opcode_is_anim(int op)
     return (op == 12 || op == 13) ? 1 : 0;
 }
 
+int anim_opcode_is_frame_load(int op)
+{
+    /* Orig Anim_AdvanceFrames @ 10b0:0461 case 6: frame-load via
+     * Art_LoadFrameData @ 10b8:079d + Art_PortDataToBitmap @ 10b8:0e36. */
+    return (op == 6) ? 1 : 0;
+}
+
+int anim_opcode_is_scroll(int op)
+{
+    /* Orig Anim_AdvanceFrames @ 10b0:0461 case 11: timed scroll-blit
+     * ((tick-start)%len == 0 gate + FUN_1008_0df0/FUN_10d0_03fa). */
+    return (op == 11) ? 1 : 0;
+}
+
 int anim_tick_needs_store(long tick)
 {
     /* Orig frame-pump head: (*(tick & 7)) == 0 -> Gfx_StoreDC @
@@ -2870,6 +2928,15 @@ int pedia_kind_from_selector(int sel)
     if (sel < 0 || sel > 4)
         return -1;
     return sel + 1;
+}
+
+int pedia_res_from_selector(int sel)
+{
+    /* Orig Pedia_ShowByCategory @ 1020:0000 title Res select: 0x82 + sel
+     * (same Res ids as dialog_res_list_spec @ 1068:0295). */
+    if (sel < 0 || sel > 4)
+        return -1;
+    return 0x82 + sel;
 }
 
 int pedia_dlg_id(void)

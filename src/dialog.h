@@ -86,6 +86,13 @@ civ_error_t dialog_menuz(const char *title, const char *items_text,
 civ_error_t dialog_ctrl_register(void);
 void dialog_ctrl_free(void);
 civ_error_t dialog_ctrl_radio_set(int first_id, int last_id, int selected_id);
+/* Orig: FUN_1058_0e7f @ 1058:0e7f -> Ctrl_RadioGroupSetSel count/index halves.
+ * 1:1 OS-free: count = last - first + 1 (slots in the BM_SETCHECK fan-out),
+ * index = selected - first (zero-based slot for SendDlgItemMessage). count
+ * <= 0 on empty/inverted range; index OOR when < 0 or >= count (caller maps
+ * to RANGE like dialog_ctrl_radio_set above). No Win16, no globals. */
+int dialog_ctrl_radio_count(int first_id, int last_id);
+int dialog_ctrl_radio_index(int first_id, int selected_id);
 win16_msg_result_t dialog_ctrl_paint_button(int msg, long wparam, long lparam);
 win16_msg_result_t dialog_ctrl_paint_static(int msg, long wparam, long lparam);
 win16_msg_result_t dialog_ctrl_paint_user(int msg, long wparam, long lparam);
@@ -779,6 +786,13 @@ int dialog_menuz_id_to_index(int button_id);
  * Returns 500 + index, or -1 when index < 0. */
 int dialog_menuz_index_to_id(int index);
 
+/* Orig: Dialog_MenuZ_Modal @ 1220:0156 preselect gate (DAT_1418_0002).
+ * 1:1 OS-free: nonzero (1) when 0 <= preselect < count (radio 500+preselect
+ * preselected via Ctrl_RadioGroupSetSel @ 1058:0e7f), 0 otherwise (none /
+ * OOR skips preselect, same as the orig skip-disabled scan via local_44+1).
+ * count <= 0 -> 0. No Win16, no globals. */
+int dialog_menuz_preselect_ok(int preselect, int count);
+
 /* --- Text + dialog-rect chain (2026-10-16) ---
  * Anchors (civ.exe, x86:LE:16:Protected Mode):
  *   Text_DrawAligned @ 1098:0ed1 (centered TEXTOUT; callers HoF_Show @
@@ -1173,6 +1187,14 @@ int diplo_tech_cost_at(const short *table, int nwords, int civ, int tech);
  * 12d8:4160; odd offset spans bytes 0xb/0xc, x86 allows it). Returns
  * value 0..65535, -1 on NULL/row_len < 0x0d. No globals. */
 int diplo_military_at(const uint8_t *row, int row_len);
+
+/* Orig Diplo_SetPeace @ 1168:0dda / Diplo_SetWar @ 1168:0e8e war-bit
+ * tests -> diplo_is_war / diplo_is_seen. 1:1: war == (flags & 0x20) != 0
+ * (peace set clears 0x20, war path keeps it; see diplo_apply_peace above),
+ * seen == (flags & 0x10) != 0 (war-end sweep clears 0x10 both dirs in
+ * Diplo_ProcessTurn @ 1168:0000 via diplo_war_end_clear). No globals. */
+int diplo_is_war(int flags);
+int diplo_is_seen(int flags);
 
 /* Orig Diplo_OpenContactDialog @ 1160:0000 difficulty scale ->
  * diplo_contact_tribute_scaled. 1:1 iVar6 = clamp((iVar6*(diff+1))/0x20,
@@ -1689,6 +1711,17 @@ int anim_opcode_is_callback(int op);
 /* Orig cases 12/13 (FUN_10b0_151b/17e5/172d frame pair) ->
  * anim_opcode_is_anim. 1:1 op == 12 || op == 13. */
 int anim_opcode_is_anim(int op);
+
+/* Orig Anim_AdvanceFrames @ 10b0:0461 case 6 (frame-load: 0x50 = 1 +
+ * GfxPort_Close + Art_LoadFrameData @ 10b8:079d + Art_PortDataToBitmap @
+ * 10b8:0e36 + 0x50 = 0) -> anim_opcode_is_frame_load. 1:1 op == 6. */
+int anim_opcode_is_frame_load(int op);
+
+/* Orig Anim_AdvanceFrames @ 10b0:0461 case 11 (scroll-blit: timed
+ * (tick-start)%len == 0 gate + SetActive x2 + CopyRange/Present +
+ * FUN_1008_0df0 + OFFSETRECT + FUN_10d0_03fa + ClearActive x2) ->
+ * anim_opcode_is_scroll. 1:1 op == 11. */
+int anim_opcode_is_scroll(int op);
 
 /* Orig frame-pump gate ((tick & 7) == 0 -> Gfx_StoreDC + MemCopyFar) ->
  * anim_tick_needs_store. 1:1 nonzero (1) when (tick & 7) == 0. */
@@ -2303,6 +2336,13 @@ int pedia_selector_valid(int sel);
 /* Orig Pedia_ShowByCategory @ 1020:0000 kind = sel + 1 (switch 1..5) ->
  * pedia_kind_from_selector. 1:1 sel 0..4 -> 1..5, else -1. */
 int pedia_kind_from_selector(int sel);
+
+/* Orig Pedia_ShowByCategory @ 1020:0000 title Res select (sel 0..4 ->
+ * Res 0x82..0x86: 0 tech, 1 build, 2 produce, 3 terrain, 4 gov) ->
+ * pedia_res_from_selector. 1:1 0x82 + sel, else -1. Same Res ids as
+ * dialog_res_list_spec @ 1068:0295 (0x82 tech 1..0x43 / 0x83 build 2..999 /
+ * 0x84 produce 1..999 / 0x85 gov 1..0x0c / 0x86 unit 1..999). No globals. */
+int pedia_res_from_selector(int sel);
 
 /* Orig Dlg_CreateTracked @ 1020:0000 (0x82, 0x61) -> pedia_dlg_id.
  * 1:1 0x82. */

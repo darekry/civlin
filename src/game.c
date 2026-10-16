@@ -4305,3 +4305,117 @@ int city_plunder_value(int treasury, int city_size, int divisor)
         return (treasury * city_size) / (divisor + 1);
     return (treasury / (divisor + 1)) * city_size;
 }
+
+/* --- Game end / uprising / pollution / status math (2026-10-16) ---
+ * OS-free 1:1 LIVE gates. No globals, no Win16, no exit(), C17. See game.h
+ * block for callers/callees/addrs + STUB tails. */
+
+int game_end_needs_replay(int quit_flag)
+{
+    /* Orig Game_ProcessGameEnd @ 1088:0b6d: if (g_nQuitFlag != 2)
+     * Replay_OpenOrPlay @ 1180:0000 (g_nQuitFlag @ 12d8:24ee: 2 skips the
+     * teardown; HoF path follows via the ceremony gate below). */
+    return (quit_flag != 2) ? 1 : 0;
+}
+
+int game_end_shows_ceremony(int flags_00b6)
+{
+    /* Orig Game_ProcessGameEnd @ 1088:0b6d: if ((DAT_12d0_00b6 & 0x100)
+     * == 0) Hof_CalcFinalScore @ 1040:1137 + HoF_VictoryCeremony/Load/
+     * TryInsert/Save (see halloffame.h, parallel-owned). */
+    return ((flags_00b6 & 0x100) == 0) ? 1 : 0;
+}
+
+int game_uprising_tile_ok(int tile_class, int unit_at, int cont_val)
+{
+    /* Orig Game_SpawnUprisings @ 1088:0be9 tile loop: do { Rng_Range @
+     * 11c8:003d (0x50/0x2c+3) draws } while (Map_GetTileClass @ 1110:16c0
+     * != 10); } while (Map_GetUnitAt @ 1110:18ce != -1 ||
+     * Map_GetOceanOrContVal @ 1110:1dbd < 0x10). Draws stay caller-side. */
+    if (tile_class != 10)
+        return 0;
+    if (unit_at != -1)
+        return 0;
+    return (cont_val >= 0x10) ? 1 : 0;
+}
+
+int game_uprising_leader(int turn)
+{
+    /* Orig Game_SpawnUprisings @ 1088:0be9: iVar3 = Util_Clamp(g_nTurn /
+     * 0x96 + 1, 1, 3) @ 11c8:0063 (util_clamp in sys.h); leader 0x11 when
+     * iVar3 < 3 else 0x12 for Unit_SpawnUnit @ 11c0:12c8. Negative turns
+     * clamp via util_clamp (orig used non-negative g_nTurn). */
+    int v = util_clamp(turn / 0x96 + 1, 1, 3);
+
+    return (v < 3) ? 0x11 : 0x12;
+}
+
+int game_uprising_wave_due(int turn)
+{
+    /* Orig Game_SpawnUprisings @ 1088:0be9 wave gate: ((g_nTurn + 1U & 7)
+     * == 0) && ((DAT_12d8_2b74 & 7) == 0). The DAT_12d8_2b74 conjunct is
+     * game-state owned and stays caller-side; this is the pure turn half. */
+    return (((turn + 1) & 7) == 0) ? 1 : 0;
+}
+
+int game_pollution_spread_due(int counter)
+{
+    /* Orig Game_DoPollutionAndWonderRace @ 1088:1e32: if (0x10 <
+     * DAT_12d8_42f0) { DAT_12d8_42f2++; Map_SpreadPollution @ 1028:1afd;
+     * DAT_12d8_42f0 = 0; } (counter is DAT_12d8_42f0). */
+    return (0x10 < counter) ? 1 : 0;
+}
+
+int game_pollution_alarm_due(int counter, int smoke)
+{
+    /* Orig same: if ((DAT_12d8_42f0 == 0x0c) && (6 < DAT_12d8_42f4))
+     * "Scientists alarmed" @ 1420:1744 + Status_FormatMainRow @ 1138:0000
+     * (smoke is DAT_12d8_42f4; message tail stays Win16). */
+    return (counter == 0x0c && 6 < smoke) ? 1 : 0;
+}
+
+int game_status_pollution_icon(int counter)
+{
+    /* Orig Game_UpdateStatusPanel @ 1088:13d5: if (DAT_12d8_42f0 != 0)
+     * Gfx_DrawTechIcon @ 11a8:0cb1 variant (DAT_12d8_42f0 % 4) + count
+     * below (x86 IDIV truncates toward zero, same as C %). */
+    if (counter < 0)
+        counter = 0;
+    return counter % 4;
+}
+
+int game_status_pollution_count(int counter)
+{
+    /* Orig same: Util_Clamp(DAT_12d8_42f0 / 4, 0, 3) @ 11c8:0063. */
+    if (counter < 0)
+        counter = 0;
+    return util_clamp(counter / 4, 0, 3);
+}
+
+int game_status_progress_index(int science, int difficulty, int base,
+                               int trade, int year)
+{
+    /* Orig Game_UpdateStatusPanel @ 1088:13d5 progress icon: year < 0 ?
+     * 1 : 2 factor (g_nYear @ 12d8:42fa sign select), then Util_Clamp @
+     * 11c8:0063((science << 2) / ((difficulty * 2 + base + 6) * trade *
+     * factor + 1), 0, 3); icon via DAT_1420_98e4 + Gfx_DrawTechIcon @
+     * 11a8:0cb1. science is DAT_43b8+0x7c[civ], base DAT_12a8_0020,
+     * trade DAT_3f5c+2[civ]. Negative game inputs clamp to 0 (orig used
+     * non-negative values). */
+    int factor;
+    long denom;
+    long v;
+
+    if (science < 0)
+        science = 0;
+    if (difficulty < 0)
+        difficulty = 0;
+    if (base < 0)
+        base = 0;
+    if (trade < 0)
+        trade = 0;
+    factor = (year < 0) ? 1 : 2;
+    denom = (long)(difficulty * 2 + base + 6) * (long)trade * (long)factor + 1L;
+    v = ((long)science << 2) / denom;
+    return util_clamp((int)v, 0, 3);
+}

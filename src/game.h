@@ -3088,4 +3088,100 @@ int game_elimflag_clear(int flags_00b6, int civ);
  * div < 0 -> -1. No globals. */
 int city_plunder_value(int treasury, int city_size, int divisor);
 
+/* --- Game end / uprising / pollution / status math (2026-10-16) ---
+ * Anchors (civ.exe, x86:LE:16:Protected Mode), decompiled this pass:
+ *   Game_ProcessGameEnd @ 1088:0b6d (end-of-game HoF path: FUN_1188_07ad +
+ *     Replay_OpenOrPlay @ 1180:0000 unless quit == 2, then Hof_CalcFinalScore
+ *     @ 1040:1137 + HoF_VictoryCeremony/Load/TryInsert/Save unless
+ *     DAT_12d0_00b6 & 0x100; called 2x from Game_TurnLoopTick @ 1088:0000).
+ *   Game_SpawnUprisings @ 1088:0be9 (head gate (5-diff)*0x1e vs turn, then
+ *     every-8th wave ((turn+1)&7)==0 && (DAT_12d8_2b74&7)==0 with tile loop
+ *     Map_GetTileClass @ 1110:16c0 == 10 ocean + Map_GetUnitAt @ 1110:18ce
+ *     == -1 + Map_GetOceanOrContVal @ 1110:1dbd >= 0x10, leader via
+ *     Util_Clamp(turn/0x96+1,1,3) @ 11c8:0063 (<3 -> 0x11 else 0x12),
+ *     Unit_SpawnUnit @ 11c0:12c8; second half is the city-plunder revolt
+ *     scan with the 0x62/99 retry caps + Travellers/Barbarian/Native/
+ *     Guerrilla message + Dialog_ShowMessage @ 1220:00d2 tail).
+ *   Game_DoPollutionAndWonderRace @ 1088:1e32 (pollution head via
+ *     Util_SignStep @ 11c8:003d + Util_Clamp @ 11c8:0063 on DAT_12d8_42f0;
+ *     alarm when 42f0 == 0x0c && 42f4 > 6; spread via Map_SpreadPollution
+ *     @ 1028:1afd when 0x10 < 42f0, then 42f0 = 0; wonder-race loop over
+ *     rounds 0..difficulty with Rng_Range(0x15)+1 picks, see worldgen.h).
+ *   Game_UpdateStatusPanel @ 1088:13d5 (progress icon via Util_Clamp @
+ *     11c8:0063 of (science<<2)/((diff*2+base+6)*trade*year_factor+1) to
+ *     0..3 with year_factor 1 (year<0) / 2, icon via DAT_1420_98e4; then
+ *     pollution icons when DAT_12d8_42f0 != 0: variant 42f0%4 + count
+ *     Util_Clamp(42f0/4,0,3); treasury row (10-lux-tax); pop milestone
+ *     popup via Dialog_ShowMessage @ 1220:00d2).
+ * OS-free gates below are LIVE 1:1 on explicit params (no globals, no
+ * Win16, read-only); dialog/GDI/map/city-state tails stay STUB in
+ * game_process_game_end / game_spawn_uprisings /
+ * game_do_pollution_and_wonder_race / game_update_status_panel with TODO
+ * Orig refs. No exit(), C17. */
+
+/* Orig Game_ProcessGameEnd @ 1088:0b6d replay gate -> game_end_needs_replay.
+ * 1:1 (g_nQuitFlag @ 12d8:24ee != 2) -> Replay_OpenOrPlay @ 1180:0000 runs.
+ * Returns nonzero (1) when the replay teardown runs. No globals. */
+int game_end_needs_replay(int quit_flag);
+
+/* Orig Game_ProcessGameEnd @ 1088:0b6d ceremony gate -> game_end_shows_ceremony.
+ * 1:1 (DAT_12d0_00b6 & 0x100) == 0 -> Hof_CalcFinalScore @ 1040:1137 +
+ * HoF_VictoryCeremony/Load/TryInsert/Save runs. Returns nonzero (1) when
+ * the ceremony path runs. No globals. */
+int game_end_shows_ceremony(int flags_00b6);
+
+/* Orig Game_SpawnUprisings @ 1088:0be9 tile loop -> game_uprising_tile_ok.
+ * 1:1 Map_GetTileClass @ 1110:16c0 == 10 (ocean spawn tile) &&
+ * Map_GetUnitAt @ 1110:18ce == -1 (empty) && Map_GetOceanOrContVal @
+ * 1110:1dbd >= 0x10. Returns nonzero (1) when the tile accepts a spawn.
+ * No globals. */
+int game_uprising_tile_ok(int tile_class, int unit_at, int cont_val);
+
+/* Orig Game_SpawnUprisings @ 1088:0be9 leader pick -> game_uprising_leader.
+ * 1:1 Util_Clamp(g_nTurn/0x96+1,1,3) @ 11c8:0063 (inline here, no sys link
+ * beyond util_clamp in sys.h); <3 -> 0x11 else 0x12 (leader unit type for
+ * Unit_SpawnUnit @ 11c0:12c8). No globals. */
+int game_uprising_leader(int turn);
+
+/* Orig Game_SpawnUprisings @ 1088:0be9 wave gate -> game_uprising_wave_due.
+ * 1:1 ((g_nTurn+1) & 7) == 0 (every 8th turn; the DAT_12d8_2b74 & 7
+ * conjunct is game-state owned and stays caller-side). Returns nonzero
+ * (1) when the wave turn fires. No globals. */
+int game_uprising_wave_due(int turn);
+
+/* Orig Game_DoPollutionAndWonderRace @ 1088:1e32 spread gate ->
+ * game_pollution_spread_due. 1:1 0x10 < DAT_12d8_42f0 (then DAT_12d8_42f2++,
+ * Map_SpreadPollution @ 1028:1afd, DAT_12d8_42f0 = 0). Returns nonzero (1)
+ * when the spread fires. No globals. */
+int game_pollution_spread_due(int counter);
+
+/* Orig same alarm gate -> game_pollution_alarm_due. 1:1 DAT_12d8_42f0 ==
+ * 0x0c && 6 < DAT_12d8_42f4 (smoke counter; "Scientists alarmed" message
+ * @ 1420:1744 + Status_FormatMainRow @ 1138:0000 tail stays Win16).
+ * Returns nonzero (1) when the alarm fires. No globals. */
+int game_pollution_alarm_due(int counter, int smoke);
+
+/* Orig Game_UpdateStatusPanel @ 1088:13d5 pollution variant ->
+ * game_status_pollution_icon. 1:1 DAT_12d8_42f0 % 4 (drawn when 42f0 != 0
+ * via Gfx_DrawTechIcon @ 11a8:0cb1; x86 IDIV truncates toward zero, same
+ * as C %). Negative counters clamp to 0 (orig used non-negative game
+ * values). No globals. */
+int game_status_pollution_icon(int counter);
+
+/* Orig same pollution count -> game_status_pollution_count. 1:1
+ * Util_Clamp(DAT_12d8_42f0/4,0,3) @ 11c8:0063 (util_clamp in sys.h).
+ * Negative counters clamp to 0 (same contract as above). No globals. */
+int game_status_pollution_count(int counter);
+
+/* Orig Game_UpdateStatusPanel @ 1088:13d5 progress icon ->
+ * game_status_progress_index. 1:1 Util_Clamp((science<<2) /
+ * ((difficulty*2+base+6)*trade*year_factor+1),0,3) @ 11c8:0063 where
+ * year_factor = (year < 0) ? 1 : 2 (g_nYear @ 12d8:42fa sign select at
+ * @ 1088:1554); science is DAT_43b8+0x7c[civ], base is DAT_12a8_0020,
+ * trade is DAT_3f5c+2[civ]. Negative science/difficulty/base/trade clamp
+ * to 0 (orig used non-negative game values). Returns 0..3, the index
+ * into DAT_1420_98e4 for Gfx_DrawTechIcon @ 11a8:0cb1. No globals. */
+int game_status_progress_index(int science, int difficulty, int base,
+                               int trade, int year);
+
 #endif /* CIVLIN_GAME_H */

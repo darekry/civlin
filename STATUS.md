@@ -222,7 +222,9 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `dialog_menuz` | STUB | 1220:0000, 1220:0156 | has TODO |
 | `dialog_ctrl_register` | STUB | 1058:0000, 1058:0440, 1058:04f6, 1058:0b4d, 1058:0d71, 1058:0e7f | has TODO |
 | `dialog_ctrl_free` | NOOP | 1058:0d71 |  |
-| `dialog_ctrl_radio_set` | STUB | 1058:0e7f | has TODO |
+| `dialog_ctrl_radio_set` | PARTIAL | 1058:0e7f | has TODO |
+| `dialog_ctrl_radio_count` | LIVE | 1058:0e7f |  |
+| `dialog_ctrl_radio_index` | LIVE | 1058:0e7f |  |
 | `dialog_ctrl_paint_button` | LIVE | 1058:0000 |  |
 | `dialog_ctrl_paint_static` | LIVE | 1058:04f6 |  |
 | `dialog_ctrl_paint_user` | LIVE | 1058:0440 |  |
@@ -270,6 +272,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `ui_draw_end_turn_prompt` | STUB | 10d0:0854, 10d8:00e0, 1110:0448, 11c0:0ec2, 1210:07ae | has TODO |
 | `dialog_menuz_id_to_index` | LIVE | 1220:0156 |  |
 | `dialog_menuz_index_to_id` | LIVE | 1220:0156 |  |
+| `dialog_menuz_preselect_ok` | LIVE | 1058:0e7f, 1220:0156 |  |
 | `text_align_x` | LIVE | 1098:0e0b, 1098:0ed1 |  |
 | `text_center_y` | LIVE | 1098:0dda, 1098:0ed1 |  |
 | `dialog_dlgunits_to_pixels` | LIVE | 1098:0d43, 1100:03ff |  |
@@ -292,6 +295,8 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `diplo_is_peace` | LIVE | 1168:0a07 |  |
 | `diplo_is_contact` | LIVE |  |  |
 | `diplo_has_embassy` | LIVE |  |  |
+| `diplo_is_war` | LIVE | 1168:0000, 1168:0dda, 1168:0e8e |  |
+| `diplo_is_seen` | LIVE | 1168:0000 |  |
 | `diplo_apply_peace` | LIVE | 1168:0dda |  |
 | `diplo_apply_war` | LIVE | 1168:0e8e |  |
 | `diplo_tribute_amount` | LIVE | 1160:328e, 1168:0000, 11c8:0063 |  |
@@ -355,6 +360,8 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `anim_opcode_needs_store` | LIVE | 1098:1104 |  |
 | `anim_opcode_is_callback` | LIVE |  |  |
 | `anim_opcode_is_anim` | LIVE |  |  |
+| `anim_opcode_is_frame_load` | LIVE | 10b0:0461, 10b8:079d, 10b8:0e36 |  |
+| `anim_opcode_is_scroll` | LIVE | 10b0:0461 |  |
 | `anim_tick_needs_store` | LIVE | 1000:137f, 1098:1104 |  |
 | `anim_seq_is_finished` | LIVE |  |  |
 | `anim_slot_init` | LIVE | 10a8:0000 |  |
@@ -403,6 +410,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `quiz_pair_first_mode` | LIVE | 1178:0000 |  |
 | `pedia_selector_valid` | LIVE | 1020:0000 |  |
 | `pedia_kind_from_selector` | LIVE | 1020:0000 |  |
+| `pedia_res_from_selector` | LIVE | 1020:0000, 1068:0295 |  |
 | `pedia_dlg_id` | LIVE | 1020:0000 |  |
 | `pedia_dlg_flags` | LIVE | 1020:0000 |  |
 
@@ -715,6 +723,16 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `game_elimflag_msg_id` | LIVE | 1038:083d, 1420:0746 |  |
 | `game_elimflag_clear` | LIVE | 1038:083d |  |
 | `city_plunder_value` | LIVE | 1038:0000, 1038:0901 |  |
+| `game_end_needs_replay` | LIVE | 1088:0b6d, 1180:0000, 12d8:24ee |  |
+| `game_end_shows_ceremony` | LIVE | 1040:1137, 1088:0b6d |  |
+| `game_uprising_tile_ok` | LIVE | 1088:0be9, 1110:16c0, 1110:18ce, 1110:1dbd, 11c8:003d |  |
+| `game_uprising_leader` | LIVE | 1088:0be9, 11c0:12c8, 11c8:0063 |  |
+| `game_uprising_wave_due` | LIVE | 1088:0be9 |  |
+| `game_pollution_spread_due` | LIVE | 1028:1afd, 1088:1e32 |  |
+| `game_pollution_alarm_due` | LIVE | 1138:0000, 1420:1744 |  |
+| `game_status_pollution_icon` | LIVE | 1088:13d5, 11a8:0cb1 |  |
+| `game_status_pollution_count` | LIVE | 11c8:0063 |  |
+| `game_status_progress_index` | LIVE | 1088:13d5, 1088:1554, 11a8:0cb1, 11c8:0063, 12d8:42fa |  |
 
 ### `src/gfx_indexed.c`
 
