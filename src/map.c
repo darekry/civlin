@@ -1012,6 +1012,17 @@ int map_repaint_mode_is_rowmajor(int mode)
     return mode == 0;
 }
 
+/* --- Chain P4 render+text (2026-10-16): repaint gate @ 1208:17da.
+ * See map.h P4 block. OS-free 1:1 LIVE, no Win16, no globals. */
+
+int map_repaint_needed(int cell_flag)
+{
+    /* Orig FUN_1208_17da @ 1208:17da: if (*(char *)(ctx+0x2c) != 0)
+     * runs the Pre/Post_DrawTilesToPort pair around
+     * Map_RepaintViewShuffled @ 1208:1866 (mode 1 shuffled). */
+    return (cell_flag != 0) ? 1 : 0;
+}
+
 int map_shuffle_grid_count(int w_tiles, int h_tiles)
 {
     /* Orig Map_RepaintViewShuffled @ 1208:1866 shuffled head: n =

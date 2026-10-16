@@ -3,6 +3,8 @@
  * the caller (main.c) and validates them here (no globals, no exit). */
 #include "video.h"
 
+#include <stdlib.h>
+
 #include "gfx_indexed.h"
 
 /* Concrete port backing store (Orig ~0x20-word struct @ 10d0:0000
@@ -199,17 +201,62 @@ int gfx_color_table_kind(int color)
 
 civ_error_t gfx_port_create(SDL_Renderer *ren, int w, int h, gfx_port_t **out)
 {
+    /* Orig GfxPort_Create @ 10d0:0000 -> GR_PortOpen (see video.h P4
+     * block). GETDC + CREATECOMPATIBLEDC borrow the caller renderer
+     * (borrow only, never owned/freed here); bitmap via
+     * GfxPort_AllocBitmap @ 10d0:0cfa even width ((w+1)/2*2). SDL3 port:
+     * malloc gfx_port_t + SDL_CreateTexture INDEX8 TARGET backing store
+     * (INDEX8 keeps ANIMATEPALETTE possible via SDL_SetPaletteColors;
+     * TARGET allows the Blit @ 10d0:08f1 / PresentRect @ 10d0:0854
+     * render-target path). Error mapping: NULL out -> NOENT; NULL ren
+     * -> NOENT; w/h <= 0 -> RANGE; malloc fail -> NOMEM; bitmap fail ->
+     * IO with *out NULL (no leak). */
+    gfx_port_t *port = NULL;
+    SDL_Texture *tex = NULL;
+    civ_error_t rc;
+
     if (out)
         *out = NULL;
-    (void)ren;
-    (void)w;
-    (void)h;
-    if (!out)
+    if (!out || !ren)
         return CIV_ERR_NOENT;
-    /* TODO: Orig FUN_10d0_0000 @ 10d0:0000 -> GfxPort_Create (GR_PortOpen).
-     * GETDC + CREATECOMPATIBLEDC + bitmap via 10d0:0cfa; port struct ~0x20
-     * words. SDL_Texture bridge TBD. */
-    return CIV_ERR_UNSUPPORTED;
+    if (w <= 0 || h <= 0)
+        return CIV_ERR_RANGE;
+    port = (gfx_port_t *)malloc(sizeof(*port));
+    if (!port)
+        return CIV_ERR_NOMEM;
+    port->tex = NULL;
+    port->w = w;
+    port->h = h;
+    port->ren = ren;
+    port->has_clip = 0;
+    port->pal = NULL;
+    port->clip.x = 0;
+    port->clip.y = 0;
+    port->clip.w = 0;
+    port->clip.h = 0;
+    rc = gfx_port_alloc_bitmap(ren, w, h, &tex);
+    if (rc != CIV_OK) {
+        free(port);
+        return rc;
+    }
+    port->tex = tex;
+    *out = port;
+    return CIV_OK;
+}
+
+void gfx_port_destroy(gfx_port_t *port)
+{
+    /* Orig GfxPort_Close @ 10d0:0172 free tail (ClearActive prologue
+     * caller-side via gfx_port_clear_active + DELETEDC + DELETEOBJECT +
+     * GLOBALFREE x2 + zero words; GETDC/CREATECOMPATIBLEDC borrows need
+     * no release, renderer stays caller-owned). SDL3: destroy the INDEX8
+     * TARGET backing store + free the port (palette refs are borrowed,
+     * never freed here). NULL is a no-op. No globals, no exit(). */
+    if (!port)
+        return;
+    if (port->tex)
+        SDL_DestroyTexture(port->tex);
+    free(port);
 }
 
 civ_error_t gfx_port_alloc_bitmap(SDL_Renderer *ren, int w, int h,
@@ -242,12 +289,21 @@ civ_error_t gfx_port_alloc_bitmap(SDL_Renderer *ren, int w, int h,
 
 civ_error_t gfx_port_set_active(gfx_port_t *port)
 {
-    (void)port;
+    /* Orig GfxPort_SetActive @ 10d0:0956 (see video.h P4 block):
+     * Gfx_SetCurrentDC(port+0x16) + 17cc = port always + 17ae = port
+     * unless the 12d8:44ff+0x43 dialog port (slots caller-side via
+     * gfx_port_clear_active). SDL3 equivalent is an SDL render-target
+     * select onto the port INDEX8 TARGET backing store. NULL port ->
+     * NOENT; unwired port (ren NULL from the pre-bridge Create, or tex
+     * NULL) -> UNSUPPORTED (no fake target); SDL target-set fail ->
+     * IO. */
     if (!port)
         return CIV_ERR_NOENT;
-    /* TODO: Orig FUN_10d0_0956 @ 10d0:0956 -> GfxPort_SetActive. Selects
-     * the drawing port/DC; SDL render-target select TBD. */
-    return CIV_ERR_UNSUPPORTED;
+    if (!port->ren || !port->tex)
+        return CIV_ERR_UNSUPPORTED;
+    if (!SDL_SetRenderTarget(port->ren, port->tex))
+        return CIV_ERR_IO;
+    return CIV_OK;
 }
 
 civ_error_t gfx_port_present_rect(gfx_port_t *port, SDL_Renderer *ren,
@@ -508,22 +564,21 @@ civ_error_t gfx_port_release_dc(gfx_port_t *port, SDL_Renderer *dc)
 civ_error_t gfx_port_create_compatible(SDL_Renderer *ren, int w, int h,
                                        gfx_port_t **out)
 {
+    /* Orig CREATECOMPATIBLEDC + GfxPort_AllocBitmap @ 10d0:0cfa bitmap
+     * select -> GfxPort_CreateCompatible (see video.h P4 block).
+     * Compatible-port sibling of GfxPort_Create @ 10d0:0000 (same
+     * ~0x20-word port struct, same even-width bitmap); complements
+     * gfx_port_alloc_bitmap (raw texture) by returning the owning port.
+     * SDL3: identical bridge to gfx_port_create (borrowed renderer +
+     * INDEX8 TARGET backing store). Same error mapping: NULL out/ren
+     * -> NOENT; w/h <= 0 -> RANGE; malloc -> NOMEM; bitmap -> IO. */
     if (out)
         *out = NULL;
-    (void)ren;
-    (void)w;
-    (void)h;
-    if (!out)
+    if (!out || !ren)
         return CIV_ERR_NOENT;
     if (w <= 0 || h <= 0)
         return CIV_ERR_RANGE;
-    /* TODO: Orig CREATECOMPATIBLEDC + FUN_10d0_0cfa @ 10d0:0cfa bitmap
-     * select -> GfxPort_CreateCompatible. Compatible-port sibling of
-     * GfxPort_Create @ 10d0:0000 (same ~0x20-word port struct);
-     * complements gfx_port_alloc_bitmap (raw texture) by returning the
-     * owning port. SDL3 TBD: target-capable texture selected into the
-     * new port. */
-    return CIV_ERR_UNSUPPORTED;
+    return gfx_port_create(ren, w, h, out);
 }
 
 civ_error_t palette_apply_to_port(gfx_port_t *port, int first, int count)
@@ -1559,4 +1614,31 @@ int palette_handle_is_live(int handle)
     /* Orig same guard: GLOBALFREE/DELETEOBJECT tylko gdy handle != 0
      * (zera skipowane CMP w disasm 1090:0596/0488). */
     return (handle != 0) ? 1 : 0;
+}
+
+/* --- Chain P4 render+text (2026-10-16): create/present + godpal.
+ * See video.h P4 block. OS-free 1:1 LIVE, no Win16, no globals. */
+
+int palette_animate_clamp(int first, int count)
+{
+    /* Orig Palette_AnimateRange @ 1090:0376 cap: if (0xec < first+count)
+     * count = 0xec - first (0xec = godpal entries, see gfx_indexed.h
+     * GFX_GODPAL_COUNT; LOGPALETTE tail past 0xec stays zero/black).
+     * Callers: opcode 1 full apply (MainPort_ApplyPalette @ 1200:00a8)
+     * + timed 1/0xe fades (Anim_AdvanceFrames @ 10b0:0461) + Push @
+     * 1090:015e / Pop @ 1090:02d2 / Zero @ 1090:0670 / Set @ 1090:06fd. */
+    if (first < 0 || count <= 0 || first >= CIV_PALETTE_COUNT)
+        return 0;
+    if (first + count > CIV_PALETTE_COUNT)
+        count = CIV_PALETTE_COUNT - first;
+    return count;
+}
+
+int palette_flag_for_mono(int mono)
+{
+    /* Orig same + Palette_Init @ 1090:0488 init + ZeroGodPalette @
+     * 1090:0670 (always 0) / Set @ 1090:06fd (1 when color else 0):
+     * DAT_1420_17a6 == 0 (color/VGA) ? 1 : 0 is the ANIMATEPALETTE flag
+     * byte per entry; mono (EGA) clears it. */
+    return (mono == 0) ? 1 : 0;
 }

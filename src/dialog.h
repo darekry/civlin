@@ -1329,6 +1329,33 @@ int text_centered_x(int x, int w);
  * extent < 0 -> 0. No globals. */
 int text_measure_scaled(int extent);
 
+/* --- Chain P4 render+text (2026-10-16): Text_Draw* @ 10d8 color/shadow ---
+ * Anchors (civ.exe, x86:LE:16:Protected Mode), batch-decompiled this pass:
+ *   Text_DrawDirect @ 10d8:00e0 (cVar1 = DAT_12d8_45fd; if
+ *     (DAT_12d8_28fc == 0) cVar1 = civ_table[param_5] (s_..._45b5+9);
+ *     then Text_SetColor + SELECTOBJECT font + MOVETO + Util_StrCopy +
+ *     Text_PackPascal @ 1100:0000 + Text_DrawPascalAtOrigin @ 1100:017b).
+ *   FUN_10d8_002d @ 10d8:002d (same mono color pick + SELECTOBJECT +
+ *     Text_SetColor + StrCopy + PackPascal + DrawPascalAtOrigin).
+ *   Text_DrawShadowed @ 10d8:02df (SelectForCoords gate + DispatchFont +
+ *     GETTEXTMETRICS tmHeight local_126 + shadow TEXTOUT at (x + dx, y+1)
+ *     with dx = (local_126 < 0x12 ? 0 : 1) + main TEXTOUT at (x,y)).
+ * OS-free color/shadow math below is LIVE 1:1 on explicit params (no
+ * Win16, no globals); SELECTOBJECT/MOVETO/TEXTOUT/SETBKMODE tails stay
+ * STUB in text_draw_* above. */
+
+/* Orig Text_DrawDirect @ 10d8:00e0 + FUN_10d8_002d @ 10d8:002d mono
+ * pick -> text_resolve_color. 1:1 mono == 0 (DAT_12d8_28fc color/VGA)
+ * ? civ_entry (civ_table[param]) : fallback (DAT_12d8_45fd). No globals. */
+int text_resolve_color(int mono, int civ_entry, int fallback);
+
+/* Orig Text_DrawShadowed @ 10d8:02df shadow pos -> text_shadow_pos. 1:1
+ * sx = x + (height >= 0x12 ? 1 : 0) (decompiler local_126 < 0x12 ? x :
+ * x+1; complements text_shadow_offset dx-only above), sy = y + 1 (shadow
+ * row always one down). NULL outs -> NOENT. No globals. */
+civ_error_t text_shadow_pos(int x, int y, int height,
+                            int *sx_out, int *sy_out);
+
 /* Orig Text_PackPascal @ 1100:0000 połowa długości -> text_pascal_len.
  * 1:1 strlen cap 255 (buf[0] = len, len = Util_StrLen). NULL -> -1. */
 int text_pascal_len(const char *s);

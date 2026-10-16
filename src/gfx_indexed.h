@@ -892,4 +892,34 @@ int gfx_try_custom_stub(const uint8_t *src, size_t src_len,
                         uint32_t *w_out, uint32_t *h_out,
                         uint8_t *bpp_out, uint8_t *pal_out);
 
+/* --- Chain P4 render+text (2026-10-16): godpal 0xec range/flag ---
+ * Anchors (civ.exe, x86:LE:16:Protected Mode), batch-decompiled this pass:
+ *   Palette_AnimateRange @ 1090:0376 (if (0xec < first+count) count =
+ *     0xec - first; then RGB triples + flag byte per entry, then
+ *     ANIMATEPALETTE over 0xec; callers MainPort_ApplyPalette @ 1200:00a8
+ *     opcode 1 + Anim_AdvanceFrames @ 10b0:0461 timed 1/0xe + Push @
+ *     1090:015e / Pop @ 1090:02d2 / Zero @ 1090:0670 / Set @ 1090:06fd).
+ *   Palette_Init @ 1090:0488 (LOGPALETTE 0x300 + 0xec entries zeroed +
+ *     CREATEPALETTE -> DAT_1420_9966 @ 1420:9966 HPALETTE handle word).
+ *   ZeroGodPalette @ 1090:0670 (flags = 0 over [first, first+count)) vs
+ *     Set @ 1090:06fd (flags = DAT_1420_17a6 == 0 ? 1 : 0 over the range).
+ *   DAT_1420_9966 @ 1420:9966 (HPALETTE BSS handle, zeros at load: Ghidra
+ *     read 16 B zeros, not a static RGB table; unpacked/civ.exe
+ *     (832512 B NE Win3.x) has no static LOGPALETTE anchor 00 03 EC 00 —
+ *     the 0xec RGB payload is built at runtime via AnimateRange from
+ *     art/anim sources, so gfx_godpal_get stays UNSUPPORTED with no fake
+ *     bytes; range/flag math below is LIVE).
+ * OS-free 1:1 LIVE below (no Win16, no SDL, no globals); the RGB table
+ * itself stays STUB until a runtime capture (not a static dump) lands. */
+
+/* Orig Palette_AnimateRange @ 1090:0376 0xec cap -> gfx_godpal_range_len.
+ * 1:1: first < 0 || count <= 0 || first >= 0xec -> 0; else
+ * min(count, 0xec - first). No globals. */
+int gfx_godpal_range_len(int first, int count);
+
+/* Orig same + Zero/Set @ 1090:0670/06fd flag byte ->
+ * gfx_godpal_flag_for_mono. 1:1 DAT_1420_17a6 == 0 (color/VGA) ? 1 : 0
+ * (Zero always clears; Set follows mono). No globals. */
+int gfx_godpal_flag_for_mono(int mono);
+
 #endif /* CIVLIN_GFX_INDEXED_H */

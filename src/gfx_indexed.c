@@ -350,10 +350,16 @@ civ_error_t gfx_godpal_get(int index, uint8_t rgb[3])
         return CIV_ERR_RANGE;
     /* TODO: Orig godpal.c 0xec RGB entries feeding FUN_1090_0488 @
      * 1090:0488 Palette_Init (LOGPALETTE 0x300 -> CREATEPALETTE ->
-     * DAT_1420_9966 @ 1420:9966). Byte payload not yet dumped from
-     * godpal.c / DAT_1420_9966, so no static const table is emitted here
-     * (no fake bytes); bounds above stay live. AD2 wiring (still stub
-     * until bytes pasted): run gfx_godpal_search("unpacked/civ.exe",
+     * DAT_1420_9966 @ 1420:9966). P4 finding (2026-10-16, read-only):
+     * DAT_1420_9966 is a BSS HPALETTE handle (Ghidra reads zeros), and
+     * unpacked/civ.exe (832512 B NE Win3.x) has no static LOGPALETTE
+     * anchor 00 03 EC 00 — the 0xec RGB payload is built at runtime via
+     * Palette_AnimateRange @ 1090:0376 from art/anim sources (see
+     * MainPort_ApplyPalette @ 1200:00a8 + Push @ 1090:015e / Pop @
+     * 1090:02d2), so no static const table is emitted here (no fake
+     * bytes); bounds above stay live. A runtime capture (not a static
+     * dump) is needed before this returns CIV_OK. AD2 wiring (still stub
+     * until bytes captured): run gfx_godpal_search("unpacked/civ.exe",
      * &off) (local-only unpacked/civ.exe, read-only, never committed);
      * on CIV_OK the LOGPALETTE anchor 00 03 EC 00 sits at off (palVersion
      * 0x0300 LE = 00 03, palNumEntries 0x00EC LE = EC 00, then 0xecx4
@@ -2500,4 +2506,30 @@ int gfx_try_custom_stub(const uint8_t *src, size_t src_len,
     (void)bpp_out;
     (void)pal_out;
     return -1;
+}
+
+/* --- Chain P4 render+text (2026-10-16): godpal 0xec range/flag.
+ * See gfx_indexed.h P4 block. OS-free 1:1 LIVE, no SDL, no globals. */
+
+int gfx_godpal_range_len(int first, int count)
+{
+    /* Orig Palette_AnimateRange @ 1090:0376 cap: if (0xec < first+count)
+     * count = 0xec - first (0xec = GFX_GODPAL_COUNT godpal entries;
+     * LOGPALETTE 0x300 tail past 0xec stays zero/black, see
+     * palette_animate_range @ 1090:0376 / palette_apply_to_port @
+     * 1200:00a8 in video.h). Callers Push @ 1090:015e / Pop @ 1090:02d2
+     * / Zero @ 1090:0670 / Set @ 1090:06fd share the same cap. */
+    if (first < 0 || count <= 0 || first >= GFX_GODPAL_COUNT)
+        return 0;
+    if (first + count > GFX_GODPAL_COUNT)
+        count = GFX_GODPAL_COUNT - first;
+    return count;
+}
+
+int gfx_godpal_flag_for_mono(int mono)
+{
+    /* Orig ZeroGodPalette @ 1090:0670 (always 0) / Set @ 1090:06fd +
+     * AnimateRange @ 1090:0376 + Init @ 1090:0488 flag byte:
+     * DAT_1420_17a6 == 0 (color/VGA) ? 1 : 0 (mono/EGA clears). */
+    return (mono == 0) ? 1 : 0;
 }

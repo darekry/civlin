@@ -1234,4 +1234,86 @@ int gfx_store_modal_needs_save(int is_modal);
  * SELECTOBJECT-restore + VALIDATERECT no-op restore). */
 int gfx_store_order_is_save_first(void);
 
+/* --- Chain P4 render+text (2026-10-16): create/present/repaint + godpal ---
+ * Anchors (civ.exe, x86:LE:16:Protected Mode), batch-decompiled this pass:
+ *   GfxPort_Create @ 10d0:0000 (GR_PortOpen: Debug_LogTrace "GR PortOpen" +
+ *     GETDC(0) + CREATECOMPATIBLEDC + RELEASEDC + Util_MemCopyFar rect +
+ *     OFFSETRECT + port ~0x20 words + GLOBALALLOC color handle (or
+ *     FUN_1098_28e4 error) + GETDEVICECAPS 0xc/0xe + GfxPort_AllocBitmap @
+ *     10d0:0cfa even width ((w+1)/2*2) + SELECTOBJECT; 15+ creators incl.
+ *     WinMain @ 1008:01f5, City_OpenCensusView @ 1018:0108, Pic_PlayShared
+ *     @ 1030:019b/01c3, Art_LoadFrameData @ 10b8:0a59).
+ *   GfxPort_PresentRect @ 10d0:0854 (BITBLT rop 0xcc0020 SRCCOPY w =
+ *     right-left, h = bottom-top + VALIDATERECT no-op; already LIVE as
+ *     gfx_port_present_rect -> SDL_RenderTexture above).
+ *   GfxPort_ClearActive @ 10d0:09a2 (slot clear DAT_1420_17cc/17ae; already
+ *     LIVE as gfx_port_slot_after_clear/gfx_port_clear_active above).
+ *   GfxPort_AllocBitmap @ 10d0:0cfa (even-width CREATEBITMAP vs odd
+ *     FUN_10a0_0000 path; already LIVE as gfx_port_alloc_bitmap ->
+ *     SDL_CreateTexture INDEX8 TARGET above).
+ *   GfxPort_Close @ 10d0:0172 (GR_PortClose: ClearActive prologue +
+ *     DELETEDC + DELETEOBJECT + GLOBALFREE x2 + zero words; free tail
+ *     LIVE as gfx_port_destroy below, DC/device pairing stays borrowed).
+ *   GfxPort_SetActive @ 10d0:0956 (Gfx_SetCurrentDC(port+0x16) + 17cc =
+ *     port always + 17ae = port unless the 12d8:44ff+0x43 dialog port;
+ *     SDL3 equivalent is an SDL render-target select, LIVE below).
+ *   Palette_AnimateRange @ 1090:0376 (0xec cap + RGB triples + flag byte
+ *     then ANIMATEPALETTE; callers opcode 1/0xe incl. MainPort_ApplyPalette
+ *     @ 1200:00a8 + Anim_AdvanceFrames @ 10b0:0461 + PushPalette @
+ *     1090:015e/PopPalette @ 1090:02d2 + Zero @ 1090:0670/Set @ 1090:06fd).
+ *   Palette_Init @ 1090:0488 (LOGPALETTE 0x300 + 0xec zeroed entries +
+ *     CREATEPALETTE -> DAT_1420_9966; already LIVE-noop as palette_init).
+ *   MainPort_ApplyPalette @ 1200:00a8 (GLOBALLOCK port -> AnimateRange +
+ *     *(port+6) = DAT_1420_9966; already LIVE as palette_apply_to_port).
+ *   DAT_1420_9966 @ 1420:9966 (HPALETTE handle word, BSS zero at load;
+ *     read 16 B zeros in Ghidra, not a static RGB table: the 0xec RGB
+ *     payload is built at runtime via AnimateRange from art/anim sources,
+ *     so no static LOGPALETTE anchor 00 03 EC 00 exists in unpacked/civ.exe
+ *     — gfx_godpal_get stays UNSUPPORTED with no fake bytes, range/flag
+ *     math below is LIVE).
+ *   Map_RepaintViewShuffled @ 1208:1866 (mode 2 direct PresentRect / 1
+ *     shuffled Fisher-Yates via mem_alloc_lock + Rng_Range @ 11c8:003d /
+ *     0 row-major; per-tile SETRECT 0x20 + IntersectRect clip + OOB/fog
+ *     blank vs RevealCenter; geometry already LIVE in map.h
+ *     (map_paint helpers, map_shuffle helpers, map_repaint_mode helpers)).
+ *   Map_PaintTilesClipped @ 1208:1534 (tile-range variant of the same
+ *     per-tile loop; geometry already LIVE in map.h).
+ *   Map_DrawCityLabels @ 1208:1f64 (per-label rects + Text_DrawAligned;
+ *     box already LIVE as map_city_label_box in map.h).
+ *   FUN_1208_17da @ 1208:17da (repaint gate: *(u+0x2c) != 0 drives the
+ *     Pre/Post_DrawTilesToPort pair around Map_RepaintViewShuffled; LIVE
+ *     as map_repaint_needed in map.h).
+ *   Text_DrawDirect @ 10d8:00e0 (mono color pick + SELECTOBJECT/MOVETO +
+ *     PackPascal + DrawPascalAtOrigin; color pick LIVE as
+ *     text_resolve_color in dialog.h).
+ *   Text_DrawShadowed @ 10d8:02df (SelectForCoords gate + DispatchFont +
+ *     shadow at (x + (h>=0x12), y+1) + main at (x,y); pos LIVE as
+ *     text_shadow_pos in dialog.h, dx-only already LIVE as
+ *     text_shadow_offset).
+ *   Text_DrawAt @ 10d8:01fa (DrawShadowed(...,0) wrapper; STUB).
+ *   Text_DrawClipped @ 10d8:01b0 (SelectForCoords + DispatchFont +
+ *     DrawDirect; STUB).
+ * OS-free 1:1 LIVE below (no Win16, no globals, C17); GDI device tails
+ * stay STUB with TODO Orig. */
+
+/* Orig GfxPort_Create @ 10d0:0000 malloc + bitmap bridge ->
+ * gfx_port_create is now LIVE (see video.c): malloc gfx_port_t +
+ * gfx_port_alloc_bitmap INDEX8 TARGET + wire ren/w/h (GETDC/
+ * CREATECOMPATIBLEDC borrow the caller renderer; even width
+ * ((w+1)/2*2) via gfx_port_bitmap_pitch). NULL out -> NOENT (nothing
+ * stored); NULL ren -> NOENT; w/h <= 0 -> RANGE; malloc fail -> NOMEM;
+ * bitmap fail -> IO (freed, *out NULL). */
+void gfx_port_destroy(gfx_port_t *port);
+
+/* Orig Palette_AnimateRange @ 1090:0376 0xec cap ->
+ * palette_animate_clamp. 1:1: first < 0 || count <= 0 || first >= 0xec
+ * -> 0; else min(count, 0xec - first) (decompiler: if (0xec <
+ * first+count) count = 0xec - first). No globals. */
+int palette_animate_clamp(int first, int count);
+
+/* Orig same + ZeroGodPalette @ 1090:0670 / Set @ 1090:06fd flag byte ->
+ * palette_flag_for_mono. 1:1 DAT_1420_17a6 == 0 ? 1 : 0 (color sets the
+ * LOGPALETTE flag, mono clears; Zero always clears). No globals. */
+int palette_flag_for_mono(int mono);
+
 #endif /* CIVLIN_VIDEO_H */

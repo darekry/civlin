@@ -630,6 +630,19 @@ civ_error_t map_repaint_view_shuffled(int mode);
  * Text_DrawAligned @ 1098:0ed1). GDI text -> SDL_ttf TBD. */
 civ_error_t map_draw_city_labels(void);
 
+/* --- Chain P4 render+text (2026-10-16): repaint gate @ 1208:17da ---
+ * Orig FUN_1208_17da @ 1208:17da (repaint gate around
+ * Map_RepaintViewShuffled @ 1208:1866: GLOBALLOCK city-name ctx, then
+ * if (*(char *)(ctx+0x2c) != 0) { DAT_13e8_0000 = 0 + Pre_DrawTilesToPort
+ * trace + Map_RepaintViewShuffled(mode 1 shuffled) + Post_DrawTilesToPort
+ * trace + DAT_13e8_0000 = 1 }; GLOBALUNLOCK when ctx != 0. The
+ * DAT_13e8_0000 dance + traces stay caller-side; the gate below is LIVE
+ * 1:1 on the explicit +0x2c cell flag byte. No Win16, no globals. */
+
+/* Orig FUN_1208_17da @ 1208:17da gate -> map_repaint_needed. 1:1
+ * nonzero (1) when cell_flag != 0 (repaint runs), 0 otherwise. */
+int map_repaint_needed(int cell_flag);
+
 /* --- Chain 2026-10-16 (8): paint order + city-label format (goals 2/3) ---
  * Orig (civ.exe, x86:LE:16:Protected Mode), decompiled this pass:
  *   Map_PaintTilesClipped @ 1208:1534 (tile-range paint from the
