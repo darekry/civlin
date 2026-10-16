@@ -24,6 +24,7 @@
 #include "civ_common.h"
 #include "game.h"
 #include "mainmenu.h"
+#include "win16.h"
 
 int main(int argc, char *argv[])
 {
@@ -56,11 +57,28 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    /* WinMain @ 1008:0000 init order (best-effort: UNSUPPORTED logged). */
+    /* 16 MB startup arena (replaces GLOBALALLOC/GETFREESPACE). */
+    if (win16_mem_init() != CIV_OK) {
+        SDL_Log("arena: out of memory");
+        SDL_DestroyRenderer(ren);
+        SDL_DestroyWindow(win);
+        SDL_Quit();
+        return 1;
+    }
+
+    /* WinMain @ 1008:0000 init order (boot is now real via win16; menu/
+     * game tails stay best-effort until their modals land). */
     err = boot_run(win, ren);
     SDL_Log("boot: %s", civ_strerror(err));
 
-    /* Main_RunStartupSequence @ 11e0:0000 (best-effort until SDL modal). */
+    /* Main_RunStartupSequence @ 11e0:0000: intro (Anim_OpenSequence @
+     * 10b0:008a + loop Anim_AdvanceFrames @ 10b0:0461 over dialog 0x94)
+     * first, menu dispatch after. STUB until the Anim engine lands;
+     * direct mainmenu_run below keeps the tail visible meanwhile. */
+    err = main_run_startup_sequence();
+    SDL_Log("startup: %s", civ_strerror(err));
+
+    /* MainMenu_WndProc @ 11e0:0221 (best-effort until SDL modal). */
     err = mainmenu_run(&choice);
     SDL_Log("menu: %s (%d)", civ_strerror(err), (int)choice);
     if (err == CIV_OK) {
@@ -89,6 +107,7 @@ int main(int argc, char *argv[])
      * palette/font), then caller-owned window/renderer teardown. */
     game_shutdown(&game);
     boot_shutdown();
+    win16_mem_shutdown();
     SDL_DestroyRenderer(ren);
     SDL_DestroyWindow(win);
     SDL_Quit();

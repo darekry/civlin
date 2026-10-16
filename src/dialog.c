@@ -6,7 +6,11 @@
 
 civ_error_t dialog_init(void)
 {
-    return CIV_ERR_UNSUPPORTED;
+    /* DLGPROC layer (@ 1098:124f/16e2/1838, controls @ 1058:*; MenuZ @
+     * 1220:0156). WONTFIX-Win16 instance data: procs are pure dispatch
+     * (handled/default, no USER handles stored); SDL modal lands per-call.
+     * No-op CIV_OK. */
+    return CIV_OK;
 }
 
 win16_msg_result_t dlg_proc(int msg, long wparam, long lparam)
@@ -2654,5 +2658,29 @@ int quiz_tech_is_valid(int pre1, int pre2)
         return 0;
     if (pre2 == -1)
         return 0;
+    return 1;
+}
+
+/* --- Chain 2026-10-16 (task): Quiz reward/resettle (goal 3) ---
+ * See dialog.h block. OS-free 1:1 LIVE (no Win16, no globals, no exit()). */
+
+int quiz_reward_flags(int cur)
+{
+    /* Orig Quiz_RunCivilizationQuiz @ 1178:0022: DAT_12d0_00b6 |= 1. */
+    return cur | 1;
+}
+
+int quiz_needs_resettle(int mode, int correct)
+{
+    /* Orig Quiz_RunCivilizationQuiz @ 1178:0022: pudlo w trybie 0 ->
+     * DAT_13b8_0000 = 1 + FoundCityIfHome-resettle. */
+    if (mode != 0)
+        return 0;
+    return (!correct) ? 1 : 0;
+}
+
+int quiz_pair_first_mode(void)
+{
+    /* Orig Quiz_RunQuizPair @ 1178:0000: pierwszy Quiz(1). */
     return 1;
 }

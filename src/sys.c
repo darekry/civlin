@@ -2,6 +2,8 @@
  * documented adaptations where DOS/Win16 has no Linux equivalent. */
 #include "sys.h"
 
+#include "win16.h"
+
 #include <math.h>
 #include <stdarg.h>
 #include <stdlib.h>
@@ -447,22 +449,22 @@ civ_error_t status_measure_row(int *h_out)
 
 civ_error_t sys_check_runtime_memory(void)
 {
-    /* TODO: Sys_CheckRuntimeMemory @ 11e8:0075 (GETFREESPACE <1000000 /
-     * <300000 + GETFREESYSTEMRESOURCES <10/<8 -> MESSAGEBOX 1420:4473 /
-     * 1420:44ff, once each via 1420:43b4/43b6). Needs a parent window +
-     * SDL_GetSystemRAM mapping. Triggers/content LIVE in sys_runtime_*
-     * below + boot_runtime_needs_* (boot.h); per-civ call site is
-     * Game_TurnLoopTick @ 1088:0000 (check-then-move order). */
-    return CIV_ERR_UNSUPPORTED;
+    /* Sys_CheckRuntimeMemory @ 11e8:0075 (GETFREESPACE <1000000 / <300000 +
+     * GETFREESYSTEMRESOURCES <10/<8 -> MESSAGEBOX 1420:4473/1420:44ff, once
+     * each via 1420:43b4/43b6). Linux delegate: win16_check_runtime_memory
+     * (SDL_GetSystemRAM; warn-once flags stay caller-side, no globals here).
+     * Triggers/content LIVE in sys_runtime_* + boot_runtime_needs_*; per-civ
+     * call site is Game_TurnLoopTick @ 1088:0000 (check-then-move order). */
+    return win16_check_runtime_memory(0, 0);
 }
 
 civ_error_t sys_check_free_memory(void)
 {
     /* Orig: FUN_11e8_0000 @ 11e8:0000 -> Sys_CheckFreeMemory. Boot check:
      * GETFREESPACE against the required floor, MESSAGEBOX 1420:43b8 on
-     * shortfall. Linux mapping TBD (SDL_GetSystemRAM). Stub
-     * CIV_ERR_UNSUPPORTED. No globals, no exit(), read-only. */
-    return CIV_ERR_UNSUPPORTED;
+     * shortfall. Linux delegate: win16_check_free_memory (SDL_GetSystemRAM
+     * vs the 2.5 MB + 0x23/0x23 floors). No globals, no exit(), read-only. */
+    return win16_check_free_memory();
 }
 
 size_t file_write_chunk(FILE *fp, const uint8_t *src, size_t len)

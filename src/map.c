@@ -86,7 +86,12 @@ int map_try_place_isolated_tile(int x, int y)
 
 civ_error_t map_init(void)
 {
-    return CIV_ERR_UNSUPPORTED;
+    /* WdwMap/WdwSmMap/WdwStatus_Open @ 1208:0af1/1210:025b/1218:0386.
+     * WONTFIX-Win16: no CREATEWINDOW/scroll-range/SETTIMER; the 64 KB tile
+     * buffer (1420:b394/b396, s_map above, .bss = startup-allocated, no
+     * GLOBALALLOC lock) is ready. Views/ports are SDL textures (owner:
+     * caller). No-op CIV_OK. */
+    return CIV_OK;
 }
 
 win16_msg_result_t map_wndproc_main(int msg, long wparam, long lparam)

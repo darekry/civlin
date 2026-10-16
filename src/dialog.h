@@ -2103,4 +2103,24 @@ int quiz_should_retry(int first_result);
  * quiz_tech_is_valid. 1:1 (0x7f = terminator lancucha pre, -1 = brak). */
 int quiz_tech_is_valid(int pre1, int pre2);
 
+/* --- Chain 2026-10-16 (task): Quiz reward/resettle (goal 3) ---
+ * Orig Quiz_RunQuizPair @ 1178:0000 (caller Game_TurnLoopTick @ 1088:04d3:
+ *   Quiz(1), pudlo -> Quiz(0)) + Quiz_RunCivilizationQuiz @ 1178:0022:
+ *   dobrze (local_e == local_10) -> DAT_12d0_00b6 |= 1 (nagroda);
+ *   pudlo w trybie 0 -> DAT_13b8_0000 = 1 + Unit_FoundCityIfHome resettle
+ *   wszystkich jednostek gracza + DAT_13b8_0000 = 0.
+ * OS-free ponizej LIVE 1:1 (no Win16, no globals); MenuZ/GDI ogony STUB. */
+
+/* Orig Quiz_RunCivilizationQuiz @ 1178:0022 nagroda -> quiz_reward_flags.
+ * 1:1 cur | 1 (DAT_12d0_00b6 |= 1). */
+int quiz_reward_flags(int cur);
+
+/* Orig Quiz_RunCivilizationQuiz @ 1178:0022 pudlo -> quiz_needs_resettle.
+ * 1:1 mode == 0 && !correct (resettle + 13b8 guard). */
+int quiz_needs_resettle(int mode, int correct);
+
+/* Orig Quiz_RunQuizPair @ 1178:0000 pierwszy tryb -> quiz_pair_first_mode.
+ * 1:1 1 (retry 0 w quiz_should_retry). */
+int quiz_pair_first_mode(void);
+
 #endif /* CIVLIN_DIALOG_H */

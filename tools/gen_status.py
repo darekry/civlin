@@ -112,8 +112,7 @@ def classify(name, body):
 
 # Hand overrides where the literal scan misleads (dispatchers etc.).
 OVERRIDES = {
-    "boot_run": "PARTIAL",  # dispatches 10 steps; blocked by first STUB step
-    "main": "LIVE",  # SDL boot + intro + exit works (best-effort boot)
+    "main": "LIVE",  # SDL boot + menu/game tails + exit works (boot real, rest best-effort)
     "title_play_intro_sdl": "LIVE",  # SDL intro player (parallel to RE-map stub)
     "audio_play_id": "LIVE",
     "sound_play_file": "LIVE",
@@ -141,45 +140,66 @@ sekcji „Ścieżka krytyczna" poniżej).
   — to wskazówki RE, nie approved mapping.
 - „has TODO" = w ciele jest znacznik TODO z adresem Orig i opisem braków.
 
-## Ścieżka krytyczna WinMain @ 1008:0000 (stan na 2026-10-15)
+## Ścieżka krytyczna WinMain @ 1008:0000 (stan na 2026-10-16)
 
-`main.c` leci best-effort: loguje `boot_run`, gra SDL-owe intro
-(`title_play_intro_sdl`: MPLOGO.BMP + OPENING.wav, skip), wychodzi z 0.
-Prawdziwy `boot_run` pada na pierwszym stubie (`boot_check_memory`).
+`main.c`: SDL_Init + okno/renderer + arena 16 MB (`win16_mem_init`) ->
+prawdziwy `boot_run` (**CIV_OK**, zweryfikowane uruchomieniem `boot: ok`) ->
+`mainmenu_run` (STUB, pierwszy strict-stop) -> `game_init` (LIVE) ->
+`game_new` (STUB) -> jeden `game_tick` (STUB) -> shutdown, exit 0.
+Reszta za bootem leci best-effort (log, nigdy fatal).
+Warstwa Win16/DOS żyje w `src/win16.{h,c}` (SDL3/stdio, arena zamiast
+GLOBALALLOC/GETFREESPACE; WONTFIX-y jako no-op `CIV_OK` z adresem Orig).
 
 | Krok WinMain | Funkcja | Stan | Komentarz |
 |---|---|---|---|
-| Sys_CheckFreeMemory | `sys_check_free_memory` | STUB | mapowanie na SDL_GetSystemRAM — trywialne |
+| Sys_CheckFreeMemory | `sys_check_free_memory` | LIVE | delegat do `win16_check_free_memory` (SDL_GetSystemRAM vs 2,5 MB + 0x23) |
 | paths (drive/cwd) | `sys_init_paths` | LIVE | |
-| App_RegisterWindowClasses | `app_register_window_classes` | STUB | na SDL brak klas okien — no-op CIV_OK |
-| civfonts.fon | `font_enum_families_init` | STUB | FON pakowany EDI; wiernie = unpack + NE-fonty |
-| ResMgr_LoadRsc x5 | `rsc_load_rsc` | LIVE | BE-walk katalogu EOF (2 passy, bounds-checked, `RSC_OK`); wpięcie 5 plików w `boot_load_resources` — STUB |
-| Video_CheckDriverCaps | `video_check_driver_caps` | LIVE | |
+| App_RegisterWindowClasses | `app_register_window_classes` | LIVE | WONTFIX: brak klas okien na SDL — no-op `CIV_OK` via `win16_register_classes` |
+| civfonts.fon | `font_enum_families_init` | LIVE | sonda plików via `win16_probe_fonts`; parse na żądanie (`font_fon/fnt_*` LIVE), install GDI WONTFIX |
+| ResMgr_LoadRsc x5 | `boot_load_resources` | LIVE | sonda 5 plików via `win16_probe_resources` (case-insensitive); `rsc_load_rsc` LIVE, właściciel mgr TBD |
+| Video_CheckDriverCaps | `boot_check_video` | LIVE | WONTFIX-checklist: no-op w tym kroku; żywy check renderera gdzie renderer istnieje |
 | Art_MaybeConvertArtwork | `art_maybe_convert_artwork` | LIVE | na Linuksie zbędne — no-op CIV_OK |
-| Config_LoadPrefs | `config_load_prefs` | STUB | wystarczą domyślne (sounds on) — CIV_OK |
-| Palette_Init | `palette_init` | LIVE | no-op |
-| Game_InitGlobalTables | `boot_init_tables` | PARTIAL | rng + próba malloc żyją; win16-lock nie ma odpowiednika |
-| Main_RunStartupSequence | `main_run_startup_sequence` | STUB | wymaga silnika Anim_* @ 10b0 + dialogu 0x94 + MenuZ |
-| Init_UnitFontTables | `boot_init_unit_font_tables` | STUB | potrzebne dopiero wizardowi |
+| Config_LoadPrefs | `boot_load_prefs` | LIVE | domyślne (sounds on); I/O `civ.prf` zostaje w `config_load_prefs` (STUB) |
+| Palette_Init | `palette_init` | LIVE | no-op (paleta per-tekstura) |
+| Game_InitGlobalTables | `boot_init_tables` | LIVE | rng + arena 16 MB; WONTFIX: Win16-lock selektora (bufor mapy w `map.c` `.bss`) |
+| Main_RunStartupSequence (intro) | `main_run_startup_sequence` | STUB | **krytyczna ścieżka**: Anim_OpenSequence @ 10b0:008a + pętla AdvanceFrames @ 10b0:0461 nad dialogiem 0x94 (P0); menu dopiero po intrze |
+| Init_UnitFontTables | `boot_init_unit_font_tables` | STUB | potrzebne dopiero wizardowi (P1) |
 | Sound_PlayId(STOP) | `audio_play_id` | LIVE | |
-| MainPort/GfxPort | `mainport_get_or_create`, `gfx_port_create` | STUB | mostek na SDL_Texture — średnia praca |
-| WdwMap/SmMap/Status_Open | `map_open_*` | STUB | `map_init` → no-op wystarczy na razie |
-| Menu_InitMainBar | `menu_init_mainbar` | STUB | no-op CIV_OK |
+| MainPort/GfxPort | `mainport_get_or_create`, `gfx_port_create` | STUB | mostek na SDL_Texture — średnia praca (P3) |
+| WdwMap/SmMap/Status_Open | `map_open_*` | STUB | `map_init` LIVE (no-op); widoki SDL TBD |
+| Menu_InitMainBar | `menu_init_mainbar` | LIVE | WONTFIX: brak USER-menu na SDL — no-op (stringi w `menu_strings` LIVE) |
 | pętla Game_TurnLoopTick | `game_turn_tick` | STUB | gra właściwa — poza zakresem |
-| WinMain_Shutdown | `boot_shutdown` | LIVE | no-op shutdowny |
+| WinMain_Shutdown | `boot_shutdown` | LIVE | no-op shutdowny + `win16_mem_shutdown` w `main.c` |
 
 Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 `CIV_MAINMENU_TEXT` (tekst już w `mainmenu.h`); wykonalne bez RSC
-(proceduralne widgety + debug-text), wierny wygląd czeka na wpięcie 5x RSC
-w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
+(proceduralne widgety + debug-text), wierny wygląd czeka na dekod ramek
+`rsc_get_indexed` (sonda plików już LIVE).
+
+## Priorytety RE/dump (wg strict-stopów z 2026-10-16)
+
+- P0 intro (krytyczna ścieżka, przed menu): `Anim_OpenSequence @ 10b0:008a`,
+  pętla `Anim_AdvanceFrames @ 10b0:0461`, współdzielony player `FUN_1030_0000`
+  (~31 KB, 16 wołających), dialog 0x94 (`Dlg_CreateTracked @ 1098:124f` +
+  `DestroyTracked @ 1098:1612`), `Gfx_StoreDC @ 1098:1104`,
+  `Anim_CloseSequence @ 10b0:0287`, `Anim_RebaseClock @ 10b0:005b`.
+  (SDL odpowiednik `title_play_intro_sdl` już gra MPLOGO.BMP + OPENING.wav,
+  ale prawdziwa ścieżka idzie przez opkody Anim.)
+- P1 menu (dopiero po intrze): `Dialog_MenuZ_Modal @ 1220:0156` nad tekstem
+  `1420:435b`.
+- P2 new game: `NewGame_Wizard @ 10e8:0000`, `Init_UnitFontTables @ 10e8:2d46`,
+  `Tribe_GetNameList @ 11f8:0080`, `Map_GenerateRandomOrLoad @ 1028:0000`.
+- P3 turn loop: `Game_TurnLoopTick @ 1088:0000`, `Sys_DrainInput @ 11f0:4ea0`.
+- P4 render: `GfxPort_Create/Present @ 10d0:0000/0854`, repaint
+  `@ 1208:1866/1f64`, `Text_Draw* @ 10d8:*`, dump godpal 0xec.
+- WONTFIX (nie dumpować): semantyka GLOBALALLOC-lock, GDI-install fontów,
+  bajty checklisty GETDEVICECAPS, chunki drivera w `civ.prf`, wnętrze MCI.
 
 ## Korekty mapy RE (do przeniesienia do `src/*.h`)
 
 - `FUN_1030_0000` to NIE `Title_PlayAnimLoop`: ~31 KB, 16 wołających
   (miasta, `Unit_DoMove`, `City_ShowTopFive`, HoF…) — współdzielony
   odtwarzacz PIC/animacji. `title.h` do poprawki.
-- `boot_check_video` nie deleguje do żywego `video_check_driver_caps`
-  (sygnatura bez renderera) — do posprzątania przy domknięciu `boot_run`.
 
 ## Pełna tabela (skan `src/*.c`)
 """

@@ -12,6 +12,7 @@
 #include "newgame.h"
 #include "sys.h"
 #include "video.h"
+#include "win16.h"
 
 civ_error_t boot_setup_paths(void)
 {
@@ -32,9 +33,10 @@ civ_error_t app_register_window_classes(void)
 {
     /* Orig: FUN_1098_06f8 @ 1098:06f8 -> App_RegisterWindowClasses.
      * REGISTERCLASS x4 + Ctrl_RegisterCustomClasses @ 1058:0b4d (see
-     * dialog.h) + GETSYSTEMMETRICS. Win16 USER -> SDL3 TBD; stub
-     * CIV_ERR_UNSUPPORTED. No globals, no exit(), read-only. */
-    return CIV_ERR_UNSUPPORTED;
+     * dialog.h) + GETSYSTEMMETRICS. WONTFIX-Win16: SDL3 has no window
+     * classes; delegate win16_register_classes (no-op CIV_OK). No globals,
+     * no exit(), read-only. */
+    return win16_register_classes();
 }
 
 civ_error_t boot_register_classes(void)
@@ -53,16 +55,21 @@ civ_error_t boot_load_fonts(void)
 
 civ_error_t boot_load_resources(void)
 {
-    /* TODO: 5x ResMgr_LoadRsc @ 1190:0000 (CivData0..4.rsc via rsc_loader). */
-    return CIV_ERR_UNSUPPORTED;
+    /* 5x ResMgr_LoadRsc @ 1190:0000 (CivData0..4.rsc via rsc_loader).
+     * Linux: probe via win16_probe_resources (read-only search civ1win/./
+     * unpacked, case variants); the owning rsc_mgr load lands with the
+     * RSC consumer (no globals here). Missing files -> NOENT (honest stop,
+     * not a fake OK). */
+    return win16_probe_resources();
 }
 
 civ_error_t boot_check_video(void)
 {
-    /* TODO: Video_CheckDriverCaps @ 1008:059a (see video.h
-     * video_check_driver_caps; renderer threading TBD, so this step stays
-     * UNSUPPORTED until boot_open_windows owns an SDL_Renderer to check). */
-    return CIV_ERR_UNSUPPORTED;
+    /* Video_CheckDriverCaps @ 1008:059a (see video.h
+     * video_check_driver_caps). WONTFIX-Win16 checklist: GETDEVICECAPS has
+     * no Linux equivalent; the live renderer check runs where the renderer
+     * exists (boot_open_windows via video_init). This order step is CIV_OK. */
+    return CIV_OK;
 }
 
 civ_error_t boot_maybe_convert_artwork(void)
@@ -75,8 +82,12 @@ civ_error_t boot_maybe_convert_artwork(void)
 
 civ_error_t boot_load_prefs(void)
 {
-    /* WinMain prefs step: Config_LoadPrefs @ 1008:0b4a (see boot.h). */
-    return config_load_prefs();
+    /* WinMain prefs step: Config_LoadPrefs @ 1008:0b4a (see boot.h).
+     * Linux: built-in defaults (config_prefs_defaults, sounds on); civ.prf
+     * file I/O stays in config_load_prefs STUB (read-only, never creates).
+     * Boot proceeds on defaults -> CIV_OK. */
+    (void)config_prefs_defaults();
+    return CIV_OK;
 }
 
 civ_error_t boot_init_palette(void)
@@ -92,14 +103,12 @@ civ_error_t boot_init_tables(void)
      * Main_RunStartupSequence @ 11e0:0000. Orig shape: key-remap loop +
      * mem_alloc_lock(64000) -> 1420:b394/b396 + Rng_Init @ 11c8:0000 +
      * string tables via Tribe_GetNameList @ 11f8:0080 (see newgame.h).
-     * Mixed port: OS-free parts 1:1 below; Win16 GLOBALALLOC lock
-     * selector semantics (-> 1420:b394/b396 far ptr, persistent) have no
-     * Linux equivalent -> overall CIV_ERR_UNSUPPORTED. No globals (probe
-     * buffer is malloc'd + freed here; the persistent 64 KB owner lives
-     * in map.h CIV_MAP_BUF_LEN); read-only; no exit(). */
+     * Linux: WONTFIX-Win16 lock selector; the 64 KB map buffer is carved
+     * from the 16 MB startup arena (win16_mem_init + arena_alloc, owner
+     * is map.c). No globals here; read-only; no exit(). */
     uint8_t key_remap[256];
     unsigned i;
-    void *probe;
+    civ_error_t err;
 
     /* 1) Key-remap loop (OS-free shape 1:1; exact remap pairs TBD from
      * the 11e8:0337 dump, so identity skeleton for now). */
@@ -110,14 +119,14 @@ civ_error_t boot_init_tables(void)
     /* 2) Rng_Init @ 11c8:0000 (live via sys.h). */
     rng_init();
 
-    /* 3) mem_alloc_lock(64000) probe: proves the host can hold the
-     * 1420:b394/b396 map buffer (see map.h CIV_MAP_BUF_LEN). Freed
-     * at once because the persistent locked handle needs the Win16
-     * selector bridge (UNSUPPORTED below). */
-    probe = malloc(64000u);
-    if (!probe)
+    /* 3) Arena: proves + reserves the host backing for the 1420:b394/b396
+     * map buffer (see map.h CIV_MAP_BUF_LEN). Persistent carve happens in
+     * map_init; here only the arena readiness gate. */
+    err = win16_mem_init();
+    if (err != CIV_OK)
+        return err;
+    if (!win16_arena_alloc(0u + WIN16_MAP_BUF_LEN))
         return CIV_ERR_NOMEM;
-    free(probe);
 
     /* 4) String-table anchor (see newgame.h): exercises the
      * Tribe_GetNameList @ 11f8:0080 dependency without requiring the
@@ -127,8 +136,7 @@ civ_error_t boot_init_tables(void)
     /* 5) Sibling tables (see below): Init_UnitFontTables @ 10e8:2d46. */
     (void)boot_init_unit_font_tables();
 
-    /* TODO: Win16 GLOBALALLOC lock semantics (-> 1420:b394/b396). */
-    return CIV_ERR_UNSUPPORTED;
+    return CIV_OK;
 }
 
 civ_error_t boot_init_unit_font_tables(void)
@@ -171,20 +179,22 @@ civ_error_t boot_open_windows(SDL_Window *win, SDL_Renderer *ren)
     err = map_init();
     if (err != CIV_OK)
         return err;
-    /* TODO: GfxPort_Create @ 10d0:0000 + MainPort_GetOrCreate @ 1098:114a
-     * + WdwMap_Open @ 1208:0af1 + WdwSmMap_Open @ 1210:025b +
-     * WdwStatus_Open @ 1218:0386 Win16 tails (see map.h). */
-    return CIV_ERR_UNSUPPORTED;
+    /* WONTFIX-Win16 tails: GfxPort_Create @ 10d0:0000 + MainPort_GetOrCreate
+     * @ 1098:114a + WdwMap_Open @ 1208:0af1 + WdwSmMap_Open @ 1210:025b +
+     * WdwStatus_Open @ 1218:0386 CREATEWINDOW/scroll-range/SETTIMER (see
+     * map.h). SDL3: window/renderer caller-owned; ports are textures. */
+    return CIV_OK;
 }
 
 civ_error_t menu_init_mainbar(void)
 {
     /* Orig: FUN_1048_0000 @ 1048:0000 -> Menu_InitMainBar.
-     * TODO: CHECKMENUITEM + MODIFYMENU main-bar build/update ("&Save
+     * CHECKMENUITEM + MODIFYMENU main-bar build/update ("&Save
      * Game\tCtrl+S" @ 14b0:0010, "&Auto Save" @ 14b0:0092, "Save First"
-     * @ 14d0:0028; see dialog.h). Win16 USER menu handles -> SDL3 menu
-     * TBD. */
-    return CIV_ERR_UNSUPPORTED;
+     * @ 14d0:0028; see dialog.h). WONTFIX-Win16: no USER menu handles on
+     * SDL3 (commands via SDL UI later); strings stay LIVE in menu_strings.
+     * No-op CIV_OK. */
+    return CIV_OK;
 }
 
 civ_error_t boot_init_menu(void)
@@ -206,7 +216,7 @@ civ_error_t boot_init_menu(void)
         return err;
     /* Cursor_Set @ 1098:096c order fidelity (void, always live). */
     cursor_set(0);
-    return CIV_ERR_UNSUPPORTED;
+    return CIV_OK;
 }
 
 /* --- Packet F: font / prefs / DOS guards (see boot.h anchors) --- */
@@ -231,18 +241,13 @@ civ_error_t dos_set_path(int drive, const char *path)
 
 civ_error_t font_enum_families_init(void)
 {
-    /* Orig FUN_1008_0e99 @ 1008:0e99 -> Font_EnumFamiliesInit (stub).
+    /* Orig FUN_1008_0e99 @ 1008:0e99 -> Font_EnumFamiliesInit.
      * ENUMFONTFAMILIES enumeration callback + ADDFONTRESOURCE(CIV_FONT_FILE
-     * "civfonts.fon" @ 1420:00a4/00fe). civfonts.fon is a Win16 NE
-     * DLL/font container (244224 B): MZ+NE header + font-directory
-     * resources; exact FON header bytes + table offsets TBD from the
-     * unpacked dump (do not implement full TTF here). SDL_ttf bridge
-     * plan: read-only NE parse -> TTF_OpenFont face + family list
-     * (ENUMFONTFAMILIES equivalent); raster via SDL_ttf when a face
-     * lands. Win16 GDI font-table install -> SDL_ttf TBD. Read-only:
-     * never writes to civ1win/ (REMOVEFONTRESOURCE tail in
-     * video_shutdown_display, see video.h). */
-    return CIV_ERR_UNSUPPORTED;
+     * "civfonts.fon" @ 1420:00a4/00fe). WONTFIX-Win16 GDI install: faces are
+     * parsed on demand via font_fon_parse/font_fnt_* (bundled FNT raster,
+     * no fontconfig/TTF); presence probe below is read-only, never writes
+     * civ1win/ (REMOVEFONTRESOURCE tail in video_shutdown_display). */
+    return win16_probe_fonts();
 }
 
 /* AF2: FON header port (see boot.h font_fon_info_t). OS-free, no SDL. */

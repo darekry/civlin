@@ -3920,3 +3920,178 @@ int tech_bit_mask(int tech)
         r += 0x10;
     return 1 << r;
 }
+
+/* --- Chain 2026-10-16 (task): Hut/Tech/Eliminate/Pedia/Gov kernels ---
+ * See game.h block. OS-free 1:1 LIVE (no Win16, no globals, no exit()). */
+
+int hut_found_city_site_ok(int dist, int tile_flags)
+{
+    /* Orig Hut_ProcessHut @ 11c0:2677 case 0: 3 < dist + 4 < (tile & 7). */
+    if (dist <= 3)
+        return 0;
+    return ((tile_flags & 7) > 4) ? 1 : 0;
+}
+
+int hut_tech_shuffle_ok(int turn, int year)
+{
+    /* Orig Hut_ProcessHut @ 11c0:2677 case 1: turn != 0 && year < 0x3e9. */
+    if (turn == 0)
+        return 0;
+    return (year < 0x3e9) ? 1 : 0;
+}
+
+int hut_tech_eligible(int not_owned, int pre1_owned, int pre2_owned)
+{
+    /* Orig Hut_ProcessHut @ 11c0:2677 case 1 pick (jak Tech_ChooseResearch). */
+    if (!not_owned)
+        return 0;
+    if (!pre1_owned)
+        return 0;
+    if (!pre2_owned)
+        return 0;
+    return 1;
+}
+
+int hut_gold_bonus(void)
+{
+    /* Orig Hut_ProcessHut @ 11c0:2677 case 2: treasury += 0x32. */
+    return 0x32;
+}
+
+int hut_barbs_ok(int dist, int city_count)
+{
+    /* Orig Hut_ProcessHut @ 11c0:2677 case 3: 3 < dist && 3efe != 0. */
+    if (dist <= 3)
+        return 0;
+    return (city_count != 0) ? 1 : 0;
+}
+
+int hut_barb_step(int city_count)
+{
+    /* Orig Hut_ProcessHut @ 11c0:2677 case 3: Util_Clamp(4-count,1,4). */
+    int v = 4 - city_count;
+
+    if (v < 1)
+        v = 1;
+    if (v > 4)
+        v = 4;
+    return v;
+}
+
+int hut_barb_unit_kind(int tile_cost)
+{
+    /* Orig Hut_ProcessHut @ 11c0:2677 case 3: 17d4[class] < 3 ? 6 : 3. */
+    return (tile_cost < 3) ? 6 : 3;
+}
+
+int hut_friendly_unit_kind(int rng2)
+{
+    /* Orig Hut_ProcessHut @ 11c0:2677 default: Rng_Range(2) == 0 ? 6 : 3. */
+    return (rng2 == 0) ? 6 : 3;
+}
+
+int tech_grant_stores_bit(int tech)
+{
+    /* Orig Tech_GrantTech @ 1170:2aaa: tech != 0x47 stawia bit + 0x48-wpis. */
+    return (tech != 0x47) ? 1 : 0;
+}
+
+int tech_grant_is_library_source(int src)
+{
+    /* Orig Tech_GrantTech @ 1170:2aaa: param_3 == 0xfffe = Great Library. */
+    return (src == 0xfffe) ? 1 : 0;
+}
+
+int tech_grant_library_spread_ok(int owners)
+{
+    /* Orig Tech_GrantTech @ 1170:2aaa: 1 < local_a (wlascicieli > 1). */
+    return (owners > 1) ? 1 : 0;
+}
+
+int tech_grant_barracks_obsolete_clear(int mask)
+{
+    /* Orig Tech_GrantTech @ 1170:2aaa (0x22/0x25): 54fc & 0xfffffffd. */
+    return mask & ~2;
+}
+
+int tech_grant_from_other(int civ, int src)
+{
+    /* Orig Tech_GrantTech @ 1170:2aaa acquire: civ != src && src != 0. */
+    if (civ == src)
+        return 0;
+    if (src == 0)
+        return 0;
+    return 1;
+}
+
+int tech_cost_roll_bound(int cost)
+{
+    /* Orig Tech_ChooseResearch @ 1170:21b3: Rng_Range(koszt << 2). */
+    return cost << 2;
+}
+
+int game_eliminate_needed(int civ, int player_civ)
+{
+    /* Orig Game_EliminateCiv @ 10e8:1b97: civ != 0 && civ != player. */
+    if (civ == 0)
+        return 0;
+    if (civ == player_civ)
+        return 0;
+    return 1;
+}
+
+int game_eliminate_alive_clear(int mask, int civ)
+{
+    /* Orig Game_EliminateCiv @ 10e8:1b97: mask & ~(1 << (civ & 0x1f)). */
+    if (civ < 0)
+        return -1;
+    return mask & ~(1 << (civ & 0x1f));
+}
+
+int game_eliminate_seen_clear(int cur, int civ)
+{
+    /* Orig Game_EliminateCiv @ 10e8:1b97 seen 0x50x0x32: cur &= ~(1<<civ). */
+    if (civ < 0)
+        return -1;
+    return cur & ~(1 << (civ & 0x1f));
+}
+
+int pedia_entry_kind_valid(int kind)
+{
+    /* Orig Pedia_ShowEntry @ 1068:06af switch: case 1..5. */
+    return (kind >= 1 && kind <= 5) ? 1 : 0;
+}
+
+int pedia_res_for_selector(int sel)
+{
+    /* Orig Pedia_ShowByCategory @ 1020:0000: sel 0..4 -> 0x82 + sel. */
+    if (sel < 0 || sel > 4)
+        return -1;
+    return 0x82 + sel;
+}
+
+int pedia_build_variant(int param)
+{
+    /* Orig Pedia_ShowEntry @ 1068:06af case 2: param+1 < 0x19 ? 2 : 3. */
+    return (param + 1 < 0x19) ? 2 : 3;
+}
+
+int pedia_terrain_find_index(const int *table, int n, int id)
+{
+    /* Orig Pedia_FindTerrainIndex @ 1020:011b: scan 0..0xb, else 0xffff. */
+    int i;
+
+    if (!table || n <= 0)
+        return -1;
+    for (i = 0; i < n; i++) {
+        if (table[i] == id)
+            return i;
+    }
+    return -1;
+}
+
+int gov_announce_needed(int gov)
+{
+    /* Orig Gov_AnnounceChange @ 10e8:32c1: gov(3b77+0x13) != 0. */
+    return (gov != 0) ? 1 : 0;
+}

@@ -2771,4 +2771,129 @@ int tech_grant_is_future(int tech);
 int tech_bit_word(int tech);
 int tech_bit_mask(int tech);
 
+/* --- Chain 2026-10-16 (task): Hut/Tech/Eliminate/Pedia/Gov kernels ---
+ * Orig (civ.exe, x86:LE:16:Protected Mode):
+ *   Hut_ProcessHut @ 11c0:2677 (jedyny caller Civ_ProcessUnitMoves @
+ *     11f0:0000 site 11f0:36a9; Rng_Range(4) case 0..3 + default-fallback):
+ *     case 0 advanced-tribe: City_FindNearest + Map_WrapStepDist, dist > 3
+ *       i (tile(x+0x50,y) & 7) > 4 -> City_FoundCity(civ,0,x,y,1) + reveal;
+ *     case 1 tech-shuffle: turn != 0 && year < 0x3e9 -> do 0x3e6 prob:
+ *       !HasTech(t) && HasTech(pre1 @ 1894) && HasTech(pre2 @ 1895) ->
+ *       Tech_GrantTech(civ,t,0); case 2 gold: treasury(43b8+0x8c) += 0x32;
+ *     case 3 barbs: dist > 3 && 3efe != 0 -> loop 1..8 step
+ *       Util_Clamp(4-3efe,1,4): Map_GetUnitAt == -1 && occup & 1 == 0 &&
+ *       class != 10, koszt(17d4) < 3 ? 6 : 3, Unit_SpawnUnit(0,kind);
+ *     default/4 friendly: Unit_SpawnUnit(civ, Rng_Range(2) == 0 ? 6 : 3).
+ *   Tech_GrantTech @ 1170:2aaa (ESCHISM+5+civ*10 bit + 0x48-tabela 14000
+ *     + wonder-cancel Replay 5,2 + Great Library 0xfffe spread; wolaja:
+ *     NewGame_InitCivState @ 10e8:1583, Tech_ChooseResearch @ 1170:22ee/
+ *     26b3, self 1170:3172, Diplo_OpenContactDialog x3, Tech_GrantConquestTech
+ *     (was FUN_1038_09bc) x2, Diplo_ExchangeTechs x2, Hut_ProcessHut @
+ *     11c0:2952, Diplomat_CityAction @ 11b8:02c1).
+ *   Game_EliminateCiv @ 10e8:1b97 (civ != 0 && != player, miasta -> early;
+ *     msg destroyed + Game_ClearEliminatedCivFlags (was FUN_1038_083d) +
+ *     Replay 0xd,2 + FoundCityIfHome resettle + seen 0x50x0x32 &= ~(1<<civ)
+ *     + NewGame_InitCivState; wolaja: Pic_PlayShared, FUN_1078_0000,
+ *     Unit_DoMove @ 1038:082c, Civ_ProcessUnitMoves @ 11f0:27b1).
+ *   Tech_CalcCost @ 1170:31ec (base0[+0x90] + base1[+0x91] * 1ca4[civ];
+ *     callerzy: Tech_ChooseResearch @ 1170:2239, Diplo_OpenContactDialog x2,
+ *     Tech_GrantConquestTech x2) + Tech_ChooseResearch MAX-roll (koszt<<2).
+ *   Pedia_ShowEntry @ 1068:06af switch 1..5 (1 tech +0x44c, 2 build
+ *     param+1<0x19?2:3 + 0xd07/0xd08 via HasTech(0x25), 3 unit +0x4b0,
+ *     4 terrain via Pedia_FindTerrainIndex (was FUN_1020_011b) +0x3f5/6,
+ *     5 pusty; caller Pedia_ShowByCategory (was FUN_1020_0000: sel 0..4 ->
+ *     Res 0x82..0x86)).
+ *   Gov_AnnounceChange @ 10e8:32c1 (gov = 3b77+0x13+civ*2 != 0 -> Res 0x8d
+ *     msg; caller Diplo_ChangeGovernment @ 1168:082b).
+ * OS-free reguly ponizej LIVE 1:1 (no Win16, no globals, read-only); dialog/
+ * map/city-state ogony STUB z TODO Orig. No exit(), C17. */
+
+/* Orig Hut_ProcessHut @ 11c0:2677 case 0 -> hut_found_city_site_ok.
+ * 1:1 dist > 3 && (tile_flags & 7) > 4 (tile = Map_GetTile(x+0x50,y)). */
+int hut_found_city_site_ok(int dist, int tile_flags);
+
+/* Orig Hut_ProcessHut @ 11c0:2677 case 1 gate -> hut_tech_shuffle_ok.
+ * 1:1 turn != 0 && year < 0x3e9. */
+int hut_tech_shuffle_ok(int turn, int year);
+
+/* Orig Hut_ProcessHut @ 11c0:2677 case 1 pick -> hut_tech_eligible.
+ * 1:1 !owned && pre1 && pre2 (pre -1 = unconditional via HasTech(-1)). */
+int hut_tech_eligible(int not_owned, int pre1_owned, int pre2_owned);
+
+/* Orig Hut_ProcessHut @ 11c0:2677 case 2 -> hut_gold_bonus. 1:1 0x32. */
+int hut_gold_bonus(void);
+
+/* Orig Hut_ProcessHut @ 11c0:2677 case 3 gate -> hut_barbs_ok.
+ * 1:1 dist > 3 && city_count_3efe != 0. */
+int hut_barbs_ok(int dist, int city_count);
+
+/* Orig Hut_ProcessHut @ 11c0:2677 case 3 step -> hut_barb_step.
+ * 1:1 Util_Clamp(4-count,1,4) @ 11c8:0063 inlined. */
+int hut_barb_step(int city_count);
+
+/* Orig Hut_ProcessHut @ 11c0:2677 case 3 kind -> hut_barb_unit_kind.
+ * 1:1 tile_cost(17d4[class]) < 3 ? 6 : 3. */
+int hut_barb_unit_kind(int tile_cost);
+
+/* Orig Hut_ProcessHut @ 11c0:2677 default -> hut_friendly_unit_kind.
+ * 1:1 Rng_Range(2) == 0 ? 6 : 3. */
+int hut_friendly_unit_kind(int rng2);
+
+/* Orig Tech_GrantTech @ 1170:2aaa Future-gate -> tech_grant_stores_bit.
+ * 1:1 tech != 0x47 (Future nie stawia ESCHISM-bitu ani 0x48-wpisu). */
+int tech_grant_stores_bit(int tech);
+
+/* Orig Tech_GrantTech @ 1170:2aaa Great Library src -> tech_grant_is_library_source.
+ * 1:1 src == 0xfffe. */
+int tech_grant_is_library_source(int src);
+
+/* Orig Tech_GrantTech @ 1170:2aaa spread (local_a > 1) ->
+ * tech_grant_library_spread_ok. 1:1 owners > 1. */
+int tech_grant_library_spread_ok(int owners);
+
+/* Orig Tech_GrantTech @ 1170:2aaa barracks-obsolete (54fc & 0xfffffffd,
+ * tech 0x22/0x25) -> tech_grant_barracks_obsolete_clear. 1:1 cur & ~2. */
+int tech_grant_barracks_obsolete_clear(int mask);
+
+/* Orig Tech_GrantTech @ 1170:2aaa acquire-tekst -> tech_grant_from_other.
+ * 1:1 civ != src && src != 0 (develop vs acquire vs library). */
+int tech_grant_from_other(int civ, int src);
+
+/* Orig Tech_ChooseResearch @ 1170:21b3 roll (Rng_Range(koszt<<2)) ->
+ * tech_cost_roll_bound. 1:1 cost << 2 (cost = tech_calc_cost). */
+int tech_cost_roll_bound(int cost);
+
+/* Orig Game_EliminateCiv @ 10e8:1b97 gate -> game_eliminate_needed.
+ * 1:1 civ != 0 && civ != player_civ. */
+int game_eliminate_needed(int civ, int player_civ);
+
+/* Orig Game_EliminateCiv @ 10e8:1b97 alive-clear -> game_eliminate_alive_clear.
+ * 1:1 mask & ~(1 << (civ & 0x1f)); civ OOR (< 0) -> -1. */
+int game_eliminate_alive_clear(int mask, int civ);
+
+/* Orig Game_EliminateCiv @ 10e8:1b97 seen-clear (0x50 x 0x32 warstwa) ->
+ * game_eliminate_seen_clear. 1:1 cur & ~(1 << (civ & 0x1f)); civ < 0 -> -1. */
+int game_eliminate_seen_clear(int cur, int civ);
+
+/* Orig Pedia_ShowEntry @ 1068:06af switch -> pedia_entry_kind_valid.
+ * 1:1 kind 1..5. */
+int pedia_entry_kind_valid(int kind);
+
+/* Orig Pedia_ShowByCategory @ 1020:0000 sel -> pedia_res_for_selector.
+ * 1:1 sel 0..4 -> 0x82 + sel (tech/build/produce/gov/unit); else -1. */
+int pedia_res_for_selector(int sel);
+
+/* Orig Pedia_ShowEntry @ 1068:06af case 2 -> pedia_build_variant.
+ * 1:1 (param + 1) < 0x19 ? 2 : 3 (local_1a). */
+int pedia_build_variant(int param);
+
+/* Orig Pedia_FindTerrainIndex @ 1020:011b scan -> pedia_terrain_find_index.
+ * 1:1 pierwszy i w 0..0xb z table[i] == id, else -1 (orig 0xffff);
+ * NULL/n <= 0 -> -1. */
+int pedia_terrain_find_index(const int *table, int n, int id);
+
+/* Orig Gov_AnnounceChange @ 10e8:32c1 gate -> gov_announce_needed.
+ * 1:1 gov != 0 (3b77+0x13+civ*2). */
+int gov_announce_needed(int gov);
+
 #endif /* CIVLIN_GAME_H */

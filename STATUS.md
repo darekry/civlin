@@ -18,45 +18,66 @@ sekcji „Ścieżka krytyczna" poniżej).
   — to wskazówki RE, nie approved mapping.
 - „has TODO" = w ciele jest znacznik TODO z adresem Orig i opisem braków.
 
-## Ścieżka krytyczna WinMain @ 1008:0000 (stan na 2026-10-15)
+## Ścieżka krytyczna WinMain @ 1008:0000 (stan na 2026-10-16)
 
-`main.c` leci best-effort: loguje `boot_run`, gra SDL-owe intro
-(`title_play_intro_sdl`: MPLOGO.BMP + OPENING.wav, skip), wychodzi z 0.
-Prawdziwy `boot_run` pada na pierwszym stubie (`boot_check_memory`).
+`main.c`: SDL_Init + okno/renderer + arena 16 MB (`win16_mem_init`) ->
+prawdziwy `boot_run` (**CIV_OK**, zweryfikowane uruchomieniem `boot: ok`) ->
+`mainmenu_run` (STUB, pierwszy strict-stop) -> `game_init` (LIVE) ->
+`game_new` (STUB) -> jeden `game_tick` (STUB) -> shutdown, exit 0.
+Reszta za bootem leci best-effort (log, nigdy fatal).
+Warstwa Win16/DOS żyje w `src/win16.{h,c}` (SDL3/stdio, arena zamiast
+GLOBALALLOC/GETFREESPACE; WONTFIX-y jako no-op `CIV_OK` z adresem Orig).
 
 | Krok WinMain | Funkcja | Stan | Komentarz |
 |---|---|---|---|
-| Sys_CheckFreeMemory | `sys_check_free_memory` | STUB | mapowanie na SDL_GetSystemRAM — trywialne |
+| Sys_CheckFreeMemory | `sys_check_free_memory` | LIVE | delegat do `win16_check_free_memory` (SDL_GetSystemRAM vs 2,5 MB + 0x23) |
 | paths (drive/cwd) | `sys_init_paths` | LIVE | |
-| App_RegisterWindowClasses | `app_register_window_classes` | STUB | na SDL brak klas okien — no-op CIV_OK |
-| civfonts.fon | `font_enum_families_init` | STUB | FON pakowany EDI; wiernie = unpack + NE-fonty |
-| ResMgr_LoadRsc x5 | `rsc_load_rsc` | LIVE | BE-walk katalogu EOF (2 passy, bounds-checked, `RSC_OK`); wpięcie 5 plików w `boot_load_resources` — STUB |
-| Video_CheckDriverCaps | `video_check_driver_caps` | LIVE | |
+| App_RegisterWindowClasses | `app_register_window_classes` | LIVE | WONTFIX: brak klas okien na SDL — no-op `CIV_OK` via `win16_register_classes` |
+| civfonts.fon | `font_enum_families_init` | LIVE | sonda plików via `win16_probe_fonts`; parse na żądanie (`font_fon/fnt_*` LIVE), install GDI WONTFIX |
+| ResMgr_LoadRsc x5 | `boot_load_resources` | LIVE | sonda 5 plików via `win16_probe_resources` (case-insensitive); `rsc_load_rsc` LIVE, właściciel mgr TBD |
+| Video_CheckDriverCaps | `boot_check_video` | LIVE | WONTFIX-checklist: no-op w tym kroku; żywy check renderera gdzie renderer istnieje |
 | Art_MaybeConvertArtwork | `art_maybe_convert_artwork` | LIVE | na Linuksie zbędne — no-op CIV_OK |
-| Config_LoadPrefs | `config_load_prefs` | STUB | wystarczą domyślne (sounds on) — CIV_OK |
-| Palette_Init | `palette_init` | LIVE | no-op |
-| Game_InitGlobalTables | `boot_init_tables` | PARTIAL | rng + próba malloc żyją; win16-lock nie ma odpowiednika |
-| Main_RunStartupSequence | `main_run_startup_sequence` | STUB | wymaga silnika Anim_* @ 10b0 + dialogu 0x94 + MenuZ |
-| Init_UnitFontTables | `boot_init_unit_font_tables` | STUB | potrzebne dopiero wizardowi |
+| Config_LoadPrefs | `boot_load_prefs` | LIVE | domyślne (sounds on); I/O `civ.prf` zostaje w `config_load_prefs` (STUB) |
+| Palette_Init | `palette_init` | LIVE | no-op (paleta per-tekstura) |
+| Game_InitGlobalTables | `boot_init_tables` | LIVE | rng + arena 16 MB; WONTFIX: Win16-lock selektora (bufor mapy w `map.c` `.bss`) |
+| Main_RunStartupSequence (intro) | `main_run_startup_sequence` | STUB | **krytyczna ścieżka**: Anim_OpenSequence @ 10b0:008a + pętla AdvanceFrames @ 10b0:0461 nad dialogiem 0x94 (P0); menu dopiero po intrze |
+| Init_UnitFontTables | `boot_init_unit_font_tables` | STUB | potrzebne dopiero wizardowi (P1) |
 | Sound_PlayId(STOP) | `audio_play_id` | LIVE | |
-| MainPort/GfxPort | `mainport_get_or_create`, `gfx_port_create` | STUB | mostek na SDL_Texture — średnia praca |
-| WdwMap/SmMap/Status_Open | `map_open_*` | STUB | `map_init` → no-op wystarczy na razie |
-| Menu_InitMainBar | `menu_init_mainbar` | STUB | no-op CIV_OK |
+| MainPort/GfxPort | `mainport_get_or_create`, `gfx_port_create` | STUB | mostek na SDL_Texture — średnia praca (P3) |
+| WdwMap/SmMap/Status_Open | `map_open_*` | STUB | `map_init` LIVE (no-op); widoki SDL TBD |
+| Menu_InitMainBar | `menu_init_mainbar` | LIVE | WONTFIX: brak USER-menu na SDL — no-op (stringi w `menu_strings` LIVE) |
 | pętla Game_TurnLoopTick | `game_turn_tick` | STUB | gra właściwa — poza zakresem |
-| WinMain_Shutdown | `boot_shutdown` | LIVE | no-op shutdowny |
+| WinMain_Shutdown | `boot_shutdown` | LIVE | no-op shutdowny + `win16_mem_shutdown` w `main.c` |
 
 Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 `CIV_MAINMENU_TEXT` (tekst już w `mainmenu.h`); wykonalne bez RSC
-(proceduralne widgety + debug-text), wierny wygląd czeka na wpięcie 5x RSC
-w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
+(proceduralne widgety + debug-text), wierny wygląd czeka na dekod ramek
+`rsc_get_indexed` (sonda plików już LIVE).
+
+## Priorytety RE/dump (wg strict-stopów z 2026-10-16)
+
+- P0 intro (krytyczna ścieżka, przed menu): `Anim_OpenSequence @ 10b0:008a`,
+  pętla `Anim_AdvanceFrames @ 10b0:0461`, współdzielony player `FUN_1030_0000`
+  (~31 KB, 16 wołających), dialog 0x94 (`Dlg_CreateTracked @ 1098:124f` +
+  `DestroyTracked @ 1098:1612`), `Gfx_StoreDC @ 1098:1104`,
+  `Anim_CloseSequence @ 10b0:0287`, `Anim_RebaseClock @ 10b0:005b`.
+  (SDL odpowiednik `title_play_intro_sdl` już gra MPLOGO.BMP + OPENING.wav,
+  ale prawdziwa ścieżka idzie przez opkody Anim.)
+- P1 menu (dopiero po intrze): `Dialog_MenuZ_Modal @ 1220:0156` nad tekstem
+  `1420:435b`.
+- P2 new game: `NewGame_Wizard @ 10e8:0000`, `Init_UnitFontTables @ 10e8:2d46`,
+  `Tribe_GetNameList @ 11f8:0080`, `Map_GenerateRandomOrLoad @ 1028:0000`.
+- P3 turn loop: `Game_TurnLoopTick @ 1088:0000`, `Sys_DrainInput @ 11f0:4ea0`.
+- P4 render: `GfxPort_Create/Present @ 10d0:0000/0854`, repaint
+  `@ 1208:1866/1f64`, `Text_Draw* @ 10d8:*`, dump godpal 0xec.
+- WONTFIX (nie dumpować): semantyka GLOBALALLOC-lock, GDI-install fontów,
+  bajty checklisty GETDEVICECAPS, chunki drivera w `civ.prf`, wnętrze MCI.
 
 ## Korekty mapy RE (do przeniesienia do `src/*.h`)
 
 - `FUN_1030_0000` to NIE `Title_PlayAnimLoop`: ~31 KB, 16 wołających
   (miasta, `Unit_DoMove`, `City_ShowTopFive`, HoF…) — współdzielony
   odtwarzacz PIC/animacji. `title.h` do poprawki.
-- `boot_check_video` nie deleguje do żywego `video_check_driver_caps`
-  (sygnatura bez renderera) — do posprzątania przy domknięciu `boot_run`.
 
 ## Pełna tabela (skan `src/*.c`)
 
@@ -91,23 +112,23 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 |---|---|---|---|
 | `boot_setup_paths` | LIVE | 1000:11bb, 1000:2826 |  |
 | `boot_check_memory` | LIVE | 11e8:0000, 1420:43b8 |  |
-| `app_register_window_classes` | STUB | 1058:0b4d, 1098:06f8 |  |
+| `app_register_window_classes` | LIVE | 1058:0b4d, 1098:06f8 |  |
 | `boot_register_classes` | LIVE | 1098:06f8 |  |
 | `boot_load_fonts` | LIVE | 1008:0e99 |  |
-| `boot_load_resources` | STUB | 1190:0000 | has TODO |
-| `boot_check_video` | STUB | 1008:059a | has TODO |
+| `boot_load_resources` | LIVE | 1190:0000 |  |
+| `boot_check_video` | LIVE | 1008:059a |  |
 | `boot_maybe_convert_artwork` | LIVE | 10b8:0000, 10b8:079d, 1420:20a9 |  |
 | `boot_load_prefs` | LIVE | 1008:0b4a |  |
 | `boot_init_palette` | LIVE | 1090:0488 |  |
-| `boot_init_tables` | PARTIAL | 1090:0488, 11c8:0000, 11e0:0000, 11e8:0337, 11f8:0080, 1420:b394 | has TODO |
+| `boot_init_tables` | LIVE | 1090:0488, 11c8:0000, 11e0:0000, 11e8:0337, 11f8:0080, 1420:b394 |  |
 | `boot_init_unit_font_tables` | STUB | 10e8:0000, 10e8:2d46 |  |
 | `cursor_set` | NOOP | 1048:0000, 1098:096c |  |
-| `boot_open_windows` | PARTIAL | 1098:114a, 10d0:0000, 1208:0af1, 1210:025b, 1218:0386 | has TODO |
-| `menu_init_mainbar` | STUB | 1048:0000, 1098:096c, 14b0:0010, 14b0:0092, 14d0:0028 | has TODO |
-| `boot_init_menu` | PARTIAL | 1048:0000, 1098:096c |  |
+| `boot_open_windows` | LIVE | 1098:114a, 10d0:0000, 1208:0af1, 1210:025b, 1218:0386 |  |
+| `menu_init_mainbar` | LIVE | 1048:0000, 1098:096c, 14b0:0010, 14b0:0092, 14d0:0028 |  |
+| `boot_init_menu` | LIVE | 1048:0000, 1098:096c |  |
 | `dos_drive_ready` | LIVE | 1000:1184, 1008:0bbf, 1150:00c9 |  |
 | `dos_set_path` | LIVE | 1000:116a |  |
-| `font_enum_families_init` | STUB | 1008:0e99, 1420:00a4 |  |
+| `font_enum_families_init` | LIVE | 1008:0e99, 1420:00a4 |  |
 | `font_fon_u16le` | LIVE |  |  |
 | `font_fon_u32le` | LIVE |  |  |
 | `font_fon_parse` | LIVE | 1008:0e99, 1420:00a4 |  |
@@ -132,7 +153,7 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `menu_string_at` | LIVE |  |  |
 | `config_load_prefs` | STUB | 1008:0b4a, 12d0:0064, 1420:010b | has TODO |
 | `config_save_prefs` | STUB | 1000:116a, 1000:1184, 1008:0bbf, 1420:0113 | has TODO |
-| `boot_run` | PARTIAL | 1000:11bb, 1000:2826, 1008:0000, 1008:059a, 1008:0b4a, 1008:0d68, 1008:0e99, 1088:0000, 1090:0488, 1098:06f8, 1098:096c, 10b8:0000, 10e8:2d46, 1190:0000, 11e8:0000, 11e8:0337 |  |
+| `boot_run` | LIVE | 1000:11bb, 1000:2826, 1008:0000, 1008:059a, 1008:0b4a, 1008:0d68, 1008:0e99, 1088:0000, 1090:0488, 1098:06f8, 1098:096c, 10b8:0000, 10e8:2d46, 1190:0000, 11e8:0000, 11e8:0337 |  |
 | `boot_shutdown` | LIVE | 1008:0000, 1008:0329, 1008:0d68, 1208:0af1 |  |
 | `art_maybe_convert_artwork` | LIVE | 1090:0488, 10b8:0000, 10b8:04df, 10b8:062d, 10b8:06a0, 10b8:076a, 10b8:079d, 10b8:0aa8, 10b8:0c1c, 10b8:0ded, 10b8:0e36, 10b8:11bc, 10b8:158c, 10d0:0cfa, 1420:20a9 |  |
 | `main_run_startup_sequence` | STUB | 1008:0329, 1090:0376, 1098:096c, 1098:1104, 1098:124f, 10b0:008a, 10b0:0461, 10e8:0000, 1108:0243, 1130:000e, 1150:00c9, 11e0:0000, 11e0:0221, 1420:435b |  |
@@ -194,7 +215,7 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 
 | Function | State | Orig addr | Note |
 |---|---|---|---|
-| `dialog_init` | STUB | 1058:0000, 1058:0440, 1058:049b, 1058:04f6, 1058:0b4d, 1058:0d71, 1058:0e7f, 1098:0157, 1098:124f, 1098:1612, 1098:16e2, 1098:1838, 10b0:0000, 10b0:0461, 1220:0156, 1420:1ea0, 1420:1ec8, 1420:1f40, 1420:4a41, 14b0:0010, 14b0:0092, 14d0:0028 |  |
+| `dialog_init` | LIVE | 1058:0000, 1058:0440, 1058:049b, 1058:04f6, 1058:0b4d, 1058:0d71, 1058:0e7f, 1098:0157, 1098:124f, 1098:1612, 1098:16e2, 1098:1838, 10b0:0000, 10b0:0461, 1220:0156, 1420:1ea0, 1420:1ec8, 1420:1f40, 1420:4a41, 14b0:0010, 14b0:0092, 14d0:0028 |  |
 | `dlg_proc` | LIVE | 1098:124f, 1098:16e2, 1420:1ea0 |  |
 | `civ_dialog_proc` | LIVE | 1098:124f, 1098:1838 |  |
 | `dialog_shutdown` | NOOP |  |  |
@@ -362,6 +383,9 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `quiz_answer_is_correct` | LIVE | 1178:0022, 12d0:00b6 |  |
 | `quiz_should_retry` | LIVE | 1178:0000 |  |
 | `quiz_tech_is_valid` | LIVE | 1178:0022 |  |
+| `quiz_reward_flags` | LIVE | 1178:0022 |  |
+| `quiz_needs_resettle` | LIVE | 1178:0022 |  |
+| `quiz_pair_first_mode` | LIVE | 1178:0000 |  |
 
 ### `src/game.c`
 
@@ -629,6 +653,28 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `tech_grant_is_future` | LIVE | 1170:2aaa, 12a8:0022 |  |
 | `tech_bit_word` | LIVE | 1170:3181 |  |
 | `tech_bit_mask` | LIVE | 1170:3181 |  |
+| `hut_found_city_site_ok` | LIVE | 11c0:2677 |  |
+| `hut_tech_shuffle_ok` | LIVE | 11c0:2677 |  |
+| `hut_tech_eligible` | LIVE | 11c0:2677 |  |
+| `hut_gold_bonus` | LIVE | 11c0:2677 |  |
+| `hut_barbs_ok` | LIVE | 11c0:2677 |  |
+| `hut_barb_step` | LIVE | 11c0:2677, 11c8:0063 |  |
+| `hut_barb_unit_kind` | LIVE | 11c0:2677 |  |
+| `hut_friendly_unit_kind` | LIVE | 11c0:2677 |  |
+| `tech_grant_stores_bit` | LIVE | 1170:2aaa |  |
+| `tech_grant_is_library_source` | LIVE | 1170:2aaa |  |
+| `tech_grant_library_spread_ok` | LIVE | 1170:2aaa |  |
+| `tech_grant_barracks_obsolete_clear` | LIVE | 1170:2aaa |  |
+| `tech_grant_from_other` | LIVE | 1170:2aaa |  |
+| `tech_cost_roll_bound` | LIVE | 1170:21b3 |  |
+| `game_eliminate_needed` | LIVE | 10e8:1b97 |  |
+| `game_eliminate_alive_clear` | LIVE | 10e8:1b97 |  |
+| `game_eliminate_seen_clear` | LIVE | 10e8:1b97 |  |
+| `pedia_entry_kind_valid` | LIVE | 1068:06af |  |
+| `pedia_res_for_selector` | LIVE | 1020:0000 |  |
+| `pedia_build_variant` | LIVE | 1068:06af |  |
+| `pedia_terrain_find_index` | LIVE | 1020:011b |  |
+| `gov_announce_needed` | LIVE | 10e8:32c1 |  |
 
 ### `src/gfx_indexed.c`
 
@@ -743,7 +789,7 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `map_fill_rect` | LIVE | 1028:1d15 |  |
 | `map_draw_rect_border` | LIVE | 1028:1ca7 |  |
 | `map_try_place_isolated_tile` | LIVE | 1028:05e7 |  |
-| `map_init` | STUB |  |  |
+| `map_init` | LIVE | 1208:0af1, 1210:025b, 1218:0386, 1420:b394 |  |
 | `map_wndproc_main` | LIVE | 1008:0329, 1008:0d68, 1098:06f8, 10d0:0854, 1110:03e9, 1208:0054, 1208:0af1 |  |
 | `map_wndproc_small` | LIVE | 1110:03ae, 1110:03e9, 1210:0000, 1210:025b, 1210:09b4 |  |
 | `map_wndproc_status` | LIVE | 1088:13d5, 11f8:0278, 1218:0000, 1218:0386, 1218:0801, 1218:0956 |  |
@@ -1090,8 +1136,8 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `main_key_to_res_char` | LIVE | 1098:02d1, 1208:0000, 1420:1400, 1420:142c |  |
 | `sys_get_client_rect` | STUB | 1000:137f, 1218:0956, 1218:0a06 | has TODO |
 | `status_measure_row` | STUB | 1088:1460, 1098:0dda, 1138:0269, 11f0:4754, 1220:0b88 | has TODO |
-| `sys_check_runtime_memory` | STUB | 1088:0000, 11e8:0075, 1420:43b4, 1420:4473, 1420:44ff | has TODO |
-| `sys_check_free_memory` | STUB | 11e8:0000, 1420:43b8 |  |
+| `sys_check_runtime_memory` | LIVE | 11e8:0075, 1420:43b4, 1420:4473, 1420:44ff |  |
+| `sys_check_free_memory` | LIVE | 11e8:0000, 1420:43b8 |  |
 | `file_write_chunk` | LIVE | 1000:272a |  |
 | `ne_entry_count` | LIVE |  |  |
 | `ne_entry_addr` | LIVE |  |  |
@@ -1275,6 +1321,45 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `gfx_store_order_is_save_first` | LIVE | 1098:00b5, 10d0:0854 |  |
 | `palette_dispose` | NOOP | 1090:0488, 1090:0596 |  |
 | `palette_handle_is_live` | LIVE | 1090:0596 |  |
+
+### `src/win16.c`
+
+| Function | State | Orig addr | Note |
+|---|---|---|---|
+| `win16_mem_init` | LIVE | 1100:030f, 11e8:0000, 11e8:0337 |  |
+| `win16_mem_shutdown` | LIVE |  |  |
+| `win16_arena_alloc` | LIVE |  |  |
+| `win16_arena_used` | LIVE |  |  |
+| `win16_arena_size` | LIVE |  |  |
+| `win16_global_alloc` | LIVE | 1100:030f |  |
+| `win16_global_free` | LIVE |  |  |
+| `win16_get_free_space` | LIVE | 11e8:0000 |  |
+| `win16_get_free_resources` | LIVE | 11e8:0000 |  |
+| `win16_check_free_memory` | LIVE | 11e8:0000 |  |
+| `win16_check_runtime_memory` | LIVE | 11e8:0075 |  |
+| `win16_dos_get_drive` | LIVE | 1000:1252 |  |
+| `win16_dos_get_cwd` | LIVE | 1000:139c |  |
+| `win16_dos_chdir` | LIVE | 1000:116a |  |
+| `win16_fd_alloc` | LIVE |  |  |
+| `win16_fd_get` | LIVE |  |  |
+| `win16_lopen` | LIVE | 1000:2ad9 |  |
+| `win16_lread` | LIVE | 1000:1750 |  |
+| `win16_lwrite` | LIVE | 1000:3fc4 |  |
+| `win16_llseek` | LIVE | 1000:161c |  |
+| `win16_lclose` | LIVE | 1000:1fa6 |  |
+| `win16_register_classes` | LIVE | 1008:00cd, 1058:0b4d, 1098:06f8, 1208:0e7b |  |
+| `win16_get_system_metrics` | LIVE |  |  |
+| `win16_message_box` | LIVE | 1420:43b8 |  |
+| `win16_set_timer` | LIVE | 1008:00cd, 1208:0e7b |  |
+| `win16_kill_timer` | LIVE |  |  |
+| `win16_timer_interval_ms` | LIVE |  |  |
+| `win16_create_palette` | LIVE | 1090:0488 |  |
+| `win16_animate_palette` | LIVE | 1090:0376 |  |
+| `win16_dispose_palette` | LIVE |  |  |
+| `win16_delete_object` | LIVE |  |  |
+| `win16_find_asset` | LIVE |  |  |
+| `win16_probe_resources` | LIVE |  |  |
+| `win16_probe_fonts` | LIVE |  |  |
 
 ### `src/worldgen.c`
 
