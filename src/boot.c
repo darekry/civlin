@@ -8,6 +8,7 @@
 #include "audio.h"
 #include "dialog.h"
 #include "game.h"
+#include "mainmenu.h"
 #include "map.h"
 #include "newgame.h"
 #include "sys.h"
@@ -995,6 +996,25 @@ civ_error_t main_run_startup_sequence(void)
     int dlg_flags;
     int earth_seq;
     int rebase;
+    int timer_ms;
+    int cancel;
+    int btn_id;
+    int back;
+    int valid;
+    int dis;
+    int pre_ok;
+    int split_n;
+    int n_items;
+    int center;
+    int show;
+    int need_preset;
+    int w;
+    int h;
+    int ctx;
+    int pal;
+    int off;
+    int is_init;
+    int is_extra;
 
     /* OS-free 1:1 order probe (ref unpacked/civ.exe @ 11e0:0000 decompile):
      * intro dialog 0x94/0x41 + 2 anim loops (intro + earth-prepare 0x91e) +
@@ -1020,6 +1040,54 @@ civ_error_t main_run_startup_sequence(void)
     if (main_startup_should_run_wizard(0) != 1)
         return CIV_ERR_UNSUPPORTED;
     if (main_startup_should_break(0) != 0)
+        return CIV_ERR_UNSUPPORTED;
+    /* OS-free 1:1 tracked-host gates @ 1098:124f for the 0x94/0x41 intro
+     * host (center + show + 0x200x0x140 preset + 0x18 ctx + 0xec palette +
+     * push slot + ctl 0x65-0x6e init + 0x323 earth-extra shape). */
+    center = dlg_create_should_center((unsigned)dlg_flags);
+    show = dlg_create_should_show((unsigned)dlg_flags);
+    need_preset = dlg_id_needs_preset_size(dlg_id);
+    w = dlg_preset_w(dlg_id);
+    h = dlg_preset_h(dlg_id);
+    ctx = dlg_tracked_ctx_size();
+    pal = dlg_tracked_pal_count();
+    off = dlg_tracked_push_off(0);
+    is_init = dlg_ctl_is_tracked_init(CIV_DLG_TRACKED_CTL_FIRST);
+    is_extra = dlg_ctl_is_earth_extra(0x323);
+    if (dlg_flags != CIV_DLG_INTRO_FLAGS || center != 1 || show != 1)
+        return CIV_ERR_BAD_DATA;
+    if (need_preset == 0 || w != CIV_DLG_PRESET_W || h != CIV_DLG_PRESET_H)
+        return CIV_ERR_BAD_DATA;
+    if (ctx != CIV_DLG_TRACKED_CTX_SIZE || pal != CIV_DLG_TRACKED_PAL_COUNT)
+        return CIV_ERR_BAD_DATA;
+    if (off != 0 || is_init == 0 || is_extra == 0)
+        return CIV_ERR_BAD_DATA;
+    /* OS-free 1:1 MenuZ gates @ 1220:0156 the wizard steps reuse after the
+     * intro (500+i fan-out + -1 preselect = none + mask 0 = nothing
+     * disabled + 100 ms timer + -1 cancel/back; ref unpacked/civ.exe
+     * 'Can''t initialize timer in MenuZ' @ 1420:4a41). */
+    timer_ms = dialog_menuz_timer_ms();
+    cancel = dialog_menuz_cancel_code();
+    btn_id = dialog_menuz_index_to_id(0);
+    back = dialog_menuz_id_to_index(btn_id);
+    valid = dialog_menuz_id_is_valid(btn_id, 6);
+    dis = dialog_menuz_item_disabled(0, 0);
+    pre_ok = dialog_menuz_preselect_ok(-1, 6);
+    if (timer_ms != menuz_timer_interval_ms() || cancel != CIV_DIALOG_MENUZ_CANCEL)
+        return CIV_ERR_BAD_DATA;
+    if (btn_id != CIV_DIALOG_MENUZ_BASE_ID || back != 0 || valid == 0)
+        return CIV_ERR_BAD_DATA;
+    if (dis != 0 || pre_ok != 0)
+        return CIV_ERR_BAD_DATA;
+    if (mainmenu_should_loop(CIV_MENU_NONE) != 1)
+        return CIV_ERR_BAD_DATA;
+    /* OS-free 1:1 menu-text shape the MainMenu_WndProc @ 11e0:0221 dispatch
+     * reuses after the wizard gate (CIV_MAINMENU_TEXT @ 1420:435b, ref
+     * unpacked/civ.exe file offset 0xbb35b, 6 items; same '_' split as
+     * Dialog_SplitMenuText @ 1220:0000 feeding Dialog_MenuZ_Modal). */
+    split_n = dialog_split_menu_count(CIV_MAINMENU_TEXT);
+    n_items = mainmenu_item_count();
+    if (split_n != 6 || n_items != split_n)
         return CIV_ERR_UNSUPPORTED;
     return CIV_ERR_UNSUPPORTED;
 }

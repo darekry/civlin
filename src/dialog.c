@@ -419,9 +419,12 @@ int anim_advance_frames(void)
      * (sound @ 1150:00c9, StoreDC @ 1098:1104, tick @ 1100:02e1).
      * PARTIAL: OS-free opcode/tick/ret gates below are LIVE 1:1 (no
      * Win16, no globals, read-only; decoder lives in anim_opcode_* /
-     * anim_tick_* / anim_slot_phase / anim_caption_phase /
-     * anim_dissolve_phase below); the timed GfxPort/frame tail stays
-     * STUB. Refs verified read-only: strings unpacked/civ.exe
+     * anim_tick_* / anim_clamp_tick / anim_seq_is_finished /
+     * anim_advance_ret / anim_slot_phase / anim_caption_phase /
+     * anim_caption_needs_palette / anim_caption_is_custom /
+     * anim_dissolve_phase / anim_pal_src_for below, same sample-probe
+     * shape as anim_open_sequence above); the timed GfxPort/frame tail
+     * stays STUB. Refs verified read-only: strings unpacked/civ.exe
      * ("OPENING.wav"). Chain 2026-10-16 (21) answer: STUB zostaje w
      * dialog.c (sequence player, nie boot.c/game.c); zwiazek ze
      * starfield: BRAK — Ship_AnimateStarfield @ 1070:12b5 to wlasna
@@ -435,34 +438,73 @@ int anim_advance_frames(void)
      * Sound_PlayId @ 1150:00c9 + frames via Art_LoadFrameData @
      * 10b8:079d; per-tick ctx @ 1420:1f40 stays caller-side). Stub
      * reports done so future wait-loops terminate. */
-    int valid;
-    int invalid;
-    int store;
-    int pump;
-    int idle;
-    int finished;
-    int ret_busy;
-    int due;
+    static const int sample_ops[] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
+        12, 13, 14 };
+    size_t i;
 
-    valid = anim_opcode_is_valid(7);
-    invalid = anim_opcode_is_valid(0);
-    store = anim_opcode_needs_store(7);
-    pump = anim_tick_needs_store(0L);
-    idle = anim_tick_needs_store(1L);
-    finished = anim_seq_is_finished(0L, 1L);
-    ret_busy = anim_advance_ret(0L, 1L);
-    due = anim_tick_is_due(0L, 8L, 8);
-    if (valid != 1 || invalid != 0 || store != 1)
+    /* Opcode-valid: full 1..0xe table valid, 0/0xf invalid. */
+    for (i = 0; i < sizeof(sample_ops) / sizeof(sample_ops[0]); i++) {
+        if (anim_opcode_is_valid(sample_ops[i]) != 1)
+            return 1;
+    }
+    if (anim_opcode_is_valid(0) != 0 || anim_opcode_is_valid(0x0f) != 0)
         return 1;
-    if (pump != 1 || idle != 0 || finished != 0)
+    /* Opcode families 1..0xe (decoder LIVE in chain-22/33 below). */
+    if (anim_opcode_is_palette(1) != 1 || anim_opcode_is_palette(2) != 1 ||
+        anim_opcode_is_palette(0x0e) != 1 || anim_opcode_is_palette(7) != 0)
         return 1;
-    if (ret_busy != 0 || due != 1)
+    if (anim_opcode_is_slot(3) != 1 || anim_opcode_is_slot(4) != 1 ||
+        anim_opcode_is_slot(7) != 0)
         return 1;
-    if (anim_opcode_is_text(7) != 1 || anim_caption_phase(0L, 1L, 0L, 0) != 1)
+    if (anim_opcode_needs_store(5) != 1 || anim_opcode_needs_store(7) != 1 ||
+        anim_opcode_needs_store(8) != 1 || anim_opcode_needs_store(9) != 1 ||
+        anim_opcode_needs_store(1) != 0)
         return 1;
-    if (anim_slot_phase(0L, 1L, 0L, 0) != ANIM_SLOTPH_ALLOC)
+    if (anim_opcode_is_callback(10) != 1 || anim_opcode_is_callback(7) != 0)
         return 1;
-    if (anim_dissolve_phase(0L, 1L, 0L, 0) != ANIM_DIZPH_SETUP)
+    if (anim_opcode_is_anim(12) != 1 || anim_opcode_is_anim(13) != 1 ||
+        anim_opcode_is_anim(7) != 0)
+        return 1;
+    if (anim_opcode_is_frame_load(6) != 1 || anim_opcode_is_frame_load(7) != 0)
+        return 1;
+    if (anim_opcode_is_scroll(11) != 1 || anim_opcode_is_scroll(7) != 0)
+        return 1;
+    if (anim_opcode_is_text(7) != 1 || anim_opcode_is_text(8) != 0)
+        return 1;
+    /* Tick-due: frame-pump every 8. tick + 11/0xe period gate. */
+    if (anim_tick_needs_store(0L) != 1 || anim_tick_needs_store(8L) != 1 ||
+        anim_tick_needs_store(1L) != 0)
+        return 1;
+    if (anim_tick_is_due(0L, 8L, 8) != 1 || anim_tick_is_due(0L, 9L, 8) != 0)
+        return 1;
+    if (anim_clamp_tick(110L, 100L, 50L) != 10L ||
+        anim_clamp_tick(200L, 100L, 50L) != 50L)
+        return 1;
+    /* Ret: busy/done halves (boolean half in anim_seq_is_finished). */
+    if (anim_seq_is_finished(0L, 1L) != 0 || anim_seq_is_finished(1L, 1L) != 1)
+        return 1;
+    if (anim_advance_ret(0L, 1L) != 0 || anim_advance_ret(1L, 1L) != 1)
+        return 1;
+    /* Phases: slot 3/4, caption 7, dissolve 12/13. */
+    if (anim_slot_phase(0L, 1L, 0L, 0) != ANIM_SLOTPH_ALLOC ||
+        anim_slot_phase(0L, 1L, 1L, 1) != ANIM_SLOTPH_FINISH ||
+        anim_slot_phase(0L, 2L, 1L, 1) != ANIM_SLOTPH_STEP ||
+        anim_slot_phase(0L, 2L, 1L, 0) != ANIM_SLOTPH_NONE)
+        return 1;
+    if (anim_caption_phase(0L, 1L, 0L, 0) != ANIM_CAPPH_DRAW ||
+        anim_caption_phase(0L, 1L, 1L, 0) != ANIM_CAPPH_UNDRAW ||
+        anim_caption_phase(0L, 2L, 1L, 0) != ANIM_CAPPH_NONE)
+        return 1;
+    if (anim_caption_needs_palette(0L, 0L, ANIM_CAPF_PALETTE_APPLY) != 1 ||
+        anim_caption_needs_palette(0L, 1L, ANIM_CAPF_PALETTE_APPLY) != 0 ||
+        anim_caption_is_custom(1) != 1 || anim_caption_is_custom(0) != 0)
+        return 1;
+    if (anim_dissolve_phase(0L, 1L, 0L, 0) != ANIM_DIZPH_SETUP ||
+        anim_dissolve_phase(0L, 1L, 1L, 0) != ANIM_DIZPH_FINISH ||
+        anim_dissolve_phase(0L, 2L, 1L, 0) != ANIM_DIZPH_STEP)
+        return 1;
+    if (anim_pal_src_for(0x81) != 0 || anim_pal_src_for(0x82) != 1 ||
+        anim_pal_src_for(0x85) != 2 || anim_pal_src_for(0) != -1)
         return 1;
     return 1;
 }
@@ -2625,7 +2667,7 @@ anim_seq_phase_t anim_seq_phase_step(anim_seq_phase_t phase, int opened,
  * See dialog.h block. OS-free 1:1 LIVE (no GDI, no globals, no exit()).
  * GDI tails (GLOBALLOCK bitmaps + Art_PortDataToBitmap @ 10b8:0e36 +
  * GfxPort_SetActive/ClearActive + palette AnimateRange/CopyRange) stay in
- * anim_pump_if_active/anim_advance_frames STUBs above. */
+ * anim_pump_if_active/anim_advance_frames PARTIAL dispatchers above. */
 
 int anim_dissolve_rand_index(unsigned raw, int n)
 {

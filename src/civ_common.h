@@ -188,4 +188,27 @@ int util_str_case_cmp(const char *a, const char *b);
  * family. OS-free 1:1, no Win16, no globals, no exit(). */
 int util_compare_bounded(const char *a, const char *b, int bound);
 
+/* Orig: FUN_1000_3722 @ 1000:3722 -> Util_StrLen.
+ * NUL-terminated byte length (SCASB.REPNE shape, same as
+ * Util_VsprintfStrLen @ 1000:19f2 but the general string-family entry;
+ * callers: Debug_PrintLine @ 1000:3088 length step before
+ * File_WriteBuffered @ 1000:2e85, save path tail @ 1140:xxxx spec+8,
+ * Text_PackPascal @ 1100:0000 len half via buf[0] = len, dialog extent
+ * @ 1100:00ea width step via GETTEXTEXTENT @ 1608:0220). Verified ref
+ * unpacked/civ.exe (NE, not packed civ1win/CIV.EXE). OS-free 1:1 port:
+ * strlen semantics; NULL -> 0 (orig faulted on a bad far pointer).
+ * No Win16, no globals, no exit(). Procedural menu text path (width
+ * sum + ellipsis cap) uses this, never the Vsprintf-internal twin. */
+size_t util_str_len(const char *s);
+
+/* Orig: FUN_1000_37b2 @ 1000:37b2 -> Util_StrRChr.
+ * Reverse byte search (SCASB-back shape; strrchr semantics): last
+ * occurrence of (char)c in s, NUL counted as a match position (returns
+ * past-end when c == 0), else NULL when absent. Sole in-tree user:
+ * Sys_FatalAbort @ 1000:4124 caption kernel over '\\' 0x5c (see sys.h
+ * sys_fatal_basename, now a thin delegate here). Verified ref
+ * unpacked/civ.exe. OS-free 1:1 port; NULL s -> NULL (orig faulted).
+ * No Win16, no globals, no exit(). */
+char *util_str_rchr(const char *s, int c);
+
 #endif /* CIVLIN_COMMON_H */

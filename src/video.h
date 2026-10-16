@@ -141,8 +141,18 @@ civ_error_t gfx_port_alloc_bitmap(SDL_Renderer *ren, int w, int h,
                                   SDL_Texture **out);
 
 /* Orig: FUN_10d0_0000 @ 10d0:0000 -> gfx_port_create (GfxPort_Create /
- * GR_PortOpen). GETDC + CREATECOMPATIBLEDC + bitmap via 10d0:0cfa. NULL
- * out reports NOENT; otherwise UNSUPPORTED. */
+ * GR_PortOpen). LIVE SDL_Texture bridge (see video.c): malloc gfx_port_t +
+ * gfx_port_alloc_bitmap @ 10d0:0cfa INDEX8 TARGET backing store (even
+ * pitch ((w+1)/2*2) via gfx_port_bitmap_pitch; INDEX8 keeps
+ * ANIMATEPALETTE possible via SDL_SetPaletteColors, TARGET allows the
+ * Blit @ 10d0:08f1 / PresentRect @ 10d0:0854 render-target path) + borrowed
+ * ren/w/h wiring (GETDC/CREATECOMPATIBLEDC borrow the caller renderer,
+ * never owned/freed here). Backs the Anim_OpenSequence @ 10b0:008a GfxPort
+ * x2 pair + the WdwMap_Open @ 1208:0af1 / WdwSmMap_Open @ 1210:025b /
+ * WdwStatus_Open @ 1218:0386 views in boot_open_windows (ports are
+ * textures, window/renderer stay caller-owned). NULL out/ren reports
+ * NOENT (*out NULL when present); w/h <= 0 reports RANGE; malloc fail
+ * reports NOMEM; bitmap fail reports IO (*out NULL, no leak). */
 civ_error_t gfx_port_create(SDL_Renderer *ren, int w, int h, gfx_port_t **out);
 
 /* Orig: FUN_10d0_0956 @ 10d0:0956 -> gfx_port_set_active (GfxPort_SetActive).
@@ -199,12 +209,18 @@ civ_error_t gfx_port_blit(gfx_port_t *dst, const gfx_port_t *src,
                           const SDL_Rect *src_rect, int dst_x, int dst_y);
 
 /* Orig: FUN_1098_114A @ 1098:114a -> mainport_get_or_create
- * (MainPort_GetOrCreate). Returns the main port/DC: GETDC +
- * SELECTPALETTE/REALIZEPALETTE + GfxPort_SetActive @ 10d0:0956 bridge.
- * Called before WdwMap_Open @ 1208:0af1 / WdwSmMap_Open @ 1210:025b /
- * WdwStatus_Open @ 1218:0386 in boot_open_windows (see boot.h). SDL3
- * render-target select TBD; stub returns CIV_ERR_UNSUPPORTED. NULL
- * renderer/out reports NOENT. */
+ * (MainPort_GetOrCreate). PARTIAL SDL_Texture probe bridge (see video.c):
+ * window-sized port geometry is proven via SDL_GetRenderOutputSize +
+ * gfx_port_create @ 10d0:0000 INDEX8 TARGET + destroy probe (same backing
+ * store the Anim_OpenSequence @ 10b0:008a GfxPort x2 pair and the map views
+ * need), but the port is NOT returned yet: SELECTPALETTE/REALIZEPALETTE
+ * (via palette_apply_to_port @ 1200:00a8/1090:0376, blocked on the godpal
+ * runtime capture) + main-screen GfxPort_SetActive @ 10d0:0956
+ * render-target semantics stay TBD, so the tail keeps UNSUPPORTED (no fake
+ * CIV_OK). Called before WdwMap_Open @ 1208:0af1 / WdwSmMap_Open @
+ * 1210:025b / WdwStatus_Open @ 1218:0386 in boot_open_windows (see boot.h).
+ * NULL renderer/out reports NOENT; size-query fail reports IO; zero size
+ * reports BAD_DATA; create fail propagates (NOMEM/RANGE/IO). */
 civ_error_t mainport_get_or_create(SDL_Renderer *ren, gfx_port_t **out);
 
 /* Orig: FUN_10c0_xxxx @ 10c0:xxxx -> gfx_port_fill_or_copy

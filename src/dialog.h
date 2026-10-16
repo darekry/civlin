@@ -1965,7 +1965,8 @@ int anim_slot_should_step(long start, int per, int cur, long now);
  * dissolve phases (critical path, goal: engine 1..0xe) ---
  * Orig Anim_AdvanceFrames @ 10b0:0461 case bodies (civ.exe,
  * x86:LE:16:Protected Mode), decompiled 2026-10-16 (GLOBALLOCK/GfxPort/
- * Art/ResMgr tails stay in the anim_advance_frames STUB above; the 11/0xe
+ * Art/ResMgr tails stay in the anim_advance_frames PARTIAL dispatcher
+ * above; the 11/0xe
  * period half is already LIVE as anim_tick_is_due, mono caller-side).
  * OS-free halves below are LIVE 1:1 on explicit params (no Win16, no
  * globals, read-only except caller-owned palette outs, no exit(), C17).
@@ -2498,7 +2499,7 @@ int pedia_dlg_flags(void);
  *     1220:0eb8 SENDMESSAGE 0xf to 12b0:0004/001c/0034 -> dialog_show_message
  *     STUB; id math LIVE in dialog_show_message_id above),
  *   Anim_AdvanceFrames @ 10b0:0461 (timed opcode switch 1..0xe ->
- *     anim_advance_frames STUB/PARTIAL; decoder LIVE in anim_opcode_* above,
+  *   anim_advance_frames PARTIAL dispatcher; decoder LIVE in anim_opcode_* above,
  *     caption case 7 LIVE below).
  * Refs verified read-only 2026-10-16: unpacked/civ.exe strings
  *   ("RanDoMRadio"/"RanDoMStatic"/"RanDoMUser", "RANDOMRADIOPROC"/
@@ -2589,8 +2590,8 @@ int anim_seq_ctx_size(void);
 
 /* Orig Anim_AdvanceFrames @ 10b0:0461 timed cases 11 (scroll-blit) / 14
  * (palette-rotate): (tick - start) % len == 0 gate (SetActive/CopyRange
- * tails stay in anim_advance_frames STUB) -> anim_tick_is_due. 1:1 nonzero
- * (1) when due, 0 when not; len <= 0 -> -1 (orig divided; here a hard
+ * tails stay in the anim_advance_frames PARTIAL dispatcher above) ->
+ * anim_tick_is_due. 1:1 nonzero (1) when due, 0 when not; len <= 0 -> -1 (orig divided; here a hard
  * stop). No globals. */
 int anim_tick_is_due(long start, long tick, int len);
 

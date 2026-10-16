@@ -5,6 +5,7 @@
 #include "win16.h"
 
 #include <math.h>
+#include <limits.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
@@ -626,8 +627,18 @@ civ_error_t sys_get_client_rect(int *w_out, int *h_out)
         return CIV_ERR_NOENT;
     *w_out = 0;
     *h_out = 0;
-    /* TODO: SDL_GetWindowSize mapping for the SDL status view. */
+    /* TODO: SDL_GetWindowSize mapping for the SDL status view.
+     * Pure size gate: sys_client_rect_is_valid below (LIVE). */
     return CIV_ERR_UNSUPPORTED;
+}
+
+int sys_client_rect_is_valid(int w, int h)
+{
+    /* Orig FUN_1218_0956 @ 1218:0956 / FUN_1218_0a06 @ 1218:0a06 size
+     * gate (see sys.h): GLOBALLOCK client extent before SETRECT/
+     * INFLATERECT; zero/negative extent paints nothing. Verified ref
+     * unpacked/civ.exe. */
+    return (w > 0 && h > 0) ? 1 : 0;
 }
 
 civ_error_t status_measure_row(int *h_out)
@@ -638,8 +649,22 @@ civ_error_t status_measure_row(int *h_out)
     /* TODO: Orig FUN_1138_0269 @ 1138:0269 (Status_MeasureRow:
      * GETTEXTMETRICS tmHeight variant; feeds the status-row stride
      * alongside status_font_height @ 1098:0dda; needs SDL text-metrics
-     * bridge). */
+     * bridge). Pure stride kernel: status_row_stride below (LIVE). */
     return CIV_ERR_UNSUPPORTED;
+}
+
+int status_row_stride(int h, int lines)
+{
+    /* Orig FUN_1138_0269 @ 1138:0269 stride half (see sys.h): local_8
+     * line stride, x2 for the civ block. Verified ref unpacked/civ.exe. */
+    long r;
+
+    if (h <= 0 || lines <= 0)
+        return 0;
+    r = (long)h * (long)lines;
+    if (r > (long)INT_MAX)
+        return INT_MAX;
+    return (int)r;
 }
 
 civ_error_t sys_check_runtime_memory(void)
@@ -1246,12 +1271,13 @@ civ_error_t sys_fatal_abort(const char *msg)
 const char *sys_fatal_basename(const char *path)
 {
     /* Orig Sys_FatalAbort @ 1000:4124 caption kernel: Util_StrRChr @
-     * 1000:37b2 over '\\' 0x5c, +1 past it, else the whole far path. */
+     * 1000:37b2 over '\\' 0x5c, +1 past it, else the whole far path.
+     * Thin delegate to the string family (util_str_rchr LIVE). */
     const char *b;
 
     if (!path)
         return NULL;
-    b = strrchr(path, '\\');
+    b = util_str_rchr(path, '\\');
     return b ? b + 1 : path;
 }
 

@@ -1045,8 +1045,10 @@ int menuz_timer_interval_ms(void);
  *   dialog.h anim chain). Związek z Pic: Pic_PlayShared @ 1030:0000 NIE
  *   jest wołany ze StartupSequence (sole Pic pump-caller to sam
  *   Pic_PlayShared dla Pic_PumpMenuCommand @ 1030:9aed, patrz game.h).
- * main_run_startup_sequence powyżej zostaje STUB (SDL modal/event bridge
- *   TBD); liczniki/id dźwięków poniżej są LIVE 1:1 na jawnych stałych
+ * main_run_startup_sequence powyżej zostaje PARTIAL (OS-free liczniki/id
+ *   poniżej LIVE + MenuZ/tracked/menu-text gałęzie probowane read-only w
+ *   ciele; SDL modal/event bridge TBD, nigdy fake CIV_OK); liczniki/id
+ *   dźwięków poniżej są LIVE 1:1 na jawnych stałych
  *   (no Win16, no globals, read-only). No exit(), C17. */
 
 /* Orig Main_RunStartupSequence @ 11e0:0000 loop count ->

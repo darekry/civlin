@@ -1,45 +1,151 @@
-/* Main menu stubs. */
+/* Main menu dispatchers (PARTIAL modal hosts + LIVE OS-free gates). */
 #include "mainmenu.h"
 
+#include "boot.h"
+#include "dialog.h"
 #include "save.h"
 #include "worldgen.h"
 
 civ_error_t mainmenu_run(civ_mainmenu_choice_t *out)
 {
     /* Orig: FUN_11e0_0221 @ 11e0:0221, now mainmenu_run (MainMenu_WndProc).
-     * Orig flow (stubbed: SDL3 modal TBD, no globals here):
-     *   Util_StrCopy @ 1000:36b2 (buf, text @ 1420:435b CIV_MAINMENU_TEXT)
-     *   + Dialog_MenuZ_Modal @ 1220:0156 loop while choice < 0 || choice > 3
-     *   (DAT_1418_0002 preselect, DAT_1418_0004 cancel/back re-prompts;
-     *   raw choice = zero-based MenuZ index, i.e. 500-based button id minus
-     *   CIV_DIALOG_MENUZ_BASE_ID via dialog_menuz_id_to_index) into
-     *   g_nMenuChoice (12d8:44e2), then mainmenu_dispatch. Read-only stub:
-     *   validates out, reports NONE, no modal pumped.
+     * PARTIAL dispatcher: OS-free gates below are LIVE 1:1 (no Win16, no
+     * globals, read-only); the SDL3 modal pump stays STUB (never fake
+     * CIV_OK). Orig flow: Util_StrCopy @ 1000:36b2 (buf, text @ 1420:435b
+     * CIV_MAINMENU_TEXT, ref unpacked/civ.exe file offset 0xbb35b:
+     * "_Start a New Game_Load a Saved Game_Play on EARTH_Customize World_
+     * View Hall of Fame_Quit") + Dialog_MenuZ_Modal @ 1220:0156 loop while
+     * choice < 0 || choice > 3 (DAT_1418_0002 preselect, DAT_1418_0004
+     * cancel/back re-prompts; raw choice = zero-based MenuZ index, i.e.
+     * 500-based button id minus CIV_DIALOG_MENUZ_BASE_ID via
+     * dialog_menuz_id_to_index) into g_nMenuChoice (12d8:44e2), then
+     * mainmenu_dispatch. SDL modal shape (TBD, documented, not pumped):
+     * Dlg_CreateTracked @ 1098:124f host (0x94/0x41 intro constants via
+     * main_startup_intro_dialog_id/flags) + MenuZ radio 500+i fan-out +
+     * SETTIMER 100 (menuz_timer_interval_ms/dialog_menuz_timer_ms; 0 =
+     * 'Can''t initialize timer in MenuZ' @ 1420:4a41, ref unpacked/civ.exe
+     * file offset 0xbba41, windows.c) + PEEKMESSAGE/ISDIALOGMESSAGE pump to
+     * cancel -1 (DAT_12b0_00a0/DAT_1418_0004 via dialog_menuz_cancel_code/
+     * is_cancel) + re-prompt gate (mainmenu_should_loop /
+     * dialog_menuz_should_loop) + dispatch.
      * TODO: Orig FUN_11e0_0221 @ 11e0:0221 SDL3 modal bridge TBD
-     * (Dialog_MenuZ_Modal @ 1220:0156 over CIV_MAINMENU_TEXT @ 1420:435b;
+     * (Dlg_CreateTracked @ 1098:124f host + Dialog_MenuZ_Modal @ 1220:0156
+     * over CIV_MAINMENU_TEXT @ 1420:435b + PEEKMESSAGE/ISDIALOGMESSAGE pump;
      * OS-free '_' split already LIVE in mainmenu_item_count/at below). */
     int n_items;
+    int split_n;
     int y_color;
     int y_mono;
     char probe[64];
+    int pre_ok;
+    int btn_id;
+    int back;
+    int valid;
+    int dis;
+    int timer_ms;
+    int cancel;
+    int loop_none;
+    int loop_zero;
+    int center;
+    int show;
+    int need_preset;
+    int w;
+    int h;
+    int ctx;
+    int pal;
+    int off;
+    int is_init;
+    int is_extra;
+    int row;
+    int row_id;
+    int row_target;
+    int group;
+    int intro_id;
+    int intro_flags;
 
     if (!out)
         return CIV_ERR_NOENT;
-    /* OS-free 1:1 probe of the packet-N split (ref unpacked/civ.exe file
-     * offset 0xbb35b: CIV_MAINMENU_TEXT @ 1420:435b, 6 items): proves the
-     * '_' buffer shape feeding Dialog_MenuZ_Modal @ 1220:0156 without
-     * pumping the Win16 PEEKMESSAGE/ISDIALOGMESSAGE modal. Read-only. */
+    /* OS-free 1:1 packet-N split (ref unpacked/civ.exe file offset 0xbb35b:
+     * CIV_MAINMENU_TEXT @ 1420:435b, 6 items): proves the '_' buffer shape
+     * feeding Dialog_MenuZ_Modal @ 1220:0156 without pumping the Win16
+     * PEEKMESSAGE/ISDIALOGMESSAGE modal. Read-only. */
     n_items = mainmenu_item_count();
+    split_n = dialog_split_menu_count(CIV_MAINMENU_TEXT);
     y_color = mainmenu_dialog_y_offset(0);
     y_mono = mainmenu_dialog_y_offset(1);
-    (void)y_color;
-    (void)y_mono;
-    if (n_items != 6)
+    if (n_items != 6 || split_n != n_items)
         return CIV_ERR_UNSUPPORTED;
+    if (y_color != 0xb4 || y_mono != 10)
+        return CIV_ERR_BAD_DATA;
     if (mainmenu_item_at(0, probe, sizeof(probe)) != CIV_OK)
         return CIV_ERR_UNSUPPORTED;
     if (probe[0] == '\0')
         return CIV_ERR_UNSUPPORTED;
+    /* OS-free 1:1 MenuZ id/gates @ 1220:0156 (RanDoMRadio 500+i fan-out +
+     * DAT_1418_0002 preselect + DAT_12d8_24da disable mask + 100 ms timer +
+     * -1 cancel/back; baseline mask 0 above = nothing disabled). */
+    pre_ok = dialog_menuz_preselect_ok(-1, n_items);
+    btn_id = dialog_menuz_index_to_id(0);
+    back = dialog_menuz_id_to_index(btn_id);
+    valid = dialog_menuz_id_is_valid(btn_id, n_items);
+    dis = dialog_menuz_item_disabled(0, 0);
+    timer_ms = dialog_menuz_timer_ms();
+    cancel = dialog_menuz_cancel_code();
+    if (pre_ok != 0 || btn_id != CIV_DIALOG_MENUZ_BASE_ID || back != 0)
+        return CIV_ERR_BAD_DATA;
+    if (valid == 0 || dis != 0)
+        return CIV_ERR_BAD_DATA;
+    if (timer_ms != menuz_timer_interval_ms())
+        return CIV_ERR_BAD_DATA;
+    if (cancel != CIV_DIALOG_MENUZ_CANCEL)
+        return CIV_ERR_BAD_DATA;
+    /* OS-free 1:1 re-prompt gate (choice < 0 || choice > 3): NONE (-1,
+     * cancel/back) must loop, 0 (new game) must accept; dialog twin must
+     * agree (same Orig @ 11e0:0221 / @ 1220:0156 shape). */
+    loop_none = mainmenu_should_loop(CIV_MENU_NONE);
+    loop_zero = mainmenu_should_loop(0);
+    if (loop_none != 1 || loop_zero != 0)
+        return CIV_ERR_BAD_DATA;
+    if (dialog_menuz_should_loop(CIV_MENU_NONE) != loop_none)
+        return CIV_ERR_BAD_DATA;
+    if (dialog_menuz_is_cancel(0, -1) != 0)
+        return CIV_ERR_BAD_DATA;
+    /* OS-free 1:1 tracked-host gates @ 1098:124f for the modal host
+     * (intro dialog 0x94/0x41 via main_startup_intro_dialog_id/flags in
+     * boot.h; preset 0x200x0x140 + 0x18 ctx + 0xec palette + push slot +
+     * ctl 0x65-0x6e init + 0x8f earth-extra 0x323-0x332 shape). */
+    intro_id = main_startup_intro_dialog_id();
+    intro_flags = main_startup_intro_dialog_flags();
+    center = dlg_create_should_center((unsigned)intro_flags);
+    show = dlg_create_should_show((unsigned)intro_flags);
+    need_preset = dlg_id_needs_preset_size(intro_id);
+    w = dlg_preset_w(intro_id);
+    h = dlg_preset_h(intro_id);
+    ctx = dlg_tracked_ctx_size();
+    pal = dlg_tracked_pal_count();
+    off = dlg_tracked_push_off(0);
+    is_init = dlg_ctl_is_tracked_init(CIV_DLG_TRACKED_CTL_FIRST);
+    is_extra = dlg_ctl_is_earth_extra(0x323);
+    if (intro_id != CIV_DLG_INTRO_ID || intro_flags != CIV_DLG_INTRO_FLAGS)
+        return CIV_ERR_BAD_DATA;
+    if (center != 1 || show != 1 || need_preset == 0)
+        return CIV_ERR_BAD_DATA;
+    if (w != CIV_DLG_PRESET_W || h != CIV_DLG_PRESET_H)
+        return CIV_ERR_BAD_DATA;
+    if (ctx != CIV_DLG_TRACKED_CTX_SIZE || pal != CIV_DLG_TRACKED_PAL_COUNT)
+        return CIV_ERR_BAD_DATA;
+    if (off != 0 || is_init == 0 || is_extra == 0)
+        return CIV_ERR_BAD_DATA;
+    /* OS-free 1:1 dispatch-row probe @ 1048:01cd (ref unpacked/civ.exe seg
+     * 1048 table @ CS:0x3d8 + handler offsets @ CS:0x460, CX = 0x44): first
+     * row 101 -> handler 0x1ff, group 1. Proves the scan hit before the
+     * Win16 handler bridge. Read-only. */
+    row = menu_dispatch_find(101);
+    row_id = menu_dispatch_id_at(row);
+    row_target = menu_dispatch_target_at(row);
+    group = menu_command_group(101);
+    if (row != 0 || row_id != 101 || row_target != 0x1ff || group != 1)
+        return CIV_ERR_BAD_DATA;
     *out = CIV_MENU_NONE;
     return CIV_ERR_UNSUPPORTED;
 }
@@ -263,6 +369,18 @@ int mainmenu_dialog_y_offset(int flag_28fc)
      * local_12 for Dialog_MenuZ_Modal @ 1220:0156; mono/VGA branch like
      * opcode 8 in Anim_AdvanceFrames @ 10b0:0461). */
     return (flag_28fc == 0) ? 0xb4 : 10;
+}
+
+int mainmenu_should_loop(int choice)
+{
+    /* Orig MainMenu_WndProc @ 11e0:0221 re-prompt gate: do { Util_StrCopy
+     * @ 1000:36b2 + Dialog_MenuZ_Modal @ 1220:0156 -> g_nMenuChoice @
+     * 12d8:44e2 } while (choice < 0 || choice > 3) (DAT_1418_0004
+     * cancel/back re-prompts; 0..3 enter the startup dispatch, 4/5 are
+     * handled in-loop via HoF/quit paths). Sibling gate
+     * dialog_menuz_should_loop @ 1220:0156 must agree (probed in
+     * mainmenu_run above). */
+    return (choice < 0 || choice > 3) ? 1 : 0;
 }
 
 int menu_toggle_show_cmd(int hidden_flag)

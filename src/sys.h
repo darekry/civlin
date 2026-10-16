@@ -391,16 +391,33 @@ int main_key_to_res_char(int vkey);
  * equivalent TBD (SDL_GetWindowSize on the status view). Params are the
  * client width/height outputs; NULL either -> NOENT (orig faulted on a
  * bad far pointer). Zeroes outputs then stub CIV_ERR_UNSUPPORTED until
- * the SDL status-view mapping lands. */
+ * the SDL status-view mapping lands. Pure size gate below
+ * (sys_client_rect_is_valid) is LIVE for the procedural menu path
+ * (skip draw when no area, no RSC needed). */
 civ_error_t sys_get_client_rect(int *w_out, int *h_out);
+/* Orig FUN_1218_0956 @ 1218:0956 / FUN_1218_0a06 @ 1218:0a06 size gate
+ * (GLOBALLOCK client extent before SETRECT/INFLATERECT; zero/negative
+ * extent = no status view to paint). OS-free 1:1 on explicit w/h:
+ * 1 when w > 0 && h > 0, else 0. Verified ref unpacked/civ.exe.
+ * No DOS, no Win16, no globals, no exit(). Procedural menu guard. */
+int sys_client_rect_is_valid(int w, int h);
 /* Orig: FUN_1138_0269 @ 1138:0269 -> Status_MeasureRow.
  * GETTEXTMETRICS variant in the status_font_height @ 1098:0dda chain
  * (derives the status-row line stride kept as local_8, x2 for the civ
  * block; callers: 1138 row formatters + status panel @ 1088:1460 +
  * Unit_ShowInfoPopup @ 11f0:4754 + Dialog_MenuZ_Modal @ 1220:0b88 via
  * status_font_height). Linux equivalent TBD (SDL_ttf measurement;
- * SDL_GetText stub). Returns CIV_OK + *h_out on success. */
+ * SDL_GetText stub). Returns CIV_OK + *h_out on success. Pure stride
+ * kernel below (status_row_stride) is LIVE for procedural list layout
+ * without RSC. */
 civ_error_t status_measure_row(int *h_out);
+/* Orig FUN_1138_0269 @ 1138:0269 stride half (local_8 line stride, x2
+ * for the civ block in the 1138 row formatters). OS-free 1:1 on
+ * explicit (h, lines): h * lines; h <= 0 || lines <= 0 -> 0 (no rows
+ * to lay out); saturates at INT_MAX on overflow (Linux-side guard,
+ * orig 16-bit wrapped). Verified ref unpacked/civ.exe. No DOS, no
+ * Win16, no globals, no exit(). */
+int status_row_stride(int h, int lines);
 /* Sys_CheckRuntimeMemory @ 11e8:0075. UNSUPPORTED (needs window + RAM
  * thresholds; SDL_GetSystemRAM equivalent TBD). Trigger/content kernels
  * live in sys_runtime_* below (LIVE); the MESSAGEBOX tail stays here. */

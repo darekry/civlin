@@ -356,3 +356,23 @@ int util_compare_bounded(const char *a, const char *b, int bound)
     }
     return 0;
 }
+
+size_t util_str_len(const char *s)
+{
+    /* Orig FUN_1000_3722 @ 1000:3722 -> Util_StrLen (see civ_common.h):
+     * SCASB.REPNE length without NUL. Distinct Orig site from
+     * Util_VsprintfStrLen @ 1000:19f2 (util_vsprintf_strlen), same
+     * contract; the menu/ellipsis path uses this entry. */
+    if (!s)
+        return 0;
+    return strlen(s);
+}
+
+char *util_str_rchr(const char *s, int c)
+{
+    /* Orig FUN_1000_37b2 @ 1000:37b2 -> Util_StrRChr (see civ_common.h):
+     * strrchr semantics incl. the NUL match (c == 0 -> past-end). */
+    if (!s)
+        return NULL;
+    return (char *)strrchr(s, c);
+}

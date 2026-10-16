@@ -124,11 +124,27 @@ int menu_toggle_view_window(int cmd);
 /* Orig: FUN_11e0_0221 @ 11e0:0221, now mainmenu_run — shows the menu
  * (Util_StrCopy @ 1000:36b2 + Dialog_MenuZ_Modal @ 1220:0156 loop while
  * choice<0 || choice>3 over CIV_MAINMENU_TEXT @ 1420:435b) and returns the
- * raw choice. Stub: NOENT on NULL out, else UNSUPPORTED with *out=NONE;
- * read-only (no modal pumped until SDL3 bridge lands). Raw choice is the
+ * raw choice. Partial dispatcher: OS-free split (mainmenu_item_count/at 1:1
+ * over CIV_MAINMENU_TEXT @ 1420:435b, ref unpacked/civ.exe file offset
+ * 0xbb35b) + y-offset (mainmenu_dialog_y_offset) + MenuZ id/gates
+ * (dialog_menuz_* @ 1220:0156, timer 100, cancel -1) + tracked host gates
+ * (dlg_create_* @ 1098:124f for the 0x94/0x41 intro host) + dispatch-row
+ * probe (menu_dispatch_* @ 1048:01cd) are wired read-only; the SDL3 modal
+ * pump (Dlg_CreateTracked host + PEEKMESSAGE/ISDIALOGMESSAGE loop +
+ * RanDoMRadio 500+i fan-out) stays CIV_ERR_UNSUPPORTED, never fake CIV_OK.
+ * NOENT on NULL out, else UNSUPPORTED with *out=NONE; read-only (no modal
+ * pumped until the SDL3 bridge lands). Raw choice is the
  * zero-based MenuZ index; 500-based button ids map via dialog_menuz_*
  * (CIV_DIALOG_MENUZ_BASE_ID). */
 civ_error_t mainmenu_run(civ_mainmenu_choice_t *out);
+
+/* Orig MainMenu_WndProc @ 11e0:0221 re-prompt gate (choice < 0 || choice > 3)
+ * -> mainmenu_should_loop. 1:1 nonzero (1) when the modal must re-prompt
+ * (cancel/back DAT_1418_0004 or OOR pick), 0 when the choice is accepted
+ * into the startup dispatch (0..3 feed Main_RunStartupSequence @ 11e0:0000;
+ * sibling gate dialog_menuz_should_loop @ 1220:0156 must agree). No Win16,
+ * no globals, no exit(), read-only. */
+int mainmenu_should_loop(int choice);
 
 /* Dispatches one choice to load/earth/hall/quit/new-game.
  * CIV_MENU_EARTH (3) -> worldgen_load_earth (Orig FUN_1108_0243 @ 1108:0243,

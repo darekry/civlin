@@ -438,16 +438,44 @@ civ_error_t gfx_port_blit(gfx_port_t *dst, const gfx_port_t *src,
 
 civ_error_t mainport_get_or_create(SDL_Renderer *ren, gfx_port_t **out)
 {
+    /* Orig FUN_1098_114A @ 1098:114a -> MainPort_GetOrCreate (see video.h).
+     * P3 SDL_Texture probe bridge (PARTIAL, no fake): the window-sized
+     * port geometry is proven here read-only (SDL_GetRenderOutputSize +
+     * gfx_port_create @ 10d0:0000 INDEX8 TARGET + gfx_port_destroy probe;
+     * same backing store the Anim_OpenSequence @ 10b0:008a GfxPort x2 pair
+     * and the WdwMap_Open @ 1208:0af1 / WdwSmMap_Open @ 1210:025b /
+     * WdwStatus_Open @ 1218:0386 views in boot_open_windows need), but
+     * the port is NOT returned yet: SELECTPALETTE/REALIZEPALETTE (via
+     * palette_apply_to_port @ 1200:00a8/1090:0376, blocked on the godpal
+     * runtime capture, see gfx_godpal_get) + the main-screen SetActive @
+     * 10d0:0956 render-target semantics stay TBD, so no fake CIV_OK.
+     * Error mapping: NULL -> NOENT (*out NULL when present); output-size
+     * query fail -> IO; zero size -> BAD_DATA; create fail propagates
+     * (NOMEM/RANGE/IO, *out NULL, no leak); device tail -> UNSUPPORTED. */
+    int w = 0;
+    int h = 0;
+    gfx_port_t *probe = NULL;
+    civ_error_t rc;
+
     if (out)
         *out = NULL;
-    (void)ren;
     if (!ren || !out)
         return CIV_ERR_NOENT;
+    if (!SDL_GetRenderOutputSize(ren, &w, &h))
+        return CIV_ERR_IO;
+    if (w <= 0 || h <= 0)
+        return CIV_ERR_BAD_DATA;
+    rc = gfx_port_create(ren, w, h, &probe);
+    if (rc != CIV_OK)
+        return rc;
+    gfx_port_destroy(probe);
     /* TODO: Orig FUN_1098_114A @ 1098:114a -> MainPort_GetOrCreate () ->
      * port/DC. GETDC + SELECTPALETTE/REALIZEPALETTE + GfxPort_SetActive
      * @ 10d0:0956 bridge, called before WdwMap_Open @ 1208:0af1 /
      * WdwSmMap_Open @ 1210:025b / WdwStatus_Open @ 1218:0386 in
-     * boot_open_windows. SDL3 render-target select TBD. */
+     * boot_open_windows. SDL3 render-target select + palette commit TBD
+     * (see palette_apply_to_port); returning the probed port as CIV_OK
+     * now would fake the palette half. */
     return CIV_ERR_UNSUPPORTED;
 }
 
