@@ -154,6 +154,9 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `main_pump_until_flag_should_continue` | LIVE | 11e8:02a4 |  |
 | `main_pump_timer_tick` | LIVE | 1008:0d68 |  |
 | `boot_timer_proc_interval_ms` | LIVE | 1008:0000, 1008:00cd, 1008:0329, 1008:0d68, 12d8:460e |  |
+| `main_startup_anim_loops` | LIVE | 10b0:008a, 10b0:0461, 10e8:0000, 1108:01bc, 11e0:0000 |  |
+| `main_startup_intro_sound` | LIVE | 1420:3114 |  |
+| `main_startup_stop_sound` | LIVE |  |  |
 
 ### `src/civ_common.c`
 
@@ -303,6 +306,14 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `text_fit_scaled_width` | LIVE | 10d8:05b8, 11d0:02e4 |  |
 | `text_fit_pascal_ellipsis_scaled` | LIVE | 1018:0be0, 1030:0000, 11d0:02e4 |  |
 | `unit_popup_text_limit` | LIVE | 11f0:468c, 11f0:4808, 11f0:4a76 |  |
+| `anim_opcode_is_valid` | LIVE | 10b0:0461 |  |
+| `anim_opcode_is_palette` | LIVE | 1090:0376, 1098:201d |  |
+| `anim_opcode_is_slot` | LIVE | 10a8:0000, 10a8:00b4, 10a8:00fc, 10a8:018e, 1150:00c9, 11e0:0000 |  |
+| `anim_opcode_needs_store` | LIVE | 1098:1104 |  |
+| `anim_opcode_is_callback` | LIVE |  |  |
+| `anim_opcode_is_anim` | LIVE |  |  |
+| `anim_tick_needs_store` | LIVE | 1000:137f, 1098:1104 |  |
+| `anim_seq_is_finished` | LIVE |  |  |
 
 ### `src/game.c`
 
@@ -548,6 +559,18 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `pic_finish_paint_step_count` | LIVE | 1030:94d2, 1030:95c2, 1030:96ad, 1030:982f |  |
 | `pic_finish_paint_step_is_caption` | LIVE |  |  |
 | `pic_finish_paint` | STUB | 1030:900d, 1030:94d2, 1030:96ad, 1030:982f, 1098:1104, 10d0:0854, 1100:09a9 | has TODO |
+| `ship_view_dispatch` | LIVE | 1070:10cb, 1070:11e2, 1608:01a8 |  |
+| `ship_command_is_launch` | LIVE | 1070:110f |  |
+| `ship_lbuttonup_is_armed` | LIVE | 1070:1129 |  |
+| `ship_hit_sets_armed` | LIVE | 1070:117f, 1608:00b0 |  |
+| `pic_arrow_dir` | LIVE | 1030:96ad |  |
+| `pic_arrow_row_count` | LIVE |  |  |
+| `pic_arrow_is_greyed` | LIVE |  |  |
+| `pic_caption_text_dx` | LIVE | 1030:982f |  |
+| `pic_dispatch_is_caption` | LIVE | 1030:95c2, 1030:982f |  |
+| `pic_dispatch_is_arrow` | LIVE | 1030:96ad |  |
+| `pic_dispatch_arrow_variant` | LIVE |  |  |
+| `pic_pump_owner_is_shared` | LIVE | 1030:0000, 1030:900d, 1030:9aed, 1048:01cd |  |
 
 ### `src/gfx_indexed.c`
 
@@ -1132,6 +1155,12 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `gfx_icon_registry_group_count` | LIVE |  |  |
 | `gfx_icon_registry_total` | LIVE |  |  |
 | `gfx_icon_registry_free` | LIVE | 1008:062f, 1008:075b |  |
+| `gfx_store_dc` | STUB | 1098:1104, 1100:09a9 | has TODO |
+| `gfx_dc_push` | STUB |  | has TODO |
+| `gfx_dc_pop` | STUB | 10d0:0854, 10d0:09a2 | has TODO |
+| `gfx_store_tick_needs_save` | LIVE | 10b0:0461 |  |
+| `gfx_store_modal_needs_save` | LIVE | 1030:0000, 1098:124f, 1208:0af1, 1210:025b, 1220:0156 |  |
+| `gfx_store_order_is_save_first` | LIVE | 1098:00b5, 10d0:0854 |  |
 | `palette_dispose` | NOOP | 1090:0488, 1090:0596 |  |
 | `palette_handle_is_live` | LIVE | 1090:0596 |  |
 

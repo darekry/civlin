@@ -2573,4 +2573,115 @@ int pic_finish_paint_step_is_caption(int step);
  * No globals, no exit(). */
 civ_error_t pic_finish_paint(void);
 
+/* --- Chain 2026-10-16 (22): Ship hook dispatch + Pic arrow/caption geometry
+ * (goals 2/3) ---
+ * Anchors (civ.exe, x86:LE:16:Protected Mode), decompiled this pass:
+ *   Ship_ViewHookProc @ 1070:10cb (SETWINDOWLONG hook for Ship_ShowView @
+ *     1070:0327 modal via Ship_PumpViewInput @ 1070:1018; result via
+ *     DAT_1420_b376: 1 = close, 2 = launch; loop until 1/2; unhooked via
+ *     SETWINDOWLONG-restore + FREEPROCINSTANCE; else DEFDLGPROC @
+ *     1608:01a8). CS table @ 1070:11e2 (4 entries, read from the image):
+ *     0x0102 WM_CHAR -> Ship_ViewCharHandler @ 1070:10fd (label this pass:
+ *       ES = 0x1420, DAT_1420_b376 = 1, return 1; key = close).
+ *     0x0111 WM_COMMAND -> Ship_ViewCommandHandler @ 1070:110f (label:
+ *       AX = DI (wParam); == 999 (0x3e7 Launch, ship_view_launch_id) ->
+ *       DAT_1420_b376 = 2, return 1; else DEFDLGPROC).
+ *     0x0202 WM_LBUTTONUP -> Ship_ViewButtonUpHandler @ 1070:1129 (label:
+ *       CMP [0x5226],0 (armed flag from DOWN) -> JZ skip (no b376); else
+ *       save coords [BP+6] -> 1420:5228/522A + child hit-test via
+ *       1608:00b0/0104 on DAT_1290_0110 port + valid part-click ->
+ *       DAT_1420_b376 = 1; always clears 5226 = 0 at 1070:1177).
+ *     0x0201 WM_LBUTTONDOWN -> Ship_ViewButtonDownHandler @ 1070:117f
+ *       (label: same coord save + hit-test; on hit sets [0x5226] = 1
+ *       (armed for the UP); never sets b376 itself).
+ *   Kody 1/2 (ship_view_result_is_close/launch LIVE above): 1 = close/
+ *     cancel (CHAR or valid part-click UP), 2 = launch-confirm (COMMAND
+ *     999). PEEKMESSAGE/TRANSLATE/DISPATCH pump stays STUB in
+ *     ship_pump_view_input above.
+ *   Pic_DrawFrameArrow @ 1030:96ad (FILLRECT white + FRAMERECT black +
+ *     FUN_1000_14f8 pen setup + FUN_1030_994b + pen pick: greyed when
+ *     (kind == 2 && DAT_1260_002e == 0) || (kind == 1 && DAT_1260_0030 ==
+ *     0) else CREATEPEN 0x808080 + SELECTOBJECT + triangle rows via
+ *     MOVETO/LINETO: dir = (kind == 1) ? -1 : +1, cy = bold + (y0+y1)/2,
+ *     cx = bold + (x0+x1)/2 + dir*((h-6)/2), rows = h-7 (each row widens
+ *     by 1, steps cx by -dir); SELECTOBJECT-restore + DELETEOBJECT when
+ *     pen created; callee of Pic_FinishPaint @ 1030:94d2 x2 + dispatch
+ *     modes 0x97/0x98 in Pic_DispatchFinishPaint @ 1030:95c2).
+ *   Pic_DrawFrameCaption @ 1030:982f (FILLRECT + FRAMERECT + same 1000:14f8
+ *     /994b setup + INFLATERECT(1,1) + OFFSETRECT(bold,bold) +
+ *     OFFSETRECT((w)/4,0) where w = x1-x0 + SELECTOBJECT font 1420:54a2 +
+ *     DRAWTEXT 0x6e4 + restore; callee of FinishPaint tail + dispatch mode
+ *     0x96 in DispatchFinishPaint).
+ *   Pic_DispatchFinishPaint @ 1030:95c2 (modes from pic_pump_select_to_mode
+ *     LIVE above: sel 1/2/3 -> 0x96/97/98; 0x96 -> caption when flags&3,
+ *     0x97 -> arrow(1) when flags&3, 0x98 -> arrow(2) when flags&3; each
+ *     gated by (*(uint *)(p+6) & 3) != 0 + FUN_1000_14f8 setup variant).
+ *   Pic_PumpMenuCommand @ 1030:9aed (sole caller Pic_PlayShared @ 1030:0000
+ *     city-view loop: PEEKMESSAGE/ISCHILD gate + TRANSLATE/DISPATCH +
+ *     WM_PAINT 0xf -> Pic_PresentOnPaint @ 1030:900d (SETRECT 0x140x0x200
+ *     + PresentRect 0x70-port + FinishPaint tail) + sel switch above +
+ *     WM_COMMAND 0x111 -> Menu_DispatchCommand @ 1048:01cd (NOT through the
+ *     sel switch); the city modal spins on Sys_DrainInput @ 11f0:4ea0 +
+ *     Sys_WaitForInput @ 1038:0c1d like census/HoF/wizard/Replay).
+ * OS-free dispatch/geometry below is LIVE 1:1 on explicit params (no Win16,
+ * no globals, read-only); GDI hit-test/blits + modal pump stay STUB with
+ * TODO Orig. No exit(), C17. */
+
+/* Orig Ship_ViewHookProc @ 1070:10cb CS table @ 1070:11e2 ->
+ * ship_view_dispatch. 1:1 handler pick: 0x0102 -> 0 (char @ 10fd),
+ * 0x0111 -> 1 (command @ 110f), 0x0201 -> 2 (button-down @ 117f), 0x0202 ->
+ * 3 (button-up @ 1129), else -1 (DEFDLGPROC @ 1608:01a8 path). */
+int ship_view_dispatch(int msg);
+
+/* Orig Ship_ViewCommandHandler @ 1070:110f CMP DI,0x3e7 ->
+ * ship_command_is_launch. 1:1 wparam == 999 (ship_view_launch_id). */
+int ship_command_is_launch(int wparam);
+
+/* Orig Ship_ViewButtonUpHandler @ 1070:1129 CMP [0x5226],0 gate ->
+ * ship_lbuttonup_is_armed. 1:1 flag != 0 (armed by a prior DOWN hit;
+ * 0 = skip, no b376). Flag is DAT_1420_5226 passed explicitly. */
+int ship_lbuttonup_is_armed(int armed_flag);
+
+/* Orig Ship_ViewButtonDownHandler @ 1070:117f hit -> [0x5226] = 1 ->
+ * ship_hit_sets_armed. 1:1 hit != 0 (hit-test via 1608:00b0/0104 on the
+ * DAT_1290_0110 port; valid part-click arms the UP). */
+int ship_hit_sets_armed(int hit);
+
+/* Orig Pic_DrawFrameArrow @ 1030:96ad dir (kind == 1 ? -1 : +1) ->
+ * pic_arrow_dir. 1:1 -1 for kind 1, +1 otherwise (kind is param_6). */
+int pic_arrow_dir(int kind);
+
+/* Orig same row loop (for local_10 < h-7) -> pic_arrow_row_count. 1:1
+ * h-7 floored at 0 (h is param_5-param_3 height; orig loop simply skips
+ * when h <= 7). */
+int pic_arrow_row_count(int h);
+
+/* Orig same greyed-pen gate ((kind == 2 && f002e == 0) || (kind == 1 &&
+ * f0030 == 0) -> stock object, else CREATEPEN 0x808080) ->
+ * pic_arrow_is_greyed. 1:1 nonzero (1) when greyed. Flags are
+ * DAT_1260_002e/0030 passed explicitly. */
+int pic_arrow_is_greyed(int kind, int f002e, int f0030);
+
+/* Orig Pic_DrawFrameCaption @ 1030:982f OFFSETRECT((w)/4,0) ->
+ * pic_caption_text_dx. 1:1 (x1-x0)/4 with C truncation (orig (param_5-
+ * param_3)/4; negative stays negative). w is the width explicitly. */
+int pic_caption_text_dx(int w);
+
+/* Orig Pic_DispatchFinishPaint @ 1030:95c2 mode gates ->
+ * pic_dispatch_is_caption/is_arrow. 1:1: caption = (mode == 0x96),
+ * arrow = (mode == 0x97 || mode == 0x98); the (*(p+6)&3) paint gate stays
+ * caller-side (needs the PIC ctx). */
+int pic_dispatch_is_caption(int mode);
+int pic_dispatch_is_arrow(int mode);
+
+/* Orig same arrow variant (0x97 -> FUN_1000_14f8(1,...), 0x98 -> (2,...)) ->
+ * pic_dispatch_arrow_variant. 1:1: 0x97 -> 1, 0x98 -> 2, else -1. */
+int pic_dispatch_arrow_variant(int mode);
+
+/* Orig Pic_PumpMenuCommand @ 1030:9aed sole caller (Pic_PlayShared @
+ * 1030:0000 city-view loop) -> pic_pump_owner_is_shared. 1:1 from_shared
+ * != 0 (the pump never runs outside the shared city view; PEEKMESSAGE /
+ * DISPATCH tail stays STUB in pic_play_shared). */
+int pic_pump_owner_is_shared(int from_shared);
+
 #endif /* CIVLIN_GAME_H */

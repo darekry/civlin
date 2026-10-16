@@ -2031,3 +2031,153 @@ int unit_popup_text_limit(int panel_left, int panel_right)
      * OS-free 1:1, bez clamp (ujemny max wymusza "." w pętli Fit). */
     return (panel_right - panel_left) - 8;
 }
+
+/* --- Chain 2026-10-16 (22): Anim opcode decoder (goal 1). See dialog.h.
+ * OS-free 1:1 LIVE (no Win16, no globals, no exit(), read-only). Player
+ * (anim_pump_if_active / anim_advance_frames above) stays STUB/PARTIAL. */
+
+int anim_opcode_is_valid(int op)
+{
+    /* Orig Anim_AdvanceFrames @ 10b0:0461 switch *local_8: cases 1..0xe,
+     * default = skip (no action, next frame). */
+    return (op >= ANIM_OPCODE_MIN && op <= ANIM_OPCODE_MAX) ? 1 : 0;
+}
+
+int anim_opcode_is_palette(int op)
+{
+    /* Orig same: 1 (fade-zero via Palette_AnimateRange @ 1090:0376), 2
+     * (palette-set copy), 0xe (rotate-shift + AnimateRange). */
+    return (op == 1 || op == 2 || op == 0x0e) ? 1 : 0;
+}
+
+int anim_opcode_is_slot(int op)
+{
+    /* Orig same: 3 (Alloc @ 10a8:0000 + StepA @ 10a8:00fc + Free @
+     * 10a8:00b4), 4 (same with StepB @ 10a8:018e). No Sound_PlayId @
+     * 1150:00c9 inside (sound rides caller-side in Main_RunStartupSequence
+     * @ 11e0:0000, see boot.h). */
+    return (op == 3 || op == 4) ? 1 : 0;
+}
+
+int anim_opcode_needs_store(int op)
+{
+    /* Orig same direct Gfx_StoreDC @ 1098:1104 cases: 5 (port-switch),
+     * 7 (caption, both branches), 8 (fill), 9 (swap). The every-8-tick
+     * pump StoreDC lives in anim_tick_needs_store below. */
+    return (op == 5 || op == 7 || op == 8 || op == 9) ? 1 : 0;
+}
+
+int anim_opcode_is_callback(int op)
+{
+    /* Orig case 10: (*(param_1+0x51))(...) user hook, no default draw. */
+    return (op == 10) ? 1 : 0;
+}
+
+int anim_opcode_is_anim(int op)
+{
+    /* Orig cases 12/13: FUN_10b0_151b setup + FUN_10b0_17e5 frame +
+     * FUN_10b0_172d free pair (12 with the 0xc palette pre-copy). */
+    return (op == 12 || op == 13) ? 1 : 0;
+}
+
+int anim_tick_needs_store(long tick)
+{
+    /* Orig frame-pump head: (*(tick & 7)) == 0 -> Gfx_StoreDC @
+     * 1098:1104 + Util_MemCopyFar @ 1000:137f (double-buffer sync). */
+    return ((tick & 7L) == 0) ? 1 : 0;
+}
+
+int anim_seq_is_finished(long cur, long end)
+{
+    /* Orig tail: cur < end -> busy (0), else done (nonzero). */
+    return (cur >= end) ? 1 : 0;
+}
+
+/* --- Chain 2026-10-16 (23): Anim slot struct + sequence phases (goals 1/2).
+ * See dialog.h block. OS-free 1:1 LIVE (no Win16, no globals, no exit()). */
+
+civ_error_t anim_slot_init(anim_slot_t *slot, int art, int geo0, int geo1,
+                           int geo2, int max_frames, int ticks_per_frame,
+                           long start_tick)
+{
+    /* Orig Anim_AllocSlot @ 10a8:0000 field init (disasm stores per field;
+     * DAT_1420_17a6 gate + mem_alloc_lock 0x14 + Mem_ReallocHandle handle
+     * tail stay caller-side STUB). */
+    if (!slot)
+        return CIV_ERR_NOENT;
+    if (max_frames <= 0 || ticks_per_frame <= 0)
+        return CIV_ERR_RANGE;
+    slot->art = art;
+    slot->geo0 = geo0;
+    slot->geo1 = geo1;
+    slot->geo2 = geo2;
+    slot->max_frames = max_frames;
+    slot->cur_frame = 0;
+    slot->ticks_per_frame = ticks_per_frame;
+    slot->start_tick = start_tick;
+    return CIV_OK;
+}
+
+long anim_slot_frame_at(long start, long now, int ticks_per_frame)
+{
+    /* Orig Anim_StepSlotA/B @ 10a8:00fc/018e: (now - start) / per. */
+    if (ticks_per_frame <= 0)
+        return -1L;
+    return (now - start) / (long)ticks_per_frame;
+}
+
+int anim_slot_is_finished(long frame, int max_frames)
+{
+    /* Orig same: (max < frame) -> CONCAT31(...,1) done. */
+    return (frame > (long)max_frames) ? 1 : 0;
+}
+
+int anim_slot_blend(int src, long frame, int max_frames)
+{
+    /* Orig Anim_BlendSlotFrame @ 10a8:0228 per-channel: (src * frame) / max
+     * (u8 channels, alpha byte copied verbatim caller-side). */
+    long v;
+
+    if (src < 0 || src > 255)
+        return -1;
+    if (max_frames <= 0 || frame < 0)
+        return -1;
+    v = ((long)src * frame) / (long)max_frames;
+    if (v < 0)
+        v = 0;
+    if (v > 255)
+        v = 255;
+    return (int)v;
+}
+
+long anim_slot_play_frame(int op, long frame, int max_frames)
+{
+    /* Orig StepA (op 3) forward vs StepB (op 4) reverse select. */
+    if (op == ANIM_SLOT_OP_A)
+        return frame;
+    if (op == ANIM_SLOT_OP_B)
+        return (long)max_frames - frame;
+    return -1L;
+}
+
+anim_seq_phase_t anim_seq_phase_step(anim_seq_phase_t phase, int opened,
+                                     int pumped, int finished, int closed)
+{
+    /* Orig open -> pump -> advance -> close lifecycle (Anim_OpenSequence @
+     * 10b0:008a + Anim_PumpIfActive @ 10b0:0000 + Anim_AdvanceFrames @
+     * 10b0:0461 + Anim_CloseSequence @ 10b0:0287; DAT_1420_1f40 active flag
+     * + GfxPort_Create/Close + Art_LoadFrameData @ 10b8:079d frame loads
+     * stay caller-side STUB). */
+    switch (phase) {
+    case ANIM_SEQ_CLOSED:
+        return (opened != 0) ? ANIM_SEQ_OPEN : ANIM_SEQ_CLOSED;
+    case ANIM_SEQ_OPEN:
+        return (pumped != 0) ? ANIM_SEQ_PLAYING : ANIM_SEQ_OPEN;
+    case ANIM_SEQ_PLAYING:
+        return (finished != 0) ? ANIM_SEQ_DONE : ANIM_SEQ_PLAYING;
+    case ANIM_SEQ_DONE:
+        return (closed != 0) ? ANIM_SEQ_CLOSED : ANIM_SEQ_DONE;
+    default:
+        return ANIM_SEQ_CLOSED;
+    }
+}

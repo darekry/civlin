@@ -997,4 +997,85 @@ int main_pump_timer_tick(int flag);
  * boot_timer_proc_interval_ms. 1:1 5 (ms). */
 int boot_timer_proc_interval_ms(void);
 
+/* --- Chain 2026-10-16 (22): Main_RunStartupSequence + Pic pump caller
+ * (goal 5) ---
+ * Anchors (civ.exe, x86:LE:16:Protected Mode), decompiled this pass:
+ *   ADRES-KOREKTA: zadanie mówi Main_RunStartupSequence @ 10e8:0000, ale
+ *     10e8:0000 to NewGame_Wizard @ 10e8:0000 (wizard 0..5: difficulty
+ *     1420:2a5a / competition 2aa9+2ac3 / tribe 2ad2+Custom / custom-world
+ *     1220:16fd + finalize: clear units/cities/map 0x50x0x32, g_year 0xF060,
+ *     leader Sound_PlayId, Map_GenerateRandomOrLoad; sole caller chain
+ *     poniżej). Prawdziwy Main_RunStartupSequence @ 11e0:0000 (renamed;
+ *     dispatcher MainMenu_WndProc @ 11e0:0221 choices over CIV_MAINMENU_TEXT
+ *     @ 1420:435b; callees: Dlg_CreateTracked @ 1098:124f (0x94,0x41) +
+ *     Gfx_StoreDC @ 1098:1104 + Palette_AnimateRange @ 1090:0376 +
+ *     Anim_OpenSequence @ 10b0:008a + Sound_PlayId @ 1150:00c9 (3,0) +
+ *     Anim_AdvanceFrames @ 10b0:0461 loop#1 + Anim_CloseSequence @
+ *     10b0:0287 + Sound_PlayId (1,0) + [g_nMenuChoice 0/2/3 path:]
+ *     Sys_DrainInput @ 11f0:4ea0 + Anim_OpenSequence (0x91e) +
+ *     Anim frame-set 1000 via FUN_10b0_005b + WorldGen_PrepareEarth @
+ *     1108:01bc + Anim_AdvanceFrames loop#2 (until DAT_13e0_001e) +
+ *     Anim_CloseSequence + Sound_PlayId (1,0) + Dlg_DestroyTracked @
+ *     1098:1612 + NewGame_Wizard @ 10e8:0000; else DestroyTracked only).
+ * Związek z Anim: StartupSequence to GŁÓWNY driver Anim (2x open/advance/
+ *   close loops; Anim_PumpIfActive @ 10b0:0000 to per-tick pump tego samego
+ *   silnika przez Sys_Yield @ 1098:0157). Związek z intro: loop#1 to intro
+ *   (Sound_PlayId 3 = intro jingle, potem 1 = STOP; dialog 0x94 tło;
+ *   OPENING.wav @ 1420:3114 + MPLOGO.BMP (NE resource, brak filename
+ *   string, patrz title.h) idą caller-side, nie w opkodach 1..0xe — patrz
+ *   dialog.h anim chain). Związek z Pic: Pic_PlayShared @ 1030:0000 NIE
+ *   jest wołany ze StartupSequence (sole Pic pump-caller to sam
+ *   Pic_PlayShared dla Pic_PumpMenuCommand @ 1030:9aed, patrz game.h).
+ * main_run_startup_sequence powyżej zostaje STUB (SDL modal/event bridge
+ *   TBD); liczniki/id dźwięków poniżej są LIVE 1:1 na jawnych stałych
+ *   (no Win16, no globals, read-only). No exit(), C17. */
+
+/* Orig Main_RunStartupSequence @ 11e0:0000 loop count ->
+ * main_startup_anim_loops. 1:1 2 (loop#1 intro + loop#2 earth-prepare). */
+int main_startup_anim_loops(void);
+
+/* Orig same Sound_PlayId(3,0) before loop#1 -> main_startup_intro_sound.
+ * 1:1 3 (intro jingle; STOP = 1 wraca via main_startup_stop_sound). */
+int main_startup_intro_sound(void);
+
+/* Orig same Sound_PlayId(1,0) after each loop -> main_startup_stop_sound.
+ * 1:1 1 (STOP). */
+int main_startup_stop_sound(void);
+
+/* --- Chain 2026-10-16 (23): Startup wizard gate + order (goals 3/5) ---
+ * Anchors (civ.exe, x86:LE:16:Protected Mode), decompiled this pass:
+ *   Main_RunStartupSequence @ 11e0:0000 (full order: Dlg_CreateTracked 0x94
+ *     + Gfx_StoreDC @ 1098:1104 + Palette_AnimateRange @ 1090:0376 +
+ *     Anim_OpenSequence @ 10b0:008a + DAT_13e0_001e = 0 + Sound_PlayId @
+ *     1150:00c9 (3,0) + FILLRECT + Cursor_Set @ 1098:096c + loop#1
+ *     Anim_AdvanceFrames @ 10b0:0461 + Anim_CloseSequence @ 10b0:0287 +
+ *     Sound (1,0) + [g_nMenuChoice @ 12d8:44e2 w 0/2/3:] Sys_DrainInput @
+ *     11f0:4ea0 + Anim_OpenSequence (0x91e) + Anim_RebaseClock @ 10b0:005b
+ *     (1000) + WorldGen_PrepareEarth @ 1108:01bc + loop#2 Advance (until
+ *     DAT_13e0_001e) + Close + Sound (1,0) + Dlg_DestroyTracked @ 1098:1612
+ *     + NewGame_Wizard @ 10e8:0000; else DestroyTracked only).
+ *   Menu choices (MainMenu_WndProc @ 11e0:0221 over CIV_MAINMENU_TEXT @
+ *     1420:435b, g_nMenuChoice @ 12d8:44e2): 0 = Start New (random), 1 =
+ *     Load Saved (Save_LoadDialog @ 1130:000e; skips the wizard), 2 = Play
+ *     on EARTH (preset), 3 = Customize World (LoadEarth customizer @
+ *     1108:0243), 4 = Hall of Fame, 5 = Quit. Startup wizard gate = 0/2/3.
+ *   Wizard tail (NewGame_Wizard @ 10e8:0000 steps 0..5: difficulty 2a5a /
+ *     competition 2aa9+2ac3 / tribe 2ad2+Custom / custom-world 1220:16fd x2
+ *     / finalize: clear units/cities/map 0x50x0x32, g_year 0xF060 (-4000),
+ *     leader Sound_PlayId, Map_GenerateRandomOrLoad @ 1028:0000; zwiad tylko,
+ *     pelny port wizarda poza tym lancuchem) + Menu_PromptNation @ 1070:1f58
+ *     (NIE startowy wybor — spaceship-preview w grze; patrz newgame.h) +
+ *     tribe_get_name_list STUB (Res blob 0x94).
+ *   Boot/title link: loop#1 to intro (title_play_intro_sdl w title.c gra
+ *     MPLOGO.BMP + OPENING.wav best-effort; boot_run/main best-effort).
+ * main_run_startup_sequence powyzej zostaje STUB (SDL modal/event bridge
+ * TBD); gate ponizej jest LIVE 1:1 na jawnym wyborze (no Win16, no globals,
+ * read-only). No exit(), C17. */
+
+/* Orig Main_RunStartupSequence @ 11e0:0000 wizard gate
+ * (g_nMenuChoice == 0/2/3) -> main_startup_should_run_wizard. 1:1 1 gdy
+ * choice w {0, 2, 3} (nowa gra / EARTH / customize -> NewGame_Wizard),
+ * 0 wpp (1 = load, 4/5/HoF/quit/out-of-range -> sam DestroyTracked). */
+int main_startup_should_run_wizard(int menu_choice);
+
 #endif /* CIVLIN_BOOT_H */

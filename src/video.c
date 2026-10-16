@@ -1488,6 +1488,57 @@ civ_error_t gfx_icon_registry_free(int *slots, int n)
     return CIV_OK;
 }
 
+/* --- Chain 2026-10-16 (22): Gfx_StoreDC pattern (goal 4). See video.h.
+ * LIVE order/gates + STUB calls (no Win16, no globals, no exit()). */
+
+civ_error_t gfx_store_dc(void)
+{
+    /* Orig Gfx_StoreDC @ 1098:1104 -> Gfx_SetCurrentDC @ 1100:09a9.
+     * TODO: SDL bridge (borrowed renderer as DC + TARGET backing via
+     * gfx_port_* above; restore via PresentRect + ClearActive). */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t gfx_dc_push(void)
+{
+    /* Orig push half of the save -> draw -> restore pattern (see video.h
+     * chain block; 28 StoreDC callers incl. Anim frame-pump, Pic_PlayShared,
+     * MenuZ_Modal, Dlg_CreateTracked, map opens, UpdateStatusPanel,
+     * ShowInfoPopup). TODO: SDL renderer-target push TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t gfx_dc_pop(void)
+{
+    /* Orig pop half (PresentRect @ 10d0:0854 + ClearActive @ 10d0:09a2 +
+     * SELECTOBJECT-restore + VALIDATERECT no-op). TODO: SDL restore TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+int gfx_store_tick_needs_save(long tick)
+{
+    /* Orig Anim_AdvanceFrames @ 10b0:0461 frame-pump head ((tick & 7) == 0
+     * -> StoreDC + MemCopyFar); video-owned copy (same shape as
+     * anim_tick_needs_store, no dialog pull). */
+    return ((tick & 7L) == 0) ? 1 : 0;
+}
+
+int gfx_store_modal_needs_save(int is_modal)
+{
+    /* Orig modal-entry StoreDC (Pic_PlayShared @ 1030:0000, MenuZ_Modal @
+     * 1220:0156, Dlg_CreateTracked @ 1098:124f, map opens @ 1208:0af1 /
+     * 1210:025b): modal paint always saves the DC first. */
+    return (is_modal != 0) ? 1 : 0;
+}
+
+int gfx_store_order_is_save_first(void)
+{
+    /* Orig save -> draw -> restore order (StoreDC, then Fill/Blit/Present/
+     * Text via 10d0:0854/08f1 + 1098:00b5/0e0b/0ed1, then PresentRect +
+     * ClearActive + SELECTOBJECT-restore + VALIDATERECT no-op). */
+    return 1;
+}
+
 /* --- Chain 2026-10-16 (17): palette dispose pair (goal 2) ---
  * See video.h block. LIVE-noop (no Win16, no globals, no exit()). */
 

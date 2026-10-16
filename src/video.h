@@ -1177,4 +1177,61 @@ void palette_dispose(void);
  * 1:1: 1 gdy handle != 0 (free), 0 wpp (skip). No globals. */
 int palette_handle_is_live(int handle);
 
+/* --- Chain 2026-10-16 (22): Gfx_StoreDC pattern (goal 4) ---
+ * Anchors (civ.exe, x86:LE:16:Protected Mode), decompiled this pass:
+ *   Gfx_StoreDC @ 1098:1104 (thin wrapper: Gfx_SetCurrentDC @ 1100:09a9
+ *     with the current port/DC; sole callee SetCurrentDC; 28 callers incl.
+ *     Anim_AdvanceFrames @ 10b0:0461 frame-pump, Pic_PlayShared @
+ *     1030:0000, Dialog_MenuZ_Modal @ 1220:0156, Dlg_CreateTracked @
+ *     1098:124f, WdwMap_Open @ 1208:0af1 / WdwSmMap_Open @ 1210:025b,
+ *     Game_UpdateStatusPanel @ 1088:13d5, Unit_ShowInfoPopup @ 11f0:468c,
+ *     Main_RunStartupSequence @ 11e0:0000, NewGame_Wizard @ 10e8:0000,
+ *     Sys_PumpMessages @ 1108:0000, WorldGen_LoadEarth @ 1108:0243).
+ * Po co każdy save'uje DC:
+ *   Anim frame-pump (co 8. tick): double-buffer sync (StoreDC + MemCopyFar
+ *     przed blitami opkodów 5/7/8/9; patrz dialog.h anim_tick_needs_store).
+ *   Pic_PlayShared / MenuZ_Modal / Dlg_CreateTracked / map-opens:
+ *     tło pod modal (StoreDC przed FILLRECT/BITBLT dialogu, restore via
+ *     PresentRect @ 10d0:0854 + ClearActive @ 10d0:09a2 po modalu).
+ *   UpdateStatusPanel / ShowInfoPopup: clip/save przed status/popup paint
+ *     (StoreDC + SetActive, restore via PresentRect + ClearActive; unlock
+ *     to SELECTOBJECT-restore, dirty-clear to VALIDATERECT no-op na SDL3).
+ *   Ship_ShowView @ 1070:0327: NIE używa StoreDC (SetActive + PresentRect
+ *     wprost + starfield PresentRect 0xd2).
+ * Czy wzorzec da się uogólnić: TAK — save (StoreDC) -> draw (Fill/Blit/
+ *   Present/Text) -> restore (SetActive/PresentRect/ClearActive +
+ *   SELECTOBJECT-restore + VALIDATERECT no-op). Poniżej LIVE kolejność
+ *   (save-first) + tick/modal gates (no Win16, no globals); same wołania
+ *   (StoreDC/push/pop) zostają STUB z TODO Orig aż mostek SDL (borrowed
+ *   renderer jako DC, TARGET texture jako backing) wyląduje w
+ *   gfx_port_create/set_active/present_rect/blit powyżej.
+ * No exit(), C17. */
+
+/* Orig Gfx_StoreDC @ 1098:1104 -> gfx_store_dc. Thin wrapper over
+ * Gfx_SetCurrentDC @ 1100:09a9 (borrowed renderer/DC save). SDL bridge
+ * TBD (renderer borrow + TARGET backing, see gfx_port_* above). */
+civ_error_t gfx_store_dc(void);
+
+/* Orig push/pop generalization (save -> draw -> restore) -> gfx_dc_push /
+ * gfx_dc_pop. STUB pair keeping the pairing for RE-map fidelity (SDL3
+ * renderer borrow needs no real push; the order itself is LIVE in
+ * gfx_store_order_is_save_first below). */
+civ_error_t gfx_dc_push(void);
+civ_error_t gfx_dc_pop(void);
+
+/* Orig frame-pump gate (same shape as anim_tick_needs_store @ 10b0:0461:
+ * (tick & 7) == 0 -> StoreDC + MemCopyFar; video-owned copy so video.c
+ * needs no dialog pull) -> gfx_store_tick_needs_save. 1:1. */
+int gfx_store_tick_needs_save(long tick);
+
+/* Orig modal-entry gate (StoreDC before FILLRECT/BITBLT dialogu) ->
+ * gfx_store_modal_needs_save. 1:1 is_modal != 0 (modal/dialog paint
+ * always saves; modeless sim tick in Pic_PlayShared mode 0 skips). */
+int gfx_store_modal_needs_save(int is_modal);
+
+/* Orig save -> draw -> restore order -> gfx_store_order_is_save_first.
+ * 1:1 always 1 (save first, then draw, then PresentRect/ClearActive +
+ * SELECTOBJECT-restore + VALIDATERECT no-op restore). */
+int gfx_store_order_is_save_first(void);
+
 #endif /* CIVLIN_VIDEO_H */

@@ -1224,3 +1224,29 @@ int boot_timer_proc_interval_ms(void)
      * mostek TBD caller-side w map_timer_proc STUB). */
     return 5;
 }
+
+/* --- Chain 2026-10-16 (22): Main_RunStartupSequence + Pic pump caller
+ * (goal 5). See boot.h. OS-free 1:1 LIVE (no Win16, no globals). */
+
+int main_startup_anim_loops(void)
+{
+    /* Orig Main_RunStartupSequence @ 11e0:0000: loop#1 (intro, dialog 0x94
+     * + Anim_OpenSequence @ 10b0:008a + Sound 3 + Anim_AdvanceFrames @
+     * 10b0:0461 + Close + Sound 1) + loop#2 (0x91e + WorldGen_PrepareEarth
+     * @ 1108:01bc + Advance + Close + Sound 1) przed NewGame_Wizard @
+     * 10e8:0000. (Nie mylić z 10e8:0000 = wizard, nie startup.) */
+    return 2;
+}
+
+int main_startup_intro_sound(void)
+{
+    /* Orig same: Sound_PlayId(3,0) przed loop#1 (intro jingle; OPENING.wav
+     * @ 1420:3114 + MPLOGO.BMP caller-side, nie w opkodach). */
+    return 3;
+}
+
+int main_startup_stop_sound(void)
+{
+    /* Orig same: Sound_PlayId(1,0) po każdej pętli (STOP). */
+    return 1;
+}

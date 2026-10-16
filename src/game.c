@@ -3682,3 +3682,113 @@ civ_error_t pic_finish_paint(void)
      * GDI -> SDL bridge TBD. */
     return CIV_ERR_UNSUPPORTED;
 }
+
+/* --- Chain 2026-10-16 (22): Ship hook dispatch + Pic arrow/caption geometry
+ * (goals 2/3). See game.h. OS-free 1:1 LIVE (no Win16, no globals). */
+
+int ship_view_dispatch(int msg)
+{
+    /* Orig Ship_ViewHookProc @ 1070:10cb CS table @ 1070:11e2: 0x0102 ->
+     * 0x10FD (char), 0x0111 -> 0x110F (command), 0x0201 -> 0x117F (down),
+     * 0x0202 -> 0x1129 (up); loop over 4 entries, else DEFDLGPROC. */
+    switch (msg) {
+    case 0x0102:
+        return 0;
+    case 0x0111:
+        return 1;
+    case 0x0201:
+        return 2;
+    case 0x0202:
+        return 3;
+    default:
+        return -1;
+    }
+}
+
+int ship_command_is_launch(int wparam)
+{
+    /* Orig Ship_ViewCommandHandler @ 1070:110f: AX = DI (wParam low),
+     * CMP AX,0x3e7 -> JZ b376 = 2 (Launch), else DEFDLGPROC. */
+    return (wparam == 999) ? 1 : 0;
+}
+
+int ship_lbuttonup_is_armed(int armed_flag)
+{
+    /* Orig Ship_ViewButtonUpHandler @ 1070:1129: CMP [0x5226],0 -> JZ
+     * 0x1177 skip (disarm path clears 5226, no b376); armed path saves
+     * coords + hit-tests + maybe b376 = 1. */
+    return (armed_flag != 0) ? 1 : 0;
+}
+
+int ship_hit_sets_armed(int hit)
+{
+    /* Orig Ship_ViewButtonDownHandler @ 1070:117f: hit-test via
+     * 1608:00b0/0104 on DAT_1290_0110; hit -> [0x5226] = 1 (arms UP),
+     * miss -> flag untouched; never touches b376 itself. */
+    return (hit != 0) ? 1 : 0;
+}
+
+int pic_arrow_dir(int kind)
+{
+    /* Orig Pic_DrawFrameArrow @ 1030:96ad: kind (param_6) == 1 -> iVar3 =
+     * -1 else +1 (triangle points left vs right). */
+    return (kind == 1) ? -1 : 1;
+}
+
+int pic_arrow_row_count(int h)
+{
+    /* Orig same: for (local_10 = 0; local_10 < h-7; ...) MOVETO/LINETO
+     * rows; h = param_5-param_3. Non-positive loop = 0 rows. */
+    int n = h - 7;
+    return (n > 0) ? n : 0;
+}
+
+int pic_arrow_is_greyed(int kind, int f002e, int f0030)
+{
+    /* Orig same pen pick: ((kind == 2 && DAT_1260_002e == 0) ||
+     * (kind == 1 && DAT_1260_0030 == 0)) -> GETSTOCKOBJECT greyed, else
+     * CREATEPEN(0x1000,0x808080,1). */
+    if ((kind == 2 && f002e == 0) || (kind == 1 && f0030 == 0))
+        return 1;
+    return 0;
+}
+
+int pic_caption_text_dx(int w)
+{
+    /* Orig Pic_DrawFrameCaption @ 1030:982f: OFFSETRECT((param_5-param_3)
+     * /4, 0) after INFLATERECT(1,1) + OFFSETRECT(bold,bold). */
+    return w / 4;
+}
+
+int pic_dispatch_is_caption(int mode)
+{
+    /* Orig Pic_DispatchFinishPaint @ 1030:95c2: mode 0x96 -> caption
+     * (Pic_DrawFrameCaption @ 1030:982f) when (*(p+6)&3) != 0. */
+    return (mode == 0x96) ? 1 : 0;
+}
+
+int pic_dispatch_is_arrow(int mode)
+{
+    /* Orig same: 0x97/0x98 -> arrow (Pic_DrawFrameArrow @ 1030:96ad)
+     * when (*(p+6)&3) != 0 (0x97 with setup 1, 0x98 with setup 2). */
+    return (mode == 0x97 || mode == 0x98) ? 1 : 0;
+}
+
+int pic_dispatch_arrow_variant(int mode)
+{
+    /* Orig same FUN_1000_14f8 setup variant: 0x97 -> 1, 0x98 -> 2. */
+    if (mode == 0x97)
+        return 1;
+    if (mode == 0x98)
+        return 2;
+    return -1;
+}
+
+int pic_pump_owner_is_shared(int from_shared)
+{
+    /* Orig Pic_PumpMenuCommand @ 1030:9aed sole caller Pic_PlayShared @
+     * 1030:0000 (city-view modal loop; WM_PAINT 0xf -> Pic_PresentOnPaint
+     * @ 1030:900d + sel 1/2/3 -> 0x96/97/98 via pic_pump_select_to_mode +
+     * WM_COMMAND 0x111 -> Menu_DispatchCommand @ 1048:01cd). */
+    return (from_shared != 0) ? 1 : 0;
+}

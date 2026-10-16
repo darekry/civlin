@@ -1459,4 +1459,212 @@ civ_error_t text_fit_pascal_ellipsis_scaled(char *buf, size_t cap, int w,
  * ellipsis do "." jak pętla Fit). No globals, no exit(). */
 int unit_popup_text_limit(int panel_left, int panel_right);
 
+/* --- Chain 2026-10-16 (22): Anim opcode decoder (goal 1) ---
+ * Anchors (civ.exe, x86:LE:16:Protected Mode), decompiled this pass:
+ *   Anim_AdvanceFrames @ 10b0:0461 (timed frame script; callers
+ *     Anim_PumpIfActive @ 10b0:0000 (flag @ 1420:1f40, wrapped by Sys_Yield
+ *     @ 1098:0157) + Main_RunStartupSequence @ 11e0:0000 (2x loops, see
+ *     boot.h); frame pump: every 8. tick Gfx_StoreDC @ 1098:1104 +
+ *     Util_MemCopyFar @ 1000:137f; pause gate via 0x50 flag + 1420:1f40
+ *     type 0/6/9 window; per-tick callback @ +0x51; returns nonzero = done).
+ *   Anim_OpenSequence @ 10b0:008a (was FUN_10b0_008a: mem_alloc_lock 0xa6
+ *     ctx + GETCLIENTRECT + Sys_GetTickScaled @ 1100:02e1 base + max-end
+ *     scan + GfxPort_Create x2 (offs +9/+0x62) + FUN_1000_14f8/1100:0876
+ *     setup + DAT_1420_1f40 = ctx; renamed this pass).
+ *   Anim_CloseSequence @ 10b0:0287 (was FUN_10b0_0287: frees slots 3/4 via
+ *     Anim_FreeSlot @ 10a8:00b4 + slot 7 via GfxPort_Close + closes both
+ *     ports + ClearActive x2 + GLOBALFREE + Mem_DisposePtr + 1420:1f40 = 0;
+ *     renamed this pass).
+ *   Anim slots (segment 10a8, renamed this pass): Anim_AllocSlot @
+ *     10a8:0000 (mem_alloc_lock 0x14 ctx, DAT_1420_17a6 gate), Anim_StepSlotA
+ *     @ 10a8:00fc / Anim_StepSlotB @ 10a8:018e (timed step variants via
+ *     FUN_10a8_0228), Anim_FreeSlot @ 10a8:00b4 (GLOBALFREE + Mem_DisposePtr
+ *     @ 1100:060b, DAT_1420_17a6 gate).
+ * Full opcode table (switch *local_8 in Anim_AdvanceFrames):
+ *   1 palette-fade-zero (GLOBALLOCK palette + zero + flag 1 +
+ *     Palette_AnimateRange @ 1090:0376 + GLOBALUNLOCK when port active).
+ *   2 palette-set (0x81/0x82/0x85 select + GLOBALLOCK copy + GLOBALUNLOCK).
+ *   3 slot-A (Anim_AllocSlot @ 10a8:0000 on start + Anim_StepSlotA @
+ *     10a8:00fc per tick + Anim_FreeSlot @ 10a8:00b4 on end; GDI? no:
+ *     slot ctx only, NO Sound_PlayId @ 1150:00c9 inside — sound rides
+ *     caller-side in Main_RunStartupSequence via Sound_PlayId(3,0)/(1,0),
+ *     see boot.h).
+ *   4 slot-B (same with Anim_StepSlotB @ 10a8:018e; same no-sound note).
+ *   5 port-switch (Gfx_StoreDC + Text_SelectFont @ 1100:0a33 x3 +
+ *     FUN_1100_0a4a + GfxPort_SetActive @ 10d0:0956 for +0x12/+0x31).
+ *   6 frame-load (0x50 = 1 + GfxPort_Close + Art_LoadFrameData @ 10b8:079d
+ *     ([9] + 0x31 param) + Art_PortDataToBitmap @ 10b8:0e36 + 0x50 = 0;
+ *     frames come from RSC via Art_LoadResPaletted @ 10b8:11bc or disk via
+ *     Art_LoadDiskFile @ 10b8:0aa8, see video.h art chain).
+ *   7 caption-text (palette apply + SetActive/CopyRange + ResMgr_GetString
+ *     @ 1100:078a or Util_StrCopy @ 1000:36b2 + Util_PascalToCStr @
+ *     1100:0053 + Text_DrawAligned @ 1098:0ed1; tail restores + PresentRect
+ *     @ 10d0:0854 + ClearActive @ 10d0:09a2).
+ *   8 fill-rect (Gfx_StoreDC + Gfx_MakeBrush @ 1098:00b5 + Text_SetBkColor
+ *     @ 1098:2144 / Text_SetColor @ 1098:0e0b + FILLRECT x2 + DELETEOBJECT).
+ *   9 port-swap (MemCopyFar swap +0x12<->+0x31 + SetActive + CopyRange +
+ *     StoreDC + SETRECT/OFFSETRECT + PresentRect).
+ *   10 callback ((*(param+0x51))(...) user hook, no default action).
+ *   11 scroll-blit (timed (tick-start)%len == 0 gate + SetActive x2 +
+ *     CopyRange/Present + FUN_1008_0df0 + OFFSETRECT + FUN_10d0_03fa +
+ *     ClearActive x2).
+ *   12/13 anim-A/B (SetActive x2 + Present/CopyRange/Animate +
+ *     FUN_10b0_151b setup / Anim frame via FUN_10b0_17e5 + free via
+ *     FUN_10b0_172d; 12 does the 0xc palette pre-copy branch).
+ *   14 palette-rotate (GLOBALLOCK + save + shift + AnimateRange; timed
+ *     (tick-start)%len == 0 gate like 11).
+ * Format sekwencji: array of frame recs at +8, count at +10, each 0xf words
+ *   ([0] opcode above, [3]/[4] rect-or-port fallback, [5]/[7] start/end tick,
+ *   [9]/[10] palette range, [11] flags (0x100/0x200/0x400/0x800 port/text
+ *   gates), [12] color, [13]/[14] slot ctx; exact word map TBD vs dump).
+ * Kto woła: Anim_PumpIfActive (per-tick Sys_Yield pump) + intro loops in
+ *   Main_RunStartupSequence (dialog 0x94 + Sound_PlayId intro/STOP + 0x91e
+ *   second loop + NewGame_Wizard @ 10e8:0000 tail, see boot.h). OPENING.wav
+ *   @ 1420:3114 + MPLOGO.BMP (NE resource, no filename string, see title.h)
+ *   ride the same loops caller-side, not inside opcodes.
+ * OS-free decoder below is LIVE 1:1 on explicit op/tick (no Win16, no
+ * globals, read-only); the timed player stays STUB/PARTIAL (anim_pump_if_
+ * active / anim_advance_frames above) until the SDL port/frame bridge lands.
+ * No exit(), C17. */
+#define ANIM_OPCODE_MIN 1
+#define ANIM_OPCODE_MAX 0x0e
+
+/* Orig Anim_AdvanceFrames @ 10b0:0461 switch range -> anim_opcode_is_valid.
+ * 1:1 1 <= op <= 0x0e. */
+int anim_opcode_is_valid(int op);
+
+/* Orig same palette cases (1, 2, 0xe via Palette_AnimateRange @ 1090:0376 /
+ * Palette_CopyRange @ 1098:201d) -> anim_opcode_is_palette. 1:1. */
+int anim_opcode_is_palette(int op);
+
+/* Orig same slot cases (3, 4 via Anim_AllocSlot/StepSlotA/B/FreeSlot @
+ * 10a8:0000/00fc/018e/00b4) -> anim_opcode_is_slot. 1:1. */
+int anim_opcode_is_slot(int op);
+
+/* Orig same direct-StoreDC cases (5, 7, 8, 9 via Gfx_StoreDC @ 1098:1104;
+ * 7 both branches, 5/8/9 unconditional; frame-pump every 8. tick is separate
+ * in anim_tick_needs_store) -> anim_opcode_needs_store. 1:1. */
+int anim_opcode_needs_store(int op);
+
+/* Orig case 10 ((*(param+0x51))(...) user hook) -> anim_opcode_is_callback.
+ * 1:1 op == 10. */
+int anim_opcode_is_callback(int op);
+
+/* Orig cases 12/13 (FUN_10b0_151b/17e5/172d frame pair) ->
+ * anim_opcode_is_anim. 1:1 op == 12 || op == 13. */
+int anim_opcode_is_anim(int op);
+
+/* Orig frame-pump gate ((tick & 7) == 0 -> Gfx_StoreDC + MemCopyFar) ->
+ * anim_tick_needs_store. 1:1 nonzero (1) when (tick & 7) == 0. */
+int anim_tick_needs_store(long tick);
+
+/* Orig loop-end (cur >= end -> nonzero done) -> anim_seq_is_finished.
+ * 1:1 cur >= end. */
+int anim_seq_is_finished(long cur, long end);
+
+/* --- Chain 2026-10-16 (23): Anim slot struct + sequence phases (goals 1/2) ---
+ * Anchors (civ.exe, x86:LE:16:Protected Mode), renamed this pass:
+ *   Anim_BlendSlotFrame @ 10a8:0228 (was FUN_10a8_0228: GLOBALLOCK palette +
+ *     per-channel out = src*frame/max, alpha byte kept + FUN_1090_0119
+ *     apply + GLOBALFREE; sole callers Anim_StepSlotA/B below).
+ *   Anim_RebaseClock @ 10b0:005b (was FUN_10b0_005b: seq+0x1a = now - param,
+ *     seq+0x16 = param; Startup loop#2 passes 1000).
+ *   Anim_SetupDissolve @ 10b0:151b (was FUN_10b0_151b: mem_alloc_lock 0x79c
+ *     scatter ctx + random permutation via FUN_1100_03ea for opcodes 12/13).
+ *   Anim_StepDissolve @ 10b0:17e5 (was FUN_10b0_17e5: per-tick random-order
+ *     pixel copy for 12/13; 12 = palette-gated 0xc branch).
+ *   Anim_FreeDissolve @ 10b0:172d (was FUN_10b0_172d: Mem_DisposePtr of the
+ *     0x79c ctx; opcode 12/13 tail in Anim_CloseSequence @ 10b0:0287).
+ * Slot answers (Anim_AllocSlot @ 10a8:0000 disasm + StepA/B decompile):
+ *   ILE SLOTOW (A/B = 2?): NIE — A/B to dwa rodzaje opkodow (3 = slot-A
+ *     forward, 4 = slot-B reverse), nie pula 2 slotow. Kazdy wpis timeline
+ *     3/4 alokuje wlasny 0x14-kontekst przy starcie (Anim_AllocSlot) i zwalnia
+ *     przy koncu (Anim_FreeSlot @ 10a8:00b4 / CloseSequence); wspolbieznie
+ *     tyle slotow, ile aktywnych wpisow 3/4. To samo dla 12/13: kazdy wpis
+ *     ma wlasny 0x79c scatter-ctx (Setup/Step/FreeDissolve), nie 2.
+ *   FORMAT SLOTU 0x14 (z disasm 10a8:0000, pola LE): +0x00 dword art/frame
+ *     handle (param_1) | +0x04 u16 geo0 (param_5) | +0x06 u16 geo1 (param_6)
+ *     | +0x08 u16 geo2 (param_7) | +0x0a u16 max_frames (param_3) | +0x0c u16
+ *     cur_frame (= 0 przy alloc) | +0x0e u16 ticks_per_frame (param_4) |
+ *     +0x10 long start_tick (param_2). RAMKA? nie bitmapa — slot niesie
+ *     licznik klatki + tempo; POZYCJA? geo0/1/2 to geometria wpisu (exact
+ *     semantyka TBD vs dump timeline-rec 0xf slow); CALLBACK +0x51? NIE na
+ *     slocie — callback zyje na SEKWENCJI (case 10: (*(seq+0x51))(...) per
+ *     tick + rebase w Anim_RebaseClock); TIMER? start_tick + ticks_per_frame
+ *     + Sys_GetTickScaled @ 1100:02e1 (frame = (now - start) / per).
+ *   STEP: frame = (now - start_tick) / ticks_per_frame; frame > max -> 1
+ *     (done, slot zwalniany przez caller); inaczej BlendSlotFrame(slot,
+ *     A ? frame : max - frame). B to reverse-fade tego samego blenda.
+ * ZWIAZEK Z Art_LoadFrameData @ 10b8:079d: BRAK bezposredniego — sloty
+ *   fade'uja PALETE (BlendSlotFrame na GLOBALLOCK palette + FUN_1090_0119),
+ *   Art_LoadFrameData laduje BITMAPY klatek dla opkodu 6 (RSC via
+ *   Art_LoadResPaletted @ 10b8:11bc lub disk via Art_LoadDiskFile @
+ *   10b8:0aa8 + Art_PortDataToBitmap @ 10b8:0e36; por. video.h art chain).
+ *   Sekwencje nie pochodza z plikow RSC jako calosc: to inline tablice
+ *   timeline-rec (param_4 array + param_3 count w Anim_OpenSequence @
+ *   10b0:008a); intro loop#1 jedzie na dialogu 0x94 + Sound 3/STOP
+ *   caller-side (OPENING.wav @ 1420:3114 + MPLOGO.BMP jako NE resource bez
+ *   filename string, patrz title.h/boot.h), loop#2 na 0x91e + rebase 1000.
+ * CYKL ZYCIA: open (alloc 0xa6 + GETCLIENTRECT + tick-base + max-end scan
+ *   + GfxPort_Create x2 + DAT_1420_1f40 = ctx) -> pump (Anim_PumpIfActive @
+ *   10b0:0000 gdy 1420:1f40 != 0, via Sys_Yield @ 1098:0157) -> advance
+ *   (Anim_AdvanceFrames @ 10b0:0461 opcode switch 1..0xe) -> close
+ *   (Anim_CloseSequence: free slotow 3/4 + dissolve 12/13 + GfxPort_Close x2
+ *   + 1420:1f40 = 0). Fazy ponizej sa LIVE 1:1 na jawnych licznikach (no
+ *   Win16, no globals); player (pump/advance) zostaje STUB/PARTIAL powyzej
+ *   az mostek GfxPort/frame/SDL wyladuje. No exit(), C17. */
+#define ANIM_SLOT_SIZE 0x14
+#define ANIM_SLOT_OP_A 3
+#define ANIM_SLOT_OP_B 4
+
+typedef struct anim_slot {
+    int art;             /* +0x00 art/frame handle (param_1) */
+    int geo0;            /* +0x04 geometry word (param_5) */
+    int geo1;            /* +0x06 geometry word (param_6) */
+    int geo2;            /* +0x08 geometry word (param_7) */
+    int max_frames;      /* +0x0a frame count (param_3) */
+    int cur_frame;       /* +0x0c current frame (0 at alloc) */
+    int ticks_per_frame; /* +0x0e ticks per frame (param_4) */
+    long start_tick;     /* +0x10 start tick (param_2) */
+} anim_slot_t;
+
+/* Orig Anim_AllocSlot @ 10a8:0000 field init -> anim_slot_init. 1:1 wypelnia
+ * pola jak wyzej (cur_frame = 0). NULL slot -> NOENT. max <= 0 lub
+ * per <= 0 -> RANGE (orig dzielilby przez zero / konczyl od razu). */
+civ_error_t anim_slot_init(anim_slot_t *slot, int art, int geo0, int geo1,
+                           int geo2, int max_frames, int ticks_per_frame,
+                           long start_tick);
+
+/* Orig Anim_StepSlotA/B @ 10a8:00fc/018e licznik -> anim_slot_frame_at.
+ * 1:1 frame = (now - start) / per (C trunc). per <= 0 -> -1. */
+long anim_slot_frame_at(long start, long now, int ticks_per_frame);
+
+/* Orig same gate (max < frame -> 1) -> anim_slot_is_finished. 1:1
+ * frame > max. */
+int anim_slot_is_finished(long frame, int max_frames);
+
+/* Orig Anim_BlendSlotFrame @ 10a8:0228 kanal -> anim_slot_blend.
+ * 1:1 (src * frame) / max (clamp 0..255; alpha caller-side). max <= 0,
+ * frame < 0 -> -1. src OOR 0..255 -> -1. */
+int anim_slot_blend(int src, long frame, int max_frames);
+
+/* Orig StepA vs StepB wybor (frame vs max-frame) -> anim_slot_play_frame.
+ * 1:1 op 3 -> frame, op 4 -> max - frame; inny op -> -1. */
+long anim_slot_play_frame(int op, long frame, int max_frames);
+
+/* Fazy sekwencji (open -> pumping -> done -> closed). */
+typedef enum anim_seq_phase {
+    ANIM_SEQ_CLOSED = 0,
+    ANIM_SEQ_OPEN = 1,
+    ANIM_SEQ_PLAYING = 2,
+    ANIM_SEQ_DONE = 3
+} anim_seq_phase_t;
+
+/* Orig cykl open/pump/advance/close -> anim_seq_phase_step. 1:1: CLOSED +
+ * opened -> OPEN; OPEN + pumped -> PLAYING; PLAYING + (cur >= end) -> DONE;
+ * DONE + closed -> CLOSED; inaczej brak zmiany. Flagi 0/1 explicite (no
+ * globals; DAT_1420_1f40 active-flag zostaje caller-side). */
+anim_seq_phase_t anim_seq_phase_step(anim_seq_phase_t phase, int opened,
+                                     int pumped, int finished, int closed);
+
 #endif /* CIVLIN_DIALOG_H */
