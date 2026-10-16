@@ -2361,4 +2361,216 @@ int pic_pump_msg_is_command(int msg);
  * pic_pump_msg_is_paint. 1:1 msg == 0x0f. */
 int pic_pump_msg_is_paint(int msg);
 
+/* --- Chain 2026-10-16 (20): spaceship + drain + paint-tail (goals 1/4/5) ---
+ * Orig (civ.exe, x86:LE:16:Protected Mode), decompiled this pass:
+ *   Ship_OpenView @ 1070:0000 (renamed; guard viewer==player or debug
+ *     0x20 -> Cursor_Set(0x84) + Dlg_CreateTracked(0x94,0x41) + GfxPort
+ *     0xd2 + Art_LoadFrameData(0x15cd,0x48) + 10x Gfx_ExtractClippedIcon
+ *     -> DAT_1420_5246 + 20-entry starfield init (x=Rng_Range(0x174)+6,
+ *     y=Rng_Range(0x133)+12, flag 0, weight per uVar6&3 from
+ *     12d8:45c5/45c1/45ca/45bf or 1 when 12d8:28fc mono)).
+ *   Ship_ShowView @ 1070:0327 (renamed; stats core below + Gfx/Text tails;
+ *     callers: Menu_PromptNation @ 1070:1f58 "Which nation" brat,
+ *     Ship_BuildPart @ 1070:16c3, Ship_EditParts @ 1070:1952,
+ *     Ship_LaunchAndShow @ 1070:2015; sole modal via Ship_PumpViewInput @
+ *     1070:1018 + Main_PumpUntilFlagClear @ 11e8:02a4 + Sys_DrainInput @
+ *     11f0:4ea0; launch confirm via Dialog_ShowMessage @ 1220:00d2).
+ *   Ship_IsPartConnected @ 1070:11f2 (renamed from FUN_1070_11f2: part
+ *     byte == -1 (empty) or >2 -> 0 else 1; adjacency sum in ShowView).
+ *   Ship_AnimateStarfield @ 1070:12b5 (renamed from FUN_1070_12b5:
+ *     20-entry scroll/redraw via Ship_DrawStarPixel @ 1070:124e +
+ *     GETPIXEL probe @ 1070:127a; Gfx -> STUB).
+ *   Ship_PumpViewInput @ 1070:1018 (renamed from FUN_1070_1018: modal
+ *     PEEKMESSAGE pump, result via DAT_1420_b376 1/2; Win16 -> STUB).
+ *   Ship_CloseView @ 1070:02b5 (renamed; 10x Gfx_FreeIconBuffer +
+ *     GfxPort_Close 0xd2 + Dlg_DestroyTracked; Gfx -> STUB).
+ *   Ship_BuildPart @ 1070:16c3 (renamed; sole caller Pic_PlayShared @
+ *     1030:0000 city view: slot scan + Tech_HasTech @ 1170:3181 gate;
+ *     returns 0 built / 1 deferred-needs-tech / 2 ship-full).
+ *   Ship_EditParts @ 1070:1952 (renamed; sole caller Pic_PlayShared @
+ *     1030:0000: type dialogs + "No further"/"required" messages).
+ *   Ship_LaunchAndShow @ 1070:2015 (renamed; callers Pic_PlayShared @
+ *     1030:0000 + Ship_ShowView confirm: sets DAT_12d0_00b6 bit, arrival
+ *     message, year stamp; non-player preview via Open/Show/Drain/Wait).
+ *   Menu_PromptNation @ 1070:1f58 (renamed "Which nation" brat:
+ *     DAT_12d0_00b6 & 0xfe00 -> 7-entry list -> i+1 -> Open/Show/Close).
+ *   Sys_DrainInput @ 11f0:4ea0 (renamed; 22 callerow incl. ProcessUnitMoves,
+ *     MenuZ_Modal, PumpMessages, WaitForInput, Pic_PlayShared, Replay, HoF,
+ *     StartupSequence: zeroes 1420:1d44/1d46/1d48/1d4c/1d4e/1d50 (6 words)
+ *     + two PEEKMESSAGE drain loops + DAT_12b0_004c = 0 res-queue reset;
+ *     res queue is Main_EnqueueResString @ 1008:0a8d (append while <10)
+ *     drained by Main_DrainMessages @ 11e8:02fb; Win16 queues -> STUB).
+ *   Pic_PresentOnPaint @ 1030:900d (renamed; WM_PAINT 0xf handler:
+ *     SETRECT 0x140,0x200 + GfxPort_PresentRect 0x70-port + Pic_FinishPaint
+ *     tail @ 1030:94d2 (renamed from FUN_1030_94d2: frame/border decor via
+ *     FUN_1000_14f8 + Pic @ 1030:96ad/982f; Gfx -> STUB)).
+ * Port LIVE 1:1 na jawnych parametrach (no Win16, no globals, no exit());
+ * dialog/GfxPort/PEEKMESSAGE ogony zostaja STUB (ship_open_view etc. nie
+ * maja nowych symboli — metryki ponizej wystarcza do testu). */
+
+/* Orig Ship_IsPartConnected @ 1070:11f2 -> ship_part_connected. 1:1:
+ * (part == -1 || part > 2) -> 0 else 1 (part to signed byte wartosci
+ * slotu 0xb4-record +0x1b2; ShowView sumuje 4-sasiadow x wieksze kafle). */
+int ship_part_connected(int part);
+
+/* Orig Ship_ShowView @ 1070:0327 support line -> ship_support_percent/frac.
+ * 1:1: denom = clamp(pop,1,99) (Util_Clamp @ 11c8:0063 inline, no link);
+ * percent = (support*100)/denom, frac = (support*100)%denom (x86 IDIV
+ * trunc toward zero, same as C /%). support to DAT_1290_01ac, pop to
+ * DAT_1290_01aa. */
+int ship_support_percent(int support_raw, int pop);
+int ship_support_frac(int support_raw, int pop);
+
+/* Orig same power/mass line -> ship_power_percent/frac. 1:1: denom =
+ * clamp(pop+support,1,99); percent = (power*200)/denom, frac =
+ * (power*200)%denom. power to DAT_1290_01ae. */
+int ship_power_percent(int power_raw, int pop, int support);
+int ship_power_frac(int power_raw, int pop, int support);
+
+/* Orig same flight line -> ship_flight_tenths/years/frac. 1:1: thrust =
+ * clamp(pop10*10,0,sup10*10) (pop10 = DAT_1290_01a4, sup10 = DAT_1290_01a6);
+ * tenths = (mass_total*50)/(thrust+1) (0x32 factor); years = tenths/10,
+ * frac = tenths%10 ("x.y Years" + arrival = year + years). mass_total to
+ * local_c (suma count*waga 0x12aa). */
+int ship_flight_tenths(int mass_total, int pop10, int sup10);
+int ship_flight_years(int flight_tenths);
+int ship_flight_frac(int flight_tenths);
+
+/* Orig same success line -> ship_success_percent. 1:1: e=100;
+ * e=(e*clamp(support_pct,0,100))/100; e=(e*clamp(power_pct,0,100))/100;
+ * if (flight_tenths > 0x96) e -= (flight-0x96)/10; clamp 0..100
+ * (final Util_Clamp(local_e,0,100) + display clamp 1..100 caller-side). */
+int ship_success_percent(int support_pct, int power_pct, int flight_tenths);
+
+/* Orig same arrival stamp (*(param*2+0x752) = g_nYear + tenths/10) ->
+ * ship_arrival_year. 1:1 year + flight_tenths/10. */
+int ship_arrival_year(int year, int flight_tenths);
+
+/* Orig Sys_DrainInput @ 11f0:4ea0 state half -> sys_drain_state_words.
+ * 1:1: 6 slow zerowanych (1420:1d44/1d46/1d48/1d4c/1d4e/1d50). */
+int sys_drain_state_words(void);
+
+/* Orig Main_EnqueueResString @ 1008:0a8d gate (DAT_12b0_004c < 10) ->
+ * sys_drain_queue_cap. 1:1 pojemnosc kolejki res-stringow (drain ja zeruje
+ * w Sys_DrainInput, Main_DrainMessages @ 11e8:02fb oproznia). */
+int sys_drain_queue_cap(void);
+
+/* Orig Sys_DrainInput @ 11f0:4ea0 reset (DAT_12b0_004c = 0) ->
+ * sys_drain_queue_reset. 1:1 wartosc wpisywana do head (zawsze 0). */
+int sys_drain_queue_reset(void);
+
+/* Orig Pic_PresentOnPaint @ 1030:900d geometry -> pic_paint_port_id/w/h.
+ * 1:1: port 0x70, box 0x140 x 0x200 (SETRECT przed PresentRect; tail
+ * Pic_FinishPaint @ 1030:94d2 Gfx -> STUB). */
+int pic_paint_port_id(void);
+int pic_paint_w(void);
+int pic_paint_h(void);
+
+/* --- Chain 2026-10-16 (21): starfield step + view-input codes + finish tail
+ * (goals 1/2/4) ---
+ * Orig (civ.exe, x86:LE:16:Protected Mode), decompiled this pass:
+ *   Ship_AnimateStarfield @ 1070:12b5: 20 wpisow (0..0x13; x @ +0x166,
+ *     y @ +0x13e, flag @ +0x5232, color @ +0x116; bg DAT_1290_00d0, frame
+ *     DAT_1420_522c). Krok: erase-old-bg via Ship_DrawStarPixel @ 1070:124e
+ *     (renamed; SETPIXEL wrapper) gdy flag, potem scroll x += speed(layer):
+ *     layer = idx&3: 0 -> +6, 1 -> +5, 2 -> +4, 3 -> +3, przy czym warstwy
+ *     2/3 tylko gdy (frame&1) != 0; wrap gdy x > 0x17f: x = 2,
+ *     y = Rng_Range(0x133)+0xc, flag = 0; potem probe-bg via
+ *     Ship_ProbeStarPixel @ 1070:127a (renamed; GETPIXEL + FUN_10b0_168a)
+ *     i draw-new color gdy pixel == bg (flag = 1; warstwy 0/1 rysuja 2x2
+ *     blok 3+1 piksele, warstwy 2/3 pojedynczy piksel). Zwiazek z
+ *     Ship_ShowView @ 1070:0327: wywolywany 1x po SETRECT + 1x per pump-loop
+ *     gdy launched-bit (DAT_12d0_00b6) + zawsze PresentRect 0xd2; zwiazek z
+ *     Anim_AdvanceFrames @ 10b0:0461: BRAK (starfield to wlasna petla Ship,
+ *     nie klatki Anim; Anim to generyczny player sekwencji intro/PIC, STUB
+ *     w dialog.h anim_advance_frames).
+ *   Ship_PumpViewInput @ 1070:1018: modalny PEEKMESSAGE-pump Ship_ShowView
+ *     (SETWINDOWLONG hook Ship_ViewHookProc @ 1070:10cb, renamed; wynik via
+ *     DAT_1420_b376; loop az 1/2). Inputy z CS-tabeli @ 1070:11e2 (4 wpisy):
+ *     0x0102 WM_CHAR -> b376 = 1 (klawisz = zamknij),
+ *     0x0111 WM_COMMAND -> wParam 999 (0x3e7 Launch) -> b376 = 2
+ *     (przycisk Launch = potwierdz; inne -> DEFDLGPROC),
+ *     0x0201/0x0202 LBTNDOWN/UP -> coords do 1420:5228/522A + flag 5226 +
+ *     b376 = 1 po valid part-click (klikniecie czesci; close/DEFDLGPROC
+ *     dla reszty). Kody: 1 = close/cancel, 2 = launch-confirm.
+ *   Pic_FinishPaint @ 1030:94d2: WM_PAINT 0xf tail Pic_PresentOnPaint @
+ *     1030:900d (po PresentRect portu 0x70 box 0x140x0x200): 3 decor-passy
+ *     (arrow, arrow, caption) via Pic_DrawFrameArrow @ 1030:96ad (renamed;
+ *     FILLRECT+FRAMERECT+MOVETO/LINETO) x2 + Pic_DrawFrameCaption @
+ *     1030:982f (renamed; FILLRECT+FRAMERECT+DRAWTEXT) x1, kazdy po
+ *     FUN_1000_14f8 setup-copy; dispatch 0x96/0x97/0x98 zyje w
+ *     Pic_DispatchFinishPaint @ 1030:95c2 (renamed). Ogon (restore DC?
+ *     unlock? dirty-clear? StoreDC?): dekompilator pokazuje tylko GDI
+ *     decor + SELECTOBJECT-restore w callees; wlasciwy restore/validate
+ *     zyje w GfxPort_PresentRect @ 10d0:0854 (VALIDATERECT + StoreDC
+ *     restore) i Gfx_StoreDC @ 1098:1104 (Gfx_SetCurrentDC @ 1100:09a9,
+ *     29 callerow) + GfxPort_ClearActive @ 10d0:09a2 w popup-tail (patrz
+ *     game.h unit_popup tail) — sam FinishPaint nie dotyka DC, wiec port
+ *     to kolejnosc LIVE + wolania STUB.
+ * Port LIVE 1:1 na jawnych parametrach (no Win16, no globals, no exit());
+ * GDI/PEEKMESSAGE ogony zostaja STUB. */
+
+/* Orig Ship_AnimateStarfield @ 1070:12b5 entry-count (0..0x13 loop) ->
+ * ship_starfield_count. 1:1 liczba wpisow starfield (20). */
+int ship_starfield_count(void);
+
+/* Orig same scroll-branch (idx&3) -> ship_starfield_speed. 1:1: 0 -> 6,
+ * 1 -> 5, 2 -> 4, 3 -> 3; OOB layer -> -1. Surowy przyrost per-tick
+ * (gating warstw 2/3 co 2. frame robi ship_starfield_step_x). */
+int ship_starfield_speed(int layer);
+
+/* Orig same scroll + (frame&1) gate -> ship_starfield_step_x. 1:1:
+ * warstwy 0/1 zawsze x+speed; warstwy 2/3 tylko gdy (frame&1) != 0
+ * (DAT_1420_522c&1 w orig). Zwraca nowy x bez wrapu (wrap osobno). */
+int ship_starfield_step_x(int x, int layer, int frame);
+
+/* Orig same wrap-guard (0x17f < x) -> ship_starfield_needs_wrap.
+ * 1:1 x > 0x17f. */
+int ship_starfield_needs_wrap(int x);
+
+/* Orig same wrap-body (x = 2) -> ship_starfield_wrap_x. 1:1 zawsze 2. */
+int ship_starfield_wrap_x(void);
+
+/* Orig same wrap-body (y = Rng_Range(0x133)+0xc) ->
+ * ship_starfield_wrap_y. 1:1 rand+12 (rand to draw Rng_Range @ 11c8:003d
+ * 0..0x132; ujemny draw -> samo 12). */
+int ship_starfield_wrap_y(int rand133);
+
+/* Orig Ship_ViewHookProc @ 1070:10cb CS-tabela @ 1070:11e2 wpisy ->
+ * ship_view_msg_is_*. 1:1: 0x0102 WM_CHAR / 0x0111 WM_COMMAND /
+ * 0x0201 LBTNDOWN / 0x0202 LBTNUP (klik czesci vs klawisz vs przycisk). */
+int ship_view_msg_is_char(int msg);
+int ship_view_msg_is_command(int msg);
+int ship_view_msg_is_lbuttondown(int msg);
+int ship_view_msg_is_lbuttonup(int msg);
+
+/* Orig same COMMAND-branch (DI == 0x3e7) -> ship_view_launch_id.
+ * 1:1 id przycisku Launch (999). */
+int ship_view_launch_id(void);
+
+/* Orig DAT_1420_b376 kody (Ship_PumpViewInput @ 1070:1018 loop az 1/2) ->
+ * ship_view_result_is_close/is_launch. 1:1: 1 = close/cancel (CHAR /
+ * valid part-click), 2 = launch-confirm (COMMAND 999). */
+int ship_view_result_is_close(int code);
+int ship_view_result_is_launch(int code);
+
+/* Orig Ship_PumpViewInput @ 1070:1018 -> ship_pump_view_input. Modalny
+ * PEEKMESSAGE-pump (SETWINDOWLONG hook Ship_ViewHookProc + TRANSLATE/
+ * DISPATCH, wynik via DAT_1420_b376 1/2). Win16 queue/hook -> STUB
+ * CIV_ERR_UNSUPPORTED; kody powyzej sa LIVE. No globals, no exit(). */
+civ_error_t ship_pump_view_input(void);
+
+/* Orig Pic_FinishPaint @ 1030:94d2 decor-passy -> step-count/is-caption.
+ * 1:1: 3 passy (0: arrow, 1: arrow, 2: caption); is_caption = (step == 2).
+ * Kolejnosc LIVE, wolania GDI (Arrow/Caption + FUN_1000_14f8 setup) STUB. */
+int pic_finish_paint_step_count(void);
+int pic_finish_paint_step_is_caption(int step);
+
+/* Orig same tail -> pic_finish_paint. STUB CIV_ERR_UNSUPPORTED (restore DC
+ * zyje w GfxPort_PresentRect @ 10d0:0854 VALIDATERECT + StoreDC restore i
+ * Gfx_StoreDC @ 1098:1104 -> Gfx_SetCurrentDC @ 1100:09a9; dirty-clear to
+ * VALIDATERECT; unlock to SELECTOBJECT-restore w Arrow/Caption callees).
+ * No globals, no exit(). */
+civ_error_t pic_finish_paint(void);
+
 #endif /* CIVLIN_GAME_H */

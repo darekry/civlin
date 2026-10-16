@@ -196,6 +196,12 @@ int anim_advance_frames(void)
      * script, opcodes 1..0xe: palette fades/selects, offscreen blits,
      * sound triggers (via Sound_PlayId @ 1150:00c9), port switches (GR
      * port layer). Returns nonzero when the sequence is finished.
+     * Chain 2026-10-16 (21) answer: STUB zostaje w dialog.c (sequence
+     * player, nie boot.c/game.c); zwiazek ze starfield: BRAK —
+     * Ship_AnimateStarfield @ 1070:12b5 to wlasna petla Ship (Draw/Probe
+     * pixel + PresentRect 0xd2 w Ship_ShowView @ 1070:0327), nie klatki
+     * Anim; klatki intro/PIC ida tędy (Pic_PlayShared @ 1030:0000 caller
+     * Gfx_StoreDC @ 1098:1104 jak tutejszy frame-pump co 8. tick).
      * TODO: full script engine -> SDL TBD. Stub reports done so future
      * wait-loops terminate. */
     return 1;

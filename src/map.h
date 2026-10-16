@@ -75,6 +75,14 @@ win16_msg_result_t map_wndproc_status(int msg, long wparam, long lparam);
  * game_turn_tick. SDL timer bridge TBD; stub CIV_ERR_UNSUPPORTED.
  * No globals, no exit(), read-only. */
 civ_error_t map_timer_proc(void);
+/* --- Chain 2026-10-16 (21): map WM_TIMER interval (goal 3) ---
+ * Orig WdwMap_Open @ 1208:0af1 SETTIMER(hwnd main, id 1, 0xC8, NULL;
+ * 1208:0e7b) — 200 ms NULL-proc timer = WM_TIMER do map_wndproc_main @
+ * 1208:0054 (nie mylic z 5 ms TIMERPROC-proc z WinMain @ 1008:0000, patrz
+ * boot.h boot_timer_proc_interval_ms). KILLTIMER w WinMain_Shutdown @
+ * 1008:0329. SDL_AddTimer: dokumentacja, bez implementacji (patrz boot.h
+ * decyzja). 1:1 200 (ms). No globals, no exit(). */
+int map_timer_interval_ms(void);
 void map_shutdown(void);
 
 /* --- tile buffer (implemented 1:1; bounds match the originals) --- */
@@ -800,5 +808,38 @@ civ_error_t map_tile_cache_dispose(map_tile_slot_t *slots, int n,
                                    int *total_io);
 /* Orig DAT_1330_0004++ (Alloc + Find-hit) -> next_tick. 1:1 tick + 1. */
 int map_tile_cache_next_tick(int tick);
+
+/* --- Chain 2026-10-16 (20): SmMap click-to-center (goal 2) ---
+ * Orig SmMap_CenterOnClick @ 1210:056e (civ.exe, x86:LE:16:Protected Mode),
+ * decompiled this pass (sole caller Sys_PumpMessages @ 1108:0000, galaz
+ * DAT_12b0_001c == DAT_1420_1d48): Gfx_StoreDC + Menu_CheckCityNameId(0x1c,
+ * DAT_1420_12b0) + GLOBALLOCK handle; gdy byte +0x2c == 0 -> early out
+ * (unlock gdy handle != 0); inaczej dx = ((b3cc+b3d0)/2 - clickX)/scale,
+ * dy = ((b3ce+b3d2)/2 - clickY)/scale (scale = DAT_1410_0000, dump 2),
+ * potem Map_RefreshAllViews(g_nPlayerCiv, 1330:4010-dx, 1330:400e-dy)
+ * (view-origin w 1330:4010/400e, minimap rect w 1420:b3cc..b3d2).
+ * Zwiazek z WdwSmMap_Open @ 1210:025b (map_open_small STUB: CREATEWINDOW
+ * "World Map", rect/tile-layer x+0xf0) i Menu_ToggleView1210 @ 1210:1134
+ * (menu_toggle_show_cmd/view_window: SHOWWINDOW-toggle 12b0:001c; zob.
+ * mainmenu.h): minimapa modeless, klik centruje widok glowny (clamp w
+ * Map_CenterOnTile @ 1110:03ae STUB / map_clamp_view_* LIVE).
+ * Port matematyki LIVE 1:1 na jawnych parametrach (no Win16, no globals,
+ * no exit()); GLOBALLOCK/Gfx/Map_RefreshAllViews ogony STUB. */
+
+/* Orig SmMap_CenterOnClick @ 1210:056e delta -> smmap_click_tile_delta.
+ * 1:1 ((lo+hi)/2 - click)/scale (x86 IDIV trunc toward zero, same as C
+ * /). lo/hi to 1420:b3cc/b3d0 (X) lub b3ce/b3d2 (Y); scale to
+ * DAT_1410_0000 (dump 2). scale == 0 -> 0 (Linux guard; orig faulted
+ * DIV0). */
+int smmap_click_tile_delta(int rect_lo, int rect_hi, int click, int scale);
+
+/* Orig same recenter -> smmap_center_target. 1:1 view - delta (view to
+ * DAT_1330_4010 (X) lub 1330:400e (Y); wynik wchodzi do
+ * Map_RefreshAllViews @ 1110:03e9 STUB). */
+int smmap_center_target(int view, int delta);
+
+/* Orig DAT_1410_0000 (dump: 02 00) -> smmap_click_scale. Zwraca skale
+ * px-na-kafel uzywana w delcie powyzej (2). */
+int smmap_click_scale(void);
 
 #endif /* CIVLIN_MAP_H */

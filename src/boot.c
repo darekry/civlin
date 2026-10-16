@@ -1195,3 +1195,32 @@ int main_drain_tail_offset(int flag_004c)
      * ptr 1420:11f2+0xe, else +0xf. */
     return (flag_004c == 0) ? 0x0e : 0x0f;
 }
+
+/* --- Chain 2026-10-16 (20): timed pump flag (goal 3). See boot.h.
+ * OS-free 1:1 (no Win16, no globals, no exit()). */
+
+int main_pump_until_flag_should_continue(int flag)
+{
+    /* Orig Main_PumpUntilFlagClear @ 11e8:02a4: DAT_12d8_24f0 = param;
+     * while (DAT_12d8_24f0 != 0) pump. */
+    return (flag != 0) ? 1 : 0;
+}
+
+int main_pump_timer_tick(int flag)
+{
+    /* Orig TIMERPROC @ 1008:0d68: if (DAT_12d8_24f0 != 0)
+     * DAT_12d8_24f0--. */
+    if (flag != 0)
+        return flag - 1;
+    return flag;
+}
+
+int boot_timer_proc_interval_ms(void)
+{
+    /* Orig WinMain @ 1008:0000 SETTIMER(hwnd 0, id 0, 5, TIMERPROC @
+     * 1008:0d68) interval (1008:00cd-00db); KILLTIMER 12d8:460e+28fa w
+     * WinMain_Shutdown @ 1008:0329. SDL_AddTimer: dokumentacja, bez
+     * implementacji (patrz boot.h decyzja: HWND-bound pump vs watek SDL;
+     * mostek TBD caller-side w map_timer_proc STUB). */
+    return 5;
+}

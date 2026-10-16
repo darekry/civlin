@@ -138,6 +138,14 @@ civ_error_t map_timer_proc(void)
     return CIV_ERR_UNSUPPORTED;
 }
 
+int map_timer_interval_ms(void)
+{
+    /* Orig WdwMap_Open @ 1208:0af1 SETTIMER(..., 1, 0xC8, NULL) interval
+     * (1208:0e7b; 0xC8 = 200 ms WM_TIMER do map_wndproc_main @ 1208:0054).
+     * SDL_AddTimer: dokumentacja, bez implementacji (patrz boot.h). */
+    return 200;
+}
+
 void map_shutdown(void)
 {
 }
@@ -1166,4 +1174,28 @@ int map_tile_cache_next_tick(int tick)
 {
     /* Orig DAT_1330_0004++ w Alloc @ 1110:01a3 i Find-hit @ 1110:030c. */
     return tick + 1;
+}
+
+/* --- Chain 2026-10-16 (20): SmMap click-to-center (goal 2). See map.h.
+ * OS-free 1:1 (no Win16, no globals, no exit()). */
+
+int smmap_click_tile_delta(int rect_lo, int rect_hi, int click, int scale)
+{
+    /* Orig SmMap_CenterOnClick @ 1210:056e: ((b3cc+b3d0)/2 - clickX) /
+     * DAT_1410_0000 (Y analogicznie b3ce/b3d2). */
+    if (scale == 0)
+        return 0;
+    return ((rect_lo + rect_hi) / 2 - click) / scale;
+}
+
+int smmap_center_target(int view, int delta)
+{
+    /* Orig same: Map_RefreshAllViews(player, 1330:4010-dx, 1330:400e-dy). */
+    return view - delta;
+}
+
+int smmap_click_scale(void)
+{
+    /* Orig DAT_1410_0000 image (inspect 2 B: 02 00). */
+    return 2;
 }

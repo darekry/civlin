@@ -950,4 +950,51 @@ int main_pump_msg_is_keydown(int msg);
  * 1:1: flag_004c == 0 -> 0x0e, inaczej 0x0f. */
 int main_drain_tail_offset(int flag_004c);
 
+/* --- Chain 2026-10-16 (20): timed pump flag (goal 3) ---
+ * Orig Main_PumpUntilFlagClear @ 11e8:02a4 (civ.exe, x86:LE:16:Protected
+ * Mode), decompiled this pass: DAT_12d8_24f0 = param; while (flag != 0)
+ * PEEKMESSAGE + TRANSLATE + DISPATCH. Flaga to countdown timera: stawia ja
+ * caller (wartosc = ticki), czysci TIMERPROC @ 1008:0d68 (was TIMERPROC:
+ * if (flag != 0) flag--; decompiled this pass). Callerzy: Civ_ProcessUnitMoves
+ * @ 11f0:0000, Diplomat_BribeUnit @ 11b8:07c2, Ship_ShowView @ 1070:0327
+ * (param_2 << 1 timed preview), Replay_PlayLog @ 1180:02d3 /
+ * Replay_ShowCivDestroyed @ 1180:17e9. PEEKMESSAGE-pompa Win16 -> STUB
+ * (main_pump_message w sys.h); predykat + tick ponizej LIVE 1:1 na jawnych
+ * parametrach (no Win16, no globals, no exit()). */
+
+/* Orig Main_PumpUntilFlagClear @ 11e8:02a4 loop-guard (while flag != 0) ->
+ * main_pump_until_flag_should_continue. 1:1 flag != 0. */
+int main_pump_until_flag_should_continue(int flag);
+
+/* Orig TIMERPROC @ 1008:0d68 body (if (flag != 0) flag--) ->
+ * main_pump_timer_tick. 1:1 tick o 1 w dol, floor 0. */
+int main_pump_timer_tick(int flag);
+
+/* --- Chain 2026-10-16 (21): timer intervals (goal 3) ---
+ * Orig (civ.exe, x86:LE:16:Protected Mode), decompiled this pass:
+ *   WinMain @ 1008:0000: SETTIMER(hwnd 0, id 0, 5, TIMERPROC @ 1008:0d68 via
+ *     MAKEPROCINSTANCE -> DAT_1420_5148/514a; 1008:00cd-00db) — 5 ms proc
+ *     timer; tick = main_pump_timer_tick powyzej (DAT_12d8_24f0--).
+ *   WdwMap_Open @ 1208:0af1: SETTIMER(hwnd main, id 1, 0xC8, NULL;
+ *     1208:0e7b) — 200 ms WM_TIMER do map_wndproc_main (patrz map.h
+ *     map_timer_interval_ms; NULL-proc = wiadomosc, nie callback).
+ *   KILLTIMER w WinMain_Shutdown @ 1008:0329: 12d8:460e + 12d8:28fa
+ *     (1008:0391/03bb; trzeci KILLTIMER to Dialog_MenuZ_Modal @ 1220:0cfd).
+ *   Co jeszcze tyka: NIC poza flaga 12d8:24f0 — TIMERPROC robi wylacznie
+ *     if (flag) flag--; animacje (Anim_AdvanceFrames @ 10b0:0461) ida przez
+ *     Sys_GetTickScaled poll w pump-loop, nie przez timer; autosave/muzyka/
+ *     blink ida przez 200 ms WM_TIMER + Sys_PumpMessages/Main_PumpQuitLoop
+ *     (patrz sys.h), nie przez TIMERPROC. Boot: WinMain stawia 5 ms timer
+ *     przed font/RSC, WdwMap doklada 200 ms, shutdown sciaga KILLTIMER
+ *     najpierw (faza kill-timers w boot_shutdown_step_name).
+ * Decyzja SDL_AddTimer: DOKUMENTACJA, BEZ implementacji — Win16 timery sa
+ * HWND-bound (message pump w main.c while(!g_nQuitFlag)), SDL_AddTimer to
+ * osobny watek bez message loop; mostek (SDL_AddTimer + SDL_PushEvent +
+ * main.c pump) TBD caller-side jako STUB map_timer_proc. Ponizej tylko
+ * LIVE interwaly + tick (no Win16, no globals, no exit()). */
+
+/* Orig WinMain @ 1008:0000 SETTIMER-interval dla TIMERPROC @ 1008:0d68 ->
+ * boot_timer_proc_interval_ms. 1:1 5 (ms). */
+int boot_timer_proc_interval_ms(void);
+
 #endif /* CIVLIN_BOOT_H */

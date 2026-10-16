@@ -3375,3 +3375,310 @@ int pic_pump_msg_is_paint(int msg)
      * *param_1 -> Pic_PresentOnPaint @ 1030:900d (renamed). */
     return (msg == 0x0f) ? 1 : 0;
 }
+
+/* --- Chain 2026-10-16 (20): spaceship + drain + paint-tail (goals 1/4/5).
+ * See game.h block. OS-free 1:1 (no Win16, no globals, no exit()). */
+
+int ship_part_connected(int part)
+{
+    /* Orig Ship_IsPartConnected @ 1070:11f2: (byte == -1 || byte > 2) ->
+     * 0 else 1 (ShowView sumuje 4 sasiadow per kafel wiekszy niz 1x1). */
+    if (part == -1 || part > 2)
+        return 0;
+    return 1;
+}
+
+int ship_support_percent(int support_raw, int pop)
+{
+    /* Orig Ship_ShowView @ 1070:0327: denom = Util_Clamp(pop,1,99);
+     * pct = (support*100)/denom (DAT_1290_01ac/DAT_1290_01aa). */
+    int denom = pop;
+
+    if (denom < 1)
+        denom = 1;
+    if (denom > 99)
+        denom = 99;
+    return (support_raw * 100) / denom;
+}
+
+int ship_support_frac(int support_raw, int pop)
+{
+    /* Orig same: rem = (support*100)%denom (x86 IDIV == C /% trunc). */
+    int denom = pop;
+
+    if (denom < 1)
+        denom = 1;
+    if (denom > 99)
+        denom = 99;
+    return (support_raw * 100) % denom;
+}
+
+int ship_power_percent(int power_raw, int pop, int support)
+{
+    /* Orig same: denom = Util_Clamp(pop+support,1,99);
+     * pct = (power*200)/denom (DAT_1290_01ae). */
+    int denom = pop + support;
+
+    if (denom < 1)
+        denom = 1;
+    if (denom > 99)
+        denom = 99;
+    return (power_raw * 200) / denom;
+}
+
+int ship_power_frac(int power_raw, int pop, int support)
+{
+    /* Orig same: rem = (power*200)%denom. */
+    int denom = pop + support;
+
+    if (denom < 1)
+        denom = 1;
+    if (denom > 99)
+        denom = 99;
+    return (power_raw * 200) % denom;
+}
+
+int ship_flight_tenths(int mass_total, int pop10, int sup10)
+{
+    /* Orig same: thrust = Util_Clamp(pop10*10,0,sup10*10) (DAT_1290_01a4/
+     * DAT_1290_01a6); tenths = (mass*0x32)/(thrust+1). mass_total to
+     * local_c (suma count*waga). */
+    int thrust = pop10 * 10;
+    int cap = sup10 * 10;
+
+    if (thrust < 0)
+        thrust = 0;
+    if (thrust > cap)
+        thrust = cap;
+    return (mass_total * 50) / (thrust + 1);
+}
+
+int ship_flight_years(int flight_tenths)
+{
+    /* Orig same display/arrival: years = tenths/10. */
+    return flight_tenths / 10;
+}
+
+int ship_flight_frac(int flight_tenths)
+{
+    /* Orig same: frac = tenths%10 ("x.y Years"). */
+    return flight_tenths % 10;
+}
+
+int ship_success_percent(int support_pct, int power_pct, int flight_tenths)
+{
+    /* Orig same: e=100; e=(e*clamp(sup,0,100))/100;
+     * e=(e*clamp(pow,0,100))/100; if (flight > 0x96) e -= (flight-0x96)/10;
+     * clamp 0..100. */
+    int e = 100;
+    int s = support_pct;
+    int p = power_pct;
+
+    if (s < 0)
+        s = 0;
+    if (s > 100)
+        s = 100;
+    if (p < 0)
+        p = 0;
+    if (p > 100)
+        p = 100;
+    e = (e * s) / 100;
+    e = (e * p) / 100;
+    if (flight_tenths > 0x96)
+        e -= (flight_tenths - 0x96) / 10;
+    if (e < 0)
+        e = 0;
+    if (e > 100)
+        e = 100;
+    return e;
+}
+
+int ship_arrival_year(int year, int flight_tenths)
+{
+    /* Orig same stamp: *(param*2+0x752) = g_nYear + tenths/10. */
+    return year + flight_tenths / 10;
+}
+
+int sys_drain_state_words(void)
+{
+    /* Orig Sys_DrainInput @ 11f0:4ea0 head: DAT_1420_1d44/1d46/1d48/1d4e/
+     * 1d4c/1d50 = 0 (6 slow; potem dwa PEEKMESSAGE-drainy + 12b0:004c). */
+    return 6;
+}
+
+int sys_drain_queue_cap(void)
+{
+    /* Orig Main_EnqueueResString @ 1008:0a8d: if (DAT_12b0_004c < 10)
+     * append (Sys_DrainInput zeruje head, Main_DrainMessages oproznia). */
+    return 10;
+}
+
+int sys_drain_queue_reset(void)
+{
+    /* Orig Sys_DrainInput @ 11f0:4ea0 tail: DAT_12b0_004c = 0. */
+    return 0;
+}
+
+int pic_paint_port_id(void)
+{
+    /* Orig Pic_PresentOnPaint @ 1030:900d: GfxPort_PresentRect(0x70,...). */
+    return 0x70;
+}
+
+int pic_paint_w(void)
+{
+    /* Orig same: SETRECT(...,0x140,0x200,...) box przed PresentRect. */
+    return 0x140;
+}
+
+int pic_paint_h(void)
+{
+    /* Orig same: h = 0x200. */
+    return 0x200;
+}
+
+/* --- Chain 2026-10-16 (21): starfield step + view-input codes + finish tail
+ * (goals 1/2/4). See game.h block. OS-free 1:1 (no Win16, no globals,
+ * no exit()). */
+
+int ship_starfield_count(void)
+{
+    /* Orig Ship_AnimateStarfield @ 1070:12b5: loop 0..0x13 (20 wpisow;
+     * x @ +0x166, y @ +0x13e, flag @ +0x5232, color @ +0x116). */
+    return 20;
+}
+
+int ship_starfield_speed(int layer)
+{
+    /* Orig same scroll-switch (idx&3): 0:+6, 1:+5, 2:+4, 3:+3. */
+    switch (layer & 3) {
+    case 0:
+        return 6;
+    case 1:
+        return 5;
+    case 2:
+        return 4;
+    case 3:
+        return 3;
+    default:
+        return -1;
+    }
+}
+
+int ship_starfield_step_x(int x, int layer, int frame)
+{
+    /* Orig same: warstwy 2/3 tylko gdy (DAT_1420_522c&1) != 0. */
+    int l = layer & 3;
+    int speed = ship_starfield_speed(l);
+
+    if (speed < 0)
+        return x;
+    if (l >= 2 && (frame & 1) == 0)
+        return x;
+    return x + speed;
+}
+
+int ship_starfield_needs_wrap(int x)
+{
+    /* Orig same: if (0x17f < x) { x = 2; y = Rng+0xc; flag = 0; }. */
+    return (x > 0x17f) ? 1 : 0;
+}
+
+int ship_starfield_wrap_x(void)
+{
+    /* Orig same wrap-body: x = 2. */
+    return 2;
+}
+
+int ship_starfield_wrap_y(int rand133)
+{
+    /* Orig same: y = Rng_Range(0x133)+0xc (draw 0..0x132). */
+    if (rand133 < 0)
+        return 12;
+    return rand133 + 12;
+}
+
+int ship_view_msg_is_char(int msg)
+{
+    /* Orig Ship_ViewHookProc @ 1070:10cb CS-tabela @ 1070:11e2: 0x0102. */
+    return (msg == 0x0102) ? 1 : 0;
+}
+
+int ship_view_msg_is_command(int msg)
+{
+    /* Orig same: 0x0111 WM_COMMAND (Launch 999 branch). */
+    return (msg == 0x0111) ? 1 : 0;
+}
+
+int ship_view_msg_is_lbuttondown(int msg)
+{
+    /* Orig same: 0x0201 (coords -> 1420:5228/522A, flag 5226). */
+    return (msg == 0x0201) ? 1 : 0;
+}
+
+int ship_view_msg_is_lbuttonup(int msg)
+{
+    /* Orig same: 0x0202 (valid part-click -> b376 = 1). */
+    return (msg == 0x0202) ? 1 : 0;
+}
+
+int ship_view_launch_id(void)
+{
+    /* Orig same COMMAND-branch: DI == 0x3e7 (999 Launch). */
+    return 999;
+}
+
+int ship_view_result_is_close(int code)
+{
+    /* Orig DAT_1420_b376: 1 = close/cancel (CHAR / valid part-click). */
+    return (code == 1) ? 1 : 0;
+}
+
+int ship_view_result_is_launch(int code)
+{
+    /* Orig same: 2 = launch-confirm (COMMAND 999). */
+    return (code == 2) ? 1 : 0;
+}
+
+civ_error_t ship_pump_view_input(void)
+{
+    /* TODO: Orig Ship_PumpViewInput @ 1070:1018 (SETWINDOWLONG hook
+     * Ship_ViewHookProc @ 1070:10cb + PEEKMESSAGE + TRANSLATE/DISPATCH,
+     * wynik via DAT_1420_b376 1/2; caller Ship_ShowView @ 1070:0327).
+     * Win16 queue/hook -> SDL modal bridge TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+int pic_finish_paint_step_count(void)
+{
+    /* Orig Pic_FinishPaint @ 1030:94d2: 3 decor-passy (arrow, arrow,
+     * caption) via Pic_DrawFrameArrow @ 1030:96ad x2 +
+     * Pic_DrawFrameCaption @ 1030:982f x1; dispatch 0x96/0x97/0x98 zyje
+     * w Pic_DispatchFinishPaint @ 1030:95c2. */
+    return 3;
+}
+
+int pic_finish_paint_step_is_caption(int step)
+{
+    /* Orig same: tylko ostatni pass to caption (DRAWTEXT). */
+    return (step == 2) ? 1 : 0;
+}
+
+civ_error_t pic_finish_paint(void)
+{
+    /* TODO: Orig Pic_FinishPaint @ 1030:94d2 tail (frame/border decor via
+     * FUN_1000_14f8 + Pic_DrawFrameArrow @ 1030:96ad / Pic_DrawFrameCaption
+     * @ 1030:982f; WM_PAINT 0xf tail Pic_PresentOnPaint @ 1030:900d po
+     * PresentRect portu 0x70 box 0x140x0x200). Kolejnosc powyzej LIVE;
+     * restore DC zyje w GfxPort_PresentRect @ 10d0:0854 (VALIDATERECT +
+     * StoreDC restore) i Gfx_StoreDC @ 1098:1104 -> Gfx_SetCurrentDC @
+     * 1100:09a9 (29 callerow: Anim_AdvanceFrames @ 10b0:0461 frame-pump,
+     * Pic_PlayShared @ 1030:0000, Dialog_MenuZ_Modal @ 1220:0156,
+     * Dlg_CreateTracked @ 1098:124f, map opens @ 1208:0af1/1210:025b,
+     * Game_UpdateStatusPanel @ 1088:13d5, Unit_ShowInfoPopup @ 11f0:468c;
+     * Ship_ShowView @ 1070:0327 nie uzywa StoreDC — SetActive+PresentRect
+     * wprost) + GfxPort_ClearActive @ 10d0:09a2; unlock to
+     * SELECTOBJECT-restore w Arrow/Caption; dirty-clear to VALIDATERECT.
+     * GDI -> SDL bridge TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}

@@ -151,6 +151,9 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `main_pump_msg_is_char` | LIVE | 1008:0a8d, 1098:02d1 |  |
 | `main_pump_msg_is_keydown` | LIVE | 1208:0000 |  |
 | `main_drain_tail_offset` | LIVE | 11e8:02fb, 1420:11f2 |  |
+| `main_pump_until_flag_should_continue` | LIVE | 11e8:02a4 |  |
+| `main_pump_timer_tick` | LIVE | 1008:0d68 |  |
+| `boot_timer_proc_interval_ms` | LIVE | 1008:0000, 1008:00cd, 1008:0329, 1008:0d68, 12d8:460e |  |
 
 ### `src/civ_common.c`
 
@@ -512,6 +515,39 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `pic_pump_select_to_mode` | LIVE | 1030:0000, 1030:9aed, 1048:01cd |  |
 | `pic_pump_msg_is_command` | LIVE |  |  |
 | `pic_pump_msg_is_paint` | LIVE | 1030:900d |  |
+| `ship_part_connected` | LIVE | 1070:11f2 |  |
+| `ship_support_percent` | LIVE | 1070:0327, 11c8:0063 |  |
+| `ship_support_frac` | LIVE |  |  |
+| `ship_power_percent` | LIVE |  |  |
+| `ship_power_frac` | LIVE |  |  |
+| `ship_flight_tenths` | LIVE |  |  |
+| `ship_flight_years` | LIVE |  |  |
+| `ship_flight_frac` | LIVE |  |  |
+| `ship_success_percent` | LIVE |  |  |
+| `ship_arrival_year` | LIVE |  |  |
+| `sys_drain_state_words` | LIVE | 11f0:4ea0, 12b0:004c, 1420:1d44 |  |
+| `sys_drain_queue_cap` | LIVE | 1008:0a8d, 11e8:02fb |  |
+| `sys_drain_queue_reset` | LIVE | 11f0:4ea0 |  |
+| `pic_paint_port_id` | LIVE | 1030:900d, 1030:94d2 |  |
+| `pic_paint_w` | LIVE |  |  |
+| `pic_paint_h` | LIVE |  |  |
+| `ship_starfield_count` | LIVE | 1070:12b5 |  |
+| `ship_starfield_speed` | LIVE |  |  |
+| `ship_starfield_step_x` | LIVE |  |  |
+| `ship_starfield_needs_wrap` | LIVE |  |  |
+| `ship_starfield_wrap_x` | LIVE |  |  |
+| `ship_starfield_wrap_y` | LIVE | 11c8:003d |  |
+| `ship_view_msg_is_char` | LIVE | 1070:10cb, 1070:11e2 |  |
+| `ship_view_msg_is_command` | LIVE |  |  |
+| `ship_view_msg_is_lbuttondown` | LIVE | 1420:5228 |  |
+| `ship_view_msg_is_lbuttonup` | LIVE |  |  |
+| `ship_view_launch_id` | LIVE |  |  |
+| `ship_view_result_is_close` | LIVE | 1070:1018 |  |
+| `ship_view_result_is_launch` | LIVE |  |  |
+| `ship_pump_view_input` | STUB | 1070:0327, 1070:1018, 1070:10cb | has TODO |
+| `pic_finish_paint_step_count` | LIVE | 1030:94d2, 1030:95c2, 1030:96ad, 1030:982f |  |
+| `pic_finish_paint_step_is_caption` | LIVE |  |  |
+| `pic_finish_paint` | STUB | 1030:900d, 1030:94d2, 1030:96ad, 1030:982f, 1098:1104, 10d0:0854, 1100:09a9 | has TODO |
 
 ### `src/gfx_indexed.c`
 
@@ -631,6 +667,7 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `map_wndproc_small` | LIVE | 1110:03ae, 1110:03e9, 1210:0000, 1210:025b, 1210:09b4 |  |
 | `map_wndproc_status` | LIVE | 1088:13d5, 11f8:0278, 1218:0000, 1218:0386, 1218:0801, 1218:0956 |  |
 | `map_timer_proc` | STUB | 1008:0000, 1008:0329, 1008:0d68, 1088:0000, 1208:0af1 | has TODO |
+| `map_timer_interval_ms` | LIVE | 1008:0000, 1008:0329, 1208:0054, 1208:0af1, 1208:0e7b |  |
 | `map_shutdown` | NOOP |  |  |
 | `wdwstatus_calc_upper_rect` | STUB | 1088:1479, 1218:0956 | has TODO |
 | `wdwstatus_calc_lower_rect` | STUB | 1088:1536, 1218:0a06 | has TODO |
@@ -703,6 +740,9 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `map_tile_cache_victim` | LIVE | 1110:01a3 |  |
 | `map_tile_cache_dispose` | LIVE | 1110:0127, 1330:0002, 1330:0004, 1420:2e42 |  |
 | `map_tile_cache_next_tick` | LIVE | 1110:01a3, 1110:030c |  |
+| `smmap_click_tile_delta` | LIVE | 1210:056e, 1420:b3cc |  |
+| `smmap_center_target` | LIVE | 1110:03e9, 1330:400e, 1330:4010 |  |
+| `smmap_click_scale` | LIVE |  |  |
 
 ### `src/newgame.c`
 
