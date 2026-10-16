@@ -3474,6 +3474,21 @@ int game_turn_quiz_due(int opt_flags, int year);
  * No globals. */
 int game_turn_save_due(int opt_flags, int year, int difficulty);
 
+/* Orig Game_TurnLoopTick @ 1088:0000 retirement gate (1088:08e2 site) ->
+ * game_turn_retirement_due. 1:1: difficulty * -0x14 + 0x820 == year fires
+ * the retirement message tail (Util_StrCopy/Append @ 1000:36b2/363e +
+ * Status_FormatMainRow @ 1138:0000; GDI/dialog tail stays Win16
+ * caller-side). Integer math in orig order. No globals. */
+int game_turn_retirement_due(int year, int difficulty);
+
+/* Orig Game_TurnLoopTick @ 1088:0000 chronicle/end gate (1088:0994 site,
+ * same 0x834 want as game_turn_save_due) -> game_turn_chronicle_due.
+ * 1:1: difficulty * -0x14 + 0x834 == year fires the dynasty-ends tail
+ * (Util_StrCopy/Append + Status_FormatMainRow @ 1138:0000 +
+ * Sound_PlayId @ 1150:00c9 + Game_ProcessGameEnd @ 1088:0b6d HoF path;
+ * tails stay Win16 caller-side). No globals. */
+int game_turn_chronicle_due(int year, int difficulty);
+
 /* Orig Combat_ResolveAttack @ 1050:0000 + Combat_CalcOdds @ 11c0:1bc3
  * win predicate -> combat_attacker_wins. 1:1: roll < odds (roll is the
  * Rng_Range @ 11c8:003d 0..99 draw via game_uprising_rng_scale, odds the
@@ -3516,5 +3531,99 @@ int unit_popup_build_tail_due(int prod_flag);
  * flips + Unit_DoMove tail stay in city_do_revolt (STUB). No globals. */
 int city_revolt_best_foreign(const int *v00de, const int *v00e0,
                              const int *dists, int n);
+
+/* --- Pure game-math cores (2026-10-16) ---
+ * OS-free 1:1 LIVE on explicit params (no globals, no Win16, no exit(),
+ * C17; out params for the no-globals parallel rewrite; CIV_OK only on a
+ * real effect per Fala H). Each composes already-LIVE helpers; device /
+ * dialog / Gfx tails stay STUB in the parent with TODO Orig (see game.c).
+ * Ref: unpacked/civ.exe read-only (civ1win/ untouched). */
+
+/* Orig City_TileYield @ 1030:7c28 base+adjust compose ->
+ * city_tile_yield_combine. 1:1: base = city_tile_base_yield(tile, irrigated,
+ * kind) (1420:17d6 vs 0x1836 tables, stride 8, kind 0/1/2 food/shield/trade
+ * at +0/+1/+2); then city_tile_yield_adjust(base, kind, occ_flags, pen0, pen4,
+ * land_bonus, trade_bonus, gov_penalty, pollution_halve) (Map_GetOccupancyFlags
+ * @ 1110:199b trims + owner(3)/Tech(3)/gov/pollution modifiers + clamp <1 -> 0).
+ * Map bounds/improved/occupancy reads (Map_CheckTileBounds @ 1110:168f +
+ * Map_CheckTileImproved @ 1110:1c72 + Map_GetOccupancyFlags @ 1110:199b + gov
+ * state) stay caller-side; the map/device tail stays STUB in city_tile_yield.
+ * Returns CIV_OK + *out (real effect), CIV_ERR_NOENT on NULL out,
+ * CIV_ERR_RANGE when the base table reports OOR (tile/kind). No globals. */
+civ_error_t city_tile_yield_combine(int tile, int irrigated, int kind,
+                                    unsigned occ_flags, int pen0, int pen4,
+                                    int land_bonus, int trade_bonus,
+                                    int gov_penalty, int pollution_halve,
+                                    int *out);
+
+/* Orig City_ChooseProduction @ 1170:05ca scoring-pick core ->
+ * city_choose_production_pick. 1:1 argmin over the caller-scored eligible list
+ * via city_production_best_pick (strict-< minima, ties to the lower index, like
+ * the local_c/local_28/local_26 loops over local_e8: positive = unit 0x00..0x1b,
+ * negative = -building/-wonder). Callers score units via city_prod_unit_score
+ * (supply/local_120 + continent/sea/defense/tech mults) vs buildings/wonders via
+ * city_prod_building_score, gated by city_prod_unit_gate + tech_has_tech @
+ * 1170:3181 + continent/sea gates; the human dialog (Dlg 0x1000 + SENDMESSAGE
+ * list + City_PumpProductionDialog @ 1170:1f84, 0x66 accept / 0x65 cancel) stays
+ * STUB in city_choose_production. Returns CIV_OK + *pick_out (real effect),
+ * CIV_ERR_NOENT on NULL scores/pick_out, CIV_ERR_RANGE on n <= 0 or no pick.
+ * No globals. */
+civ_error_t city_choose_production_pick(const int *scores, int n,
+                                        int *pick_out);
+
+/* Orig Game_SpawnUprisings @ 1088:0be9 OS-free core ->
+ * game_spawn_uprisings_core. 1:1 gate chain on explicit params (no globals):
+ * game_uprising_due(difficulty, turn) head ((5-diff)*0x1e vs turn) +
+ * game_uprising_wave_due(turn) every-8th wave ((turn+1)&7)==0 (DAT_12d8_2b74&7
+ * conjunct stays caller-side) + game_uprising_tile_ok(tile_class, unit_at,
+ * cont_val) (Map_GetTileClass @ 1110:16c0 == 10 ocean + Map_GetUnitAt @
+ * 1110:18ce == -1 + Map_GetOceanOrContVal @ 1110:1dbd >= 0x10); on fire writes
+ * *leader_out via game_uprising_leader(turn) (Util_Clamp(turn/0x96+1,1,3) <3 ->
+ * 0x11 else 0x12 for Unit_SpawnUnit @ 11c0:12c8). Rng_Range @ 11c8:003d draws
+ * (0x50/0x2c+3 tile loop via game_uprising_rng_scale) + Unit_SpawnUnit place +
+ * Travellers/Barbarian/Native/Guerrilla message + Dialog_ShowMessage @ 1220:00d2
+ * tails stay STUB in game_spawn_uprisings. Returns CIV_OK + leader (real
+ * effect) when all gates fire, CIV_ERR_NOENT on NULL leader_out, else
+ * CIV_ERR_UNSUPPORTED (gated off, no write). No globals. */
+civ_error_t game_spawn_uprisings_core(int difficulty, int turn, int tile_class,
+                                      int unit_at, int cont_val,
+                                      int *leader_out);
+
+/* Orig City_ProcessDisaster @ 1040:068e OS-free pick core -> city_disaster_pick.
+ * 1:1 eligibility on explicit params (no globals): game_turn_disaster_due(turn)
+ * (g_nTurn > 0x32, 2x per Game_TurnLoopTick @ 1088:0000 pass) +
+ * city_disaster_city_ok(valid, pop, size) (1420:5502 != -1/0xff + 1420:3efe > 1
+ * + 1420:5503 > 4; Rng_Range @ 11c8:003d 0x80 draws caller-side); on fire writes
+ * *kind_out = roll (the caller Rng_Range(10) draw 0..9; building-flag checks on
+ * the 0x1c mask @ 1420:54fc via city_disaster_has_building + messages @
+ * 1420:07f0/0839 + viewer Pic_PlayShared @ 1030:0000 + dialog Dialog_ShowMessage
+ * @ 1220:00d2 + Map_CenterOnTile @ 1110:03ae tails stay STUB in
+ * city_process_disaster). Returns CIV_OK + kind (real effect) when eligible,
+ * CIV_ERR_NOENT on NULL kind_out, CIV_ERR_RANGE on roll outside 0..9, else
+ * CIV_ERR_UNSUPPORTED (gated off, no write). No globals. */
+civ_error_t city_disaster_pick(int turn, int valid, int pop, int size, int roll,
+                               int *kind_out);
+
+/* Orig Trade_DeliverCaravanGoods @ 1038:0d09 treasury apply ->
+ * trade_apply_bonus. 1:1 treasury += bonus (caller bonus via trade_calc_bonus:
+ * (dist+10)*(sizes)/0x18, same-continent /2 via Map_GetContinentId @ 1110:1d99,
+ * domestic /2, tech 0x31/0x26 each -= /3; route slots @ 1420:5513 via
+ * trade_route_value). Route-table best-3 update + Res 0x8e/City_AppendName +
+ * Dialog_ShowMessage @ 1220:00d2 + Game_UpdateStatusPanel @ 1088:13d5 +
+ * Unit_FoundCityIfHome-consume @ 11c0:16a4 tails stay STUB in
+ * trade_deliver_caravan_goods. Returns CIV_OK + *new_treasury_out (real effect),
+ * CIV_ERR_NOENT on NULL, CIV_ERR_RANGE on treasury < 0 or bonus < 0 (orig used
+ * non-negative game values). No globals. */
+civ_error_t trade_apply_bonus(int treasury, int bonus, int *new_treasury_out);
+
+/* Orig Diplomat_CityAction @ 11b8:0000 case 4 + Diplomat_BribeUnit @ 11b8:07c2
+ * affordability gate -> diplomat_affords_cost. 1:1 treasury >= cost (cost via
+ * diplomat_revolt_cost (((treas+1000)/(dist+3))*size, /2 on 1420:5502&1) or
+ * diplomat_bribe_cost (((treas+0x2ee)/(dist+2))*shield-cost, /2 on type != 0);
+ * dist via Diplo_NearestPalaceDist @ 1168:12c1). Treasury deduct + consume /
+ * respawn + Map_CenterOnTile @ 1110:03ae + dialog tails stay STUB in
+ * diplomat_city_action / diplomat_bribe_unit / city_do_revolt. Returns 1 afford,
+ * 0 short, -1 on treasury < 0 or cost < 0. No globals. */
+int diplomat_affords_cost(int treasury, int cost);
 
 #endif /* CIVLIN_GAME_H */

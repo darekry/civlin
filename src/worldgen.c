@@ -68,20 +68,11 @@ civ_error_t worldgen_generate_random(void)
     target = worldgen_island_target(1);
     count = 0;
     while (!worldgen_island_done(count, target)) {
-        int added;
+        int added = 0;
 
-        r = worldgen_seed_one_island();
+        r = worldgen_seed_one_island(&added);
         if (r != CIV_OK)
             return r;
-        added = 0;
-        for (y = 0; y < (int)CIV_MAP_H; y++) {
-            for (x = 0; x < (int)CIV_MAP_W; x++) {
-                int s = map_get_tile(x + 0xa0, y);
-
-                if (s != -1 && s != 0)
-                    added++;
-            }
-        }
         count += added;
         sys_yield();
     }
