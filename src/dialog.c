@@ -1709,6 +1709,30 @@ int text_measure_scaled(int extent)
     return (extent * 10) / 0x10;
 }
 
+/* --- Chain P4 render+text (2026-10-16): Text_Draw* @ 10d8 color/shadow.
+ * See dialog.h P4 block. OS-free 1:1 LIVE, no Win16, no globals. */
+
+int text_resolve_color(int mono, int civ_entry, int fallback)
+{
+    /* Orig Text_DrawDirect @ 10d8:00e0 + FUN_10d8_002d @ 10d8:002d:
+     * cVar1 = DAT_12d8_45fd; if (DAT_12d8_28fc == 0) cVar1 =
+     * civ_table[param] (mono DAT_12d8_28fc != 0 forces the fallback). */
+    return (mono == 0) ? civ_entry : fallback;
+}
+
+civ_error_t text_shadow_pos(int x, int y, int height,
+                            int *sx_out, int *sy_out)
+{
+    /* Orig Text_DrawShadowed @ 10d8:02df: shadow TEXTOUT at (x + dx,
+     * y+1) with dx = (tmHeight local_126 < 0x12 ? 0 : 1) (main TEXTOUT
+     * stays at (x,y); height is the GETTEXTMETRICS tmHeight). */
+    if (!sx_out || !sy_out)
+        return CIV_ERR_NOENT;
+    *sx_out = x + ((height >= 0x12) ? 1 : 0);
+    *sy_out = y + 1;
+    return CIV_OK;
+}
+
 int text_pascal_len(const char *s)
 {
     /* Orig Text_PackPascal @ 1100:0000 len half: buf[0] = Util_StrLen. */
