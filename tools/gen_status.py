@@ -140,24 +140,27 @@ sekcji „Ścieżka krytyczna" poniżej).
   — to wskazówki RE, nie approved mapping.
 - „has TODO" = w ciele jest znacznik TODO z adresem Orig i opisem braków.
 
-## Ścieżka krytyczna WinMain @ 1008:0000 (stan na 2026-10-16)
+## Ścieżka krytyczna WinMain @ 1008:0000 (stan na 2026-10-16, fala H)
 
+Fala H rule: `CIV_OK` = efekt osiągnięty albo krok dowodliwie pusty na SDL;
+w przeciwnym razie uczciwy `CIV_ERR_UNSUPPORTED` (koniec z fake-OK).
 `main.c`: SDL_Init + okno/renderer + arena 16 MB (`win16_mem_init`) ->
-prawdziwy `boot_run` (**CIV_OK**, zweryfikowane uruchomieniem `boot: ok`) ->
-`mainmenu_run` (STUB, pierwszy strict-stop) -> `game_init` (LIVE) ->
-`game_new` (STUB) -> jeden `game_tick` (STUB) -> shutdown, exit 0.
-Reszta za bootem leci best-effort (log, nigdy fatal).
+`boot_run` zatrzymuje się uczciwie na `boot_register_classes` (STUB:
+pędzle/metryki/klasy, U2); fail buta = abort jak orig MESSAGEBOX+exit
+(return 1). Za każdym lądowaniem fali binarka dochodzi dalej; frontier
+czytaj z logu `boot:`. Za bootem reszta leci best-effort (log, nigdy fatal).
 Warstwa Win16/DOS żyje w `src/win16.{h,c}` (SDL3/stdio, arena zamiast
-GLOBALALLOC/GETFREESPACE; WONTFIX-y jako no-op `CIV_OK` z adresem Orig).
+GLOBALALLOC/GETFREESPACE; WONTFIX-y jako no-op `CIV_OK` z adresem Orig
+tylko gdy krok jest dowodliwie pusty).
 
 | Krok WinMain | Funkcja | Stan | Komentarz |
 |---|---|---|---|
 | Sys_CheckFreeMemory | `sys_check_free_memory` | LIVE | delegat do `win16_check_free_memory` (SDL_GetSystemRAM vs 2,5 MB + 0x23) |
 | paths (drive/cwd) | `sys_init_paths` | LIVE | |
-| App_RegisterWindowClasses | `app_register_window_classes` | LIVE | WONTFIX: brak klas okien na SDL — no-op `CIV_OK` via `win16_register_classes` |
+| App_RegisterWindowClasses | `app_register_window_classes` | STUB | HONEST STOP (fala H): pędzle/metryki/klasy/custom TBD (U2) |
 | civfonts.fon | `font_enum_families_init` | LIVE | sonda plików via `win16_probe_fonts`; parse na żądanie (`font_fon/fnt_*` LIVE), install GDI WONTFIX |
 | ResMgr_LoadRsc x5 | `boot_load_resources` | LIVE | sonda 5 plików via `win16_probe_resources` (case-insensitive); `rsc_load_rsc` LIVE, właściciel mgr TBD |
-| Video_CheckDriverCaps | `boot_check_video` | LIVE | WONTFIX-checklist: no-op w tym kroku; żywy check renderera gdzie renderer istnieje |
+| Video_CheckDriverCaps | `video_init` | LIVE | check renderera tam gdzie renderer istnieje (arg-less step usunięty, fala H) |
 | Art_MaybeConvertArtwork | `art_maybe_convert_artwork` | LIVE | na Linuksie zbędne — no-op CIV_OK |
 | Config_LoadPrefs | `boot_load_prefs` | LIVE | domyślne (sounds on); I/O `civ.prf` zostaje w `config_load_prefs` (STUB) |
 | Palette_Init | `palette_init` | LIVE | no-op (paleta per-tekstura) |
@@ -166,8 +169,8 @@ GLOBALALLOC/GETFREESPACE; WONTFIX-y jako no-op `CIV_OK` z adresem Orig).
 | Init_UnitFontTables | `boot_init_unit_font_tables` | STUB | potrzebne dopiero wizardowi (P1) |
 | Sound_PlayId(STOP) | `audio_play_id` | LIVE | |
 | MainPort/GfxPort | `mainport_get_or_create`, `gfx_port_create` | STUB | mostek na SDL_Texture — średnia praca (P3) |
-| WdwMap/SmMap/Status_Open | `map_open_*` | STUB | `map_init` LIVE (no-op); widoki SDL TBD |
-| Menu_InitMainBar | `menu_init_mainbar` | LIVE | WONTFIX: brak USER-menu na SDL — no-op (stringi w `menu_strings` LIVE) |
+| WdwMap/SmMap/Status_Open | `map_open_*` | STUB | `map_init` HONEST STOP (bufor/widoki, U4); `boot_open_windows` STUB po `video_init` |
+| Menu_InitMainBar | `menu_init_mainbar` | LIVE | WONTFIX: brak USER-menu na SDL — no-op (stringi w `menu_strings` LIVE); `boot_init_menu` STUB via `dialog_init` (U2) |
 | pętla Game_TurnLoopTick | `game_turn_tick` | STUB | gra właściwa — poza zakresem |
 | WinMain_Shutdown | `boot_shutdown` | LIVE | no-op shutdowny + `win16_mem_shutdown` w `main.c` |
 

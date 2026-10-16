@@ -63,27 +63,25 @@
 
 /* WinMain @ 1008:0000 init order (caller-owned loop tail).
  *
- * drive/path (Sys_GetCurrentDrive @ 1000:11bb + Sys_BuildCurrentDirPath @
- *   1000:2826, live via boot_setup_paths) -> memory (Sys_CheckFreeMemory @
- *   11e8:0000, stub) -> classes (App_RegisterWindowClasses @ 1098:06f8,
- *   stub) -> timer/accel/font (5 ms SETTIMER TIMERPROC @ 1008:0d68 (24f0
- *   countdown) + 16 ms app timer + accelerators +
- *   Font_EnumFamiliesInit @ 1008:0e99, stub) -> 5x RSC
- *   (ResMgr_LoadRsc @ 1190:0000 CivData0..4.rsc, stub) -> video caps
- *   (Video_CheckDriverCaps @ 1008:059a, stub) -> artwork
- *   (Art_MaybeConvertArtwork @ 10b8:0000, stub) -> prefs (Config_LoadPrefs
- *   @ 1008:0b4a, stub; defaults live via config_prefs_defaults) ->
- *   palette (Palette_Init @ 1090:0488, stub) -> tables
- *   (Game_InitGlobalTables @ 11e8:0337 partial + Init_UnitFontTables @
- *   10e8:2d46 stub) -> ports/map windows (boot_open_windows below) ->
- *   menu bar (boot_init_menu below) -> cursor (Cursor_Set @ 1098:096c,
- *   void stub) -> event/turn loop caller-owned (while(!g_nQuitFlag) +
- *   Game_TurnLoopTick @ 1088:0000 via game_tick, see game.h; main.c owns
- *   the loop, SDL window/renderer are caller-created and borrowed, never
- *   owned here). Wiring: CIV_OK where OS-free
- *   (boot_setup_paths live, tables partial but overall UNSUPPORTED until
- *   the Win16 selector bridge lands), otherwise CIV_ERR_UNSUPPORTED stub;
- *   first non-OK step short-circuits. No globals, no exit(), read-only. */
+ * Fala H rule (2026-10-16): CIV_OK = observable effect achieved or step
+ * provably vacuous on SDL, else CIV_ERR_UNSUPPORTED (no fake-OK); first
+ * non-OK short-circuits, main.c aborts like orig MESSAGEBOX+exit.
+ *
+ * drive/path (live) -> memory (live check) -> classes
+ * (App_RegisterWindowClasses @ 1098:06f8, HONEST STOP: brushes/metrics/
+ * custom classes TBD, U2) -> timer/accel/font (font probe live; 5/16 ms
+ * timers documented, SDL bridge TBD) -> 5x RSC probe gate (presence live,
+ * full image owner TBD) -> artwork (honest no-op: vacuous on SDL) ->
+ * prefs (defaults live, consumed by audio_play_id; civ.prf read needs a
+ * prefs owner, TBD) -> palette (honest no-op: no global palette object on
+ * SDL, per-surface install is the architecture) -> tables (rng + arena
+ * live) -> ports/map windows (HONEST STOP: video_init live incl.
+ * driver-caps check, then map_init/ports UNSUPPORTED, U4) -> menu bar
+ * (HONEST STOP: dialog_init UNSUPPORTED, U2) -> cursor (void) ->
+ * event/turn loop caller-owned (while(!g_nQuitFlag) + Game_TurnLoopTick @
+ * 1088:0000 via game_tick, see game.h; main.c owns the loop and aborts
+ * when boot fails; SDL window/renderer are caller-created and borrowed,
+ * never owned here). No globals, no exit(), read-only. */
 civ_error_t boot_run(SDL_Window *win, SDL_Renderer *ren);
 
 /* Single steps, in WinMain order (each UNSUPPORTED until implemented,
@@ -106,7 +104,9 @@ civ_error_t boot_register_classes(void);
 civ_error_t app_register_window_classes(void);
 civ_error_t boot_load_fonts(void);
 civ_error_t boot_load_resources(void);
-civ_error_t boot_check_video(void);
+/* (No boot_check_video step: the arg-less order slot carried no check; the
+ * live Video_CheckDriverCaps @ 1008:059a verdict runs in video_init where
+ * the renderer exists, see video.h. Removed fala H, no fake-OK slot.) */
 civ_error_t boot_maybe_convert_artwork(void);
 civ_error_t boot_load_prefs(void);
 civ_error_t boot_init_palette(void);
@@ -784,8 +784,9 @@ int config_prefs_sounds_on(const civ_prefs_t *prefs);
  * count reports decoded entries (0 until the dump lands), describe maps
  * an entry index to its checklist meaning (NULL when out of range or not
  * yet dumped, same contract as tribe_get_name_list, see newgame.h). SDL
- * renderer-caps mapping TBD in video_check_driver_caps; boot_check_video
- * above delegates to it. No globals, no exit(), read-only. */
+ * renderer-caps mapping lives in video_check_driver_caps (see video.h),
+ * called from video_init where the renderer exists. No globals, no
+ * exit(), read-only. */
 int boot_video_caps_count(void);
 const char *boot_video_caps_describe(int index);
 

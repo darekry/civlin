@@ -33,11 +33,19 @@ civ_error_t boot_check_memory(void)
 civ_error_t app_register_window_classes(void)
 {
     /* Orig: FUN_1098_06f8 @ 1098:06f8 -> App_RegisterWindowClasses.
-     * REGISTERCLASS x4 + Ctrl_RegisterCustomClasses @ 1058:0b4d (see
-     * dialog.h) + GETSYSTEMMETRICS. WONTFIX-Win16: SDL3 has no window
-     * classes; delegate win16_register_classes (no-op CIV_OK). No globals,
-     * no exit(), read-only. */
-    return win16_register_classes();
+     * HONEST STOP (fala H): 3x CREATESOLIDBRUSH colors (0xc0c0c0 gray /
+     * 0xffffff white / 0x000000 black -> DAT_1420_179e/17a0/17a2) +
+     * REGISTERCLASS x4 (map 1208:0054, smmap 1210:0000, status 1218:0000,
+     * dialog 1098:1838) + Ctrl_RegisterCustomClasses @ 1058:0b4d (see
+     * dialog.h) + GETSYSTEMMETRICS x7 (menu/cursor/frame/caption/
+     * dialog-frame -> 12d8/12e0 words) + cursor pos + SETTIMER(0,0,16,
+     * NULL) id -> DAT_12d8_460e (decompiled 2026-10-16) have no SDL3
+     * window-class equivalent yet (brush colors + metrics via SDL are the
+     * portable halves, owner TBD with the U2 dialog layer) ->
+     * CIV_ERR_UNSUPPORTED. No globals, no exit(), read-only.
+     * TODO: Orig FUN_1098_06f8 @ 1098:06f8 portable halves (SDL dialog/
+     * modal owner, U2). */
+    return CIV_ERR_UNSUPPORTED;
 }
 
 civ_error_t boot_register_classes(void)
@@ -62,15 +70,6 @@ civ_error_t boot_load_resources(void)
      * RSC consumer (no globals here). Missing files -> NOENT (honest stop,
      * not a fake OK). */
     return win16_probe_resources();
-}
-
-civ_error_t boot_check_video(void)
-{
-    /* Video_CheckDriverCaps @ 1008:059a (see video.h
-     * video_check_driver_caps). WONTFIX-Win16 checklist: GETDEVICECAPS has
-     * no Linux equivalent; the live renderer check runs where the renderer
-     * exists (boot_open_windows via video_init). This order step is CIV_OK. */
-    return CIV_OK;
 }
 
 civ_error_t boot_maybe_convert_artwork(void)
@@ -182,11 +181,15 @@ civ_error_t boot_open_windows(SDL_Window *win, SDL_Renderer *ren)
     err = map_init();
     if (err != CIV_OK)
         return err;
-    /* WONTFIX-Win16 tails: GfxPort_Create @ 10d0:0000 + MainPort_GetOrCreate
-     * @ 1098:114a + WdwMap_Open @ 1208:0af1 + WdwSmMap_Open @ 1210:025b +
-     * WdwStatus_Open @ 1218:0386 CREATEWINDOW/scroll-range/SETTIMER (see
-     * map.h). SDL3: window/renderer caller-owned; ports are textures. */
-    return CIV_OK;
+    /* HONEST STOP (fala H): MainPort_GetOrCreate @ 1098:114a +
+     * GfxPort_Create @ 10d0:0000 + WdwMap_Open @ 1208:0af1 + WdwSmMap_Open
+     * @ 1210:025b + WdwStatus_Open @ 1218:0386 CREATEWINDOW/scroll-range/
+     * 200 ms timer (see map.h) have no SDL equivalent yet (U4: ports are
+     * textures, owner TBD caller-side). SDL3 window/renderer stay
+     * caller-owned, never Destroyed here.
+     * TODO: Orig GfxPort_Create @ 10d0:0000 + MainPort_GetOrCreate @
+     * 1098:114a + Wdw*_Open (SDL port/texture owners, U4). */
+    return CIV_ERR_UNSUPPORTED;
 }
 
 civ_error_t menu_init_mainbar(void)
@@ -879,28 +882,29 @@ civ_error_t boot_run(SDL_Window *win, SDL_Renderer *ren)
      * Font_EnumFamiliesInit @ 1008:0e99; 5 ms SETTIMER TIMERPROC @
      * 1008:0d68 (24f0 countdown, see chain-21 in boot.h; 200 ms map
      * WM_TIMER installed later by WdwMap_Open @ 1208:0af1) -> 5x RSC
-     * (boot_load_resources stub via ResMgr_LoadRsc @ 1190:0000 CivData0..4)
-     * -> video caps (boot_check_video stub via Video_CheckDriverCaps @
-     * 1008:059a) -> artwork (boot_maybe_convert_artwork stub via
-     * Art_MaybeConvertArtwork @ 10b8:0000) -> prefs (boot_load_prefs stub
-     * via Config_LoadPrefs @ 1008:0b4a) -> palette (boot_init_palette stub
-     * via Palette_Init @ 1090:0488) -> tables (boot_init_tables partial:
-     * remap + rng_init + malloc probe live, Win16 lock stub) -> ports/map
-     * windows (boot_open_windows partial: video_init + map_init live) ->
-     * menu bar (boot_init_menu partial: cursor live, menu/dialog stub) ->
-     * cursor (Cursor_Set @ 1098:096c void) -> event/turn loop caller-owned
-     * (while(!g_nQuitFlag) Game_TurnLoopTick via game_tick ->
-     * game_turn_tick @ 1088:0000, see game.h; main.c owns it). Wiring:
-     * CIV_OK where OS-free (setup_paths live, tables partial but overall
-     * UNSUPPORTED), otherwise CIV_ERR_UNSUPPORTED stub; first non-OK
-     * short-circuits. No globals, no exit(), read-only. */
+     * (boot_load_resources probe gate via ResMgr_LoadRsc @ 1190:0000
+     * CivData0..4; full image owner TBD) -> artwork
+     * (art_maybe_convert_artwork honest no-op: vacuous on SDL, see boot.h)
+     * -> prefs (boot_load_prefs: defaults live via config_prefs_defaults,
+     * consumed by audio_play_id; civ.prf file read needs a prefs owner, no
+     * globals, TBD) -> palette (boot_init_palette honest no-op: no global
+     * palette object on SDL, per-surface install is the architecture) ->
+     * tables (boot_init_tables: rng + arena live, remap identity TBD) ->
+     * ports/map windows (boot_open_windows HONEST STOP: video_init live
+     * incl. driver-caps check, then map_init/ports UNSUPPORTED, U4) ->
+     * menu bar (boot_init_menu HONEST STOP: dialog_init UNSUPPORTED, U2)
+     * -> cursor (Cursor_Set @ 1098:096c void) -> event/turn loop
+     * caller-owned (while(!g_nQuitFlag) Game_TurnLoopTick via game_tick ->
+     * game_turn_tick @ 1088:0000, see game.h; main.c owns it, aborts when
+     * boot fails like orig MESSAGEBOX+exit). Fala H rule: CIV_OK = effect
+     * achieved or provably vacuous on SDL, else CIV_ERR_UNSUPPORTED; first
+     * non-OK short-circuits. No globals, no exit(), read-only. */
     static civ_error_t (*const steps[])(void) = {
         boot_setup_paths,
         boot_check_memory,
         boot_register_classes,
         boot_load_fonts,
         boot_load_resources,
-        boot_check_video,
         boot_maybe_convert_artwork,
         boot_load_prefs,
         boot_init_palette,

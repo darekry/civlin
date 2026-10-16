@@ -15,13 +15,14 @@
  *   CIVDIALOGPROC @ 1098:1838 / DESTROYWINDOW for main/map/status windows
  *   / REMOVEFONTRESOURCE for CIV_FONT_FILE; delegates to video/map/dialog/
  *   audio shutdown, then window/renderer destroy here).
- * U1: boot_run (live) -> intro (MPLOGO.BMP + OPENING.wav, skippable,
- *   tick-driven SDL stand-in for Main_RunStartupSequence @ 11e0:0000 loop#1
- *   until the Anim opcode engine lands) -> menu/game best-effort stubs
- *   (logged, never fatal) -> live tick loop (WinMain @ 1008:0304 shape:
- *   while(!g_nQuitFlag) on the original 60ths clock, window close / ESC
- *   quits) -> shutdown. No exit() in libs (this main may return). No
- *   globals. C17, SDL3 only. */
+ * U1/H: boot_run (honest: CIV_OK or provably vacuous per step, else
+ *   UNSUPPORTED; failure aborts like orig MESSAGEBOX+exit, return 1) ->
+ *   intro (MPLOGO.BMP + OPENING.wav, skippable, tick-driven SDL stand-in
+ *   for Main_RunStartupSequence @ 11e0:0000 loop#1 until the Anim opcode
+ *   engine lands) -> menu/game best-effort stubs (logged, never fatal) ->
+ *   live tick loop (WinMain @ 1008:0304 shape: while(!g_nQuitFlag) on the
+ *   original 60ths clock, window close / ESC quits) -> shutdown. No
+ *   exit() in libs (this main may return). No globals. C17, SDL3 only. */
 #include <SDL3/SDL.h>
 
 #include <stdlib.h>
@@ -94,10 +95,22 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    /* WinMain @ 1008:0000 init order (boot is now real via win16; menu/
-     * game tails stay best-effort until their modals land). */
+    /* WinMain @ 1008:0000 init order (boot steps stay honest per the fala
+     * H rule in boot.h: CIV_OK or provably vacuous, else UNSUPPORTED).
+     * Orig order-step failure -> MESSAGEBOX + exit (e.g. classes @
+     * 1008:0070, SETTIMER @ 1008:00e9): no best-effort past a failed boot,
+     * intro/loop need the booted state. */
     err = boot_run(win, ren);
     SDL_Log("boot: %s", civ_strerror(err));
+    if (err != CIV_OK) {
+        game_shutdown(&game);
+        boot_shutdown();
+        win16_mem_shutdown();
+        SDL_DestroyRenderer(ren);
+        SDL_DestroyWindow(win);
+        SDL_Quit();
+        return 1;
+    }
 
     /* Main_RunStartupSequence @ 11e0:0000 loop#1 shape (intro over dialog
      * 0x94: Anim_OpenSequence @ 10b0:008a + Anim_AdvanceFrames @ 10b0:0461

@@ -35,13 +35,15 @@ struct gfx_port {
 
 civ_error_t video_init(SDL_Window *win, SDL_Renderer *ren)
 {
-    /* Orig Video init tail (GETDC/CREATEPALETTE family, see video.h).
-     * Linux: caller owns win/ren; nothing to allocate yet. NULL -> NOENT
-     * (orig faulted on a bad handle); otherwise CIV_OK so boot can proceed
-     * to the title animation. */
+    /* Orig Video_CheckDriverCaps @ 1008:059a tail (GETDC/CREATEPALETTE
+     * family, see video.h video_check_driver_caps). Fala H: the arg-less
+     * boot_check_video order step is gone; the live renderer check runs
+     * here where the renderer exists (was already documented so in
+     * boot_check_video). NULL -> NOENT (orig faulted on a bad handle);
+     * otherwise the real driver-caps verdict. No globals, no exit(). */
     if (!win || !ren)
         return CIV_ERR_NOENT;
-    return CIV_OK;
+    return video_check_driver_caps(ren);
 }
 
 civ_error_t video_blit_indexed(SDL_Renderer *ren, SDL_Texture *tex, int x, int y)
