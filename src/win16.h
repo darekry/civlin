@@ -36,10 +36,14 @@
  *   ResMgr_LoadRsc           @ 1190:0000  (_LOPEN/_HREAD 0xE360; see rsc_loader.h)
  *   Sound_MciOpen            @ 1150:001c  (MCI_OPEN WAV; see audio.h)
  *
- * Policy (agreed 2026-10-16): do NOT reimplement Win16 mechanics faithfully.
+ * Policy (agreed 2026-10-16, odblokowanie: stan gry portujemy 1:1, tylko
+ * mechanika OS zostaje STUB): do NOT reimplement Win16 mechanics faithfully.
  * Port only the effect promised to the rest of the game; Win16 plumbing has
  * no Linux equivalent and becomes a documented no-op CIV_OK (WONTFIX-Win16)
- * or a thin SDL3/stdio delegate below. Orig addresses stay in comments so
+ * or a thin SDL3/stdio delegate below. Stan gry (DGROUP DAT_*, shared-static
+ * DAT_13f8_0000, stos dialogow, bufory map/save/palety) to NIE mechanika OS
+ * i MUSI byc portowany 1:1 na jawne konteksty albo module-static z adnotacja
+ * Orig (patrz AGENTS.md + civ_common.h). Orig addresses stay in comments so
  * the RE map survives. C17, SDL3 only, no exit() in libs, read-only vs
  * civ1win/unpacked (never writes assets).
  */

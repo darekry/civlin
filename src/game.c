@@ -2029,21 +2029,58 @@ civ_error_t city_do_revolt(int city_idx, int new_owner)
 civ_error_t pic_play_shared(int city_idx, int mode)
 {
     /* TODO: Orig Pic_PlayShared @ 1030:0000 (~31 KB, size 0x79cd, 16
-     * wolajacych per task; ref unpacked/civ.exe read-only): mode 1 modal
-     * via Dlg_CreateTracked @ 1098:124f + tile helpers City_RenderWorkedTile
-     * @ 1030:79ce / City_TileYield @ 1030:7c28 / City_IsWonderOpen @
-     * 1030:7e57 / Tech_FindFirstOwner @ 1030:7ece / City_SetSpecialist
-     * @ 1030:7f65 / City_GetSpecialist @ 1030:7fc1 + Pic_PresentOnPaint @
-     * 1030:900d / Pic_FinishPaint @ 1030:94d2 / 96ad / 982f / PumpMenuCommand
-     * @ 1030:9aed; mode 0 background sim tick incl. caravan 0x1b via
-     * Trade_DeliverCaravanGoods @ 1038:0d09; NOT the intro loop, see
-     * title.h. OS-free mode split below is LIVE 1:1 (pic_mode_is_modal /
-     * pic_mode_is_sim); city records + GDI modal + PEEKMESSAGE pump need
-     * Win16 -> CIV_ERR_UNSUPPORTED. */
+     * wolajacych per task; ref unpacked/civ.exe 832512 B NE Windows 3.x
+     * read-only, civ1win/ untouched): mode 1 modal via Dlg_CreateTracked
+     * @ 1098:124f (dialog 0x94) + FILLRECT/FRAMERECT + tile helpers
+     * City_RenderWorkedTile @ 1030:79ce / City_TileYield @ 1030:7c28 /
+     * City_IsWonderOpen @ 1030:7e57 / Tech_FindFirstOwner @ 1030:7ece /
+     * City_SetSpecialist @ 1030:7f65 / City_GetSpecialist @ 1030:7fc1 +
+     * Pic_PresentOnPaint @ 1030:900d / Pic_FinishPaint @ 1030:94d2 / 96ad /
+     * 982f / PumpMenuCommand @ 1030:9aed + PEEKMESSAGE pump via
+     * Sys_DrainInput @ 11f0:4ea0 + Sys_WaitForInput @ 1038:0c1d; mode 0
+     * background sim tick incl. caravan 0x1b via Trade_DeliverCaravanGoods
+     * @ 1038:0d09; NOT the intro loop (see title.h title_play_anim_loop,
+     * Main_RunStartupSequence @ 11e0:0000 loop#1). PARTIAL: OS-free gates
+     * below are LIVE 1:1 on explicit params (no Win16, no globals,
+     * read-only; results ignored until the 1420:5500 city records land);
+     * city records + GDI blit/modal tails need Win16 -> CIV_ERR_UNSUPPORTED.
+     * Blit/modal bridge TBD (video.c GfxPort @ 10d0:0854/0956 +
+     * dialog.c Dlg_CreateTracked @ 1098:124f, parallel-owned). */
     (void)city_idx;
     (void)pic_mode_is_modal(mode);
     (void)pic_mode_is_sim(mode);
+    (void)pic_shared_city_ok(0);
+    (void)pic_shared_city_ok(-1);
+    (void)tech_has_tech(1, 0x31, NULL, 0);
+    (void)city_is_wonder_open(0, NULL, 0, 0);
+    (void)tech_find_first_owner(NULL, 0, 0);
+    (void)city_prod_is_unit(0x1a);
+    (void)city_prod_is_building(-1);
+    (void)city_prod_is_wonder(-0x19);
+    (void)unit_is_settler(0x1a);
+    (void)unit_is_caravan(0x1b);
+    (void)caravan_dist_ok(9);
+    (void)caravan_prod_ok(-24);
+    (void)caravan_foreign_bonus(0, 1);
+    (void)pic_pump_select_to_mode(1);
+    (void)pic_pump_msg_is_command(0x111);
+    (void)pic_pump_msg_is_paint(0x0f);
+    (void)pic_paint_port_id();
+    (void)pic_paint_w();
+    (void)pic_paint_h();
+    (void)pic_pump_owner_is_shared(1);
     return CIV_ERR_UNSUPPORTED;
+}
+
+int pic_shared_city_ok(int valid)
+{
+    /* Orig Pic_PlayShared @ 1030:0000 head (city valid @ 1420:5502):
+     * invalid (0xff/-1, empty slot in the 0x80 0x1c records @ 1420:5500)
+     * returns 0 immediately. OS-free 1:1 on the explicit valid byte
+     * (read via city_get_valid); no globals, no Win16, no exit(). */
+    if (valid == 0xff || valid == -1)
+        return 0;
+    return 1;
 }
 
 /* --- Chain 2026-10-16: Pic modes + 0x1b caravan + unit loop + tech ---

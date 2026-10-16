@@ -2926,4 +2926,63 @@ int text_align_slot(int format);
  * shadow_flag != 0. No globals. */
 int text_shadowed_needs_shadow(int mono, int shadow_flag);
 
+/* --- Chain 2026-10-16 (36): Dlg tracked preset/ctx/ctl/close/rebase tails ---
+ * Orig (civ.exe, x86:LE:16:Protected Mode), 1:1 OS-free ports of pure
+ * branches/constants in Dlg_CreateTracked @ 1098:124f /
+ * Dlg_DestroyTracked @ 1098:1612 (no Win16, no globals, no exit(),
+ * read-only, C17). Handle/modal/GDI tails stay PARTIAL/void-NOOP with
+ * TODO Orig in dlg_create_tracked / dlg_destroy_tracked below
+ * (CREATEDIALOG + MAKEPROCINSTANCE(DLGPROC @ 1098:16e2 / CIVDIALOGPROC @
+ * 1098:1838) + GETDC/SELECTPALETTE/REALIZEPALETTE + tracked-stack store @
+ * 1420:1ea0/1ec8 + Gfx_StoreDC @ 1098:1104 + SHOWWINDOW + 0xec palette copy
+ * via Palette_CopyRange @ 1098:201d + DESTROYWINDOW/FREEPROCINSTANCE/
+ * GLOBALFREE + Mem_DisposePtr @ 1100:060b + refresh via FUN_1208_14d5 ->
+ * SDL3 bridge TBD). Refs verified read-only 1:1 vs unpacked/civ.exe (NE
+ * LE, no copy): "RanDoMRadio"/"RanDoMStatic"/"RanDoMUser" + "OPENING.wav"
+ * + "MenuZ()  :  windows.c" + "Can't initialize timer in MenuZ". No fake. */
+
+/* Orig Dlg_CreateTracked @ 1098:124f preset-size store (param_1 == 0x94
+ * || == 0x8f -> DAT_12d8_0026 = 1, sibling of 002e = 0x200 via
+ * dlg_preset_w + 002c = 0x140 via dlg_preset_h; see dlg_create_tracked
+ * PARTIAL) -> dlg_preset_flag_value. 1:1 1 (the stored flag word).
+ * No globals. */
+int dlg_preset_flag_value(void);
+
+/* Orig same ctl-init loop (iVar6 = 0x65; while (<= 0x6e), GETDLGITEM-guarded
+ * SENDMESSAGE 0x30 per item; gate in dlg_ctl_is_tracked_init) ->
+ * dlg_tracked_init_count. 1:1 0x6e - 0x65 + 1 = 10 slots. No globals. */
+int dlg_tracked_init_count(void);
+
+/* Orig same tracked-stack slot (far HWND/ctx pair: off at +0x1ea0, seg at
+ * +0x1ea2; push byte offset = count * 4 via dlg_tracked_push_off) ->
+ * dlg_tracked_entry_size. 1:1 4 bytes per slot. No globals. */
+int dlg_tracked_entry_size(void);
+
+/* Orig Dlg_CreateTracked @ 1098:124f earth-custom extra loop (0x8f adds
+ * 0x323-0x332, gate in dlg_ctl_is_earth_extra) ->
+ * dlg_ctl_earth_extra_count. 1:1 0x332 - 0x323 + 1 = 16 slots.
+ * No globals. */
+int dlg_ctl_earth_extra_count(void);
+
+/* Orig Dlg_DestroyTracked @ 1098:1612 top restore (DAT_1420_1ec8 += -1 via
+ * dlg_tracked_pop_count; DAT_1420_9948 = 0 when count - 1 == 0 else the
+ * count-2 slot; see dlg_destroy_tracked void-NOOP) -> dlg_tracked_top_off.
+ * 1:1 byte offset of the new top slot, -1 when the stack is empty
+ * (count <= 1, orig writes 0). Else (count - 2) * 4. No globals. */
+int dlg_tracked_top_off(int count);
+
+/* Orig same empty gate (top cleared when the pop empties the stack) ->
+ * dlg_destroy_clears_top. 1:1 nonzero (1) when count <= 1 (orig writes
+ * DAT_1420_9948 = 0 + 1420:17aa = 0 + 1420:9960 cleared when it is the
+ * dying ctx), 0 otherwise. No globals. */
+int dlg_destroy_clears_top(int count);
+
+/* Orig Main_RunStartupSequence @ 11e0:0000 loop#2 rebase param (SEEK/skok
+ * logicznego zegara via Anim_RebaseClock @ 10b0:005b: base = now - param,
+ * stored = param; math LIVE in anim_rebase_clock, probed in
+ * dlg_create_tracked) -> dlg_intro_rebase_ticks. 1:1 1000 ticks (przeskocz
+ * pierwsze 1000 tickow intro-nakladki; menu idle 100000 + re-sync 0x48c
+ * stay caller-side in MainMenu_WndProc @ 11e0:0221). No globals. */
+int dlg_intro_rebase_ticks(void);
+
 #endif /* CIVLIN_DIALOG_H */

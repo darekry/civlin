@@ -1143,19 +1143,61 @@ int res_compare_pascal(const uint8_t *a, const uint8_t *b);
 rsc_error_t res_copy_pascal(uint8_t *dst, size_t cap,
                             const uint8_t *src);
 
-/* Orig: Res_GetStringCopy @ 11f8:0080 — STUB (shared-static owner).
- * ResMgr_GetString into DAT_13f8_0000 + Util_PascalToCStr; returns a
- * pointer to the shared static (overwritten next call). No globals on
- * Linux -> stub RSC_ERR_UNSUPPORTED. NULL out -> NOENT. Entry->meaning
- * map lives in res_blob_entry_kind below (same table/entry domain);
- * the LIVE fetch path is rsc_get_blob_string @ 1100:078a. */
+/* Orig: Res_GetStringCopy @ 11f8:0080 — LIVE 1:1 (module-static
+ * DAT_13f8_0000 equiv, odblokowanie 2026-10-16).
+ * Decompile (civ.exe, x86:LE:16:Protected Mode):
+ *   DAT_13f8_0000 = 0;
+ *   ResMgr_GetString(dst=13f8:0000 far, table, N=entry+1);
+ *   Util_PascalToCStr(13f8:0000); return 13f8:0000.
+ * ResMgr_GetString @ 1100:078a walk: ResMgr_GetById(type 0x2da8, id=table)
+ * + GLOBALLOCK, BE count @ +0 (first*0x100+second), N<1 or count<N -> empty
+ * (*dst=0), else skip N-1 via p+=*p+1, *dst=len + memcpy(dst+1,p+1,len)
+ * via Util_MemCopy @ 1000:299e, GLOBALUNLOCK + DisposeHandle.
+ * Linux: staging in s_res_static (256 B, DAT_13f8_0000 image, overwritten
+ * by the next copy/raw call — same semantics, Orig addr in comment) then
+ * copy C string to out. table = resource id within type 0x2da8 (0x94 tribe,
+ * 0x8c leader, 0x95 adj, 0x82 tech, 0x83 wonder-build, 0x84 produce,
+ * 0x8d government, 0x8a report, 0x88 city), entry 0-based (N=entry+1).
+ * Known tables 0x94/0x8c/0x95 served from verified dumps (mirror of
+ * civ_tribe/leader/adj in newgame.h, file offs 0x1b2f/0x18c8/0x2293);
+ * other tables need explicit blob via res_get_string_copy_from_blob
+ * (legacy returns UNSUPPORTED with *out untouched, no fake). NULL out ->
+ * NOENT; entry OOR for a known table -> NOENT (*out untouched);
+ * cap==0 or C len+1>cap -> RANGE (*out untouched). No SDL/exit, C17. */
 rsc_error_t res_get_string_copy(unsigned table, unsigned entry,
                                 char *out, size_t cap);
 
-/* Orig: Res_GetStringRaw @ 11f8:00c5 — STUB (same shared static, Pascal
- * length byte kept, no PascalToCStr). Same contract as copy. */
+/* Orig: Res_GetStringRaw @ 11f8:00c5 — LIVE 1:1 (same static, Pascal kept).
+ * Decompile: same as copy above but WITHOUT Util_PascalToCStr (length byte
+ * kept). Same staging/copy contract, Pascal len+1 bytes to out. */
 rsc_error_t res_get_string_raw(unsigned table, unsigned entry,
                                uint8_t *out, size_t cap);
+
+/* OS-free explicit-blob kernels (no globals, no static): generic 1:1 of the
+ * ResMgr_GetString @ 1100:078a walk + (copy only) Util_PascalToCStr @
+ * 1100:0053 on a caller-provided resource payload slice (valid while the
+ * container lives). blob = payload of resource id=table (BE count + Pascal
+ * strings @ +2), entry 0-based (N=entry+1). Thin wrappers over
+ * rsc_get_blob_string @ 1100:078a (LIVE) + util_pascal_to_c @ 1100:0053.
+ * NULL blob/out -> NOENT; blob_size<2 or entry overrun -> TRUNCATED;
+ * entry OOR vs BE count -> NOENT; cap==0 or len+1>cap -> RANGE;
+ * else RSC_OK (*out_len optional, len+1 for raw, strlen+1 for copy).
+ * No SDL/exit/globals, C17, borrowed blob vs caller-owned out. */
+rsc_error_t res_get_string_copy_from_blob(const uint8_t *blob, size_t blob_size,
+                                          unsigned entry, char *out, size_t cap,
+                                          size_t *out_len);
+rsc_error_t res_get_string_raw_from_blob(const uint8_t *blob, size_t blob_size,
+                                         unsigned entry, uint8_t *out, size_t cap,
+                                         size_t *out_len);
+
+/* DAT_13f8_0000 image accessors (shared-static overwrite semantics):
+ * pointers valid until the next res_get_string_copy/raw call (any table).
+ * Copy flavour is NUL-terminated C (via PascalToCStr), raw flavour keeps
+ * the Pascal length byte @ [0]. Never NULL; cap is RES_STATIC_CAP (256).
+ * No SDL/exit, C17. */
+#define RES_STATIC_CAP 256u
+const char *res_copy_static_cstr(void);
+const uint8_t *res_raw_static_pascal(void);
 
 /* --- BLOB 0x2da8 entry->meaning map (2026-10-16) ---
  * Anchors (civ.exe, x86:LE:16:Protected Mode):
@@ -1167,7 +1209,8 @@ rsc_error_t res_get_string_raw(unsigned table, unsigned entry,
  *     11f8:014a shape; N < 1 or count < N -> Empty).
  *   Res_GetStringCopy @ 11f8:0080 (copy: + Util_PascalToCStr @ 1100:0053
  *     into DAT_13f8_0000) vs Res_GetStringRaw @ 11f8:00c5 (raw Pascal,
- *     same static) — both STUB (shared static, no globals on Linux).
+ *     same static) — both LIVE 1:1 above (module-static DAT_13f8_0000
+ *     image + verified 0x94/0x8c/0x95 dumps, generic via _from_blob).
  *   LIVE fetch: rsc_get_blob_string (data/size/index 0-based, N=index+1).
  * Readers (14 ResMgr_GetString xrefs, entry first param of copy/raw):
  *   0x82 tech names: NewGame_Wizard @ 10e8:03c6 finalize loop (FUN_1170_3181

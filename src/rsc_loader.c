@@ -3013,45 +3013,176 @@ rsc_error_t res_copy_pascal(uint8_t *dst, size_t cap,
     return RSC_OK;
 }
 
+/* DAT_13f8_0000 image (odblokowanie 2026-10-16): single 256-B shared
+ * static, overwritten by the next copy/raw call (either flavour), same as
+ * orig (copy returns C via PascalToCStr, raw keeps Pascal len byte).
+ * Zero-initialised (orig BSS zeros at load; DAT_13f8_0000 = 0 gate in both
+ * decompiles). Module-static with Orig addr annotation per AGENTS.md. */
+static uint8_t s_res_static[RES_STATIC_CAP] = { 0 };
+
+/* Verified dumps (mirror of civ_tribe/leader/adj in newgame.h, read-only;
+ * rsc_dump on unpacked/civdata0.rsc: 0x94 @ 0x1b2f, 0x8c @ 0x18c8,
+ * 0x95 @ 0x2293, BE16 count + Pascal walk = rsc_get_blob_string shape).
+ * Duplicated here (not via newgame.h) to keep rsc_loader self-contained
+ * (lower layer; no cross-module globals). */
+static const char *const s_res_tribe[16] = {
+    "NONE", "Romans", "Babylonians", "Germans", "Egyptians", "Americans",
+    "Greeks", "Indians", "NONE", "Russians", "Zulus", "French", "Aztecs",
+    "Chinese", "English", "Mongols"
+};
+static const char *const s_res_leader[16] = {
+    "", "Caesar", "Hammurabi", "Frederick", "Ramesses", "Abe Lincoln",
+    "Alexander", "M.Gandhi", "", "Stalin", "Shaka", "Napoleon", "Montezuma",
+    "Mao Tse Tung", "Elizabeth I", "Genghis Khan"
+};
+static const char *const s_res_adj[16] = {
+    "NONE", "Roman", "Babylonian", "German", "Egyptian", "American",
+    "Greek", "Indian", "NONE", "Russian", "Zulu", "French", "Aztec",
+    "Chinese", "English", "Mongol"
+};
+
+static int res_table_is_known(unsigned table)
+{
+    return table == RES_BLOB_TRIBE || table == RES_BLOB_LEADER ||
+           table == RES_BLOB_TRIBE_ADJ;
+}
+
+static const char *res_known_cstr(unsigned table, unsigned entry)
+{
+    if (entry >= 16u)
+        return NULL;
+    if (table == RES_BLOB_TRIBE)
+        return s_res_tribe[entry];
+    if (table == RES_BLOB_LEADER)
+        return s_res_leader[entry];
+    if (table == RES_BLOB_TRIBE_ADJ)
+        return s_res_adj[entry];
+    return NULL;
+}
+
+rsc_error_t res_get_string_copy_from_blob(const uint8_t *blob, size_t blob_size,
+                                          unsigned entry, char *out, size_t cap,
+                                          size_t *out_len)
+{
+    /* Pure 1:1 of ResMgr_GetString @ 1100:078a (via rsc_get_blob_string)
+     * + Util_PascalToCStr @ 1100:0053 (via util_pascal_to_c). No static. */
+    uint8_t tmp[RES_STATIC_CAP];
+    size_t plen = 0;
+    size_t clen = 0;
+    rsc_error_t br;
+
+    if (out_len)
+        *out_len = 0;
+    if (!blob || !out)
+        return RSC_ERR_NOENT;
+    br = rsc_get_blob_string(blob, blob_size, entry, tmp, sizeof(tmp), &plen);
+    if (br != RSC_OK)
+        return br;
+    (void)plen;
+    if (!util_pascal_to_c((char *)tmp))
+        return RSC_ERR_NOENT;
+    clen = strlen((const char *)tmp) + 1u;
+    if (cap == 0 || clen > cap)
+        return RSC_ERR_RANGE;
+    memcpy(out, tmp, clen);
+    if (out_len)
+        *out_len = clen;
+    return RSC_OK;
+}
+
+rsc_error_t res_get_string_raw_from_blob(const uint8_t *blob, size_t blob_size,
+                                         unsigned entry, uint8_t *out, size_t cap,
+                                         size_t *out_len)
+{
+    /* Pure 1:1 of ResMgr_GetString @ 1100:078a only (Pascal kept). */
+    if (out_len)
+        *out_len = 0;
+    if (!blob || !out)
+        return RSC_ERR_NOENT;
+    return rsc_get_blob_string(blob, blob_size, entry, out, cap, out_len);
+}
+
+const char *res_copy_static_cstr(void)
+{
+    return (const char *)s_res_static;
+}
+
+const uint8_t *res_raw_static_pascal(void)
+{
+    return s_res_static;
+}
+
 rsc_error_t res_get_string_copy(unsigned table, unsigned entry,
                                 char *out, size_t cap)
 {
-    (void)table;
-    (void)entry;
-    /* TODO: Orig FUN_11f8_0080 @ 11f8:0080 (Res_GetStringCopy:
-     * DAT_13f8_0000 = 0 + ResMgr_GetString(table, entry + 1 into the
-     * shared static @ DAT_13f8_0000) + Util_PascalToCStr @ 1100:0053;
-     * returns the shared static pointer, overwritten by the next
-     * GetString call — caller must copy immediately; see rsc_loader.h
-     * ownership note) -> Linux has no shared static (no globals), so
-     * the blob fetch (rsc_get_blob_string @ 1100:078a, LIVE) + copy
-     * wiring stays TBD. Entry map: see res_blob_entry_kind (0x82 tech,
-     * 0x83 wonder-build, 0x84 produce, 0x8d government, 0x8a report,
-     * 0x8c leader, 0x94 tribe, 0x95 tribe-adj, 0x88 city). */
+    /* Orig Res_GetStringCopy @ 11f8:0080:
+     *   DAT_13f8_0000 = 0;
+     *   ResMgr_GetString(13f8:0000, table, N=entry+1);
+     *   Util_PascalToCStr(13f8:0000); return 13f8:0000.
+     * Linux stages into s_res_static (DAT_13f8_0000 image) then copies C
+     * to out. Known tables 0x94/0x8c/0x95 from verified dumps; other
+     * tables via res_get_string_copy_from_blob (UNSUPPORTED here, *out
+     * untouched, no fake). */
+    const char *s = NULL;
+    size_t slen = 0;
+    size_t need = 0;
+
     if (!out)
         return RSC_ERR_NOENT;
-    if (cap > 0)
-        out[0] = '\0';
-    return RSC_ERR_UNSUPPORTED;
+    if (!res_table_is_known(table))
+        return RSC_ERR_UNSUPPORTED;
+    s = res_known_cstr(table, entry);
+    if (!s) {
+        /* Known table, OOR entry: orig would leave empty in the static
+         * (count<N -> *dst=0); mirror that, signal NOENT, *out untouched. */
+        s_res_static[0] = 0;
+        s_res_static[1] = 0;
+        return RSC_ERR_NOENT;
+    }
+    slen = strlen(s);
+    if (slen > 255u)
+        return RSC_ERR_RANGE;
+    /* Stage Pascal then convert in place (same order as orig). */
+    s_res_static[0] = (uint8_t)slen;
+    if (slen > 0)
+        memcpy(&s_res_static[1], s, slen);
+    if (!util_pascal_to_c((char *)s_res_static))
+        return RSC_ERR_NOENT;
+    need = slen + 1u;
+    if (cap == 0 || need > cap)
+        return RSC_ERR_RANGE;
+    memcpy(out, s_res_static, need);
+    return RSC_OK;
 }
 
 rsc_error_t res_get_string_raw(unsigned table, unsigned entry,
                                uint8_t *out, size_t cap)
 {
-    (void)table;
-    (void)entry;
-    /* TODO: Orig FUN_11f8_00c5 @ 11f8:00c5 (Res_GetStringRaw: same as
-     * copy above but WITHOUT Util_PascalToCStr — Pascal length byte
-     * kept; same shared static @ DAT_13f8_0000 ownership) -> same TBD.
-     * Entry map: see res_blob_entry_kind in rsc_loader.h (0x82 tech,
-     * 0x83 wonder-build, 0x84 produce, 0x8d government, 0x8a report,
-     * 0x8c leader, 0x94 tribe, 0x95 tribe-adj, 0x88 city); LIVE fetch
-     * is rsc_get_blob_string @ 1100:078a. */
+    /* Orig Res_GetStringRaw @ 11f8:00c5: same staging without PascalToC. */
+    const char *s = NULL;
+    size_t slen = 0;
+    size_t need = 0;
+
     if (!out)
         return RSC_ERR_NOENT;
-    if (cap > 0)
-        out[0] = 0;
-    return RSC_ERR_UNSUPPORTED;
+    if (!res_table_is_known(table))
+        return RSC_ERR_UNSUPPORTED;
+    s = res_known_cstr(table, entry);
+    if (!s) {
+        s_res_static[0] = 0;
+        return RSC_ERR_NOENT;
+    }
+    slen = strlen(s);
+    if (slen > 255u)
+        return RSC_ERR_RANGE;
+    s_res_static[0] = (uint8_t)slen;
+    if (slen > 0)
+        memcpy(&s_res_static[1], s, slen);
+    need = slen + 1u;
+    if (cap == 0 || need > cap)
+        return RSC_ERR_RANGE;
+    memcpy(out, s_res_static, need);
+    return RSC_OK;
 }
 
 const char *res_blob_entry_kind(unsigned table)

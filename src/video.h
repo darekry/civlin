@@ -211,26 +211,79 @@ int gfx_scroll_copy_h(int dst_h, int src_h);
  * FUN_1098_25b9; opcode 0xb start path when DAT_12d8_28fc == 0:
  * GLOBALALLOC(count*4) + GLOBALLOCK x2 + flag-1 copy of count entries
  * from (base+start) then Palette_AnimateLockedRange @ 1090:0119 +
- * GLOBALFREE; headless skips all). Alloc-size half OS-free 1:1 below
- * (bytes = count*4, -1 on count < 0); lock/animate tails stay STUB. */
+ * GLOBALFREE; headless (DAT_12d8_28fc != 0) skips all). Alloc-size half
+ * OS-free 1:1 below (bytes = count*4, -1 on count < 0); lock/animate
+ * tails stay PARTIAL with TODO Orig (no fake CIV_OK). Ref
+ * unpacked/civ.exe read-only (832512 B NE Win3.x, not packed
+ * civ1win/CIV.EXE): anchor 1098:25b9 + callee 1090:0119; no bytes copied. */
 int palette_snapshot_size(int count);
 
 /* Orig Palette_AnimateLockedRange @ 1090:0119 (renamed 2026-10-16 from
  * FUN_1090_0119; GLOBALLOCK + Palette_AnimateRange @ 1090:0376 +
- * GLOBALUNLOCK wrapper; callers opcode 9/0xc + SnapshotAndAnimate).
- * Needs the Win16 selector lock -> stub CIV_ERR_UNSUPPORTED. The range
- * predicate itself stays LIVE in palette_animate_clamp. */
+ * GLOBALUNLOCK wrapper; callers opcode 9 (port-swap present tail) / 0xc
+ * (dissolve palette pre-copy branch) + SnapshotAndAnimate @ 1098:25b9).
+ * PARTIAL bridge (see video.c): OS-free range/flag probes LIVE 1:1 via
+ * palette_animate_clamp / palette_snapshot_size / palette_flag_for_mono
+ * (BAD_DATA on probe mismatch, RANGE on bad range); Win16 selector
+ * lock + ANIMATEPALETTE device tail stays CIV_ERR_UNSUPPORTED with
+ * TODO Orig (no fake). The range predicate itself stays LIVE in
+ * palette_animate_clamp. Ref unpacked/civ.exe read-only. */
 civ_error_t palette_animate_locked_range(int first, int count);
 
 /* Palette_AnimateRange @ 1090:0376 (ported; range repaint via
  * SDL_SetPaletteColors staging on a temp 256-entry palette, no globals.
- * Orig copies RGB triples + flag byte then ANIMATEPALETTE; callers issue
- * opcode 1 (full apply from MainPort_ApplyPalette @ 1200:00a8) and timed
- * 1/0xe fades from Anim_AdvanceFrames @ 10b0:0461 (title/HoF fades).
+ * Orig copies RGB triples + flag byte then ANIMATEPALETTE; LIVE-bridge
+ * for Anim opcode 1 (fade-zero fill via anim_pal_fade_zero +
+ * MainPort_ApplyPalette @ 1200:00a8 full apply) / 9 (port-swap via the
+ * locked wrapper @ 1090:0119 above) / 0xe (rotate-shift) from
+ * Anim_AdvanceFrames @ 10b0:0461 (title/HoF fades; timed 1/0xe gate via
+ * anim_tick_is_due, decoder via anim_opcode_is_palette/needs_animate in
+ * dialog.h; opcode predicate LIVE below as palette_animate_opcode_ok).
  * Colors feed from gfx_godpal_get (0x00..0xeb) + black tail past 0xec
  * (LOGPALETTE 0x300 zero tail); propagates UNSUPPORTED until the godpal
- * dump lands (no fake bytes). Range outside [0,256) reports RANGE. */
+ * runtime capture lands (no fake bytes). Range outside [0,256) reports
+ * RANGE. Ref unpacked/civ.exe read-only (anchor 1090:0376 + callers
+ * 1200:00a8/10b0:0461). */
 civ_error_t palette_animate_range(int first, int count);
+
+/* Orig same opcode family (1/9/0xe via 1090:0376 + 1090:0119 lock path) ->
+ * palette_animate_opcode_ok. 1:1 1 when op == 1 || op == 9 || op == 0xe
+ * (1 fade-zero direct, 9 port-swap via the locked wrapper, 0xe rotate;
+ * op 2 copies via Palette_CopyRange @ 1098:201d not Animate, 12 animates
+ * via the dissolve 0xc pre-copy branch). 0 otherwise. OS-free 1:1 on the
+ * explicit op (no Win16, no globals). Ref unpacked/civ.exe read-only. */
+int palette_animate_opcode_ok(int op);
+
+/* Orig SnapshotAndAnimate @ 1098:25b9 headless gate (DAT_12d8_28fc) ->
+ * palette_snapshot_headless_skips. 1:1 nonzero (1) when headless != 0
+ * (orig skips GLOBALALLOC/LOCK/copy/animate/free entirely), 0 otherwise.
+ * OS-free 1:1, no Win16, no globals. */
+int palette_snapshot_headless_skips(int headless_28fc);
+
+/* Orig Palette_SnapshotAndAnimate @ 1098:25b9 -> palette_snapshot_and_animate.
+ * PARTIAL OS-free payload probe bridge: headless skip is a faithful
+ * vacuum no-op (CIV_OK, WONTFIX-Win16: no palette when headless); else
+ * RANGE on bad range (first < 0 || count <= 0 || first+count > 256,
+ * count < 0 via palette_snapshot_size == -1), BAD_DATA on OS-free probe
+ * mismatch (snapshot bytes / clamp / flag literals below), then the
+ * GLOBALALLOC(count*4) + GLOBALLOCK x2 + flag-1 copy + AnimateLockedRange
+ * @ 1090:0119 + GLOBALFREE device tail stays CIV_ERR_UNSUPPORTED with
+ * TODO Orig (no fake bytes, no invented palette). Ref unpacked/civ.exe
+ * read-only (anchor 1098:25b9). */
+civ_error_t palette_snapshot_and_animate(int headless_28fc, int first,
+                                         int count);
+
+/* Orig Anim opcode 1/9/0xe dispatch via 1090:0376 (+ 1090:0119 lock for 9)
+ * -> palette_animate_for_opcode. PARTIAL bridge routing the opcode to its
+ * tail (1/0xe direct via palette_animate_range LIVE above, 9 via
+ * palette_animate_locked_range PARTIAL above); anim_opcode_is_palette (1,
+ * 2, 0xe) + anim_opcode_needs_animate (1, 12, 0xe) + present/period gates
+ * stay in dialog.c (not duplicated here). RANGE when the opcode is not
+ * 1/9/0xe (orig switch skips other opcodes) or the range is outside
+ * [0,256); otherwise propagates the tail result (UNSUPPORTED from the
+ * godpal/lock tails until those bridges land, no fake). Ref
+ * unpacked/civ.exe read-only. */
+civ_error_t palette_animate_for_opcode(int op, int first, int count);
 
 /* GfxPort_* @ 10d0:0000/0956/0854/08f1 + bitmap @ 10d0:0cfa.
  * Drawing port: the original port struct holds ~0x20 words (DC +
@@ -1496,5 +1549,111 @@ int palette_animate_clamp(int first, int count);
  * palette_flag_for_mono. 1:1 DAT_1420_17a6 == 0 ? 1 : 0 (color sets the
  * LOGPALETTE flag, mono clears; Zero always clears). No globals. */
 int palette_flag_for_mono(int mono);
+
+/* --- Chain 2026-10-16 (23): Art_LoadFrameData @ 10b8:079d +
+ * Art_PortDataToBitmap @ 10b8:0e36 opcode-6 payload (goal) ---
+ * Anchors (civ.exe, x86:LE:16:Protected Mode), decompiled + disasm-verified
+ * this pass (read-only ref unpacked/civ.exe, NE Win3.x):
+ *   Art_LoadFrameData @ 10b8:079d (Art_LoadDiskFile @ 10b8:0aa8 disk path
+ *     via _LOPEN/_HREAD + save_unpack when DAT_1420_17a8 != 0, else
+ *     Art_LoadResPaletted @ 10b8:11bc RSC path via ResMgr_GetById + 0xec
+ *     palette expand + Art_DecodeLZW @ 10b8:158c, then Art_SaveConvertedFrame
+ *     @ 10b8:0c1c when GOV DAT_1420_9980 != 1, then GfxPort_Create @
+ *     10d0:0000 + Gfx_StoreDC @ 1098:1104; opcode 6 in Anim_AdvanceFrames @
+ *     10b0:0461 runs Close + LoadFrameData + PortDataToBitmap).
+ *   Art_PortDataToBitmap @ 10b8:0e36 (GR_PortDataToBitmap/log string:
+ *     even-width direct BITBLT vs odd-width pad via DAT_1420_17a6 mono
+ *     GLOBALALLOC + HMEMCPY rows vs compatible-DC + SETBITMAPBITS + BITBLT
+ *     0xcc0020 rows, then SELECTOBJECT/DELETEOBJECT + free when param_2 !=
+ *     0 + SETRECT clip 0,0,w,h at +0x20; driver-dependent).
+ * Disasm immediates (1:1, no copy): convert gate CMP 17a8,1 + CMP frame,0x89
+ *   + CMP res,0 (10b8:0858/0863/086d) -> needs_convert; palette copy CMP
+ *   SI,0x10 (10b8:0915/09e0) -> 0x10 entries; fill-from CMP frame,0xc8 (200)
+ *   (10b8:0929/09f4) -> 0x13 else 0x11; fill-end CMP SI,0x100 (10b8:0965/
+ *   0a30) -> 0x100; gov gate CMP 9980,1 (10b8:08a1) -> save when != 1;
+ *   GLOBALALLOC 0x42,0x400 (0x400 = 0x100*4 palette words); even check
+ *   w/2*2 == w (10b8:0e6a..0e78, signed CWD/SUB/SAR/SHL) -> is_even_width
+ *   (already LIVE); padded ((w+1)/2)*2 (10b8:0edb..0ee1 + 10b8:0f3b..0f43 +
+ *   10b8:0fc1..0fc7 + 10b8:1024..102e) -> padded_width (already LIVE);
+ *   alloc ((w+1)/2*2)*h (10b8:0ed2..0ef6 GLOBALALLOC) -> alloc_size; mono
+ *   CMP 17a6,1 (10b8:0ec7) selects pad vs compat; HMEMCPY w bytes/row
+ *   (10b8:0f18..0f85) with dst stride padded; SETBITMAPBITS + BITBLT PUSH
+ *   0xcc0020 (10b8:10e1 SRCCOPY) rows in the compat path; free CMP
+ *   [BP+0xa],0 (10b8:116d, param_2) zeroes +0x12; SETRECT 0,0,w,h at +0x20
+ *   (10b8:1192..11ae).
+ * Split: OS-free predicates/sizes below are LIVE 1:1 (no Win16, no globals,
+ *   read-only except explicit outs); disk/RSC/LZW/GfxPort/BITBLT/device
+ *   tails stay STUB/PARTIAL with TODO Orig (no fake CIV_OK). The opcode-6
+ *   dispatcher itself stays PARTIAL in anim_advance_frames (dialog.c, not
+ *   touched here); these payload probes are what its frame-load tail calls. */
+
+/* Orig Art_LoadFrameData @ 10b8:079d convert gate (10b8:0858/0863/086d) ->
+ * art_frame_needs_convert. 1:1 (convert_flag == 1 && frame_id != 0x89 &&
+ * res_ok != 0) (DAT_1420_17a8 + EARTH 0x89 preset bypass + ResPaletted ok;
+ * 0x89 is the WorldGen earth bitmap 320x200, see worldgen.h). 1 = take the
+ * 10c8:0000 convert + SaveConvertedFrame path, 0 = skip to palette fill.
+ * No globals. */
+int art_frame_needs_convert(int convert_flag, int frame_id, int res_ok);
+
+/* Orig same palette copy bound (CMP SI,0x10) -> art_frame_palette_copy_count.
+ * 1:1 0x10 entries (u32 copy from 0x12e8:0002). No globals. */
+int art_frame_palette_copy_count(void);
+
+/* Orig same fill-from (CMP frame,0xc8) -> art_frame_palette_fill_from. 1:1
+ * 0x13 when frame_id == 200 (0xc8, extra 0x44/0x48 slots) else 0x11. The
+ * 0x40 slot (= local_24) + optional 0x44/0x48 (locals 0x26/0x2a) stores stay
+ * caller-side (needs the GLOBALLOCK bits). No globals. */
+int art_frame_palette_fill_from(int frame_id);
+
+/* Orig same fill-end (CMP SI,0x100) -> art_frame_palette_fill_end. 1:1 0x100
+ * entries (0x400 B via GLOBALALLOC 0x42,0x400). No globals. */
+int art_frame_palette_fill_end(void);
+
+/* Orig same gov gate (CMP 9980,1 @ 10b8:08a1) -> art_frame_saves_converted.
+ * 1:1 (gov_9980 != 1) takes Art_SaveConvertedFrame @ 10b8:0c1c
+ * (_LCREAT/_HWRITE + save_pack), == 1 returns 1 early with unlock/free.
+ * No globals. */
+int art_frame_saves_converted(int gov_9980);
+
+/* Orig Art_PortDataToBitmap @ 10b8:0e36 alloc (GLOBALALLOC ((w+1)/2*2)*h) ->
+ * art_port_alloc_size. 1:1 padded stride via art_port_padded_width (same as
+ * gfx_remap_stride/gfx_port_bitmap_pitch) times h. -1 on w < 0 or h < 0
+ * (orig far-ptr fault). No globals. */
+int art_port_alloc_size(int w, int h);
+
+/* Orig same path select (even @ 10b8:0e78 + mono CMP 17a6,1 @ 10b8:0ec7) ->
+ * art_port_path_kind. 1:1 0 = direct even-width BITBLT, 1 = odd + mono
+ * GLOBALALLOC + HMEMCPY rows, 2 = odd + color compatible-DC + SETBITMAPBITS
+ * + BITBLT 0xcc0020 rows. -1 on w < 0. mono is DAT_1420_17a6 == 1. */
+int art_port_path_kind(int w, int mono);
+
+/* Orig same free tail (CMP param_2,0 @ 10b8:116d) -> art_port_frees_bits.
+ * 1:1 (free_flag != 0) frees + zeroes +0x12 (GLOBALFREE), else keeps bits
+ * for the port bitmap. No globals. */
+int art_port_frees_bits(int free_flag);
+
+/* Orig Art_LoadFrameData @ 10b8:079d -> art_load_frame_data. PARTIAL
+ * OS-free payload probe bridge: frame-id gate (art_frame_id_ok) + convert
+ * gate (art_frame_needs_convert) + palette copy/fill bounds
+ * (art_frame_palette_copy_count/fill_from/fill_end) + gov save gate
+ * (art_frame_saves_converted) probed 1:1 (BAD_DATA on mismatch, no fake);
+ * device tail (Art_LoadDiskFile @ 10b8:0aa8 _LOPEN/_HREAD + save_unpack @
+ * 10f8:040a, Art_LoadResPaletted @ 10b8:11bc ResMgr_GetById + 0xec expand +
+ * Art_DecodeLZW @ 10b8:158c, Art_SaveConvertedFrame @ 10b8:0c1c, GfxPort_
+ * Create @ 10d0:0000 + Gfx_StoreDC @ 1098:1104) stays UNSUPPORTED.
+ * frame_id < 0 -> RANGE (orig faulted). Ref unpacked/civ.exe read-only. */
+civ_error_t art_load_frame_data(int frame_id, int convert_flag, int res_ok,
+                                int gov_9980);
+
+/* Orig Art_PortDataToBitmap @ 10b8:0e36 -> art_port_data_to_bitmap. PARTIAL
+ * OS-free payload probe bridge: even (art_port_is_even_width) + padded
+ * (art_port_padded_width) + alloc (art_port_alloc_size) + path
+ * (art_port_path_kind) + free (art_port_frees_bits) probed 1:1 (BAD_DATA on
+ * mismatch, no fake); device tail (GfxPort_AllocBitmap @ 10d0:0cfa even
+ * bitmap + BITBLT rop 0xcc0020 SRCCOPY rows + SETBITMAPBITS + CREATECOMPAT-
+ * IBLEDC + SELECTOBJECT/DELETEOBJECT/DELETEDC + GLOBALLOCK/UNLOCK/FREE +
+ * SETRECT 0,0,w,h clip at +0x20) stays UNSUPPORTED. w/h <= 0 -> RANGE.
+ * Ref unpacked/civ.exe read-only. */
+civ_error_t art_port_data_to_bitmap(int w, int h, int mono, int free_flag);
 
 #endif /* CIVLIN_VIDEO_H */

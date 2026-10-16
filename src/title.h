@@ -46,36 +46,26 @@
  * exit(), read-only. */
 civ_error_t title_play_intro(void);
 
-/* Orig: FUN_1030_0000 @ 1030:0000 -> Pic_PlayShared (NOT Title_PlayAnimLoop).
- * MAP CORRECTION (verified: size 0x79cd ~31 KB, 16 wolajacych per task;
- * 13 verified incl. City_ShowTopFive @ 1080:099b, Unit_DoMove @ 1038:0000,
- * City_ProcessDisaster @ 1040:068e, Game score @ 1040:1137 tails,
- * 1170/1188/11b8 families): 1030:0000 is the shared PIC/modal player
- * (Dlg_CreateTracked @ 1098:124f + FILLRECT/FRAMERECT + internal
- * 1030:79ce/7c28/... helpers), NOT the pre-menu intro loop. CONFIRMED
- * 2026-10-16: Ghidra name is Pic_PlayShared @ 1030:0000 with params
- * (city_idx, mode) — mode 1 opens the modal city view (Dlg_CreateTracked @
- * 1098:124f dialog 0x94 + Gfx_StoreDC @ 1098:1104 save first), mode 0 runs
- * the background sim tick (incl. the caravan prod-0x1b
- * Trade_DeliverCaravanGoods @ 1038:0d09 call); 13-caller fan-out
- * re-verified (City_DoRevolt @ 11b8:0f26, City_ProcessDisaster @ 1040:068e,
- * City_ShowCensusReport @ 1018:1d5b, City_ShowTopFive @ 1080:099b,
- * Demo_ShowDemographics @ 1188:123a, 1018:0be0, 1018:208f, 1040:1137,
- * 1170:0000, 1170:05af, 1170:05ca, 1188:0db8, Unit_DoMove @ 1038:0000);
- * no Art_LoadFrameData @ 10b8:079d frame path inside (city GDI tiles, not
- * RSC frames). Linux owner is pic_play_shared (see game.h/game.c); the
- * mode split itself is LIVE there (pic_mode_is_modal/pic_mode_is_sim).
- * This title_play_anim_loop symbol keeps the intro shape (frames +
- * Sound_PlayId(CIV_SOUND_OPENING) + title_poll_skip()) until the true
- * intro entry is isolated — it is NOT the Orig 1030:0000 mapping. PARTIAL:
- * OS-free intro gates below are LIVE 1:1 (title_dialog_is_intro 0x94 +
- * title_seq_is_earth 0x91e + title_intro_should_continue adv==0, ref
- * unpacked/civ.exe Main_RunStartupSequence @ 11e0:0000 + Anim_OpenSequence
- * @ 10b0:008a / Anim_AdvanceFrames @ 10b0:0461); the Win16 modal tails
- * (Dlg_CreateTracked @ 1098:124f / Dlg_DestroyTracked @ 1098:1612 +
- * Gfx_StoreDC @ 1098:1104 + Anim_CloseSequence @ 10b0:0287 +
- * Anim_RebaseClock @ 10b0:005b owners in dialog.c/video.c) stay TODO ->
- * CIV_ERR_UNSUPPORTED. */
+/* Orig Main_RunStartupSequence @ 11e0:0000 loop#1 -> title_play_anim_loop
+ * (intro pump shape, NOT the shared PIC player).
+ * MAP CORRECTION (verified: FUN_1030_0000 size 0x79cd ~31 KB, 16
+ * wolajacych per task is the shared PIC/modal player with params
+ * (city_idx, mode): mode 1 modal city view, mode 0 background sim tick;
+ * Linux owner is pic_play_shared in game.h/game.c with the LIVE mode
+ * split pic_mode_is_modal/pic_mode_is_sim + pic_shared_city_ok gate).
+ * This title_play_anim_loop symbol keeps ONLY the intro shape (frames +
+ * Sound_PlayId(CIV_SOUND_OPENING) + title_poll_skip()) for loop#1
+ * (Dlg_CreateTracked @ 1098:124f dialog 0x94 + Anim_OpenSequence @
+ * 10b0:008a / Anim_AdvanceFrames @ 10b0:0461 pump + Anim_CloseSequence @
+ * 10b0:0287 + Anim_RebaseClock @ 10b0:005b + Gfx_StoreDC @ 1098:1104
+ * save-first); it is NOT the Orig 1030:0000 mapping (no city/mode params
+ * here, no 1030 tile helpers inside). PARTIAL: OS-free intro gates below
+ * are LIVE 1:1 (title_dialog_is_intro 0x94 + title_seq_is_earth 0x91e +
+ * title_intro_should_continue adv==0, ref unpacked/civ.exe 832512 B NE
+ * Windows 3.x read-only); the Win16 modal tails (Dlg_CreateTracked @
+ * 1098:124f / Dlg_DestroyTracked @ 1098:1612 + Gfx_StoreDC @ 1098:1104 +
+ * Anim_CloseSequence @ 10b0:0287 + Anim_RebaseClock @ 10b0:005b owners in
+ * dialog.c/video.c) stay TODO -> CIV_ERR_UNSUPPORTED. */
 civ_error_t title_play_anim_loop(void);
 
 /* Orig: FUN_1018_xxxx @ 1018:xxxx -> title_decode_frame (Title_DecodeFrame).

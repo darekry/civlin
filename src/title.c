@@ -193,21 +193,20 @@ civ_error_t title_play_intro(void)
 
 civ_error_t title_play_anim_loop(void)
 {
-    /* Orig FUN_1030_0000 @ 1030:0000 = Pic_PlayShared (~31 KB, size 0x79cd,
-     * 16 wolajacych per task; shared PIC/modal player, NOT the intro loop
-     * — see title.h map correction; Linux owner pic_play_shared in
-     * game.h/game.c with the LIVE mode split in
-     * pic_mode_is_modal/pic_mode_is_sim). PARTIAL: OS-free intro gates
-     * below are LIVE 1:1 (ref unpacked/civ.exe Main_RunStartupSequence @
-     * 11e0:0000 + Anim_OpenSequence @ 10b0:008a / Anim_AdvanceFrames @
-     * 10b0:0461 decompiles); the Win16 modal tails stay stubbed.
-     * TODO: Orig Pic_PlayShared @ 1030:0000 modal tails (Dlg_CreateTracked
-     * @ 1098:124f dialog 0x94 + Dlg_DestroyTracked @ 1098:1612 +
-     * Gfx_StoreDC @ 1098:1104 save-first + Anim_CloseSequence @ 10b0:0287
-     * + Anim_RebaseClock @ 10b0:005b owners in dialog.c/video.c + GDI
-     * FILLRECT/FRAMERECT + 1030:79ce/7c28/... tile helpers) -> SDL3 bridge
-     * TBD. Frame present (Win16) -> CIV_ERR_UNSUPPORTED. SDL3 intro loop
-     * lives in title_play_intro_sdl() below. */
+    /* Orig Main_RunStartupSequence @ 11e0:0000 loop#1 intro pump (NOT the
+     * shared PIC player: Pic_PlayShared lives in game.h/game.c with the
+     * LIVE pic_mode_is_modal/pic_mode_is_sim + pic_shared_city_ok gates;
+     * no city/mode params here). PARTIAL: OS-free intro gates below are
+     * LIVE 1:1 (ref unpacked/civ.exe 832512 B NE Windows 3.x read-only +
+     * Anim_OpenSequence @ 10b0:008a / Anim_AdvanceFrames @ 10b0:0461
+     * decompiles); the Win16 modal tails stay stubbed.
+     * TODO: Orig Main_RunStartupSequence @ 11e0:0000 loop#1 tails
+     * (Dlg_CreateTracked @ 1098:124f dialog 0x94 + Dlg_DestroyTracked @
+     * 1098:1612 + Gfx_StoreDC @ 1098:1104 save-first + Anim_CloseSequence
+     * @ 10b0:0287 + Anim_RebaseClock @ 10b0:005b owners in dialog.c/video.c
+     * + GDI FILLRECT/FRAMERECT) -> SDL3 bridge TBD. Frame present (Win16)
+     * -> CIV_ERR_UNSUPPORTED. SDL3 intro loop lives in
+     * title_play_intro_sdl() below. */
     int is_intro_host;
     int is_earth_seq;
     int keep_on_busy;

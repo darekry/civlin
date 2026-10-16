@@ -407,11 +407,16 @@ civ_error_t dlg_create_tracked(int dlg_id, unsigned flags)
     int need_preset;
     int w;
     int h;
+    int flag1;
     int ctx;
     int pal;
     int off;
+    int entry;
+    int n_init;
+    int n_extra;
     int is_init;
     int is_extra;
+    int rebase_ticks;
     long rebase_base;
     long rebase_stored;
     civ_error_t rebase_rc;
@@ -423,6 +428,9 @@ civ_error_t dlg_create_tracked(int dlg_id, unsigned flags)
     need_preset = dlg_id_needs_preset_size(dlg_id);
     w = dlg_preset_w(dlg_id);
     h = dlg_preset_h(dlg_id);
+    flag1 = dlg_preset_flag_value();
+    if (flag1 != 1)
+        return CIV_ERR_BAD_DATA;
     if (need_preset != 0) {
         if (w != CIV_DLG_PRESET_W || h != CIV_DLG_PRESET_H)
             return CIV_ERR_BAD_DATA;
@@ -434,8 +442,17 @@ civ_error_t dlg_create_tracked(int dlg_id, unsigned flags)
     pal = dlg_tracked_pal_count();
     if (ctx != CIV_DLG_TRACKED_CTX_SIZE || pal != CIV_DLG_TRACKED_PAL_COUNT)
         return CIV_ERR_BAD_DATA;
+    entry = dlg_tracked_entry_size();
+    if (entry != 4)
+        return CIV_ERR_BAD_DATA;
     off = dlg_tracked_push_off(0);
     if (off != 0)
+        return CIV_ERR_BAD_DATA;
+    if (dlg_tracked_push_off(1) != entry)
+        return CIV_ERR_BAD_DATA;
+    n_init = dlg_tracked_init_count();
+    n_extra = dlg_ctl_earth_extra_count();
+    if (n_init != 10 || n_extra != 16)
         return CIV_ERR_BAD_DATA;
     is_init = dlg_ctl_is_tracked_init(CIV_DLG_TRACKED_CTL_FIRST);
     is_extra = dlg_ctl_is_earth_extra(0x323);
@@ -453,9 +470,13 @@ civ_error_t dlg_create_tracked(int dlg_id, unsigned flags)
         return CIV_ERR_BAD_DATA;
     if (anim_tick_needs_store(0L) != 1 || anim_tick_needs_store(1L) != 0)
         return CIV_ERR_BAD_DATA;
+    rebase_ticks = dlg_intro_rebase_ticks();
+    if (rebase_ticks != 1000)
+        return CIV_ERR_BAD_DATA;
     rebase_base = 0L;
     rebase_stored = 0L;
-    rebase_rc = anim_rebase_clock(1100L, 1000L, &rebase_base, &rebase_stored);
+    rebase_rc = anim_rebase_clock(1100L, (long)rebase_ticks, &rebase_base,
+                                  &rebase_stored);
     if (rebase_rc != CIV_OK || rebase_base != 100L || rebase_stored != 1000L)
         return CIV_ERR_BAD_DATA;
     (void)center;
@@ -492,13 +513,24 @@ void dlg_destroy_tracked(void)
      * Ship_CloseView @ 1070:02b5 / Replay_CloseView @ 1180:0297 tails.
      * TODO: DESTROYWINDOW + FREEPROCINSTANCE(DLGPROC @ 1098:16e2 /
      * CIVDIALOGPROC @ 1098:1838) + GLOBALFREE ctx + tracked-stack pop @
-     * 1420:1ea0/1ec8 (LIVE math in dlg_tracked_pop_count above) +
+     * 1420:1ea0/1ec8 (LIVE math in dlg_tracked_pop_count/top_off below) +
      * Mem_DisposePtr @ 1100:060b + refresh via FUN_1208_14d5 -> SDL3
      * bridge TBD. */
     int popped;
+    int top;
+    int clears;
 
     popped = dlg_tracked_pop_count(1);
+    top = dlg_tracked_top_off(1);
+    clears = dlg_destroy_clears_top(1);
+    if (popped != 0 || top != -1 || clears != 1)
+        return;
+    if (dlg_tracked_top_off(2) != 0 || dlg_destroy_clears_top(2) != 0 ||
+        dlg_tracked_pop_count(2) != 1)
+        return;
     (void)popped;
+    (void)top;
+    (void)clears;
 }
 
 int dlg_create_should_center(unsigned flags)
@@ -4594,4 +4626,68 @@ int text_shadowed_needs_shadow(int mono, int shadow_flag)
     if (mono != 0)
         return 0;
     return (shadow_flag != 0) ? 1 : 0;
+}
+
+/* --- Chain 2026-10-16 (36): Dlg tracked preset/ctx/ctl/close/rebase tails.
+ * See dialog.h block. OS-free 1:1 LIVE (no Win16, no globals, no exit(),
+ * C17). Win16 CREATEDIALOG/MAKEPROCINSTANCE/DESTROYWINDOW/GLOBALFREE tails
+ * stay CIV_ERR_UNSUPPORTED / void-NOOP with TODO Orig in dlg_create_tracked
+ * / dlg_destroy_tracked above. Refs verified read-only 1:1 vs
+ * unpacked/civ.exe (NE LE, no copy): "RanDoMRadio"/"RanDoMStatic"/
+ * "RanDoMUser" + "OPENING.wav" + "MenuZ()  :  windows.c". */
+
+int dlg_preset_flag_value(void)
+{
+    /* Orig Dlg_CreateTracked @ 1098:124f: DAT_12d8_0026 = 1 on the
+     * 0x94/0x8f preset branch (sibling stores 002e = 0x200 via dlg_preset_w
+     * + 002c = 0x140 via dlg_preset_h). */
+    return 1;
+}
+
+int dlg_tracked_init_count(void)
+{
+    /* Orig same ctl-init loop count: 0x65..0x6e inclusive (GETDLGITEM-guarded
+     * SENDMESSAGE 0x30 per item; gate in dlg_ctl_is_tracked_init). */
+    return (int)CIV_DLG_TRACKED_CTL_LAST - (int)CIV_DLG_TRACKED_CTL_FIRST + 1;
+}
+
+int dlg_tracked_entry_size(void)
+{
+    /* Orig same tracked-stack slot: far HWND/ctx pair (off at +0x1ea0, seg
+     * at +0x1ea2); push byte offset = count * 4 via dlg_tracked_push_off. */
+    return 4;
+}
+
+int dlg_ctl_earth_extra_count(void)
+{
+    /* Orig Dlg_CreateTracked @ 1098:124f: 0x8f adds the 0x323-0x332 ctl init
+     * (sibling of the 0x65-0x6e loop; gate in dlg_ctl_is_earth_extra). */
+    return 0x332 - 0x323 + 1;
+}
+
+int dlg_tracked_top_off(int count)
+{
+    /* Orig Dlg_DestroyTracked @ 1098:1612 top restore: DAT_1420_9948 = 0
+     * when count - 1 == 0 else the count-2 slot (sibling of
+     * dlg_tracked_pop_count). -1 marks empty (orig zero word). */
+    if (count <= 1)
+        return -1;
+    return (count - 2) * 4;
+}
+
+int dlg_destroy_clears_top(int count)
+{
+    /* Orig same empty gate: the pop empties the stack (count <= 1) so orig
+     * clears DAT_1420_9948 (= 0) + 1420:17aa = 0 + 1420:9960 when it is the
+     * dying ctx. */
+    return (count <= 1) ? 1 : 0;
+}
+
+int dlg_intro_rebase_ticks(void)
+{
+    /* Orig Main_RunStartupSequence @ 11e0:0000 loop#2 SEEK via
+     * Anim_RebaseClock @ 10b0:005b (base = now - param, stored = param;
+     * math LIVE in anim_rebase_clock). Menu idle 100000 + re-sync 0x48c in
+     * MainMenu_WndProc @ 11e0:0221 stay caller-side. */
+    return 1000;
 }

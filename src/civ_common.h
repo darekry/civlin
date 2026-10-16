@@ -1,6 +1,13 @@
 /* CivLin common types + Ghidra address annotations.
  *
- * Rules: C17, no exit() in libs, no globals, read-only vs civ1win/unpacked.
+ * Rules (2026-10-16 odblokowanie): C17, no exit() in libs, read-only vs
+ * civ1win/unpacked. Stan gry DOZWOLONY i WYMAGANY 1:1: DGROUP (DAT_1420_*,
+ * DAT_12d8_*, DAT_13f8_0000 shared-static, stos dialogow, bufory map/save,
+ * palety) przenosimy na jawne konteksty (struct + out/cap) albo — gdy
+ * oryginal uzywal proces-global/static o semantyce nadpisywania — na
+ * module-static z ta sama semantyke + adnotacja Orig adresu. NIE stubujemy
+ * tylko dlatego, ze oryginal uzyl globala/__far/segmentu. STUB/PARTIAL
+ * tylko dla mechaniki OS (USER/GDI/KERNEL plumbing, szczegoly w win16.h).
  * Ghidra target: civ.exe (NE Win3.x, Borland C++ 1991), program "civ.exe".
  */
 #ifndef CIVLIN_COMMON_H
