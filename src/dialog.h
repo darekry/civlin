@@ -672,4 +672,144 @@ civ_error_t dialog_get_item_rect(int dlg_id, int item_id, dlg_rect_t *out);
  * Dlg_DestroyTracked + Dialog_RefreshViews @ 1220:0eb8). SDL modal TBD. */
 civ_error_t dialog_show_message(const char *text, int *out_choice);
 
+/* --- Dialog string lists (2026-10-16) ---
+ * Anchors (civ.exe, x86:LE:16:Protected Mode):
+ *   Text_DrawDlgItemString @ 1098:2796 (Dialog_GetItemRect @ 1100:03ff
+ *     into local_10 + source choice + Text_SetDlgItemPascal @ 1100:0947:
+ *     param_5 == 0 ? (param_6 != 0 ? Util_StrCopy @ 1000:36b2 +
+ *     FUN_1100_0000 : empty local_110) : ResMgr_GetString @ 1100:078a into
+ *     local_110; sole caller FUN_10f0_0066 @ 10f0:0066).
+ *   Text_SetDlgItemPascal @ 1100:0947 (Util_PascalToCStr @ 1100:0053 on
+ *     the local_110 Pascal buffer + SETWINDOWTEXT on the item handle;
+ *     sole caller Text_DrawDlgItemString above).
+ *   Text_FillResStringList @ 1098:1f4f (ResMgr_GetString @ 1100:078a per
+ *     id + Util_PascalToCStr @ 1100:0053 + LSTRLEN empty check + pointer
+ *     pack: *out_ptrs = entry, *out_ptrs += 4, cursor += len+1, count++;
+ *     returns NULL on the first empty string, else the tail cursor; sole
+ *     caller Dialog_InitResStringTables @ 1068:0295).
+ *   Dialog_InitResStringTables @ 1068:0295 (mem_alloc_lock 0x7fff +
+ *     Text_FillResStringList x5 for Res 0x82 tech 1..0x43 / 0x83 build
+ *     2..999 / 0x84 produce 1..999 / 0x85 1..0xc / 0x86 1..999 into
+ *     DAT_1288_* tables + FUN_1098_1909 dialog 0x82 show; no callers
+ *     found = init-time once).
+ *   Main_ShowResString @ 1008:0add (ResMgr_GetString @ 1100:078a into
+ *     local_1e + Main_EnqueueResString @ 1008:0a8d queue; no callers
+ *     found = message-queue producer for the 12b0:004c ring).
+ *   Main_EnqueueResString @ 1008:0a8d (if DAT_12b0_004c < 10:
+ *     queue[DAT_12d8_0024-ish @ 1420:4473+0x71+count*2] = id, count++).
+ * Who fills dialog lists: Dialog_InitResStringTables (wizard/menu/city
+ * tables 0x82..0x86 at init) + Text_DrawDlgItemString (per-item text at
+ * draw time, incl. wizard screens via NewGame_Wizard @ 10e8:0000 and
+ * MainMenu via 11e0:0221 through Dialog_MenuZ_Modal @ 1220:0156).
+ * OS-free cursor/queue/source math below is LIVE 1:1 on explicit params
+ * (no Win16, no globals, read-only except outs); ResMgr string fetch +
+ * GDI handles stay STUB with TODO Orig. */
+
+/* Res list ids filled by Dialog_InitResStringTables @ 1068:0295. */
+#define CIV_RES_TECH_LIST 0x82
+#define CIV_RES_BUILD_LIST 0x83
+#define CIV_RES_PRODUCE_LIST 0x84
+#define CIV_RES_GOV_LIST 0x85
+#define CIV_RES_UNIT_LIST 0x86
+/* Main_EnqueueResString @ 1008:0a8d ring cap (DAT_12b0_004c < 10). */
+#define CIV_RES_QUEUE_MAX 10
+
+/* Orig Text_FillResStringList @ 1098:1f4f cursor half ->
+ * text_res_list_advance. 1:1 pointer-pack step (*out_ptrs += 4,
+ * cursor += entry_len+1 for the NUL): next_off = cur_off + entry_len + 1.
+ * Returns CIV_OK, NOENT on NULL next_off, RANGE on overflow. The
+ * ResMgr_GetString @ 1100:078a + Util_PascalToCStr @ 1100:0053 fetch +
+ * LSTRLEN empty-stop stays in the text_fill_res_string_list STUB below
+ * (needs live ResMgr blobs). No globals, no exit(). */
+civ_error_t text_res_list_advance(size_t cur_off, size_t entry_len,
+                                  size_t *next_off);
+
+/* Orig Main_EnqueueResString @ 1008:0a8d -> main_enqueue_res_string.
+ * 1:1 ring push (cap CIV_RES_QUEUE_MAX): when *count < 10,
+ * queue[*count] = id and (*count)++. Returns 1 when queued, 0 when the
+ * ring is full (orig silently drops), -1 on NULL queue/count. No Win16,
+ * no globals, no exit(). */
+int main_enqueue_res_string(int *queue, size_t *count, int id);
+
+/* --- Res-string tables + queue (2026-10-16) ---
+ * Anchors (civ.exe, x86:LE:16:Protected Mode):
+ *   Dialog_InitResStringTables @ 1068:0295 (mem_alloc_lock 0x7fff; switch
+ *     on param_1: 0 fills all five lists below in order, 1..5 fills one;
+ *     each via Text_FillResStringList @ 1098:1f4f (Res 0x82 tech 1..0x43
+ *     / 0x83 build 2..999 / 0x84 produce 1..999 / 0x85 gov 1..0x0c /
+ *     0x86 unit 1..999) into the DAT_1288_* tables; then FUN_1098_1909
+ *     dialog 0x82 show. No callers found in the NE xref scan = init-time
+ *     once; caller TBD (candidate WinMain @ 1008:0000 family /
+ *     Game_InitGlobalTables @ 11e8:0337 string-table step, NOT proven —
+ *     never claimed as boot/wizard until the call site lands)).
+ *   Main_EnqueueResString @ 1008:0a8d (if DAT_12b0_004c < 10:
+ *     queue[DAT_1420_4473+0x71+count*2] = id, count++; ring cap 10,
+ *     full ring silently drops).
+ *   Main_ShowResString @ 1008:0add (ResMgr_GetString @ 1100:078a into
+ *     local_1e + Main_EnqueueResString queue; no callers found =
+ *     message-queue producer for the 12b0:004c ring).
+ *   Main_PumpMessage @ 1098:02d1 (PEEKMESSAGE pump: WM_CHAR 0x102 ->
+ *     Main_EnqueueResString direct; WM_KEYDOWN 0x100 via Main_KeyToResChar
+ *     @ 1208:0000 (0x21..0x28 key map) -> enqueue; else
+ *     TRANSLATE/ DISPATCHMESSAGE; TRANSLATEACCELERATOR + shutdown tail
+ *     via WinMain_Shutdown @ 1008:0329; sole caller FUN_11e8_02fb).
+ * Who consumes the queue: TBD (no NE xrefs to the 12b0:004c count or
+ * the 1420:4473 queue slots beyond the two producers; NOT claimed as
+ * Text_DrawDlgItemString until the read site lands). Reset path is
+ * sys_drain_input @ 11f0:4ea0 (clears 12b0:004c alongside 1420:1d44).
+ * OS-free spec/queue math below is LIVE 1:1 on explicit params (no
+ * Win16, no globals, read-only except outs); ResMgr fetch + heap +
+ * dialog handles stay STUB with TODO Orig. */
+
+/* Orig Dialog_InitResStringTables @ 1068:0295 switch half ->
+ * dialog_res_list_spec. 1:1 table select: 1 -> (0x82,1,0x43 tech),
+ * 2 -> (0x83,2,999 build), 3 -> (0x84,1,999 produce), 4 -> (0x85,1,0x0c
+ * gov), 5 -> (0x86,1,999 unit). NOENT on any NULL out, RANGE on index
+ * outside 1..5, else CIV_OK. No globals, no exit(). */
+civ_error_t dialog_res_list_spec(int index, int *res_id, int *first,
+                                 int *last);
+
+/* Orig Main_EnqueueResString @ 1008:0a8d gate half -> main_res_queue_full.
+ * 1:1 of the DAT_12b0_004c < 10 gate (CIV_RES_QUEUE_MAX): nonzero (1)
+ * when count >= 10 (orig silently drops), 0 otherwise. */
+int main_res_queue_full(size_t count);
+
+/* Orig Dialog_InitResStringTables @ 1068:0295 -> dialog_init_res_string_tables.
+ * Table fill driver (spec via dialog_res_list_spec above + pack via
+ * text_fill_res_string_list). Needs mem_alloc_lock 0x7fff heap + live
+ * ResMgr blobs (see rsc_loader.h res_get_string_copy STUB) + the
+ * FUN_1098_1909 dialog-show tail -> STUB. index 0 = all five tables. */
+civ_error_t dialog_init_res_string_tables(int index);
+
+/* Orig Main_ShowResString @ 1008:0add -> main_show_res_string.
+ * Per-string producer (ResMgr_GetString @ 1100:078a fetch + enqueue via
+ * main_enqueue_res_string above). Needs live ResMgr blobs -> STUB. */
+civ_error_t main_show_res_string(int id);
+
+/* Orig Text_DrawDlgItemString @ 1098:2796 source choice ->
+ * text_dlg_string_source. 1:1 dispatch on (res_id, fallback): res_id !=
+ * 0 -> 2 (ResMgr_GetString @ 1100:078a path); res_id == 0 && fallback !=
+ * 0 -> 1 (Util_StrCopy + FUN_1100_0000 path); else 0 (empty local_110,
+ * still via Text_SetDlgItemPascal @ 1100:0947). Returns 0/1/2. No
+ * globals. */
+int text_dlg_string_source(int res_id, long fallback);
+
+/* Orig Text_SetDlgItemPascal @ 1100:0947 handle tail ->
+ * text_set_dlg_item_text. Pascal->C half lives in util_pascal_to_c @
+ * 1100:0053 (LIVE); SETWINDOWTEXT handle tail -> SDL TBD (STUB). */
+civ_error_t text_set_dlg_item_text(int dlg_id, int item_id, const char *text);
+
+/* Orig Text_DrawDlgItemString @ 1098:2796 -> text_draw_dlg_item_string.
+ * Item-rect (Dialog_GetItemRect @ 1100:03ff, LIVE math in
+ * dialog_client_rect/dialog_dlgunits_to_pixels) + source choice (above)
+ * + Text_SetDlgItemPascal @ 1100:0947. GDI handle tail -> STUB. */
+civ_error_t text_draw_dlg_item_string(int dlg_id, int item_id, int res_id,
+                                      long fallback);
+
+/* Orig Text_FillResStringList @ 1098:1f4f -> text_fill_res_string_list.
+ * Pack loop (ResMgr_GetString per id + PascalToC + LSTRLEN empty-stop +
+ * cursor pack via text_res_list_advance above). Needs live ResMgr blobs
+ * (see rsc_loader.h res_get_string_copy STUB) -> STUB. */
+civ_error_t text_fill_res_string_list(int res_id, int first, int last);
+
 #endif /* CIVLIN_DIALOG_H */

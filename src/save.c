@@ -1298,3 +1298,254 @@ civ_error_t save_marshal_fields_live(uint8_t *image, size_t cap,
         return CIV_ERR_BAD_DATA;
     return CIV_OK;
 }
+
+/* --- Replay log (segment 1180, 2026-10-16): OS-free format/count math.
+ * No globals, no exit(), C17. GDI/file/dialog tails stay STUB below. */
+
+int replay_year_from_turn(int turn)
+{
+    /* Orig Replay_YearFromTurn @ 1180:0f7c. Decompiler ladder 1:1
+     * (signed compares, int math). */
+    if (turn < 0xfb)
+        return turn * 0x14 + -4000;
+    if (turn + -0xfa < 0x33)
+        return (turn + -0xfa) * 10 + 1000;
+    if (turn + -300 < 0x33)
+        return (turn + -300) * 5 + 0x5dc;
+    if (turn + -0x15e < 0x33)
+        return (turn + -0x15e) * 2 + 0x6d6;
+    return turn + 0x5aa;
+}
+
+civ_error_t replay_append_log(uint8_t *buf, size_t cap, size_t *count,
+                              int kind, int turn, const uint8_t *payload,
+                              unsigned payload_len)
+{
+    /* Orig Replay_AppendLog @ 11c0:3beb. Decompiler: gate
+     * DAT_1388_0000 + param_2 + 2 < 0x1000, head = kind*0x10 +
+     * (turn>>8), low = turn, then param_2 payload bytes 1:1 with
+     * per-count branches (0/1/2/3 extra bytes). */
+    size_t need;
+    size_t cur;
+    unsigned k;
+
+    if (!buf || !count)
+        return CIV_ERR_NOENT;
+    if (!payload && payload_len != 0)
+        return CIV_ERR_NOENT;
+    if (kind < 0 || kind > 15)
+        return CIV_ERR_RANGE;
+    cur = *count;
+    if (cur > cap)
+        return CIV_ERR_RANGE;
+    need = (size_t)2u + (size_t)payload_len;
+    if (cur + need > cap)
+        return CIV_ERR_TRUNCATED;
+    if (cur + need >= (size_t)CIV_REPLAY_MAX_BYTES)
+        return CIV_ERR_TRUNCATED;
+    buf[cur] = (uint8_t)((unsigned)kind * 0x10u +
+        ((unsigned)((turn >> 8) & 0x0f)));
+    buf[cur + 1u] = (uint8_t)(turn & 0xff);
+    for (k = 0; k < payload_len; k++)
+        buf[cur + 2u + (size_t)k] = payload[k];
+    *count = cur + need;
+    return CIV_OK;
+}
+
+int replay_find_empty_slot(const int *owners, int n)
+{
+    /* Orig Replay_FindEmptySlot @ 1180:0fe5 scan half (0x80 slots @
+     * 1390:00a0, -1 sentinel; the 0x2a0/0x1a0/0x00a0 writes land once the
+     * caller passes the found index back with coords). */
+    int i;
+
+    if (!owners || n <= 0)
+        return -1;
+    for (i = 0; i < n; i++) {
+        if (owners[i] == (int)CIV_REPLAY_EMPTY)
+            return i;
+    }
+    return -1;
+}
+
+int replay_update_slot_owner(int *owners, const int *xs, const int *ys, int n,
+                             int x, int y, int owner)
+{
+    /* Orig Replay_UpdateSlotOwner @ 1180:1044 scan half (match
+     * 0x2a0==x && 0x1a0==y, then 0x00a0 = owner). */
+    int i;
+
+    if (!owners || !xs || !ys || n <= 0)
+        return -1;
+    for (i = 0; i < n; i++) {
+        if (xs[i] == x && ys[i] == y) {
+            owners[i] = owner;
+            return i;
+        }
+    }
+    return -1;
+}
+
+/* --- Replay map-tile (2026-10-16): OS-free format/score math 1:1. --- */
+
+static int replay_wrap_step_dist(int x1, int x2, int y1, int y2)
+{
+    /* Local twin of map_wrap_step_dist @ 11c8:02ec (see map.h; duplicated
+     * here to keep save/map decoupled for the parallel rewrite, same as
+     * the tile_move_cost/unit_move_cost split): dx = |x1-x2| wrapped at
+     * the 0x50 game-map width (dx > 0x28 -> 0x50-dx), dy = |y1-y2|
+     * unwrapped, then hi + lo/2 (Map_StepDist @ 11c8:025d). */
+    int dx = x1 - x2;
+    int dy = y1 - y2;
+    int hi;
+    int lo;
+
+    dx = dx < 0 ? -dx : dx;
+    if (dx > 0x28)
+        dx = 0x50 - dx;
+    dy = dy < 0 ? -dy : dy;
+    hi = dx > dy ? dx : dy;
+    lo = dx < dy ? dx : dy;
+    return hi + lo / 2;
+}
+
+int replay_find_nearest_slot(const int *owners, const int *xs,
+                             const int *ys, int n, int x, int y,
+                             int *dist_out)
+{
+    /* Orig Replay_FindNearestSlot @ 1180:1096. Decompiler: DAT_1420_b1a4
+     * = 999; for i < 0x80: skip owners[i] == -1; d = Map_WrapStepDist(x,
+     * xs[i], y, ys[i]); if (d < best) { best = d; slot = i; }. Strict <
+     * keeps ties at the lower index. Orig leaves slot undefined when no
+     * slot qualifies; Linux returns -1 with best 999 (orig sentinel). */
+    int best = 999;
+    int slot = -1;
+    int i;
+
+    if (dist_out)
+        *dist_out = 999;
+    if (!owners || !xs || !ys || n <= 0)
+        return -1;
+    for (i = 0; i < n; i++) {
+        int d;
+
+        if (owners[i] == (int)CIV_REPLAY_EMPTY)
+            continue;
+        d = replay_wrap_step_dist(x, xs[i], y, ys[i]);
+        if (d < best) {
+            best = d;
+            slot = i;
+        }
+    }
+    if (dist_out)
+        *dist_out = best;
+    return slot;
+}
+
+civ_error_t replay_tile_window(int x, int y, int *x0, int *x1, int *y0,
+                               int *y1)
+{
+    /* Orig Replay_RefreshMapTile @ 1180:110c head. Decompiler:
+     * local_a = Util_Clamp(x-5,0,0x50), local_e = Util_Clamp(x+5,0,0x50),
+     * local_c = Util_Clamp(y-5,2,0x31), local_10 = Util_Clamp(y+5,2,0x31)
+     * (game map 0x50 x 0x32 at rows 2..0x31; DAT_1390_009c == 4 skips the
+     * whole repaint). Inline clamp (sys.h util_clamp twin) keeps save.c
+     * free of the sys dependency; bounds match the decompiler. */
+    if (!x0 || !x1 || !y0 || !y1)
+        return CIV_ERR_NOENT;
+    *x0 = x - 5 < 0 ? 0 : (x - 5 > 0x50 ? 0x50 : x - 5);
+    *x1 = x + 5 < 0 ? 0 : (x + 5 > 0x50 ? 0x50 : x + 5);
+    *y0 = y - 5 < 2 ? 2 : (y - 5 > 0x31 ? 0x31 : y - 5);
+    *y1 = y + 5 < 2 ? 2 : (y + 5 > 0x31 ? 0x31 : y + 5);
+    return CIV_OK;
+}
+
+char replay_map_text_cell(int tile_is_ocean, int has_city,
+                          int combined_lo_bit)
+{
+    /* Orig Replay_DumpMapText @ 1180:137f cell. Decompiler: tile == 10
+     * (Map_IsSeaLand @ 1110:16c0) -> 0x20, else 0x2e; city scan hit ->
+     * (combined & 1) == 0 ? 0x2b : 0x2a (Map 1110:199b combined, low bit
+     * test (uVar3 & 1) == 0). */
+    char c;
+
+    if (tile_is_ocean)
+        c = 0x20;
+    else
+        c = 0x2e;
+    if (has_city)
+        c = (combined_lo_bit & 1) == 0 ? '+' : '*';
+    return c;
+}
+
+int replay_mode_is_record(int mode)
+{
+    /* Orig Replay_OpenOrPlay @ 1180:0000: DAT_1390_009c == 3 ->
+     * record-to-file branch (Save_SaveDialog + save_file_open +
+     * Replay_DumpMapText, closed after Replay_PlayLog). */
+    return mode == 3;
+}
+
+int replay_mode_needs_view(int mode)
+{
+    /* Orig Replay_PromptMode @ 1180:017a: DAT_1390_009c != 0 ->
+     * Dlg_CreateTracked view + GfxPort_Create; 0 cancels before it. */
+    return mode != 0;
+}
+
+int replay_entry_len(int kind)
+{
+    /* Orig Replay_PlayLog @ 1180:02d3 framing (iVar6 - iVar7 deltas):
+     * 1/9: +6 total = 2 framing + 4 payload; 2/3: +3 = 2+1; 5/6/8/10:
+     * +4 = 2+2; 0xb: +5 = 2+3; 0xd: +4 = 2+2; 0xc variable. */
+    switch (kind) {
+    case 1:
+    case 9:
+        return 4;
+    case 2:
+    case 3:
+        return 1;
+    case 5:
+    case 6:
+    case 8:
+    case 10:
+    case 0x0d:
+        return 2;
+    case 0x0b:
+        return 3;
+    default:
+        return -1;
+    }
+}
+
+civ_error_t replay_show_entry(int entry_civ, int player_civ, int mode)
+{
+    (void)entry_civ;
+    (void)player_civ;
+    (void)mode;
+    /* TODO: Orig Replay_ShowEntry @ 1180:0e78 (Text_SetColor @ 1098:0e0b
+     * when DAT_1390_009a == g_nPlayerCiv + file append when
+     * DAT_1390_009c == 3 via handle @ 0xb1a6 + FUN_11e8_0504/FUN_10d8_01b0
+     * blit + PresentRect). GDI/file tail -> SDL/file bridge TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t replay_open_or_play(void)
+{
+    /* TODO: Orig Replay_OpenOrPlay @ 1180:0000 (Replay_PromptMode @
+     * 1180:017a "See Replay..." dialog + mode-3 Save_SaveDialog @
+     * 1098:26d4 + save_file_open @ 1140:0139 + Replay_PlayLog @ 1180:02d3
+     * + Replay_CloseView @ 1180:0297 teardown). COMMDLG/file/dialog -> SDL
+     * bridge TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t replay_show_civ_destroyed(int civ)
+{
+    (void)civ;
+    /* TODO: Orig Replay_ShowCivDestroyed @ 1180:17e9 (Art_LoadFrameData +
+     * ResMgr_GetById 0x39d5 + Gfx_DrawTechIcon @ 11a8:0cb1 + Sound_PlayId
+     * @ 1150:00c9 + FUN_10d8_046e text + PresentRect). Frames/audio/GDI
+     * tail -> SDL bridge TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}

@@ -368,6 +368,45 @@ int sys_pump_messages(void)
     return 0;
 }
 
+civ_error_t main_pump_message(void)
+{
+    /* TODO: Orig Main_PumpMessage @ 1098:02d1 (Win16 MSG dispatcher behind
+     * Main_DrainMessages @ 11e8:02fb; WM_CHAR 0x102 -> Main_EnqueueResString
+     * @ 1008:0a8d direct, WM_KEYDOWN 0x100 via Main_KeyToResChar @ 1208:0000
+     * (main_key_to_res_char below, LIVE map) else DISPATCHMESSAGE @
+     * 1608:0140; quit via WinMain_Shutdown @ 1008:0329). Needs Win16 MSG +
+     * accel table + 12b0:0004 window. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+int main_key_to_res_char(int vkey)
+{
+    /* Orig Main_KeyToResChar @ 1208:0000 switch on the WM_KEYDOWN wParam:
+     * 0x21..0x28 -> far ptr into the 1420:142c table; Main_PumpMessage @
+     * 1098:02d1 enqueues the pointer low byte (default 1420:1400 -> 0x00
+     * = skip). Table ids read from the image (base 0x142c low 0x2c). */
+    switch (vkey) {
+    case 0x21:
+        return 0x39;
+    case 0x22:
+        return 0x33;
+    case 0x23:
+        return 0x31;
+    case 0x24:
+        return 0x37;
+    case 0x25:
+        return 0x34;
+    case 0x26:
+        return 0x38;
+    case 0x27:
+        return 0x36;
+    case 0x28:
+        return 0x32;
+    default:
+        return 0;
+    }
+}
+
 civ_error_t sys_get_client_rect(int *w_out, int *h_out)
 {
     /* Orig: FUN_1218_0956 @ 1218:0956 family -> Sys_GetClientRect (see

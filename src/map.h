@@ -119,6 +119,47 @@ civ_error_t wdwstatus_calc_upper_rect(civ_rect_t *out);
  * DAT_12d8_45fb) (second text row). */
 civ_error_t wdwstatus_calc_lower_rect(civ_rect_t *out);
 
+/* --- status dirty-flag + frame metrics (2026-10-16) ---
+ * Orig (civ.exe, x86:LE:16:Protected Mode):
+ *   WdwStatus_Refresh @ 1218:0801 head (dirty flag at +0x2c of the
+ *     GLOBALLOCK @ 1608:000c handle on ctx DAT_1420_4964: flag == 0 ->
+ *     early out with GLOBALUNLOCK @ 1608:0010, else full repaint via
+ *     GfxPort_SetActive @ 10d0:0956 + WdwStatus_CalcPanelRect @ 1218:0abf
+ *     + Status_DrawPanelFrame @ 11f8:0278 + Game_UpdateStatusPanel @
+ *     1088:13d5 + Unit_ShowInfoPopup @ 11f0:468c + PresentRect @
+ *     10d0:0854 / FUN_10d0_09a2).
+ *   WdwStatus_RequestRefresh @ 1218:063e (guard DAT_1420_4964 != 0 +
+ *     GETWINDOWRECT/GETCLIENTRECT pair, then WdwStatus_Refresh with
+ *     0x34/DC; caller of Refresh alongside WinMain @ 1008:0000).
+ *   WdwStatus_CalcUpperRect @ 1218:0956 / WdwStatus_CalcLowerRect @
+ *     1218:0a06 / WdwStatus_CalcPanelRect @ 1218:0abf shared head
+ *     (GLOBALLOCK + Util_MemCopyFar @ 1000:137f of the status-port client
+ *     rect, then the cx/cy derivation below; the three SETRECT shapes
+ *     differ per frame: upper cy+0x1e / lower cy*2+0x46,0x1e / panel
+ *     local_a-iVar2,iVar2*3+0x46, each INFLATERECT -1,-1).
+ * Relation to WdwMap/SmMap windows (map_open_* STUBs in map.c):
+ *   the status port is the third child (WdwStatus_Open @ 1218:0386)
+ *   beside WdwMap_Open @ 1208:0af1 + WdwSmMap_Open @ 1210:025b; every
+ *   view refresh funnels through Map_RefreshAllViews @ 1110:03e9 ->
+ *   Game_UpdateStatusPanel @ 1088:13d5, while WdwStatus_Refresh adds the
+ *   dirty-flag gate + Unit_ShowInfoPopup on top. The GLOBALLOCK rect
+ *   fetch + GDI blit tails stay Win16 -> STUB (map_refresh_status);
+ *   the arithmetic below is OS-free 1:1 on explicit params (no Win16,
+ *   no globals, no exit(), read-only). */
+
+/* Orig WdwStatus_Refresh @ 1218:0801 dirty gate (+0x2c flag) ->
+ * wdwstatus_is_dirty. 1:1 predicate: nonzero (1) when flag != 0 (repaint),
+ * 0 when flag == 0 (early out). Takes the flag byte explicitly. */
+int wdwstatus_is_dirty(int flag);
+
+/* Orig 1218:0956/0a06/0abf shared cx/cy head -> wdwstatus_frame_metrics.
+ * 1:1: cx = (client_w - 0x8c) / 2; cy = (client_h - 0xf0) / 4 clamped to
+ * 0..10 (orig Util_Clamp shape: >10 -> 10, <0 -> 0). client_w/h are the
+ * (right-left)/(bottom-top) spans of the GLOBALLOCK'd client rect.
+ * NOENT on NULL outs, else CIV_OK. */
+civ_error_t wdwstatus_frame_metrics(int client_w, int client_h,
+                                    int *cx_out, int *cy_out);
+
 /* Orig: FUN_1128_10de @ 1128:10de -> Path_FindCorridor.
  * Corridor pather called from unit_step_toward_goal @ 1128:0000 with a
  * 999-step budget. Params: owning civ, unit index (record at
@@ -331,5 +372,32 @@ const char *tile_type_name(int tile);
  * decompiler). Returns base cost (>= 3), -1 on NULL table or
  * cost_n <= 0. No globals, no exit(), read-only. */
 int tile_move_cost(int tile, const uint8_t *cost_table, int cost_n);
+
+/* --- Map step distance (2026-10-16) ---
+ * Anchors (civ.exe, x86:LE:16:Protected Mode):
+ *   Map_StepDist @ 11c8:025d (abs both deltas, hi = max, lo = min,
+ *     returns hi + lo/2; 2-arg Chebyshev-weighted step cost used by the
+ *     Wrap variant below).
+ *   Map_WrapStepDist @ 11c8:02ec (x delta wrapped at the 0x50 map width:
+ *     dx = |x1-x2|, if 0x28 < dx dx = 0x50-dx; dy = |y1-y2| unwrapped;
+ *     then Map_StepDist(dx,dy); sole in-tree caller Replay_FindNearestSlot
+ *     @ 1180:1096 over the 0x80 replay slots; the old game.h note tying
+ *     11c8:02ec to Unit_FindDiplomatTarget was a misread: that helper is
+ *     the explicit-params Chebyshev-min scan unit_find_diplomat_target
+ *     (no Orig change), while 11c8:02ec is this wrap distance).
+ * OS-free 1:1 on explicit coords (no globals, no exit()). Negative
+ * inputs use absolute values (orig took signed far ints and folded via
+ * (v ^ (v>>0xf)) - (v>>0xf)). */
+
+/* Orig Map_StepDist @ 11c8:025d -> map_step_dist.
+ * Returns max(|dx|,|dy|) + min(|dx|,|dy|)/2. No globals. */
+int map_step_dist(int dx, int dy);
+
+/* Orig Map_WrapStepDist @ 11c8:02ec -> map_wrap_step_dist.
+ * Wraps the x delta at CIV_MAP_WRAP_W (0x50 game-map width, cf. the
+ * 0x50 x 0x32 game map vs the 0x140 x 200 tile buffer at the top of this
+ * header); y is unwrapped. Then map_step_dist. No globals. */
+#define CIV_MAP_WRAP_W 0x50
+int map_wrap_step_dist(int x1, int x2, int y1, int y2);
 
 #endif /* CIVLIN_MAP_H */

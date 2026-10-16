@@ -1369,3 +1369,814 @@ civ_error_t city_format_name(const uint8_t *p1, const uint8_t *p2,
     }
     return CIV_OK;
 }
+
+/* --- Census / demographics / status-content (2026-10-16): OS-free 1:1.
+ * No globals, no exit(), C17. GDI/dialog tails stay STUB below. */
+
+civ_error_t city_format_census_ratio(int num, int den, char *out, size_t cap)
+{
+    /* Orig City_FormatCensusRatio @ 1018:202a. Decompiler: num < 300 ?
+     * q = (num*100)/den, r = (num*100)%den : q = (num*10)/(den/10),
+     * r = (num*10)%(den/10); then IntToDec(q) + StrAppend(24fa). The
+     * remainder r is computed but never appended (4th StrAppend arg is
+     * the far-stack slot, ignored): output is the quotient text only. */
+    int q;
+    char tmp[16];
+    size_t k = 0;
+
+    if (!out)
+        return CIV_ERR_NOENT;
+    if (cap == 0)
+        return CIV_ERR_RANGE;
+    if (den <= 0)
+        return CIV_ERR_RANGE;
+    if (num < 300) {
+        q = (num * 100) / den;
+    } else {
+        int d10 = den / 10;
+
+        if (d10 == 0)
+            return CIV_ERR_RANGE;
+        q = (num * 10) / d10;
+    }
+    (void)util_int_to_dec(tmp, q, 10);
+    for (k = 0; tmp[k] != '\0'; k++) {
+        if (k + 1u >= cap)
+            return CIV_ERR_RANGE;
+        out[k] = tmp[k];
+    }
+    if (k + 1u > cap)
+        return CIV_ERR_RANGE;
+    out[k] = '\0';
+    return CIV_OK;
+}
+
+int demo_approval(int happy, int pop)
+{
+    /* Orig Demo_ShowDemographics @ 1188:123a approval row:
+     * local_1a[civ] = (local_3a[civ] * 0x32) / local_2a[civ]. */
+    if (pop <= 0)
+        return -1;
+    return (happy * 0x32) / pop;
+}
+
+int demo_literacy(int schools, int pop, const int *tech_owned, int n_tech)
+{
+    /* Orig Demo literacy row: base = ((local_6a + pop*2)*2)/pop, then
+     * x2 per Game_PickWonderForAI tech @ 1170:3181 among
+     * (0, 0x16, 0x1e, 0x0d), then Util_Clamp(v,0,100) @ 11c8:0063. The
+     * exact tech ids are wonder-prereq indices (see
+     * game_pick_wonder_for_ai); callers pass flags in the same order. */
+    static const int kDoubleTechs[4] = { 0, 0x16, 0x1e, 0x0d };
+    int v;
+    int t;
+
+    if (pop <= 0)
+        return -1;
+    v = ((schools + pop * 2) * 2) / pop;
+    if (tech_owned != NULL && n_tech > 0) {
+        for (t = 0; t < 4; t++) {
+            int id = kDoubleTechs[t];
+
+            if (id >= 0 && id < n_tech && tech_owned[id] != 0)
+                v *= 2;
+        }
+    }
+    if (v < 0)
+        v = 0;
+    if (v > 100)
+        v = 100;
+    return v;
+}
+
+int demo_disease_rate(int pop, int impr, int has_medicine)
+{
+    /* Orig Demo disease row: v = (pop*0x32)/(pop+impr); medicine tech
+     * 10 @ 1170:3181 halves it. */
+    int denom;
+    int v;
+
+    if (pop < 0)
+        return -1;
+    denom = pop + impr;
+    if (denom <= 0)
+        return -1;
+    v = (pop * 0x32) / denom;
+    if (has_medicine != 0)
+        v /= 2;
+    return v;
+}
+
+int demo_life_years(int v)
+{
+    /* Orig disease-row tail: local_5a[civ] = 0x5dc/(v+0x14). */
+    if (v < 0)
+        return -1;
+    return 0x5dc / (v + 0x14);
+}
+
+int demo_rank_player(const int *vals, int n, int player, unsigned alive_mask)
+{
+    /* Orig Demo_RankRow @ 1188:220a ranking half: local_8 = 1, then for
+     * each alive civ 1..7 with vals[civ] > vals[player] local_8++. Dead
+     * civs (mask bit clear) are skipped. vals indexes 0..n-1 with civ ids
+     * 1..7 (index 0 unused, like local_1a[8] in decompiler). */
+    int rank;
+    int c;
+
+    if (!vals)
+        return -1;
+    if (player < 1 || player > 7)
+        return -1;
+    if (n <= player)
+        return -1;
+    rank = 1;
+    for (c = 1; c <= 7 && c < n; c++) {
+        if (c == player)
+            continue;
+        if ((alive_mask & (1u << ((unsigned)c & 31u))) == 0)
+            continue;
+        if (vals[c] > vals[player])
+            rank++;
+    }
+    return rank;
+}
+
+unsigned status_lcg_next(unsigned seed)
+{
+    /* Orig Status_DrawTechIcons @ 1088:1a82 AI-fake step: local_e =
+     * local_e*5+1 (32-bit wrap), pick = (local_e & 0xff) % 9 is done by
+     * the caller (needs the %9 for the icon slot, cap 999 tries,
+     * adjacency/budget gates in the caller STUB). */
+    return seed * 5u + 1u;
+}
+
+civ_error_t demo_show_demographics(int civ)
+{
+    (void)civ;
+    /* TODO: Orig Demo_ShowDemographics @ 1188:123a (FUN_1188_0000 open +
+     * live city-record sums over 0x80 0x1c records @ 1420:5500 + tile scan
+     * via Map_IsSeaLand @ 1110:16c0/Map 1110:16ee + Demo_RankRow @
+     * 1188:220a per row + City_CloseCensusView @ 1018:0380 close).
+     * Ranking/math kernels above are LIVE; GDI/dialog tails -> SDL. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t demo_rank_row(const int *vals, int n, int player)
+{
+    (void)vals;
+    (void)n;
+    (void)player;
+    /* TODO: Orig Demo_RankRow @ 1188:220a bar/text tail (FUN_10d8_0000
+     * bars + FUN_10d8_01fa rank text "1st/2nd/3rd/Nth" @ 1420:3ced/3cf0/
+     * 3cf3/3cf6 + leader line when the best beats the player). Ranking
+     * half lives in demo_rank_player above (LIVE); GDI tail -> SDL. */
+    if (!vals)
+        return CIV_ERR_NOENT;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t city_show_census_report(int civ)
+{
+    (void)civ;
+    /* TODO: Orig City_ShowCensusReport @ 1018:1d5b (City_OpenCensusView @
+     * 1018:0000 dialog + shared PIC viewer Pic_PlayShared @ 1030:0000 +
+     * building icons 0x2618 mask + City_FormatCensusRatio @ 1018:202a x3 +
+     * City_CloseCensusView @ 1018:0380). Win16 dialog/GDI -> SDL. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+/* --- Trade / diplomat / revolt / shared-PIC chain (2026-10-16): OS-free
+ * 1:1 LIVE kernels + Win16 STUBs. No globals, no exit(), C17. See game.h
+ * chain block for callers/callees/addrs. */
+
+int trade_calc_bonus(int dist, int size_a, int size_b, int same_cont,
+                     int domestic, int has_t31, int has_t26)
+{
+    /* Orig Trade_DeliverCaravanGoods @ 1038:0d09: base =
+     * (dist+10)*(sizes)/0x18; same-continent /2 (Map_GetContinentId @
+     * 1110:1d99 equality via Map_GetTile @ 11e8:0dcf(x, y+0x32));
+     * domestic /2 (owner(dst) == civ); tech 0x31/0x26 each -= /3 (via
+     * Game_PickWonderForAI @ 1170:3181 nonzero). Integer division in
+     * orig order. */
+    int base;
+
+    if (dist < 0)
+        dist = 0;
+    if (size_a < 0)
+        size_a = 0;
+    if (size_b < 0)
+        size_b = 0;
+    base = (dist + 10) * (size_a + size_b) / 0x18;
+    if (same_cont != 0)
+        base /= 2;
+    if (domestic != 0)
+        base /= 2;
+    if (has_t31 != 0)
+        base -= base / 3;
+    if (has_t26 != 0)
+        base -= base / 3;
+    return base;
+}
+
+int trade_route_value(int size, int foreign)
+{
+    /* Orig Trade_DeliverCaravanGoods @ 1038:0d09 route slots @ 1420:5513:
+     * local_8 = size, foreign owner -> *2; best-3 kept by this value. */
+    if (size < 0)
+        return -1;
+    if (foreign != 0)
+        return size * 2;
+    return size;
+}
+
+civ_error_t trade_deliver_caravan_goods(int civ, int unit_idx, int city_idx)
+{
+    (void)civ;
+    (void)unit_idx;
+    (void)city_idx;
+    /* TODO: Orig Trade_DeliverCaravanGoods @ 1038:0d09 (bonus kernel above
+     * is LIVE in trade_calc_bonus; route value in trade_route_value).
+     * Tail needs city records @ 1420:5500 (x/y/5506/5507/5513 slots) +
+     * treasury cells + Res 0x8e/City_AppendName/Dialog_ShowMessage @
+     * 1220:00d2 + Game_UpdateStatusPanel @ 1088:13d5 + consume via
+     * Unit_FoundCityIfHome @ 11c0:16a4. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+int diplomat_revolt_cost(int treasury, int dist, int size, int half)
+{
+    /* Orig Diplomat_CityAction @ 11b8:0000 case 4: ((treas+1000)/(dist+3))
+     * *size (long math in orig), /2 when 1420:5502&1. dist is the
+     * 1168:12c1 value. */
+    long price;
+
+    if (treasury < 0 || dist < 0 || size < 0)
+        return -1;
+    price = (long)(treasury + 1000) / (long)(dist + 3) * (long)size;
+    if (half != 0)
+        price /= 2;
+    return (int)price;
+}
+
+int diplomat_bribe_cost(int treasury, int dist, int unit_cost, int type)
+{
+    /* Orig Diplomat_BribeUnit @ 11b8:07c2: ((treas+0x2ee)/(dist+2)) *
+     * shield-cost (0x1a44 table by unit type), /2 when type != 0. dist
+     * is the 1168:12c1 value. */
+    long price;
+
+    if (treasury < 0 || unit_cost < 0 || dist < -1)
+        return -1;
+    price = (long)(treasury + 0x2ee) / (long)(dist + 2) * (long)unit_cost;
+    if (type != 0)
+        price /= 2;
+    return (int)price;
+}
+
+civ_error_t diplomat_city_action(int city_idx, int civ, int unit_idx)
+{
+    (void)city_idx;
+    (void)civ;
+    (void)unit_idx;
+    /* TODO: Orig Diplomat_CityAction @ 11b8:0000 cases 0..5 (cost kernels
+     * above LIVE: revolt via diplomat_revolt_cost; steal via Rng 0x48 +
+     * Res 0x82; sabotage via Rng 2/0x18 + Res 0x83/0x84; embassy bit 0x40
+     * @ 12d8:3a0a + FUN_1018_1739; investigate via FUN_1170_05af).
+     * Needs diplo bits + city records + Rng_Range @ 11c8:003d + Win16
+     * dialog (Dialog_ShowMessage @ 1220:00d2, DAT_1418_0002/0006). */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t diplomat_bribe_unit(int civ, int unit_idx, int by_civ)
+{
+    (void)civ;
+    (void)unit_idx;
+    (void)by_civ;
+    /* TODO: Orig Diplomat_BribeUnit @ 11b8:07c2 (price kernel above LIVE
+     * in diplomat_bribe_cost; 11c0:1bc3 dist<2 gate + Res 0x84 name +
+     * Map_CenterOnTile @ 1110:03ae + consume @ 11c0:16a4 + respawn @
+     * 11c0:12c8 + seen-bit flip + treasury deduct + Game_UpdateStatusPanel
+     * @ 1088:13d5 + FUN_11e8_02a4(0x1e)). Needs unit records + treasury. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t city_do_revolt(int city_idx, int new_owner)
+{
+    (void)city_idx;
+    (void)new_owner;
+    /* TODO: Orig City_DoRevolt @ 11b8:0f26 (-1 auto-pick via
+     * (00de-00e0)*0x20/dist scan; seen-bit flips x*0x32+y+10 + 0x14
+     * diamond; near-unit moves via 1110:171f/1906 + 11c0:12c8; message
+     * 1420:4168/4182 + Dialog_ShowMessage @ 1220:00d2; Unit_DoMove @
+     * 1038:0000(new_owner, city, 1) tail). Needs city/unit records. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t pic_play_shared(int city_idx, int mode)
+{
+    (void)city_idx;
+    (void)mode;
+    /* TODO: Orig Pic_PlayShared @ 1030:0000 (mode 1 modal via
+     * Dlg_CreateTracked @ 1098:124f + tile helpers City_RenderWorkedTile
+     * @ 1030:79ce / City_TileYield @ 1030:7c28 / City_IsWonderOpen @
+     * 1030:7e57 / Tech_FindFirstOwner @ 1030:7ece / City_SetSpecialist
+     * @ 1030:7f65 / City_GetSpecialist @ 1030:7fc1; mode 0 background
+     * sim tick incl. caravan 0x1b via Trade_DeliverCaravanGoods @
+     * 1038:0d09; NOT the intro loop, see title.h). Needs city records
+     * + GDI modal. Mode split itself is LIVE in pic_mode_is_modal /
+     * pic_mode_is_sim below. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+/* --- Chain 2026-10-16: Pic modes + 0x1b caravan + unit loop + tech ---
+ * OS-free 1:1 LIVE kernels + Win16 STUBs. No globals, no exit(), C17.
+ * See game.h chain block for callers/callees/addrs. */
+
+int tech_has_tech(int civ, int tech, const uint16_t *bits, int n_civs)
+{
+    /* Orig Tech_HasTech @ 1170:3181: (tech == -1) || (tech < 0x47 &&
+     * civ != 0 && bit set in ESCHISM+5+civ*10 row, word tech/0x10, bit
+     * tech%0x10). Decompiler: *(ESCHISM+5+civ*10+(tech/0x10)*2) &
+     * (1 << (tech%0x10)). */
+    unsigned word;
+    unsigned bit;
+
+    if (tech == -1)
+        return 1;
+    if (tech < 0 || tech >= 0x47)
+        return 0;
+    if (civ == 0)
+        return 0;
+    if (bits == NULL || n_civs <= 0)
+        return 0;
+    if (civ < 0 || civ >= n_civs)
+        return 0;
+    word = (unsigned)tech / 0x10u;
+    bit = (unsigned)tech % 0x10u;
+    if (word >= 5u)
+        return 0;
+    return (bits[(size_t)civ * 5u + word] & (uint16_t)(1u << bit)) != 0;
+}
+
+int pic_mode_is_modal(int mode)
+{
+    /* Orig Pic_PlayShared @ 1030:0000: param_2 == 1 opens the modal city
+     * view (Dlg_CreateTracked @ 1098:124f dialog 0x94). */
+    return mode == 1;
+}
+
+int pic_mode_is_sim(int mode)
+{
+    /* Orig Pic_PlayShared @ 1030:0000: param_2 == 0 runs the background
+     * sim tick (growth/prod/trade incl. caravan prod 0x1b). */
+    return mode == 0;
+}
+
+int city_get_specialist(const uint8_t *base, int city_idx, int n_cities,
+                         int slot)
+{
+    /* Orig City_GetSpecialist @ 1030:7fc1: 2-bit value at slot*2 in the
+     * city specialist word (1420:5510 = rec+0x10); slot >= 8 -> 1. LE
+     * word: base[off] | base[off+1]<<8. */
+    size_t off;
+    unsigned w;
+
+    if (base == NULL || n_cities <= 0 || city_idx < 0 || city_idx >= n_cities)
+        return -1;
+    if (slot < 0)
+        return -1;
+    if (slot >= 8)
+        return 1;
+    off = (size_t)city_idx * (size_t)CIV_CITY_REC_LEN + 0x10u;
+    w = (unsigned)base[off] | ((unsigned)base[off + 1u] << 8);
+    return (int)((w >> ((unsigned)slot * 2u)) & 3u);
+}
+
+civ_error_t city_set_specialist(uint8_t *base, int city_idx, int n_cities,
+                                int slot, int value)
+{
+    /* Orig City_SetSpecialist @ 1030:7f65: clear + set 2 bits at slot*2
+     * (orig shifted raw value; mask keeps neighbours intact). */
+    size_t off;
+    unsigned w;
+
+    if (base == NULL)
+        return CIV_ERR_NOENT;
+    if (n_cities <= 0 || city_idx < 0 || city_idx >= n_cities)
+        return CIV_ERR_RANGE;
+    if (slot < 0)
+        return CIV_ERR_RANGE;
+    if (slot >= 8)
+        return CIV_OK;
+    off = (size_t)city_idx * (size_t)CIV_CITY_REC_LEN + 0x10u;
+    w = (unsigned)base[off] | ((unsigned)base[off + 1u] << 8);
+    w &= ~(3u << ((unsigned)slot * 2u));
+    w |= ((unsigned)(value & 3) << ((unsigned)slot * 2u));
+    base[off] = (uint8_t)(w & 0xffu);
+    base[off + 1u] = (uint8_t)((w >> 8) & 0xffu);
+    return CIV_OK;
+}
+
+int unit_is_settler(int type)
+{
+    /* Orig Civ_ProcessUnitMoves @ 11f0:0000 CMP 62ff,0x1a @ 11f0:1ecd:
+     * JGE takes the settler/city path (11c8:00c4 lookup), JL jumps to
+     * normal move @ 11f0:228a; second CMP @ 11f0:1f24 JZ continues the
+     * settler path, else JMP 1fff diplomat test. */
+    return type == 0x1a;
+}
+
+int unit_is_caravan(int type)
+{
+    /* Orig Civ_ProcessUnitMoves @ 11f0:0000 CMP 62ff,0x1b @ 11f0:2012:
+     * JZ enters the 0x1b caravan branch @ 11f0:201d (home-city 6307 x/y
+     * + Map_WrapStepDist @ 11c8:02ec + 5505/0xa/continent gates), else
+     * JMP 2228 normal path. */
+    return type == 0x1b;
+}
+
+int caravan_dist_ok(int dist)
+{
+    /* Orig 11f0:20b0 CMP dist,0xa / JGE 212b: dist >= 10 skips the bonus
+     * message path (falls to 2228 via the continent gate). */
+    return dist < 10;
+}
+
+int caravan_prod_ok(int prod)
+{
+    /* Orig 11f0:20a8 CMP 5505,0xe8 / JL 212b (signed): prod byte < -24
+     * skips the bonus. 0xe8 as i8 is -24 (wonder/building prod is
+     * negative; caravan goods need prod > -24). */
+    return prod >= -24;
+}
+
+int caravan_foreign_bonus(int cont_home, int cont_dst)
+{
+    /* Orig 11f0:211b/2126 Map_GetContinentId @ 1110:1d99 x2 + CMP/JNZ:
+     * equal continents -> JMP 2228 (skip, same_cont halve in
+     * trade_calc_bonus), differ -> 212b bonus message. */
+    return cont_home != cont_dst;
+}
+
+int city_is_wonder_open(int civ, const int *has_tech, int n,
+                         int discover_owner)
+{
+    /* Orig City_IsWonderOpen @ 1030:7e57: for civ 1..7 if any owns tech
+     * (Tech_HasTech @ 1170:3181) return 0; else return
+     * (discover[tech] owner == civ). has_tech[c] is the precomputed
+     * Tech_HasTech bit per civ (index 0 unused). */
+    int c;
+
+    if (has_tech == NULL || n <= 0 || civ < 0 || civ >= n)
+        return -1;
+    for (c = 1; c < 8 && c < n; c++) {
+        if (has_tech[c] != 0)
+            return 0;
+    }
+    return discover_owner == civ ? 1 : 0;
+}
+
+int tech_find_first_owner(const int *has_tech, int n,
+                           int discover_fallback)
+{
+    /* Orig Tech_FindFirstOwner @ 1030:7ece: first civ 1..7 with
+     * Tech_HasTech set, else the discover-table value. */
+    int c;
+
+    if (has_tech == NULL)
+        return -1;
+    for (c = 1; c < 8 && c < n; c++) {
+        if (has_tech[c] != 0)
+            return c;
+    }
+    return discover_fallback;
+}
+
+int city_prod_is_unit(int prod)
+{
+    /* Orig City_ChooseProduction @ 1170:05ca eligible loop local_6 <
+     * 0x1c (units 0x00..0x1b, incl. 0x19/0x1a/0x1b specials). */
+    return prod >= 0x00 && prod <= 0x1b;
+}
+
+int city_prod_is_building(int prod)
+{
+    /* Orig same function: buildings loop local_6 1..0x18 with
+     * local_e8 = -local_6 (negative prod ids). */
+    return prod <= -1 && prod >= -0x18;
+}
+
+int city_prod_is_wonder(int prod)
+{
+    /* Orig same function: wonders loop local_6 0x19..0x2e with
+     * local_e8 = -local_6. */
+    return prod <= -0x19 && prod >= -0x2e;
+}
+
+civ_error_t city_choose_production(int civ, int city_idx)
+{
+    (void)civ;
+    (void)city_idx;
+    /* TODO: Orig City_ChooseProduction @ 1170:05ca (Pic_PlayShared probe
+     * 0xffff + eligible unit/building/wonder lists via Tech_HasTech @
+     * 1170:3181 + continent/sea gates via Map_GetContinentId @ 1110:1d99
+     * + unit scoring (supply/local_120/continent/sea/defense/tech mults)
+     * vs building/wonder fixed table + human dialog Dlg 0x1000 +
+     * SENDMESSAGE list + 1170:1f84 pump, 0x66 accept / 0x65 cancel).
+     * Needs city records @ 1420:5500 + Rng_Range @ 11c8:003d + Win16
+     * dialog. Classifiers above (city_prod_is_unit/building/wonder) +
+     * tech gates (tech_has_tech) are LIVE. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t city_tile_yield(int x, int y, int kind, int *out)
+{
+    (void)x;
+    (void)y;
+    (void)kind;
+    (void)out;
+    /* TODO: Orig City_TileYield @ 1030:7c28 (kind 0/1/2 food/shield/trade;
+     * Map 1110:168f gate + tile class @ 1110:16c0 + irrigated/road @
+     * 1110:1c72 (1420:17d6 vs 0x1836) + occupancy @ 1110:199b trims +
+     * owner(3) trade +1 + pollution halve + gov penalties + trade
+     * doubling + wonder halve). Needs map tables + gov state. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t city_render_worked_tile(int city_idx, int slot, int draw)
+{
+    (void)city_idx;
+    (void)slot;
+    (void)draw;
+    /* TODO: Orig City_RenderWorkedTile @ 1030:79ce (city slot claim/draw;
+     * draw == 1 centers 1330:4010/400e + paints via 1030:90a8 tile blit +
+     * 11a8:15ce yield icons with stride local_e, else Map_SetTile claim
+     * x+0x50 + DAT_1420_00d6 food/shield/trade accumulators). Needs GDI
+     * + map buffer. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+/* --- Chain 2026-10-16 (2): production shortlist/scoring + TileYield tables
+ * + Unit_DoMove dispatch + unit-loop order ---
+ * OS-free 1:1 LIVE kernels + Win16 STUBs. No globals, no exit(), C17.
+ * See game.h chain block for callers/callees/addrs. */
+
+int city_prod_unit_gate(int unit, int prereq_owned, int obsolete_owned,
+                        int is_sea_unit, int coastal_ok, int special_ok)
+{
+    /* Orig City_ChooseProduction @ 1170:05ca eligible unit loop
+     * (local_6 < 0x1c): Tech(0x1a4c) owned + Tech(0x1a38) NOT owned +
+     * (5502&2 || domain 0x1a3a != 2); 0x19 needs DAT_3960 != -1 +
+     * Tech(0x1b). */
+    if (unit < 0x00 || unit > 0x1b)
+        return 0;
+    if (!prereq_owned)
+        return 0;
+    if (obsolete_owned)
+        return 0;
+    if (is_sea_unit && !coastal_ok)
+        return 0;
+    if (unit == 0x19 && !special_ok)
+        return 0;
+    return 1;
+}
+
+int city_prod_unit_score(int supply, int upkeep, int cost_plus2,
+                         int atk_plus_def, int moves_plus1,
+                         int sea_mult, int gov_mult)
+{
+    /* Orig City_ChooseProduction @ 1170:05ca unit score:
+     * (supply*upkeep*(1a44+2))/(((1a40)+(1a42))*((1a3c)+1)) then
+     * continent-sea-defense-tech x2/x4 branches (callers fold into
+     * sea_mult/gov_mult here; exact branch TBD). */
+    long base;
+
+    if (atk_plus_def <= 0 || moves_plus1 <= 0)
+        return -1;
+    base = (long)supply * (long)upkeep * (long)cost_plus2;
+    base /= (long)atk_plus_def * (long)moves_plus1;
+    base *= (long)sea_mult * (long)gov_mult;
+    if (base > 0x7fffffffL)
+        return 0x7fffffff;
+    if (base < (long)-0x80000000L)
+        return -0x80000000;
+    return (int)base;
+}
+
+int city_prod_building_score(int base_value, int sea_factor, int cost_plus3)
+{
+    /* Orig City_ChooseProduction @ 1170:05ca building/wonder score:
+     * (base*sea*3)/(cost+3) (54fc&2 quarter bonus stays in caller). */
+    long v;
+
+    if (cost_plus3 <= 0)
+        return -1;
+    v = (long)base_value * (long)sea_factor * 3L;
+    v /= (long)cost_plus3;
+    if (v > 0x7fffffffL)
+        return 0x7fffffff;
+    if (v < (long)-0x80000000L)
+        return -0x80000000;
+    return (int)v;
+}
+
+civ_error_t city_open_production_view(int city_idx, int prod)
+{
+    (void)city_idx;
+    (void)prod;
+    /* TODO: Orig City_OpenProductionView @ 1170:05af (Pic_PlayShared(city,1)
+     * modal tail via Dlg_CreateTracked @ 1098:124f 0x94 + tile helpers
+     * City_RenderWorkedTile @ 1030:79ce / City_TileYield @ 1030:7c28).
+     * Win16 dialog + GDI tiles TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+/* Orig 1420:17d6 base (17 tiles x8) + 1420:1836 irrigated (11 tiles x8,
+ * tiles 0..10 ocean-inclusive; beyond falls back to base). Stride 8,
+ * kind 0/1/2 food/shield/trade at +0/+1/+2; bytes +3..+7 are
+ * next-terrain/cost data, not yields. Dumps 2026-10-16 via
+ * ghidra_read_memory (civ.exe). */
+static const uint8_t s_city_yield_base[17u * 8u] = {
+    0x00, 0x01, 0x00, 0x01, 0x0e, 0x00, 0x01, 0x02,
+    0x01, 0x01, 0x00, 0x01, 0x06, 0x00, 0x01, 0x02,
+    0x02, 0x01, 0x00, 0x01, 0x0a, 0x00, 0x02, 0x03,
+    0x01, 0x02, 0x00, 0x02, 0x02, 0x00, 0x02, 0x04,
+    0x01, 0x00, 0x00, 0x02, 0x0c, 0x00, 0x03, 0x06,
+    0x00, 0x01, 0x00, 0x03, 0x0d, 0x00, 0x01, 0x02,
+    0x01, 0x00, 0x00, 0x00, 0x07, 0x00, 0x02, 0x02,
+    0x00, 0x00, 0x00, 0x00, 0x0f, 0x00, 0x02, 0x03,
+    0x01, 0x00, 0x00, 0x00, 0x03, 0x00, 0x02, 0x03,
+    0x01, 0x00, 0x00, 0x00, 0x0b, 0x00, 0x01, 0x02,
+    0x01, 0x00, 0x02, 0x00, 0x01, 0x00, 0x01, 0x03,
+    0x02, 0x01, 0x01, 0x02, 0x09, 0x00, 0x01, 0x02,
+    0x03, 0x01, 0x00, 0x01, 0x0e, 0x00, 0x01, 0x02,
+    0x01, 0x03, 0x00, 0x01, 0x06, 0x00, 0x01, 0x02,
+    0x02, 0x01, 0x00, 0x01, 0x0a, 0x00, 0x02, 0x03,
+    0x03, 0x02, 0x00, 0x02, 0x02, 0x00, 0x02, 0x04,
+    0x01, 0x02, 0x00, 0x02, 0x0c, 0x00, 0x03, 0x06
+};
+
+static const uint8_t s_city_yield_irr[11u * 8u] = {
+    0x03, 0x01, 0x00, 0x01, 0x0e, 0x00, 0x01, 0x02,
+    0x01, 0x03, 0x00, 0x01, 0x06, 0x00, 0x01, 0x02,
+    0x02, 0x01, 0x00, 0x01, 0x0a, 0x00, 0x02, 0x03,
+    0x03, 0x02, 0x00, 0x02, 0x02, 0x00, 0x02, 0x04,
+    0x01, 0x02, 0x00, 0x02, 0x0c, 0x00, 0x03, 0x06,
+    0x00, 0x01, 0x06, 0x03, 0x0d, 0x00, 0x01, 0x02,
+    0x03, 0x00, 0x00, 0x00, 0x07, 0x00, 0x02, 0x02,
+    0x02, 0x00, 0x00, 0x00, 0x0f, 0x00, 0x02, 0x03,
+    0x01, 0x04, 0x00, 0x00, 0x03, 0x00, 0x02, 0x03,
+    0x01, 0x00, 0x04, 0x00, 0x0b, 0x00, 0x01, 0x02,
+    0x03, 0x00, 0x02, 0x00, 0x01, 0x00, 0x01, 0x03
+};
+
+int city_tile_base_yield(int tile, int irrigated, int kind)
+{
+    /* Orig City_TileYield @ 1030:7c28 base: Map_CheckTileImproved @
+     * 1110:1c72 selects 0x1836 else 1420:17d6; yield = table[tile*8+kind].
+     * Map_GetTile @ 11e8:0dcf class + Map_CheckTileBounds @ 1110:168f gate
+     * stay in caller (OOR tile -> -1 here). */
+    size_t off;
+
+    if (kind < 0 || kind > 2)
+        return -1;
+    if (tile < 0 || tile > 16)
+        return -1;
+    if (irrigated && tile >= 0 && tile <= 10) {
+        off = (size_t)tile * 8u + (size_t)kind;
+        return (int)s_city_yield_irr[off];
+    }
+    off = (size_t)tile * 8u + (size_t)kind;
+    return (int)s_city_yield_base[off];
+}
+
+int city_tile_yield_adjust(int base, int kind, unsigned occ_flags,
+                           int pen0, int pen4, int land_bonus,
+                           int trade_bonus, int gov_penalty,
+                           int pollution_halve)
+{
+    /* Orig City_TileYield @ 1030:7c28 modifier chain (1110:199b occ via
+     * Map_GetOccupancyFlags @ 1110:199b; tile*0xc pens; owner(3) trade;
+     * Tech(3) trade; gov despotism/republic; 0x40 pollution halve):
+     * food/shield trims, forest/land trade +1, trade bonuses, gov -1,
+     * halve, clamp <1 -> 0. Exact tile*0xc ids + 1250:0000 -2 TBD. */
+    int v = base;
+
+    if (kind == 0 && (occ_flags & 2u))
+        v += -1 - pen0;
+    if (kind == 1 && (occ_flags & 4u))
+        v += -1 - pen4;
+    if (kind == 2 && (occ_flags & 8u) && land_bonus)
+        v += 1;
+    v += trade_bonus;
+    v -= gov_penalty;
+    if (pollution_halve)
+        v = (v + 1) / 2;
+    if (v < 1)
+        v = 0;
+    return v;
+}
+
+int unit_is_diplomat(int type)
+{
+    /* Orig Civ_ProcessUnitMoves @ 11f0:1e80..21b6 city-entry diplomat path
+     * (@ 11f0:1fff via Diplomat_CityAction @ 11b8:0000; frontier type 0x19
+     * diplomat vs 0x1a settler / 0x1b caravan / 0x0e caravan? hypothesis). */
+    return type == 0x19;
+}
+
+int unit_type_is_valid(int type)
+{
+    /* Orig City_ChooseProduction @ 1170:05ca eligible loops local_6 < 0x1c:
+     * full unit range 0x00..0x1b (28 types; 0xff = empty slot). */
+    return type >= 0x00 && type <= 0x1b;
+}
+
+int unit_dispatch_class(int type)
+{
+    /* Orig Civ_ProcessUnitMoves @ 11f0:1e80..21b6 dispatch (CMP 62ff,0x1a
+     * @ 11f0:1ecd JGE settler/city path else JMP 228a normal; CMP 0x1a @
+     * 11f0:1f24 JZ settler else JMP 1fff diplomat test; CMP 0x1b @
+     * 11f0:2012 JZ caravan branch): 0 settler, 1 caravan, 2 diplomat,
+     * 3 normal, -1 invalid/empty. */
+    if (type == 0x1a)
+        return 0;
+    if (type == 0x1b)
+        return 1;
+    if (type == 0x19)
+        return 2;
+    if (type >= 0x00 && type <= 0x1b)
+        return 3;
+    return -1;
+}
+
+int unit_order_is_fortify(int order)
+{
+    /* Orig Civ_ProcessUnitMoves @ 11f0:0000 order 0x66 case -> Unit_DoFortify
+     * (LIVE in game.c; busy 0x08 + moves 0). */
+    return order == 0x66;
+}
+
+int unit_order_is_sentry(int order)
+{
+    /* Orig Civ_ProcessUnitMoves @ 11f0:0000 order 0x68 case -> Unit_DoSentry
+     * (LIVE in game.c; 0x09 sentry-wait + moves 0). */
+    return order == 0x68;
+}
+
+int unit_order_is_found(int order)
+{
+    /* Orig Civ_ProcessUnitMoves @ 11f0:0000 order 0x62 case -> Unit_DoFoundCity
+     * (PARTIAL in game.c; join consumes settler + city_grow, new-city TBD). */
+    return order == 0x62;
+}
+
+int unit_order_is_move(int order)
+{
+    /* Orig Civ_ProcessUnitMoves @ 11f0:0000 orders 0x69/0x6d/0x6f/0x70/
+     * 0x72/0x75 cases -> Unit_DoMoveAttack variants (PARTIAL stepper +
+     * combat odds LIVE, UI pump STUB). 0x6d road? 0x70 pollution? TBD. */
+    return order == 0x69 || order == 0x6d || order == 0x6f ||
+           order == 0x70 || order == 0x72 || order == 0x75;
+}
+
+int city_transfer_treasury(int treas, int amount, int is_winner)
+{
+    /* Orig Unit_DoMove @ 1038:0000 treasury pair (1420:43b8+0x8c per civ:
+     * loser -= iVar7 via Util_Clamp @ 11a0 range, winner += iVar7).
+     * Caller passes the clamped amount; negative clamp to 0+. */
+    int v;
+
+    if (amount < 0)
+        amount = 0;
+    v = is_winner ? treas + amount : treas - amount;
+    if (v < 0)
+        v = 0;
+    return v;
+}
+
+civ_error_t civ_unit_turn_step(int civ, int unit_idx, int order)
+{
+    /* Orig Civ_ProcessUnitMoves @ 11f0:0000 loop order (per-civ 0x80 units
+     * @ 1420:62fc stride 0xc outer, per-pass do-while inner with bVar5
+     * dirty + local_38 wrap + DAT_1310_0002 gate; per unit: visibility
+     * Unit_RevealArea @ 11c0:12c8 / update @ 11c0:0395 -> centering
+     * Unit_MaybeCenterView @ 11f0:44d4 (Map 1110:1461 when player/seen) ->
+     * choose Unit_ChooseOrder @ 1078:1480 / step @ 1128:0000 -> three
+     * jump tables -> reveal via unit_reveal_area / dialog via
+     * unit_wait_for_orders @ 11c0:0ec2 + city-entry @ 11c0:2c32 +
+     * Unit_EnsureOnScreen @ 11c0:231d + Unit_PlayMoveAnimation @ 11c0:2c32).
+     * PARTIAL: IDLE (0x00) is a no-op CIV_OK; every other order reaches a
+     * Win16/map/city/dialog tail. */
+    if (civ < 0 || unit_idx < 0)
+        return CIV_ERR_RANGE;
+    if (unit_order_is_idle(order))
+        return CIV_OK;
+    if (unit_order_is_sleep(order) || unit_order_is_fail(order) ||
+        unit_order_is_no_path(order) || unit_order_is_fortify(order) ||
+        unit_order_is_sentry(order) || unit_order_is_found(order) ||
+        unit_order_is_move(order))
+        return CIV_ERR_UNSUPPORTED;
+    return CIV_ERR_RANGE;
+}

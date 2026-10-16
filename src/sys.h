@@ -248,6 +248,26 @@ void sys_yield(void);
  * queue was empty. Distinct from sys_yield (Anim pump @ 10b0:0000) and
  * sys_drain_input (state clear + queue drain, see game.h). */
 int sys_pump_messages(void);
+/* Orig: Main_PumpMessage @ 1098:02d1 -> main_pump_message (STUB).
+ * Win16 MSG dispatcher behind Main_DrainMessages @ 11e8:02fb (drains
+ * until 0): PEEKMESSAGE @ 1608:0134 (0x108/0x100) -> TRANSLATEACCELERATOR
+ * -> TRANSLATEMESSAGE @ 1608:013c; WM_CHAR 0x102 -> Main_EnqueueResString
+ * @ 1008:0a8d(wParam) direct; WM_KEYDOWN 0x100 -> Main_KeyToResChar @
+ * 1208:0000 map then Enqueue; else DISPATCHMESSAGE @ 1608:0140; quit via
+ * WinMain_Shutdown @ 1008:0329 when g_nQuitFlag == 1. Needs Win16 MSG +
+ * accel table -> stub CIV_ERR_UNSUPPORTED. Distinct from sys_pump_messages
+ * (Sys_PumpMessages @ 1108:0000, SDL_PumpEvents LIVE) and sys_yield
+ * (Sys_Yield @ 1098:0157, anim pump). No globals, no exit(). */
+civ_error_t main_pump_message(void);
+/* Orig: Main_KeyToResChar @ 1208:0000 -> main_key_to_res_char (LIVE).
+ * VK 0x21..0x28 (PgUp/PgDn/End/Home/Left/Up/Right/Down) -> res id byte:
+ * the low byte of the returned far pointer into the 1420:142c table
+ * (+0xd/+7/+5/+0xb/+8/+0xc/+10/+6 = ids 0x39/0x33/0x31/0x37/0x34/0x38/
+ * 0x36/0x32); default pointer 1420:1400 has low byte 0x00, which is
+ * exactly what the Main_PumpMessage @ 1098:02d1 !=0 filter skips, so
+ * unknown keys map to 0 (no enqueue). Returns 0..255, 0 = none. No
+ * globals, no exit(). */
+int main_key_to_res_char(int vkey);
 /* Orig: FUN_1218_0956 @ 1218:0956 / FUN_1218_0a06 @ 1218:0a06 family ->
  * Sys_GetClientRect (see map.h wdwstatus_calc_upper/lower_rect).
  * Client-rect helper behind the status frame calculators (w_out, h_out

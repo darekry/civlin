@@ -209,6 +209,16 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `text_draw_aligned` | STUB | 1080:08e9, 1088:1554, 1098:00b5, 1098:01b0, 1098:0e0b, 1098:0ed1, 1098:103f, 1098:20f4, 10b0:137a, 10e8:0667, 1110:07c3, 1180:02d3, 1220:0889 | has TODO |
 | `dialog_get_item_rect` | STUB | 1098:0d43, 1100:03ff, 1220:0156 | has TODO |
 | `dialog_show_message` | STUB | 1040:068e, 1098:124f, 1098:1612, 1220:00d2, 1220:0156, 1220:0eb8, 12b0:0004 | has TODO |
+| `text_res_list_advance` | LIVE | 1098:1f4f, 1100:0053, 1100:078a |  |
+| `main_enqueue_res_string` | LIVE | 1008:0a8d, 1420:4473 |  |
+| `dialog_res_list_spec` | LIVE | 1068:0295 |  |
+| `main_res_queue_full` | LIVE | 1008:0a8d, 1008:0add, 1098:02d1, 11f0:4ea0 |  |
+| `dialog_init_res_string_tables` | STUB | 1068:0295, 1098:1f4f | has TODO |
+| `main_show_res_string` | STUB | 1008:0a8d, 1008:0add, 1100:078a | has TODO |
+| `text_dlg_string_source` | LIVE | 1098:2796, 1100:078a, 1100:0947 |  |
+| `text_set_dlg_item_text` | STUB | 1098:2796, 1100:0053, 1100:0947 | has TODO |
+| `text_draw_dlg_item_string` | STUB | 1098:2796, 10f0:0066, 1100:03ff, 1100:0947 | has TODO |
+| `text_fill_res_string_list` | STUB | 1068:0295, 1098:1f4f, 1100:0053, 1100:078a | has TODO |
 
 ### `src/game.c`
 
@@ -227,7 +237,7 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `game_update_status_panel` | STUB | 1088:13d5, 1088:1a82, 11f8:0278, 1218:0956, 1220:00d2 | has TODO |
 | `game_accum_pollution` | LIVE | 1028:1afd, 1088:1e32, 12d8:42f0 |  |
 | `game_do_pollution_and_wonder_race` | STUB | 1028:1afd, 1088:1e32, 1170:3181, 12d8:42f0 | has TODO |
-| `game_pick_wonder_for_ai` | LIVE | 1088:1e32, 1170:3181 |  |
+| `game_pick_wonder_for_ai` | LIVE | 1088:1e32, 1170:05ca, 1170:3181 |  |
 | `civ_process_unit_moves` | LIVE | 1078:1480, 1128:0000, 11c0:0395, 11c0:0ec2, 11c0:16a4, 11f0:0000, 11f0:44d4, 1420:62fc |  |
 | `status_draw_tech_icons` | STUB | 1088:1a82, 11a8:0cb1 | has TODO |
 | `game_append_year_text` | LIVE | 1000:18d4, 1000:1ed2, 1000:2928, 1000:363e, 1000:377e, 1000:386e, 1000:3ba0, 1000:3d90, 1018:015d, 1088:13d5, 1088:1dd0, 1138:0000, 1198:00a3, 11b0:0000, 11b8:14e5, 12d8:24fa, 1420:173c, 1420:1740 |  |
@@ -285,6 +295,58 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `city_format_pop_count` | LIVE | 11c8:03ac, 12d8:42ec, 1420:172b |  |
 | `city_calc_pop_total` | LIVE | 11c8:0334, 1420:5500, 1420:5502, 1420:5503, 1420:5507 |  |
 | `city_format_name` | LIVE | 1048:0101, 11f8:014a |  |
+| `city_format_census_ratio` | LIVE | 1000:2928, 1018:202a |  |
+| `demo_approval` | LIVE | 1188:123a |  |
+| `demo_literacy` | LIVE | 1170:3181, 1188:123a, 11c8:0063 |  |
+| `demo_disease_rate` | LIVE | 1170:3181, 1188:123a |  |
+| `demo_life_years` | LIVE | 1188:123a |  |
+| `demo_rank_player` | LIVE | 1188:220a |  |
+| `status_lcg_next` | LIVE | 1088:1a82 |  |
+| `demo_show_demographics` | STUB | 1018:0380, 1110:16c0, 1110:16ee, 1188:123a, 1188:220a, 1420:5500 | has TODO |
+| `demo_rank_row` | STUB | 1188:220a, 1420:3ced | has TODO |
+| `city_show_census_report` | STUB | 1018:0000, 1018:0380, 1018:1d5b, 1018:202a, 1030:0000 | has TODO |
+| `trade_calc_bonus` | LIVE | 1038:0d09, 1110:1d99, 1170:3181, 11c8:02ec, 11e8:0dcf, 1420:5506 |  |
+| `trade_route_value` | LIVE | 1038:0d09, 1420:5513 |  |
+| `trade_deliver_caravan_goods` | STUB | 1038:0d09, 1088:13d5, 11c0:16a4, 1220:00d2, 1420:5500 | has TODO |
+| `diplomat_revolt_cost` | LIVE | 1168:12c1, 11b8:0000, 1420:5502 |  |
+| `diplomat_bribe_cost` | LIVE | 1168:12c1, 11b8:07c2 |  |
+| `diplomat_city_action` | STUB | 11b8:0000, 12d8:3a0a | has TODO |
+| `diplomat_bribe_unit` | STUB | 1088:13d5, 1110:03ae, 11b8:07c2, 11c0:12c8, 11c0:16a4, 11c0:1bc3 | has TODO |
+| `city_do_revolt` | STUB | 1038:0000, 1110:171f, 11b8:0f26, 11c0:12c8, 1220:00d2, 1420:4168 | has TODO |
+| `pic_play_shared` | STUB | 1030:0000, 1030:79ce, 1030:7c28, 1030:7e57, 1030:7ece, 1030:7f65, 1030:7fc1, 1098:124f | has TODO |
+| `tech_has_tech` | LIVE | 1170:3181 |  |
+| `pic_mode_is_modal` | LIVE | 1030:0000, 1098:124f, 1170:05ca |  |
+| `pic_mode_is_sim` | LIVE | 1030:0000 |  |
+| `city_get_specialist` | LIVE | 1030:7fc1, 1420:5510 |  |
+| `city_set_specialist` | LIVE | 1030:7f65 |  |
+| `unit_is_settler` | LIVE | 11c8:00c4, 11f0:0000, 11f0:1ecd, 11f0:1f24, 11f0:2012, 11f0:228a, 1420:62ff |  |
+| `unit_is_caravan` | LIVE | 11c8:02ec, 11f0:0000, 11f0:2012, 11f0:201d |  |
+| `caravan_dist_ok` | LIVE | 1110:1d99, 11c8:02ec, 11f0:0000, 11f0:20a8, 11f0:20b0, 11f0:211b |  |
+| `caravan_prod_ok` | LIVE | 11f0:20a8 |  |
+| `caravan_foreign_bonus` | LIVE | 1110:1d99, 11f0:211b |  |
+| `city_is_wonder_open` | LIVE | 1030:7e57, 1170:3181 |  |
+| `tech_find_first_owner` | LIVE | 1030:7ece |  |
+| `city_prod_is_unit` | LIVE | 1170:05ca |  |
+| `city_prod_is_building` | LIVE |  |  |
+| `city_prod_is_wonder` | LIVE |  |  |
+| `city_choose_production` | STUB | 1110:1d99, 1170:05ca, 1170:1f84, 1170:3181, 1420:5500 | has TODO |
+| `city_tile_yield` | STUB | 1030:7c28, 1110:168f, 1110:16c0, 1110:199b, 1110:1c72, 1420:17d6 | has TODO |
+| `city_render_worked_tile` | STUB | 1030:79ce, 1030:90a8, 11a8:15ce, 1330:4010 | has TODO |
+| `city_prod_unit_gate` | LIVE | 1170:05ca, 1420:1a38, 1420:1a3a, 1420:1a4c |  |
+| `city_prod_unit_score` | LIVE | 1170:05ca |  |
+| `city_prod_building_score` | LIVE | 1170:05ca |  |
+| `city_open_production_view` | STUB | 1030:79ce, 1030:7c28, 1098:124f, 1170:05af | has TODO |
+| `city_tile_base_yield` | LIVE | 1030:7c28, 1110:168f, 1110:1c72, 11e8:0dcf, 1420:17d6 |  |
+| `city_tile_yield_adjust` | LIVE | 1030:7c28, 1110:199b, 1250:0000 |  |
+| `unit_is_diplomat` | LIVE | 11b8:0000, 11f0:1e80, 11f0:1fff |  |
+| `unit_type_is_valid` | LIVE | 1170:05ca |  |
+| `unit_dispatch_class` | LIVE | 11f0:1e80, 11f0:1ecd, 11f0:1f24, 11f0:2012 |  |
+| `unit_order_is_fortify` | LIVE | 11f0:0000 |  |
+| `unit_order_is_sentry` | LIVE | 11f0:0000 |  |
+| `unit_order_is_found` | LIVE | 11f0:0000 |  |
+| `unit_order_is_move` | LIVE | 11f0:0000 |  |
+| `city_transfer_treasury` | LIVE | 1038:0000, 1420:43b8 |  |
+| `civ_unit_turn_step` | PARTIAL | 1078:1480, 1110:1461, 1128:0000, 11c0:0395, 11c0:12c8, 11f0:0000, 11f0:44d4, 1420:62fc |  |
 
 ### `src/gfx_indexed.c`
 
@@ -388,6 +450,8 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `map_shutdown` | NOOP |  |  |
 | `wdwstatus_calc_upper_rect` | STUB | 1088:1479, 1218:0956 | has TODO |
 | `wdwstatus_calc_lower_rect` | STUB | 1088:1536, 1218:0a06 | has TODO |
+| `wdwstatus_is_dirty` | LIVE | 1218:063e, 1218:0801 |  |
+| `wdwstatus_frame_metrics` | LIVE | 1218:0956 |  |
 | `path_find_corridor` | LIVE | 1128:0000, 1128:10de, 1420:62fc |  |
 | `path_is_passable` | LIVE | 1110:16c0, 1110:18ce, 1128:0000, 1128:081c, 11c0:23fd |  |
 | `map_is_sea_land` | LIVE | 1110:16c0, 1128:0000 |  |
@@ -411,6 +475,8 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `mainport_apply_palette` | STUB | 1090:0376, 1200:00a8 |  |
 | `tile_type_name` | LIVE | 1110:16c0, 11e8:0dcf |  |
 | `tile_move_cost` | LIVE | 1128:0000, 1420:17d4 |  |
+| `map_step_dist` | LIVE | 11c8:025d |  |
+| `map_wrap_step_dist` | LIVE | 1180:1096, 11c8:025d, 11c8:02ec |  |
 
 ### `src/newgame.c`
 
@@ -568,6 +634,20 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `save_xfer_array_live` | LIVE | 10f8:1035 |  |
 | `save_xfer_strided_live` | LIVE | 10f8:10bd |  |
 | `save_marshal_fields_live` | LIVE | 10f8:090c |  |
+| `replay_year_from_turn` | LIVE | 1180:0f7c |  |
+| `replay_append_log` | LIVE | 11c0:3beb, 1388:0000, 1390:03af |  |
+| `replay_find_empty_slot` | LIVE | 1180:0fe5, 1390:00a0 |  |
+| `replay_update_slot_owner` | LIVE | 1180:1044 |  |
+| `replay_wrap_step_dist` | LIVE | 11c8:025d, 11c8:02ec |  |
+| `replay_find_nearest_slot` | LIVE | 1180:1096, 11c8:02ec |  |
+| `replay_tile_window` | LIVE | 1180:110c, 11c8:0063 |  |
+| `replay_map_text_cell` | LIVE | 1110:16c0, 1110:199b, 1180:137f |  |
+| `replay_mode_is_record` | LIVE | 1180:0000 |  |
+| `replay_mode_needs_view` | LIVE | 1180:017a |  |
+| `replay_entry_len` | LIVE | 1180:02d3 |  |
+| `replay_show_entry` | STUB | 1098:0e0b, 1180:0e78 | has TODO |
+| `replay_open_or_play` | STUB | 1098:26d4, 1140:0139, 1180:0000, 1180:017a, 1180:0297, 1180:02d3 | has TODO |
+| `replay_show_civ_destroyed` | STUB | 10d8:046e, 1150:00c9, 1180:17e9, 11a8:0cb1 | has TODO |
 
 ### `src/sys.c`
 
@@ -607,6 +687,8 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | `sys_base_path` | LIVE | 1228:0004 |  |
 | `sys_yield` | LIVE | 1098:0157, 10b0:0000 |  |
 | `sys_pump_messages` | LIVE | 10b0:0000, 1108:0000, 11c0:0ec2, 11e8:02fb, 1328:0012 |  |
+| `main_pump_message` | STUB | 1008:0329, 1008:0a8d, 1098:0157, 1098:02d1, 1108:0000, 11e8:02fb, 1208:0000, 1608:0134, 1608:013c, 1608:0140 | has TODO |
+| `main_key_to_res_char` | LIVE | 1098:02d1, 1208:0000, 1420:1400, 1420:142c |  |
 | `sys_get_client_rect` | STUB | 1000:137f, 1218:0956, 1218:0a06 | has TODO |
 | `status_measure_row` | STUB | 1088:1460, 1098:0dda, 1138:0269, 11f0:4754, 1220:0b88 | has TODO |
 | `sys_check_runtime_memory` | STUB | 11e8:0075, 1420:43b4, 1420:4473, 1420:44ff | has TODO |
@@ -658,7 +740,7 @@ w `boot_load_resources` (STUB) + dekod ramek `rsc_get_indexed` (STUB).
 | Function | State | Orig addr | Note |
 |---|---|---|---|
 | `title_play_intro` | STUB |  | has TODO |
-| `title_play_anim_loop` | STUB | 1030:0000, 1030:79ce, 1038:0000, 1040:068e, 1040:1137, 1080:099b, 1098:124f | has TODO |
+| `title_play_anim_loop` | STUB | 1018:0be0, 1018:1d5b, 1018:208f, 1030:0000, 1030:79ce, 1038:0000, 1038:0d09, 1040:068e, 1040:1137, 1080:099b, 1098:124f, 10b8:079d, 1170:0000, 1170:05af, 1170:05ca, 1188:0db8, 1188:123a, 11b8:0f26 | has TODO |
 | `title_decode_frame` | STUB | 1018:015d, 1088:1dd0, 1138:0000, 11b0:0000, 11b8:14e5 | has TODO |
 | `pic_decompress_chunk` | LIVE | 10f8:040a, 10f8:05da, 1420:23ce |  |
 | `pic_read_header` | STUB | 10d0:0956, 1140:019d, 1420:2300, 1420:2372 | has TODO |

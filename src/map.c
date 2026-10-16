@@ -146,15 +146,51 @@ civ_error_t wdwstatus_calc_upper_rect(civ_rect_t *out)
 {
     (void)out;
     /* TODO: FUN_1218_0956 @ 1218:0956 (client-rect -> centered frame,
-     * cy+0x1e variant; INFLATERECT -1,-1; see map.h). */
+     * cy+0x1e variant; INFLATERECT -1,-1; see map.h). OS-free cx/cy head
+     * is LIVE in wdwstatus_frame_metrics below; the SETRECT field order
+     * + GLOBALLOCK rect fetch stay Win16 until decoded. */
     return CIV_ERR_UNSUPPORTED;
 }
 
 civ_error_t wdwstatus_calc_lower_rect(civ_rect_t *out)
 {
     (void)out;
-    /* TODO: FUN_1218_0a06 @ 1218:0a06 (cy*2+0x46/0x1e variant). */
+    /* TODO: FUN_1218_0a06 @ 1218:0a06 (cy*2+0x46/0x1e variant; same head
+     * as above, LIVE in wdwstatus_frame_metrics). */
     return CIV_ERR_UNSUPPORTED;
+}
+
+/* --- status dirty-flag + frame metrics (2026-10-16): OS-free 1:1. --- */
+
+int wdwstatus_is_dirty(int flag)
+{
+    /* Orig WdwStatus_Refresh @ 1218:0801 head: *(handle+0x2c) == 0 ->
+     * early out (GLOBALUNLOCK only), else full repaint. Same gate guards
+     * WdwStatus_RequestRefresh @ 1218:063e (DAT_1420_4964 != 0). */
+    return flag != 0;
+}
+
+civ_error_t wdwstatus_frame_metrics(int client_w, int client_h,
+                                    int *cx_out, int *cy_out)
+{
+    /* Orig 1218:0956/0a06/0abf shared head. Decompiler:
+     * iVar1 = ((local_c - local_10) + -0x8c) / 2 (width span - 0x8c);
+     * iVar2 = ((local_a - local_e) + -0xf0) / 4 (height span - 0xf0);
+     * if (10 < iVar2) iVar2 = 10; if (iVar2 < 0) iVar2 = 0.
+     * C17 /2 and /4 on the caller spans match the orig signed division
+     * for non-negative spans (rect spans are >= 0 on the status port). */
+    int cy;
+
+    if (!cx_out || !cy_out)
+        return CIV_ERR_NOENT;
+    *cx_out = (client_w - 0x8c) / 2;
+    cy = (client_h - 0xf0) / 4;
+    if (cy > 10)
+        cy = 10;
+    if (cy < 0)
+        cy = 0;
+    *cy_out = cy;
+    return CIV_OK;
 }
 
 int path_find_corridor(int civ, int unit_idx, int max_steps)
@@ -535,4 +571,35 @@ int tile_move_cost(int tile, const uint8_t *cost_table, int cost_n)
         return 3;
     v = cost_table[tile];
     return v != 0 ? v * 3 : 3;
+}
+
+/* --- Map step distance (2026-10-16): OS-free 1:1. No globals. */
+
+int map_step_dist(int dx, int dy)
+{
+    /* Orig Map_StepDist @ 11c8:025d. Decompiler: ax = |dx|, bx = |dy|
+     * (via (v ^ (v>>0xf)) - (v>>0xf)); hi = max, lo = min; lo /= 2;
+     * returns hi + lo. */
+    int ax = dx < 0 ? -dx : dx;
+    int by = dy < 0 ? -dy : dy;
+    int hi = ax > by ? ax : by;
+    int lo = ax < by ? ax : by;
+
+    return hi + lo / 2;
+}
+
+int map_wrap_step_dist(int x1, int x2, int y1, int y2)
+{
+    /* Orig Map_WrapStepDist @ 11c8:02ec. Decompiler: dx = |x1-x2| (same
+     * fold); if 0x28 < dx dx = 0x50-dx (game-map width wrap, cf.
+     * CIV_MAP_WRAP_W); dy = |y1-y2| unwrapped; then Map_StepDist @
+     * 11c8:025d. Used by Replay_FindNearestSlot @ 1180:1096. */
+    int dx = x1 - x2;
+    int dy = y1 - y2;
+
+    dx = dx < 0 ? -dx : dx;
+    if (dx > 0x28)
+        dx = CIV_MAP_WRAP_W - dx;
+    dy = dy < 0 ? -dy : dy;
+    return map_step_dist(dx, dy);
 }

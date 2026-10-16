@@ -1125,3 +1125,165 @@ civ_error_t dialog_show_message(const char *text, int *out_choice)
         return CIV_ERR_NOENT;
     return CIV_ERR_UNSUPPORTED;
 }
+
+/* --- Dialog string lists (2026-10-16): OS-free cursor/queue/source math.
+ * No globals, no exit(), C17. ResMgr fetch + GDI handles stay STUB. */
+
+civ_error_t text_res_list_advance(size_t cur_off, size_t entry_len,
+                                  size_t *next_off)
+{
+    /* Orig Text_FillResStringList @ 1098:1f4f cursor half: *param_4 =
+     * pcVar2 + *param_4 (pcVar2 = LSTRLEN+1) + *param_6++ per packed
+     * entry. Overflow-safe (orig used 16-bit far cursors). */
+    if (!next_off)
+        return CIV_ERR_NOENT;
+    if (entry_len > SIZE_MAX - cur_off - 1u)
+        return CIV_ERR_RANGE;
+    *next_off = cur_off + entry_len + 1u;
+    return CIV_OK;
+}
+
+int main_enqueue_res_string(int *queue, size_t *count, int id)
+{
+    /* Orig Main_EnqueueResString @ 1008:0a8d: if (DAT_12b0_004c < 10)
+     * queue[count++] = id (queue @ 1420:4473+0x71, u16 slots). Full ring
+     * silently drops (returns 0, count untouched). */
+    if (!queue || !count)
+        return -1;
+    if (*count >= (size_t)CIV_RES_QUEUE_MAX)
+        return 0;
+    queue[*count] = id;
+    (*count)++;
+    return 1;
+}
+
+/* --- Res-string tables + queue (2026-10-16): OS-free spec/queue math. --- */
+
+civ_error_t dialog_res_list_spec(int index, int *res_id, int *first,
+                                 int *last)
+{
+    /* Orig Dialog_InitResStringTables @ 1068:0295 switch(param_1).
+     * Decompiler: case 0 fills all five via Text_FillResStringList
+     * (0x82,1,0x43), (0x83,2,999), (0x84,1,999), (0x85,1,0xc),
+     * (0x86,1,999); cases 1..5 fill one (uVar1 = res, uVar2 = first,
+     * uVar3 = last). */
+    if (!res_id || !first || !last)
+        return CIV_ERR_NOENT;
+    switch (index) {
+    case 1:
+        *res_id = CIV_RES_TECH_LIST;
+        *first = 1;
+        *last = 0x43;
+        return CIV_OK;
+    case 2:
+        *res_id = CIV_RES_BUILD_LIST;
+        *first = 2;
+        *last = 999;
+        return CIV_OK;
+    case 3:
+        *res_id = CIV_RES_PRODUCE_LIST;
+        *first = 1;
+        *last = 999;
+        return CIV_OK;
+    case 4:
+        *res_id = CIV_RES_GOV_LIST;
+        *first = 1;
+        *last = 0x0c;
+        return CIV_OK;
+    case 5:
+        *res_id = CIV_RES_UNIT_LIST;
+        *first = 1;
+        *last = 999;
+        return CIV_OK;
+    default:
+        return CIV_ERR_RANGE;
+    }
+}
+
+int main_res_queue_full(size_t count)
+{
+    /* Orig Main_EnqueueResString @ 1008:0a8d gate: DAT_12b0_004c < 10
+     * (CIV_RES_QUEUE_MAX). Producers Main_ShowResString @ 1008:0add +
+     * Main_PumpMessage @ 1098:02d1; reset via sys_drain_input @
+     * 11f0:4ea0; consumer TBD (no NE xrefs). */
+    return count >= (size_t)CIV_RES_QUEUE_MAX;
+}
+
+civ_error_t dialog_init_res_string_tables(int index)
+{
+    /* TODO: Orig Dialog_InitResStringTables @ 1068:0295 (mem_alloc_lock
+     * 0x7fff + Text_FillResStringList @ 1098:1f4f per spec in
+     * dialog_res_list_spec above (index 0 = all five) into DAT_1288_*
+     * + FUN_1098_1909 dialog 0x82 show). Needs heap + live ResMgr blobs
+     * (see rsc_loader.h res_get_string_copy STUB). */
+    (void)index;
+    if (index < 0 || index > 5)
+        return CIV_ERR_RANGE;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t main_show_res_string(int id)
+{
+    /* TODO: Orig Main_ShowResString @ 1008:0add (ResMgr_GetString @
+     * 1100:078a into local_1e + Main_EnqueueResString @ 1008:0a8d via
+     * main_enqueue_res_string above). Needs live ResMgr blobs. */
+    (void)id;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+int text_dlg_string_source(int res_id, long fallback)
+{
+    /* Orig Text_DrawDlgItemString @ 1098:2796 source choice: param_5
+     * (res_id) == 0 ? (param_6 (fallback) != 0 ? copy path : empty) :
+     * ResMgr_GetString path. */
+    if (res_id != 0)
+        return 2;
+    if (fallback != 0)
+        return 1;
+    return 0;
+}
+
+civ_error_t text_set_dlg_item_text(int dlg_id, int item_id, const char *text)
+{
+    (void)dlg_id;
+    (void)item_id;
+    (void)text;
+    /* TODO: Orig Text_SetDlgItemPascal @ 1100:0947 (Util_PascalToCStr @
+     * 1100:0053 on the local_110 Pascal buffer, LIVE via util_pascal_to_c,
+     * + SETWINDOWTEXT on the GETDLGITEM handle; sole caller
+     * Text_DrawDlgItemString @ 1098:2796). Handle tail -> SDL TBD. */
+    if (!text)
+        return CIV_ERR_NOENT;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t text_draw_dlg_item_string(int dlg_id, int item_id, int res_id,
+                                      long fallback)
+{
+    (void)dlg_id;
+    (void)item_id;
+    (void)res_id;
+    (void)fallback;
+    /* TODO: Orig Text_DrawDlgItemString @ 1098:2796 (Dialog_GetItemRect @
+     * 1100:03ff rect math is LIVE in dialog_client_rect/
+     * dialog_dlgunits_to_pixels + source via text_dlg_string_source above
+     * + Text_SetDlgItemPascal @ 1100:0947; sole caller FUN_10f0_0066 @
+     * 10f0:0066). GDI handle tail -> SDL TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t text_fill_res_string_list(int res_id, int first, int last)
+{
+    (void)res_id;
+    (void)first;
+    (void)last;
+    /* TODO: Orig Text_FillResStringList @ 1098:1f4f (ResMgr_GetString @
+     * 1100:078a per id in first..last + Util_PascalToCStr @ 1100:0053 +
+     * LSTRLEN empty-stop returning NULL + cursor pack via
+     * text_res_list_advance above; sole caller Dialog_InitResStringTables
+     * @ 1068:0295 for Res 0x82/0x83/0x84/0x85/0x86). Needs live ResMgr
+     * blobs (see rsc_loader.h res_get_string_copy STUB) + caller heap. */
+    if (last < first)
+        return CIV_ERR_RANGE;
+    return CIV_ERR_UNSUPPORTED;
+}

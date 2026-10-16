@@ -42,11 +42,19 @@ civ_error_t title_play_intro(void);
  * @ 1040:068e, Game score @ 1040:1137 tails, 1170/1188/11b8 families):
  * 1030:0000 is the shared PIC/modal player (Dlg_CreateTracked @ 1098:124f
  * + FILLRECT/FRAMERECT + internal 1030:79ce/7c28/... helpers), NOT the
- * pre-menu intro loop. Intro frame source (NE resource vs RSC, OPENING.wav
- * SI 3/4 -> 0x83, see audio.h) stays TBD; this stub keeps the intro shape
- * (frames + Sound_PlayId(CIV_SOUND_OPENING) + title_poll_skip()) until
- * the true intro entry is isolated. Win16 frame present -> stub
- * CIV_ERR_UNSUPPORTED. */
+ * pre-menu intro loop. CONFIRMED 2026-10-16: Ghidra name is Pic_PlayShared
+ * @ 1030:0000 with params (city_idx, mode) — mode 1 opens the modal city
+ * view, mode 0 runs the background sim tick (incl. the caravan prod-0x1b
+ * Trade_DeliverCaravanGoods @ 1038:0d09 call); 13-caller fan-out re-verified
+ * (City_DoRevolt @ 11b8:0f26, City_ProcessDisaster @ 1040:068e,
+ * City_ShowCensusReport @ 1018:1d5b, City_ShowTopFive @ 1080:099b,
+ * Demo_ShowDemographics @ 1188:123a, 1018:0be0, 1018:208f, 1040:1137,
+ * 1170:0000, 1170:05af, 1170:05ca, 1188:0db8, Unit_DoMove @ 1038:0000);
+ * no Art_LoadFrameData @ 10b8:079d frame path inside (city GDI tiles, not
+ * RSC frames). Linux owner is pic_play_shared (see game.h/game.c); this
+ * stub keeps the intro shape (frames + Sound_PlayId(CIV_SOUND_OPENING) +
+ * title_poll_skip()) until the true intro entry is isolated. Win16 frame
+ * present -> stub CIV_ERR_UNSUPPORTED. */
 civ_error_t title_play_anim_loop(void);
 
 /* Orig: FUN_1018_xxxx @ 1018:xxxx -> title_decode_frame (Title_DecodeFrame).

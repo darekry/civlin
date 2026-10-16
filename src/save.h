@@ -475,4 +475,204 @@ civ_error_t save_marshal_fields_live(uint8_t *image, size_t cap,
 #define CIV_SAVE_STRIDED_LIVE_STRIDE \
     (CIV_SAVE_STRIDED_SKIP + CIV_SAVE_STRIDED_ELEM_LEN)
 
+/* --- Replay log (segment 1180, 2026-10-16) ---
+ * Anchors (civ.exe, x86:LE:16:Protected Mode):
+ *   Replay_PlayLog @ 1180:02d3 (reader: year via Replay_YearFromTurn @
+ *     1180:0f7c + line buffer @ 12d8:24fa + cases below + Replay_ShowEntry
+ *     @ 1180:0e78 per entry; pump via Sys_PumpMessages @ 1108:0000 +
+ *     Sys_DrainInput @ 11f0:4ea0; writer is Replay_AppendLog @ 11c0:3beb).
+ *   Log store: count @ 1388:0000 (u16-ish, cap 0x1000) + bytes @
+ *     1390:03af. Head byte: kind*0x10 + (turn>>8); next byte: turn low;
+ *     then payload (see replay_entry_len: 1/9 found+destroyed/capture 6B,
+ *     2 war / 3 peace 3B, 5 discover / 6 produce / 8 form / 10 build 4B,
+ *     0xb census 5B, 0xc election variable, 0xd destroyed 4B).
+ *   Cases (Replay_PlayLog switch on head>>4): 1/9 found(0x88 city name via
+ *     Replay_FindEmptySlot @ 1180:0fe5 + Replay_RefreshMapTile @ 1180:110c)
+ *     vs capture (Replay_UpdateSlotOwner @ 1180:1044); 2 war ("declare war
+ *     on"); 3 peace ("make peace with"); 5 discover (Res 0x82 tech via
+ *     Res_GetStringCopy @ 11f8:0080); 6 produce-first (Res 0x84); 8 form
+ *     (Res 0x8d); 10 build (Res 0x83 + 0x3967 when < 8); 0xb census
+ *     (City_FormatPopCount @ 11c8:03ac + "population"); 0xc election
+ *     (4 rows of high/low nibble civ picks); 0xd destroyed
+ *     (Replay_ShowCivDestroyed @ 1180:17e9 when mode==4 and victim==player).
+ *   Modes DAT_1390_009c: 1 = quiet (no Replay_ShowEntry), 2 = election
+ *     tail (+ FUN_1038_0c1d), 3 = record-to-file (handle @ 0xb1a6 via
+ *     Replay_OpenOrPlay @ 1180:0000 + Replay_PromptMode @ 1180:017a +
+ *     Replay_CloseView @ 1180:0297 + Replay_DumpMapText @ 1180:137f map
+ *     text), 4 = conqueror demo (Replay_ShowConqueror @ 1180:152f, slots
+ *     0x3a1 preset 0xff x0xe + "CONQUEROR" titles).
+ *   Civ names: Replay_LoadCivNames @ 1180:14be (Res 0x94/0x95 into
+ *     12d8:03da leader / 12d8:02da civ display).
+ *   Map tile refresh: Replay_RefreshMapTile @ 1180:110c (11x? clamp
+ *     x+-5/0x50 + y+-5/2..0x31 window, nearest via Replay_FindNearestSlot
+ *     @ 1180:1096 over Map_WrapStepDist @ 11c8:02ec, brush by
+ *     DAT_1420:b1a4 mode + Gfx_MakeBrush @ 1098:00b5 + PresentRect).
+ *   Who writes: Replay_AppendLog @ 11c0:3beb (11 callers: Unit_DoMove @
+ *     1038:0000, Game_TurnLoopTick @ 1088:0000, Game_DoPollutionAndWonderRace
+ *     @ 1088:1e32, NewGame wizard @ 10e8:1b97, diplomacy @ 1168:06c1/0dda/
+ *     0e8e, tech/wonder @ 1170:0241/2aaa, city/founding @ 1040:0000 +
+ *     1030:0000 shared PIC player). Who reads: Replay_PlayLog (above) +
+ *     Save_SaveDialog @ 1098:26d4 path via Replay_OpenOrPlay mode 3.
+ * OS-free format/count math below is LIVE 1:1 on explicit params (no
+ * Win16, no globals, read-only except the append cursor); GDI/file tails
+ * stay STUB with TODO Orig. */
+
+/* Replay log caps (Orig Replay_AppendLog @ 11c0:3beb + Replay_PlayLog). */
+#define CIV_REPLAY_MAX_BYTES 0x1000u
+#define CIV_REPLAY_SLOTS 0x80u
+#define CIV_REPLAY_EMPTY 0xffff
+
+/* Orig Replay_YearFromTurn @ 1180:0f7c -> replay_year_from_turn.
+ * OS-free 1:1 turn->year ladder (no globals): turn < 0xfb:
+ * turn*0x14 - 4000; turn-0xfa < 0x33: (turn-0xfa)*10 + 1000; turn-300 <
+ * 0x33: (turn-300)*5 + 0x5dc; turn-0x15e < 0x33: (turn-0x15e)*2 + 0x6d6;
+ * else turn + 0x5aa. Negative turn clamps the first arm (orig compared
+ * signed). */
+int replay_year_from_turn(int turn);
+
+/* Orig Replay_AppendLog @ 11c0:3beb -> replay_append_log.
+ * OS-free 1:1 on explicit buf/count (buf is the 1390:03af image, cap
+ * bytes; *count is the 1388:0000 cursor): needs 2 + payload_len bytes and
+ * *count + 2 + payload_len < CIV_REPLAY_MAX_BYTES (orig
+ * DAT_1388_0000 + param_2 + 2 < 0x1000 gate, param_2 = payload_len incl.
+ * kind/turn framing? here payload_len excludes the 2 framing bytes).
+ * Writes head = kind*0x10 + ((turn>>8) & 0x0f) at buf[*count], turn low at
+ * buf[*count+1], then payload bytes; advances *count by 2+payload_len.
+ * kind is 0..15 (switch cases 1..0xd, exact set see above); turn is
+ * g_nTurn (signed shown as u16 split). Returns CIV_OK, NOENT on NULL
+ * buf/count (NULL payload ok when payload_len == 0), RANGE on bad kind
+ * or count OOR, TRUNCATED when the cap gate fails (no partial write).
+ * No globals, no exit(). */
+civ_error_t replay_append_log(uint8_t *buf, size_t cap, size_t *count,
+                              int kind, int turn, const uint8_t *payload,
+                              unsigned payload_len);
+
+/* Orig Replay_FindEmptySlot @ 1180:0fe5 scan half -> replay_find_empty_slot.
+ * OS-free 1:1: first i in 0..n-1 with owners[i] == CIV_REPLAY_EMPTY
+ * (0x80 slots @ 1390:00a0 in orig, -1 sentinel). Returns the index, -1
+ * when full or on NULL/n <= 0. No globals, no exit(), read-only. */
+int replay_find_empty_slot(const int *owners, int n);
+
+/* Orig Replay_UpdateSlotOwner @ 1180:1044 scan half -> replay_update_slot_owner.
+ * OS-free 1:1: first i with xs[i]==x && ys[i]==y (orig 0x2a0/0x1a0 word
+ * tables vs param_2/param_3 bytes); writes owners[i] = owner (orig
+ * 0x00a0 table). Returns the index, -1 when no match or on NULL/n <= 0.
+ * owners NULL -> -1 (no write). No globals, no exit(). */
+int replay_update_slot_owner(int *owners, const int *xs, const int *ys, int n,
+                             int x, int y, int owner);
+
+/* --- Replay map-tile (2026-10-16) ---
+ * Anchors (civ.exe, x86:LE:16:Protected Mode):
+ *   Replay_FindNearestSlot @ 1180:1096 (0x80 slots @ 1390:00a0, skip -1;
+ *     score via Map_WrapStepDist @ 11c8:02ec over the 0x2a0/0x1a0 word
+ *     tables; best into DAT_1420_b1a4 init 999, strict < keeps ties at
+ *     the lower index; sole caller Replay_RefreshMapTile @ 1180:110c).
+ *   Replay_RefreshMapTile @ 1180:110c (11x? clamp window x+-5/0x50 +
+ *     y+-5/2..0x31 via Util_Clamp @ 11c8:0063; per tile Map_IsSeaLand @
+ *     1110:16c0 vs 10 + Map 1110:1d99 owner compare vs the nearest slot
+ *     (mismatch or DAT_1420_b1a4 >= 6 -> gray via DAT_12d8_45c6 brush,
+ *     else owner brush 7/0x0f/0x10+owner); 6x6 px rects at (x*6+0x10,
+ *     y*6+0x10) + GfxPort_PresentRect @ 10d0:0854; sole caller
+ *     Replay_PlayLog @ 1180:02d3 cases 1/9 with local_16 = 1).
+ *   Replay_DumpMapText @ 1180:137f (record path: rows y 0..0x31, per row
+ *     0x50 cells via Map_IsSeaLand @ 1110:16c0 (10 -> 0x20 ' ', else
+ *     0x2e '.'), city overlay via the 0x100 scan (x @ +0x17, y @ +3) +
+ *     Map 1110:199b-combined low bit (&1 == 0 -> 0x2b '+', else 0x2a
+ *     '*') + city-name bytes (@ 0x4da) appended at 0x24fb, CR 0x0d at
+ *     12d8:254a, 0x51 B save_file_write @ 1140:0245 per row; sole caller
+ *     Replay_OpenOrPlay @ 1180:0000 mode 3).
+ * How replay replays the map: it does NOT move units (no Unit_DoMove /
+ * Map claim) — found/capture log entries (kinds 1/9) allocate or retarget
+ * a city slot (Replay_FindEmptySlot @ 1180:0fe5 / Replay_UpdateSlotOwner
+ * @ 1180:1044), then Replay_RefreshMapTile repaints the 11-wide window
+ * around the city with the nearest-slot owner colors; the file record
+ * path instead dumps the ASCII map text above. GDI/file tails stay STUB;
+ * the OS-free window/score/cell math below is LIVE 1:1 on explicit
+ * params (no Win16, no globals, read-only except outs). */
+
+/* Orig Replay_FindNearestSlot @ 1180:1096 -> replay_find_nearest_slot.
+ * 1:1 scan (skip owners[i] == CIV_REPLAY_EMPTY; score
+ * map_wrap_step_dist(x, xs[i], y, ys[i]) per Map_WrapStepDist @ 11c8:02ec,
+ * see map.h; strict < keeps ties at the lower index, init 999 == orig
+ * DAT_1420_b1a4). Returns the index, -1 when none qualifies or on
+ * NULL/n <= 0; *dist_out gets the winning distance (999 when none, orig
+ * sentinel; NULL dist_out skips the store). No globals, no exit(). */
+int replay_find_nearest_slot(const int *owners, const int *xs,
+                             const int *ys, int n, int x, int y,
+                             int *dist_out);
+
+/* Orig Replay_RefreshMapTile @ 1180:110c clamp half -> replay_tile_window.
+ * 1:1 of the Util_Clamp @ 11c8:0063 calls (see sys.h util_clamp):
+ * x0 = clamp(x-5,0,0x50), x1 = clamp(x+5,0,0x50), y0 = clamp(y-5,2,0x31),
+ * y1 = clamp(y+5,2,0x31) (game map 0x50 x 0x32 at rows 2..0x31; the tile
+ * == 10 vs owner-brush + 6x6 PresentRect paint tail stays STUB).
+ * NOENT on any NULL out, else CIV_OK. No globals, no exit(). */
+civ_error_t replay_tile_window(int x, int y, int *x0, int *x1, int *y0,
+                               int *y1);
+
+/* Orig Replay_DumpMapText @ 1180:137f cell half -> replay_map_text_cell.
+ * 1:1: ocean (Map_IsSeaLand @ 1110:16c0 == 10) -> ' ' (0x20), else '.'
+ * (0x2e); a city at the cell (0x100 scan hit) overrides to '*' (0x2a),
+ * or '+' (0x2b) when the Map 1110:199b-combined low bit is clear
+ * ((combined & 1) == 0). Params are pre-decoded predicates (tile_is_ocean
+ * != 0, has_city != 0, combined_lo_bit & 1); the city-name append (@
+ * 0x4da into 0x24fb) + CR row framing + save_file_write tail stay STUB.
+ * Returns the cell char (never '?'). No globals, no exit(). */
+char replay_map_text_cell(int tile_is_ocean, int has_city,
+                          int combined_lo_bit);
+
+/* --- Replay modes (2026-10-16) ---
+ * Orig (civ.exe, x86:LE:16:Protected Mode):
+ *   Replay_OpenOrPlay @ 1180:0000 (loop: Replay_PromptMode @ 1180:017a;
+ *     mode < 1 -> return; mode == 3 -> record-to-file: civ-name filename
+ *     via Util_StrAppend @ 1000:363e + Save_SanitizeFileName @ 1198:0000
+ *     + Save_SaveDialog @ 1098:26d4 + save_file_open @ 1140:0139 mode
+ *     0x8004 + Replay_DumpMapText @ 1180:137f map text, then
+ *     Replay_PlayLog @ 1180:02d3 + save_file_close @ 1140:037c; else
+ *     play: Replay_PlayLog + Sound_PlayId @ 1150:00c9 + FUN_11f0_4ea0 +
+ *     FUN_1038_0c1d (now Sys_WaitForInput); then Replay_CloseView @
+ *     1180:0297 teardown).
+ *   Replay_PromptMode @ 1180:017a (DAT_1390_0098 == 0 -> mode =
+ *     Dialog_ShowMessage @ 1220:00d2 "See Replay? ..." (0 = cancel, else
+ *     play/record pick); else mode = 4; mode != 0 -> Dlg_CreateTracked @
+ *     1098:124f view + GfxPort_Create @ 10d0:0000 0x140x200).
+ *   Replay_CloseView @ 1180:0297 (Dlg_DestroyTracked @ 1098:1612 +
+ *     FUN_10d0_0172 port teardown; always runs after the log).
+ * Mode gates below are LIVE 1:1 on explicit params (dialog/file/GDI
+ * tails stay in the replay_open_or_play STUB). */
+
+/* Orig Replay_OpenOrPlay @ 1180:0000 dispatch half -> replay_mode_is_record.
+ * 1:1: nonzero (1) when mode == 3 (record-to-file), 0 otherwise. */
+int replay_mode_is_record(int mode);
+
+/* Orig Replay_PromptMode @ 1180:017a gate half -> replay_mode_needs_view.
+ * 1:1: nonzero (1) when mode != 0 (Dlg_CreateTracked view path), 0 when
+ * mode == 0 (cancel, orig returns before the view). */
+int replay_mode_needs_view(int mode);
+
+/* Orig Replay_PlayLog @ 1180:02d3 entry framing -> replay_entry_len.
+ * Fixed payload framing per kind (excludes the 2 kind/turn bytes):
+ * 1/9: 4, 2/3: 1, 5/6/8/10/0xd: 2, 0xb: 3, 0xc/others: -1 (variable or
+ * unknown; 0xc walks 4 rows of nibble picks). Returns the count or -1.
+ * No globals, no exit(). */
+int replay_entry_len(int kind);
+
+/* Orig Replay_ShowEntry @ 1180:0e78 -> replay_show_entry.
+ * Per-entry display tail (Text_SetColor when entry civ == player +
+ * file-write when mode == 3 via handle @ 0xb1a6 + map blit via
+ * FUN_11e8_0504/FUN_10d8_01b0 + PresentRect). GDI/file tail -> STUB. */
+civ_error_t replay_show_entry(int entry_civ, int player_civ, int mode);
+
+/* Orig Replay_OpenOrPlay @ 1180:0000 -> replay_open_or_play.
+ * Record/play dispatcher (Replay_PromptMode @ 1180:017a dialog + mode 3
+ * file open/close via save_file_open @ 1140:0139 + Replay_PlayLog +
+ * Replay_CloseView @ 1180:0297 teardown). COMMDLG/file/dialog tail -> STUB. */
+civ_error_t replay_open_or_play(void);
+
+/* Orig Replay_ShowCivDestroyed @ 1180:17e9 -> replay_show_civ_destroyed.
+ * Civ-destroyed animation (Art frames + Res 0x39d5 + Gfx_DrawTechIcon +
+ * Sound_PlayId + year/civ text via 10d8:046e + PresentRect). GDI/audio
+ * tail -> STUB. Param civ is the destroyed civ index. */
+civ_error_t replay_show_civ_destroyed(int civ);
+
 #endif /* CIVLIN_SAVE_H */
