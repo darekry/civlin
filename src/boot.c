@@ -1121,11 +1121,15 @@ civ_error_t main_run_startup_sequence(void)
      * Gfx_StoreDC @ 1098:1104 + Anim_OpenSequence @ 10b0:008a + loop#1/loop#2
      * Anim_AdvanceFrames @ 10b0:0461 + Anim_CloseSequence @ 10b0:0287 +
      * DestroyTracked. OS-free halves LIVE 1:1: dialog gates probed above,
-     * x2 geometry via anim_seq_port_count/off (2 ports at +9/+0x62) +
-     * gfx_startup_port_size_ok (0x200x0x140 preset backing, see video.h) +
-     * even pitch via gfx_port_bitmap_pitch / art_port_padded_width /
-     * gfx_remap_stride (((w+1)/2)*2), art id via art_frame_id_ok (see
-     * video.h). Device tails STUB: dlg_create_tracked PARTIAL
+     * x2 pair geometry via main_startup_port_pair_ok below (2 ports at
+     * +9/+0x62 + 0x200x0x140 preset backing via gfx_startup_port_size_ok,
+     * see video.h, + even pitch via gfx_port_bitmap_pitch /
+     * art_port_padded_width / gfx_remap_stride (((w+1)/2)*2)), art id via
+     * art_frame_id_ok (see video.h); per-tick SDL drain via
+     * main_startup_pump_events (PEEKMESSAGE replacement for
+     * Dialog_MenuZ_Modal @ 1220:0156) + loop-done via
+     * main_startup_modal_is_done (loop#1 done + loop#2 DAT_13e0_001e).
+     * Device tails STUB: dlg_create_tracked PARTIAL
      * (CREATEDIALOG/MAKEPROCINSTANCE/palette tails), gfx_store_dc STUB
      * (Gfx_StoreDC @ 1098:1104 -> Gfx_SetCurrentDC @ 1100:09a9), GfxPort
      * textures need a borrowed renderer (see boot_open_windows /
@@ -1144,9 +1148,6 @@ civ_error_t main_run_startup_sequence(void)
         civ_error_t art_rc;
         civ_error_t open_rc;
         gfx_port_t *frame_port = NULL;
-        int ports;
-        int port_off0;
-        int port_off1;
 
         /* 0x94 host create (PARTIAL dispatcher; UNSUPPORTED tail expected,
          * any other non-OK is a gate failure). */
@@ -1159,21 +1160,14 @@ civ_error_t main_run_startup_sequence(void)
             dlg_destroy_tracked();
             return CIV_ERR_BAD_DATA;
         }
-        /* GfxPort x2 OS-free geometry (LIVE 1:1, no renderer needed). */
-        ports = anim_seq_port_count();
-        port_off0 = anim_seq_port_off(0);
-        port_off1 = anim_seq_port_off(1);
-        if (ports != 2 || port_off0 != 9 || port_off1 != 0x62) {
+        /* GfxPort x2 pair OS-free geometry (LIVE 1:1 via
+         * main_startup_port_pair_ok, no renderer needed; covers the
+         * 0x200x0x140 preset + +9/+0x62 offs + even pitch). */
+        if (main_startup_port_pair_ok() != 1) {
             dlg_destroy_tracked();
             return CIV_ERR_BAD_DATA;
         }
         if (gfx_startup_port_size_ok(proc_w, proc_h) != 1) {
-            dlg_destroy_tracked();
-            return CIV_ERR_BAD_DATA;
-        }
-        if (gfx_port_bitmap_pitch(proc_w) != 0x200 ||
-            art_port_padded_width(proc_w) != 0x200 ||
-            gfx_remap_stride(proc_w) != 0x200) {
             dlg_destroy_tracked();
             return CIV_ERR_BAD_DATA;
         }
@@ -1192,16 +1186,28 @@ civ_error_t main_run_startup_sequence(void)
             return CIV_ERR_BAD_DATA;
         }
         /* Anim loops over the host (PARTIAL dispatcher; UNSUPPORTED open
-         * tail expected, advance reports done so the wait terminates). */
+         * tail expected, advance reports done so the wait terminates).
+         * Each loop pumps the SDL modal queue first (PEEKMESSAGE
+         * replacement for Dialog_MenuZ_Modal @ 1220:0156: quit/key/click
+         * sets the DAT_13e0_001e break image), then steps the frame and
+         * checks the loop-done shape (loop#1 done + loop#2 break). */
         open_rc = anim_open_sequence();
         if (open_rc != CIV_OK && open_rc != CIV_ERR_UNSUPPORTED) {
             dlg_destroy_tracked();
             return open_rc;
         }
         for (adv_loop = 0; adv_loop < loops; adv_loop++) {
-            int done = anim_advance_frames();
+            int pump_break = 0;
+            int done;
+            civ_error_t pump_rc;
 
-            if (done != 1) {
+            pump_rc = main_startup_pump_events(&pump_break);
+            if (pump_rc != CIV_OK) {
+                dlg_destroy_tracked();
+                return pump_rc;
+            }
+            done = anim_advance_frames();
+            if (main_startup_modal_is_done(done, pump_break) != 1) {
                 dlg_destroy_tracked();
                 return CIV_ERR_BAD_DATA;
             }
@@ -1662,4 +1668,89 @@ int main_startup_needs_rsc_frame(void)
      * 1190:0fda, see rsc_loader.h); procedural host (preset above) until
      * then. Always 1 while the decode is pending. */
     return 1;
+}
+
+/* --- Chain 2026-10-16 (P2): startup SDL modal/event bridge (goal P2) ---
+ * See boot.h block. OS-free predicates LIVE 1:1 (no Win16, no globals,
+ * read-only); the SDL drain below is the LIVE PEEKMESSAGE replacement
+ * (borrowed SDL event queue, no window needed, safe pre-Init). */
+
+int main_startup_port_pair_ok(void)
+{
+    /* Orig GfxPort_Create @ 10d0:0000 x2 pair backing for the 0x94 intro
+     * host (ref unpacked/civ.exe @ 11e0:0000 + Anim_OpenSequence @
+     * 10b0:008a ctx offs +9/+0x62 + Dlg_CreateTracked @ 1098:124f preset
+     * 0x200x0x140 via dlg_preset_w/h; pitch ((w+1)/2*2) via
+     * gfx_port_bitmap_pitch stays 0x200). Geometry only: the INDEX8
+     * TARGET textures need a borrowed renderer (see gfx_port_create /
+     * boot_open_windows), so no texture is created here. */
+    if (anim_seq_port_count() != 2)
+        return 0;
+    if (anim_seq_port_off(0) != 9)
+        return 0;
+    if (anim_seq_port_off(1) != 0x62)
+        return 0;
+    if (gfx_startup_port_size_ok(0x200, 0x140) != 1)
+        return 0;
+    if (gfx_port_bitmap_pitch(0x200) != 0x200)
+        return 0;
+    if (art_port_padded_width(0x200) != 0x200)
+        return 0;
+    if (gfx_remap_stride(0x200) != 0x200)
+        return 0;
+    return 1;
+}
+
+int main_startup_modal_is_done(int adv_done, int break_flag)
+{
+    /* Orig Main_RunStartupSequence @ 11e0:0000 loop-done shape: loop#1
+     * while (Anim_AdvanceFrames @ 10b0:0461 == 0) pump (nonzero = done,
+     * see anim_advance_frames PARTIAL stub reporting done) + loop#2
+     * do { if (DAT_13e0_001e != 0) break; c = AdvanceFrames } while
+     * (c == 0) (flag set by MainMenu_WndProc @ 11e0:0221 idle/timer,
+     * see main_startup_should_break). */
+    if (adv_done != 0)
+        return 1;
+    if (break_flag != 0)
+        return 1;
+    return 0;
+}
+
+int main_startup_event_is_dismiss(uint32_t sdl_type)
+{
+    /* Orig Dialog_MenuZ_Modal @ 1220:0156 dismiss shape (button/ESC/close
+     * ends the modal, motion/window/user noise does not). SDL mapping:
+     * QUIT (window X / SDL_Quit requested) + KEY_DOWN (any key incl. ESC,
+     * MenuZ has no per-key filter at this layer) + MOUSE_BUTTON_DOWN
+     * (MenuZ 500-based button click) dismiss; everything else is pump
+     * noise. Predicate only (no SDL init, no queue touch). */
+    if (sdl_type == (uint32_t)SDL_EVENT_QUIT)
+        return 1;
+    if (sdl_type == (uint32_t)SDL_EVENT_KEY_DOWN)
+        return 1;
+    if (sdl_type == (uint32_t)SDL_EVENT_MOUSE_BUTTON_DOWN)
+        return 1;
+    return 0;
+}
+
+civ_error_t main_startup_pump_events(int *break_flag)
+{
+    /* Orig Main_RunStartupSequence @ 11e0:0000 modal pump + Dialog_MenuZ_
+     * Modal @ 1220:0156 PEEKMESSAGE/ISDIALOGMESSAGE drain (100 ms SETTIMER
+     * @ 1220:0202 via menuz_timer_interval_ms; pacing via Sys_GetTickScaled
+     * @ 1100:02e1 TBD caller-side). SDL3 drain bridge: SDL_PollEvent loop
+     * (borrowed queue, no window owned here); dismiss events (see
+     * main_startup_event_is_dismiss) set the DAT_13e0_001e image sticky.
+     * TODO: Orig FUN_11e0_0000 @ 11e0:0000 (MenuZ 100 ms timer tick +
+     * tick-paced AdvanceFrames still go through the anim_open_sequence /
+     * art_load_frame device tails, STUB above; never fake CIV_OK). */
+    SDL_Event ev;
+
+    if (!break_flag)
+        return CIV_ERR_NOENT;
+    while (SDL_PollEvent(&ev)) {
+        if (main_startup_event_is_dismiss((uint32_t)ev.type) != 0)
+            *break_flag = 1;
+    }
+    return CIV_OK;
 }

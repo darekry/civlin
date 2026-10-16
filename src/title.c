@@ -23,22 +23,171 @@
 #include <SDL3/SDL.h>
 
 #include "audio.h"
+#include "dialog.h"
 #include "gfx_indexed.h"
 #include "sys.h"
 
 civ_error_t title_play_intro(void)
 {
-    /* TODO: confirm frame player (Main_RunStartupSequence @ 11e0:0000 loop#1:
-     * Dlg_CreateTracked(0x94,0x41) @ 1098:124f host + Anim_OpenSequence @
-     * 10b0:008a + Anim_AdvanceFrames @ 10b0:0461 pump + Anim_CloseSequence @
-     * 10b0:0287 + Gfx_StoreDC @ 1098:1104 save-first; Pic_PlayShared @
-     * 1030:0000 is the separate shared modal player, NOT this intro —
-     * see title_play_anim_loop above; FUN_1018_* callers / gr_pic.c
-     * LoadGifPicture/GR_PicRead are frame-decode candidates), then
-     * Sound_PlayId(3)=OPENING.wav + frame loop with title_poll_skip().
-     * See title_play_anim_loop / title_decode_frame below (packet C).
-     * SDL3 path is title_play_intro_sdl() below (needs win/ren, so the
-     * arg-less RE-map entry stays a stub). */
+    /* Orig Main_RunStartupSequence @ 11e0:0000 loop#1 intro host (ref
+     * unpacked/civ.exe decompile + strings "OPENING.wav",
+     * "RanDoMRadio"/"RanDoMStatic", "Can't initialize timer in MenuZ" @
+     * 1420:4a41): Dlg_CreateTracked(0x94,0x41) @ 1098:124f host +
+     * Anim_OpenSequence @ 10b0:008a + Sound_PlayId(3,0) @ 1150:00c9 +
+     * loop Anim_AdvanceFrames @ 10b0:0461 while(c == 0) + Anim_CloseSequence
+     * @ 10b0:0287 + Sound(1,0) + Gfx_StoreDC @ 1098:1104 save-first;
+     * Pic_PlayShared @ 1030:0000 is the separate shared modal player, NOT
+     * this intro (see title_play_anim_loop above; FUN_1018_* callers /
+     * gr_pic.c LoadGifPicture/GR_PicRead are frame-decode candidates).
+     * PARTIAL dispatcher: OS-free gates below are LIVE 1:1 (no Win16, no
+     * globals, read-only); the Win16 modal tails stay stubbed.
+     * SDL phase -> Anim opcode map (title_play_intro_sdl below drives the
+     * same shape on SDL3: fade/starfield = palette 1/2/0xe, logo present =
+     * store 5/7/8/9 + present 7/9/11/12/13, sweep = animate 1/12/14,
+     * OPENING.wav = caller-side (3,0)/(1,0) — no opcode plays sound
+     * inside, skip = title_intro_should_continue pump gate).
+     * TODO: Orig FUN_11e0_0000 @ 11e0:0000 SDL modal/event bridge
+     * (Dialog_MenuZ_Modal @ 1220:0156 PEEKMESSAGE/ISDIALOGMESSAGE pump +
+     * Dlg_CreateTracked @ 1098:124f (0x94,0x41) host + Dlg_DestroyTracked @
+     * 1098:1612 + Gfx_StoreDC @ 1098:1104 + Anim_CloseSequence @ 10b0:0287
+     * + Anim_RebaseClock @ 10b0:005b owners in dialog.c/video.c + GDI
+     * FILLRECT/FRAMERECT + Title_DecodeFrame @ 1018:xxxx frame path) ->
+     * SDL3 bridge TBD; faithful bitmaps wait for rsc_get_indexed @
+     * 1190:0a29. Frame present (Win16) -> CIV_ERR_UNSUPPORTED. SDL3 intro
+     * loop lives in title_play_intro_sdl() below. */
+    static const int sample_ops[] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
+        12, 13, 14 };
+    size_t i;
+    int is_intro;
+    int not_intro;
+    int is_earth;
+    int not_earth;
+    int keep_busy;
+    int done;
+    int center;
+    int show;
+    int need_preset;
+    int w;
+    int h;
+    int ctx;
+    int pal;
+    int off;
+    int is_init;
+    int is_extra;
+    int timer_ms;
+    int cancel;
+    int btn_id;
+    int back;
+    int valid;
+    int dis;
+    int pre_ok;
+    int split_n;
+    int out_idx = 0;
+    civ_error_t dlg_rc;
+    civ_error_t mz_rc;
+
+    /* 1) Title-owned intro gates LIVE (ref unpacked/civ.exe @ 11e0:0000). */
+    is_intro = title_dialog_is_intro(CIV_DLG_INTRO_ID);
+    not_intro = title_dialog_is_intro(0x8f);
+    is_earth = title_seq_is_earth(0x91e);
+    not_earth = title_seq_is_earth(CIV_DLG_INTRO_ID);
+    keep_busy = title_intro_should_continue(0);
+    done = title_intro_should_continue(1);
+    if (is_intro != 1 || not_intro != 0)
+        return CIV_ERR_BAD_DATA;
+    if (is_earth != 1 || not_earth != 0)
+        return CIV_ERR_BAD_DATA;
+    if (keep_busy != 1 || done != 0)
+        return CIV_ERR_BAD_DATA;
+
+    /* 2) 0x94 host gates LIVE (Dlg_CreateTracked @ 1098:124f shape). */
+    center = dlg_create_should_center(CIV_DLG_INTRO_FLAGS);
+    show = dlg_create_should_show(CIV_DLG_INTRO_FLAGS);
+    need_preset = dlg_id_needs_preset_size(CIV_DLG_INTRO_ID);
+    w = dlg_preset_w(CIV_DLG_INTRO_ID);
+    h = dlg_preset_h(CIV_DLG_INTRO_ID);
+    ctx = dlg_tracked_ctx_size();
+    pal = dlg_tracked_pal_count();
+    off = dlg_tracked_push_off(0);
+    is_init = dlg_ctl_is_tracked_init(CIV_DLG_TRACKED_CTL_FIRST);
+    is_extra = dlg_ctl_is_earth_extra(0x323);
+    if (center != 1 || show != 1)
+        return CIV_ERR_BAD_DATA;
+    if (need_preset == 0 || w != CIV_DLG_PRESET_W || h != CIV_DLG_PRESET_H)
+        return CIV_ERR_BAD_DATA;
+    if (ctx != CIV_DLG_TRACKED_CTX_SIZE || pal != CIV_DLG_TRACKED_PAL_COUNT)
+        return CIV_ERR_BAD_DATA;
+    if (off != 0 || is_init == 0 || is_extra == 0)
+        return CIV_ERR_BAD_DATA;
+
+    /* 3) MenuZ gates LIVE (Dialog_MenuZ_Modal @ 1220:0156 shape). */
+    timer_ms = dialog_menuz_timer_ms();
+    cancel = dialog_menuz_cancel_code();
+    btn_id = dialog_menuz_index_to_id(0);
+    back = dialog_menuz_id_to_index(btn_id);
+    valid = dialog_menuz_id_is_valid(btn_id, 1);
+    dis = dialog_menuz_item_disabled(0, 0);
+    pre_ok = dialog_menuz_preselect_ok(-1, 1);
+    split_n = dialog_split_menu_count("_Intro");
+    if (timer_ms != CIV_DLG_MENUZ_TIMER_MS || cancel != CIV_DIALOG_MENUZ_CANCEL)
+        return CIV_ERR_BAD_DATA;
+    if (btn_id != CIV_DIALOG_MENUZ_BASE_ID || back != 0 || valid == 0)
+        return CIV_ERR_BAD_DATA;
+    if (dis != 0 || pre_ok != 0 || split_n != 1)
+        return CIV_ERR_BAD_DATA;
+
+    /* 4) SDL phase -> Anim opcode map LIVE (Anim_AdvanceFrames @ 10b0:0461
+     * families 1..0xe; sound invariant: no opcode plays sound inside). */
+    for (i = 0; i < sizeof(sample_ops) / sizeof(sample_ops[0]); i++) {
+        if (anim_opcode_is_valid(sample_ops[i]) != 1)
+            return CIV_ERR_BAD_DATA;
+    }
+    if (anim_opcode_is_valid(0) != 0 || anim_opcode_is_valid(0x0f) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (anim_opcode_is_palette(1) != 1 || anim_opcode_is_palette(2) != 1 ||
+        anim_opcode_is_palette(0x0e) != 1 || anim_opcode_is_palette(7) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (anim_opcode_is_slot(3) != 1 || anim_opcode_is_slot(4) != 1 ||
+        anim_opcode_is_slot(7) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (anim_opcode_needs_store(5) != 1 || anim_opcode_needs_store(7) != 1 ||
+        anim_opcode_needs_store(8) != 1 || anim_opcode_needs_store(9) != 1 ||
+        anim_opcode_needs_store(1) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (anim_opcode_needs_present(7) != 1 || anim_opcode_needs_present(9) != 1 ||
+        anim_opcode_needs_present(11) != 1 ||
+        anim_opcode_needs_present(12) != 1 ||
+        anim_opcode_needs_present(13) != 1 ||
+        anim_opcode_needs_present(5) != 0 || anim_opcode_needs_present(1) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (anim_opcode_needs_animate(1) != 1 ||
+        anim_opcode_needs_animate(12) != 1 ||
+        anim_opcode_needs_animate(14) != 1 ||
+        anim_opcode_needs_animate(2) != 0 || anim_opcode_needs_animate(7) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (anim_opcode_needs_sound(3) != 0 || anim_opcode_needs_sound(7) != 0 ||
+        anim_opcode_needs_sound(12) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (anim_opcode_is_text(7) != 1 || anim_opcode_is_text(8) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (anim_opcode_is_scroll(11) != 1 || anim_opcode_is_scroll(7) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (anim_tick_is_due(0L, 0L, 8) != 1 || anim_tick_is_due(0L, 1L, 8) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (anim_advance_ret(0L, 1L) != 0 || anim_advance_ret(1L, 1L) != 1)
+        return CIV_ERR_BAD_DATA;
+
+    /* 5) 0x94 host dispatchers (PARTIAL; UNSUPPORTED tail expected, any
+     * other non-OK is a gate failure). */
+    dlg_rc = dlg_create_tracked(CIV_DLG_INTRO_ID, CIV_DLG_INTRO_FLAGS);
+    if (dlg_rc != CIV_OK && dlg_rc != CIV_ERR_UNSUPPORTED)
+        return CIV_ERR_BAD_DATA;
+    mz_rc = dialog_menuz("Intro", "_Intro", -1, &out_idx);
+    if (mz_rc != CIV_OK && mz_rc != CIV_ERR_UNSUPPORTED)
+        return CIV_ERR_BAD_DATA;
+    if (mz_rc == CIV_OK && out_idx != CIV_DIALOG_MENUZ_CANCEL)
+        return CIV_ERR_BAD_DATA;
+    dlg_destroy_tracked();
     return CIV_ERR_UNSUPPORTED;
 }
 

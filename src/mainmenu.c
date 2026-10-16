@@ -3,6 +3,8 @@
 
 #include "boot.h"
 #include "dialog.h"
+#include "halloffame.h"
+#include "newgame.h"
 #include "save.h"
 #include "worldgen.h"
 
@@ -249,13 +251,28 @@ civ_error_t mainmenu_item_at(int index, char *out, size_t cap)
 civ_error_t mainmenu_dispatch(civ_mainmenu_choice_t choice)
 {
     civ_save_dialog_t dlg;
+    civ_hof_entry_t slots[CIV_HOF_SLOTS];
+    civ_newgame_settings_t wiz;
+    civ_error_t rc;
 
     /* OS-free 1:1 gate (LIVE): non-dispatchable values never reach the
      * Win16 tails (orig re-prompts via the choice < 0 || choice > 3 loop
-     * + DAT_1418_0004 cancel/back; see mainmenu_should_loop). */
+     * + DAT_1418_0004 cancel/back; see mainmenu_should_loop). Ref
+     * unpacked/civ.exe file offset 0xbb35b (CIV_MAINMENU_TEXT @ 1420:435b,
+     * 6 items -> dispatchable 0..5). */
     if (!mainmenu_choice_is_valid((int)choice))
         return CIV_ERR_NOENT;
     switch (choice) {
+    case CIV_MENU_NEWGAME:
+    case CIV_MENU_CUSTOMIZE:
+        /* Orig NewGame_Wizard @ 10e8:0000 via newgame_wizard_run (see
+         * newgame.h; 2 = custom-world steps 3/4 entry, same wizard).
+         * PARTIAL: propagate the wizard rc (steps still STUB -> currently
+         * CIV_ERR_UNSUPPORTED, never fake CIV_OK).
+         * TODO: Orig NewGame_Wizard @ 10e8:0000 SDL wizard bridge TBD
+         * (Dialog_MenuZ_Modal @ 1220:0156 steps 0..2 + custom variant @
+         * 1220:16fd steps 3/4 + finalize Sound/Map tails). */
+        return newgame_wizard_run(&wiz);
     case CIV_MENU_LOAD:
         /* TODO: Orig save_prompt_open @ 1130:000e full modal (save_prompt
          * SDL bridge TBD); -1 -> choice stays invalid. */
@@ -265,17 +282,30 @@ civ_error_t mainmenu_dispatch(civ_mainmenu_choice_t choice)
          * worldgen.h WorldGen_LoadEarth); nonzero -> invalid choice. */
         return worldgen_load_earth();
     case CIV_MENU_HALL:
-        /* TODO: Orig HoF_Load @ 1080:0023 + HoF_Show @ 1080:0119 SDL
-         * modal bridge TBD. */
-        return CIV_ERR_UNSUPPORTED;
+        /* Orig HoF_Load @ 1080:0023 + HoF_Show @ 1080:0119 (see
+         * halloffame.h). PARTIAL: Load is LIVE (clears + reads
+         * famehall.civ @ 1420:14e8, missing file = empty CIV_OK), Show
+         * propagates its rc (dialog 0x94 STUB -> currently UNSUPPORTED).
+         * TODO: Orig HoF_Show @ 1080:0119 SDL modal bridge TBD (dialog
+         * 0x94 + per-slot text via hof_format_slot + present via
+         * gfx_port_present_rect @ 10d0:0854). */
+        rc = HoF_Load(slots);
+        if (rc != CIV_OK)
+            return rc;
+        return HoF_Show(slots);
     case CIV_MENU_QUIT:
-        /* TODO: Orig WinMain_Shutdown @ 1008:0329. Caller exits its loop. */
+        /* Orig WinMain_Shutdown @ 1008:0329 via boot_shutdown (see boot.h:
+         * KILLTIMER/FREEPROCINSTANCE/DESTROYWINDOW/REMOVEFONTRESOURCE
+         * order). Void owner: run it for order fidelity, then report the
+         * Win16-teardown tail as unsupported (never fake CIV_OK).
+         * Caller exits its loop.
+         * TODO: Orig WinMain_Shutdown @ 1008:0329 SDL teardown bridge TBD
+         * (timers/windows via video/map, dialogs, audio MCI close). */
+        boot_shutdown();
         return CIV_ERR_UNSUPPORTED;
     default:
         break;
     }
-    /* TODO: Orig NewGame_Wizard @ 10e8:0000 paths for choices 0/2 (SDL
-     * wizard bridge TBD, see newgame.h newgame_wizard_run). */
     return CIV_ERR_UNSUPPORTED;
 }
 

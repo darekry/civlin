@@ -442,6 +442,45 @@ civ_error_t anim_pump_if_active(void)
     if (anim_opcode_is_valid(1) != 1 || anim_opcode_is_valid(0) != 0 ||
         anim_opcode_is_slot(3) != 1)
         return CIV_ERR_BAD_DATA;
+    /* Timed 11/14 gates (fala 13 parity with anim_advance_frames @
+     * 10b0:0461): scroll 11 + rotate 14 step only when (tick-start)%len
+     * == 0 via anim_tick_is_due (mono caller-side). 1:1 ref
+     * unpacked/civ.exe (NE LE, no copy): timed switch covers 1..0xe. */
+    if (anim_opcode_is_scroll(11) != 1 || anim_opcode_is_scroll(7) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (anim_opcode_needs_animate(14) != 1)
+        return CIV_ERR_BAD_DATA;
+    if (anim_tick_is_due(10L, 10L, 4) != 1 || anim_tick_is_due(10L, 11L, 4) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (anim_tick_is_due(10L, 14L, 4) != 1)
+        return CIV_ERR_BAD_DATA;
+    /* Frame counters + resolve count (open-sequence halves, 1:1): slot
+     * licznik klatki + tempo via frame_at/should_step/is_finished/
+     * play_frame + timeline count via count_frames/resolve_count. */
+    {
+        static const int pump_timeline[] = { 11, 14, 7, 0 };
+        int counted = anim_seq_count_frames(pump_timeline, 4u);
+        int resolved;
+
+        if (counted != 3)
+            return CIV_ERR_BAD_DATA;
+        resolved = anim_seq_resolve_count(0, counted);
+        if (resolved != counted)
+            return CIV_ERR_BAD_DATA;
+        if (anim_seq_resolve_count(5, counted) != 5)
+            return CIV_ERR_BAD_DATA;
+        if (anim_slot_frame_at(100L, 108L, 8) != 1L)
+            return CIV_ERR_BAD_DATA;
+        if (anim_slot_should_step(100L, 8, 1, 108L) != 1 ||
+            anim_slot_should_step(100L, 8, 2, 108L) != 0)
+            return CIV_ERR_BAD_DATA;
+        if (anim_slot_is_finished(5L, 4) != 1 ||
+            anim_slot_is_finished(4L, 4) != 0)
+            return CIV_ERR_BAD_DATA;
+        if (anim_slot_play_frame(3, 2L, 4) != 2L ||
+            anim_slot_play_frame(4, 2L, 4) != 2L)
+            return CIV_ERR_BAD_DATA;
+    }
     {
         long base = 0L;
 
@@ -711,6 +750,40 @@ civ_error_t anim_open_sequence(void)
         return CIV_ERR_BAD_DATA;
     if (anim_slot_should_step(0L, 8, 0, 0L) != 1)
         return CIV_ERR_BAD_DATA;
+    if (anim_slot_phase(0L, 1L, 0L, 0) != ANIM_SLOTPH_ALLOC ||
+        anim_slot_phase(0L, 1L, 1L, 1) != ANIM_SLOTPH_FINISH)
+        return CIV_ERR_BAD_DATA;
+    if (anim_caption_phase(0L, 1L, 0L, 0) != ANIM_CAPPH_DRAW ||
+        anim_caption_phase(0L, 1L, 1L, 0) != ANIM_CAPPH_UNDRAW)
+        return CIV_ERR_BAD_DATA;
+    if (anim_dissolve_phase(0L, 1L, 0L, 0) != ANIM_DIZPH_SETUP ||
+        anim_dissolve_phase(0L, 1L, 1L, 0) != ANIM_DIZPH_FINISH)
+        return CIV_ERR_BAD_DATA;
+    /* Timed 11/14 gates (fala 13 parity with anim_advance_frames @
+     * 10b0:0461): scroll 11 + rotate 14 step only when (tick-start)%len
+     * == 0 via anim_tick_is_due (mono caller-side). 1:1 ref
+     * unpacked/civ.exe (NE LE, no copy): timed switch covers 1..0xe. */
+    if (anim_opcode_is_scroll(11) != 1 || anim_opcode_is_scroll(7) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (anim_opcode_needs_animate(14) != 1)
+        return CIV_ERR_BAD_DATA;
+    if (anim_tick_is_due(10L, 10L, 4) != 1 || anim_tick_is_due(10L, 11L, 4) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (anim_tick_is_due(10L, 14L, 4) != 1)
+        return CIV_ERR_BAD_DATA;
+    /* Frame counters (slot licznik klatki + tempo, 1:1): frame_at/
+     * should_step/is_finished/play_frame on the 11/14 timeline. */
+    if (anim_slot_frame_at(100L, 108L, 8) != 1L)
+        return CIV_ERR_BAD_DATA;
+    if (anim_slot_should_step(100L, 8, 1, 108L) != 1 ||
+        anim_slot_should_step(100L, 8, 2, 108L) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (anim_slot_is_finished(5L, 4) != 1 ||
+        anim_slot_is_finished(4L, 4) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (anim_slot_play_frame(3, 2L, 4) != 2L ||
+        anim_slot_play_frame(4, 2L, 4) != 2L)
+        return CIV_ERR_BAD_DATA;
     rc = anim_dissolve_perm_init(perm, 4u);
     if (rc != CIV_OK)
         return CIV_ERR_BAD_DATA;
@@ -736,13 +809,13 @@ void anim_close_sequence(void)
      * FINISH-gate); the handle teardown tail stays STUB. Intentionally
      * void (orig void). Refs verified read-only: strings unpacked/civ.exe
      * ("OPENING.wav", "RanDoMRadio"/"RanDoMStatic"/"RanDoMUser").
-     * TODO: per-rec Anim_FreeSlot @ 10a8:00b4 (slots 3/4 via
+     * TODO: Orig Anim_CloseSequence @ 10b0:0287 teardown -> SDL3 bridge
+     * TBD: per-rec Anim_FreeSlot @ 10a8:00b4 (slots 3/4 via
      * anim_slot_should_free FINISH above) + dissolve free via
      * Anim_FreeDissolve @ 10b0:172d (opcodes 12/13 via
      * anim_dissolve_should_free FINISH above) + GfxPort_ClearActive/Close
      * x2 (pair slots anim_seq_port_off above) + GLOBALFREE/Mem_DisposePtr
-     * + DAT_1420_1f40 = 0 -> SDL3 bridge TBD (GfxPort_Create @ 10d0:0000
-     * owner in video.h). */
+     * + DAT_1420_1f40 = 0 (GfxPort_Create @ 10d0:0000 owner in video.h). */
     int ports;
     int off0;
     int off1;

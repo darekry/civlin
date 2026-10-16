@@ -32,9 +32,18 @@
 
 #include "civ_common.h"
 
-/* Plays the pre-menu intro (OPENING.wav + frames). Skippable on input in
- * the original. UNSUPPORTED until the frame source (NE resource vs RSC) is
- * confirmed. */
+/* Orig Main_RunStartupSequence @ 11e0:0000 loop#1 intro host ->
+ * title_play_intro. PARTIAL dispatcher: OS-free gates LIVE 1:1 (ref
+ * unpacked/civ.exe: title_dialog_is_intro 0x94 + title_seq_is_earth 0x91e +
+ * title_intro_should_continue adv==0 + Dlg_CreateTracked @ 1098:124f
+ * (0x94,0x41) preset/ctx/pal/ctl gates + Dialog_MenuZ_Modal @ 1220:0156
+ * timer/cancel/id gates + Anim_AdvanceFrames @ 10b0:0461 opcode 1..0xe map
+ * for the title_play_intro_sdl SDL phases below); the Win16 modal tails
+ * (Dlg_CreateTracked/DestroyTracked host + Gfx_StoreDC @ 1098:1104 +
+ * Anim_OpenSequence @ 10b0:008a / Anim_CloseSequence @ 10b0:0287 +
+ * Anim_RebaseClock @ 10b0:005b owners in dialog.c/video.c + Title_DecodeFrame
+ * @ 1018:xxxx frame path) stay TODO -> CIV_ERR_UNSUPPORTED. No globals, no
+ * exit(), read-only. */
 civ_error_t title_play_intro(void);
 
 /* Orig: FUN_1030_0000 @ 1030:0000 -> Pic_PlayShared (NOT Title_PlayAnimLoop).

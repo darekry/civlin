@@ -160,19 +160,25 @@ void map_shutdown(void)
 
 civ_error_t wdwstatus_calc_upper_rect(civ_rect_t *out)
 {
-    (void)out;
     /* TODO: FUN_1218_0956 @ 1218:0956 (client-rect -> centered frame,
      * cy+0x1e variant; INFLATERECT -1,-1; see map.h). OS-free cx/cy head
      * is LIVE in wdwstatus_frame_metrics below; the SETRECT field order
-     * + GLOBALLOCK rect fetch stay Win16 until decoded. */
+     * + GLOBALLOCK rect fetch stay Win16 until decoded. Ref
+     * unpacked/civ.exe read-only (NE Win3.x, 832512 B): anchor 1218:0956.
+     * NULL out -> NOENT (orig faulted on a bad far pointer). */
+    if (!out)
+        return CIV_ERR_NOENT;
     return CIV_ERR_UNSUPPORTED;
 }
 
 civ_error_t wdwstatus_calc_lower_rect(civ_rect_t *out)
 {
-    (void)out;
     /* TODO: FUN_1218_0a06 @ 1218:0a06 (cy*2+0x46/0x1e variant; same head
-     * as above, LIVE in wdwstatus_frame_metrics). */
+     * as above, LIVE in wdwstatus_frame_metrics). Ref unpacked/civ.exe
+     * read-only (NE Win3.x, 832512 B): anchor 1218:0a06. NULL out ->
+     * NOENT (orig faulted on a bad far pointer). */
+    if (!out)
+        return CIV_ERR_NOENT;
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -554,10 +560,20 @@ civ_error_t map_refresh_all_views(int civ)
 civ_error_t mainport_apply_palette(int first, int count)
 {
     /* Orig: FUN_1200_00a8 @ 1200:00a8 -> MainPort_ApplyPalette.
-     * GLOBALLOCK -> Palette_AnimateRange @ 1090:0376 (see video.h). TODO: Win16
-     * palette -> SDL3 TBD; stub CIV_ERR_UNSUPPORTED. */
-    (void)first;
-    (void)count;
+     * GLOBALLOCK -> Palette_AnimateRange @ 1090:0376 (see video.h).
+     * OS-free 1:1 range head (same guard as palette_apply_to_port /
+     * palette_animate_range in video.c: [first, first+count) must sit
+     * inside [0,256); orig RGB triples + flag byte copy then
+     * ANIMATEPALETTE): bad range -> RANGE, no SDL touched. Device tail
+     * (SELECTPALETTE/REALIZEPALETTE -> SDL_SetPaletteColors on the
+     * MainPort INDEX8 TARGET from mainport_get_or_create @ 1098:114a)
+     * stays TBD. Ref unpacked/civ.exe read-only (NE Win3.x, 832512 B):
+     * anchors 1200:00a8 + 1090:0376.
+     * TODO: Orig FUN_1200_00a8 @ 1200:00a8 palette commit SDL bridge
+     * (needs the godpal runtime capture, see gfx_godpal_get) + the
+     * MainPort render-target select @ 10d0:0956. */
+    if (first < 0 || count <= 0 || first + count > 256)
+        return CIV_ERR_RANGE;
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -920,15 +936,17 @@ civ_error_t map_clamp_view_scroll(int tx, int ty)
 
 civ_error_t map_paint_tiles_clipped(int left, int top, int right, int bottom)
 {
-    (void)left;
-    (void)top;
-    (void)right;
-    (void)bottom;
     /* TODO: Orig Map_PaintTilesClipped @ 1208:1534 (tile-range paint from
      * 1330:4010/400e + 1408:00c6/c4: per-tile SETRECT 0x20 + clip @
      * 1100:0685 + OOB/fog blank vs Map_RevealCenter @ 1110:1461 +
      * Map_DrawCityLabels @ 1208:1f64 + PresentRect @ 10d0:0854). GfxPort
-     * blits -> SDL TBD. Clip math lives in video_clip_rect (LIVE). */
+     * blits -> SDL TBD. Clip math lives in video_clip_rect (LIVE);
+     * OS-free 1:1 head here: degenerate rect (right <= left or bottom
+     * <= top, same empty rule as video_clip_rect @ 1100:0685 which
+     * zeroes + skips) -> RANGE, no SDL touched. Ref unpacked/civ.exe
+     * read-only (NE Win3.x, 832512 B): anchor 1208:1534. */
+    if (right <= left || bottom <= top)
+        return CIV_ERR_RANGE;
     return CIV_ERR_UNSUPPORTED;
 }
 

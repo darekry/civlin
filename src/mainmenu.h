@@ -29,14 +29,19 @@
 #define CIV_MAINMENU_TEXT \
     "_Start a New Game_Load a Saved Game_Play on EARTH_Customize World_View Hall of Fame_Quit"
 
-/* Dispatch values as observed in MainMenu_WndProc (g_nMenuChoice). */
+/* Dispatch values as observed in MainMenu_WndProc (g_nMenuChoice).
+ * Raw choice is the zero-based MenuZ index over CIV_MAINMENU_TEXT @ 1420:435b
+ * (ref unpacked/civ.exe file offset 0xbb35b, 6 items); 0 = Start New Game,
+ * 1 = Load, 2 = Customize World, 3 = EARTH, 4 = Hall, 5 = Quit. 0/2 both
+ * enter NewGame_Wizard @ 10e8:0000 (2 = custom-world steps 3/4 path). */
 typedef enum civ_mainmenu_choice {
     CIV_MENU_NONE = -1,
+    CIV_MENU_NEWGAME = 0,  /* -> NewGame_Wizard @ 10e8:0000 */
     CIV_MENU_LOAD = 1,   /* -> save_prompt_open */
+    CIV_MENU_CUSTOMIZE = 2, /* -> NewGame_Wizard @ 10e8:0000 steps 3/4 */
     CIV_MENU_EARTH = 3,  /* -> FUN_1108_0243 earth map */
     CIV_MENU_HALL = 4,   /* -> HoF_Load + HoF_Show */
     CIV_MENU_QUIT = 5    /* -> WinMain_Shutdown */
-    /* 0/2 fall through to NewGame_Wizard paths; exact mapping TBD */
 } civ_mainmenu_choice_t;
 
 /* --- Chain 2026-10-16 (19): view toggles + nation entry (goals 3-5) ---
@@ -157,16 +162,20 @@ int mainmenu_should_loop(int choice);
 int mainmenu_choice_is_valid(int choice);
 
 /* Dispatches one choice to load/earth/hall/quit/new-game. PARTIAL:
- * OS-free choice gate (mainmenu_choice_is_valid above) is LIVE 1:1;
- * modal/action tails stay CIV_ERR_UNSUPPORTED with TODO Orig below
- * (MenuZ pump Dialog_MenuZ_Modal @ 1220:0156, never fake CIV_OK).
- * Orig targets: 1 save_prompt_open @ 1130:000e, 3 FUN_1108_0243 @
- * 1108:0243 (worldgen_load_earth), 4 HoF_Load @ 1080:0023 + HoF_Show @
- * 1080:0119, 5 WinMain_Shutdown @ 1008:0329, 0/2 NewGame_Wizard @
- * 10e8:0000; caller MainMenu_WndProc @ 11e0:0221.
+ * OS-free choice gate (mainmenu_choice_is_valid above, 0..5 over
+ * CIV_MAINMENU_TEXT @ 1420:435b ref unpacked/civ.exe file offset 0xbb35b)
+ * is LIVE 1:1; each arm delegates to its owner and propagates the owner
+ * rc (never fake CIV_OK); Win16 modal/action tails inside the owners stay
+ * CIV_ERR_UNSUPPORTED with TODO Orig below.
+ * Orig targets: 0/2 NewGame_Wizard @ 10e8:0000 (via newgame_wizard_run,
+ * see newgame.h), 1 save_prompt_open @ 1130:000e, 3 FUN_1108_0243 @
+ * 1108:0243 (worldgen_load_earth, see worldgen.h), 4 HoF_Load @ 1080:0023
+ * + HoF_Show @ 1080:0119 (see halloffame.h), 5 WinMain_Shutdown @
+ * 1008:0329 (via boot_shutdown, see boot.h); caller MainMenu_WndProc @
+ * 11e0:0221.
  * Invalid (non-dispatchable) choice -> CIV_ERR_NOENT (orig re-prompts,
- * never dispatches); valid-but-unimplemented (0/2 new-game, 4 hall,
- * 5 quit while their owners land) -> CIV_ERR_UNSUPPORTED.
+ * never dispatches); valid arms return the owner rc (currently
+ * CIV_ERR_UNSUPPORTED until each owner modal lands).
  * CIV_MENU_EARTH (3) -> worldgen_load_earth (Orig FUN_1108_0243 @ 1108:0243,
  * see worldgen.h); nonzero result keeps the menu choice invalid. */
 civ_error_t mainmenu_dispatch(civ_mainmenu_choice_t choice);

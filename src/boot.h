@@ -743,10 +743,13 @@ civ_error_t art_maybe_convert_artwork(void);
  * ID/count/tick halves are LIVE 1:1 (ref unpacked/civ.exe @ 11e0:0000).
  * Startup bridge (see boot.c): Dlg_CreateTracked @ 1098:124f (0x94,0x41) /
  * Dlg_DestroyTracked @ 1098:1612 host + GfxPort_Create @ 10d0:0000 x2 pair
- * geometry (anim_seq_port_count/off + gfx_startup_port_size_ok/pitch, see
- * video.h) + Art_LoadFrameData @ 10b8:079d gate (art_frame_id_ok +
- * art_load_frame probe, see video.h); device tails STUB. SDL modal/event
- * bridge TBD -> overall PARTIAL CIV_ERR_UNSUPPORTED, never fake CIV_OK.
+ * geometry (main_startup_port_pair_ok: anim_seq_port_count/off +
+ * gfx_startup_port_size_ok/pitch 0x200x0x140, see video.h) +
+ * Art_LoadFrameData @ 10b8:079d gate (art_frame_id_ok +
+ * art_load_frame probe, see video.h) + SDL modal/event drain
+ * (main_startup_pump_events: SDL_PollEvent for Dialog_MenuZ_Modal @
+ * 1220:0156 + loop-done via main_startup_modal_is_done); device tails
+ * STUB -> overall PARTIAL CIV_ERR_UNSUPPORTED, never fake CIV_OK.
  * No globals, no exit(), read-only. */
 civ_error_t main_run_startup_sequence(void);
 
@@ -1231,5 +1234,68 @@ int main_startup_procedural_ready(int dlg_id);
  * the RSC frame decode lands; never 0 while the faithful look is pending).
  * No globals. */
 int main_startup_needs_rsc_frame(void);
+
+/* --- Chain 2026-10-16 (P2): startup SDL modal/event bridge (goal P2) ---
+ * Orig Main_RunStartupSequence @ 11e0:0000 loop shape (civ.exe,
+ * x86:LE:16:Protected Mode; ref unpacked/civ.exe): loop#1 intro =
+ * while (Anim_AdvanceFrames @ 10b0:0461 == 0) pump (dialog 0x94 host via
+ * Dlg_CreateTracked @ 1098:124f (0x94,0x41) + GfxPort_Create @ 10d0:0000 x2
+ * pair at ctx offs +9/+0x62 via Anim_OpenSequence @ 10b0:008a); loop#2
+ * earth-prepare = do { if (DAT_13e0_001e != 0) break; AdvanceFrames }
+ * while (c == 0) (flag via MainMenu_WndProc @ 11e0:0221 idle/timer, see
+ * main_startup_should_break). Modal pump shape comes from
+ * Dialog_MenuZ_Modal @ 1220:0156 (PEEKMESSAGE/ISDIALOGMESSAGE drain with
+ * 100 ms SETTIMER @ 1220:0202 via menuz_timer_interval_ms, cancel -1 via
+ * dialog_menuz_cancel_code; dismiss = button/ESC/close, noise = motion).
+ * SDL mapping (no Win16, no globals, read-only except the explicit break
+ * out): SDL_PollEvent drain replaces PEEKMESSAGE, dismiss events set the
+ * break flag (loop#2 DAT_13e0_001e image), the GfxPort x2 pair stays a
+ * geometry gate (0x200x0x140 preset, renderer-borrowed textures TBD in
+ * gfx_port_create, see video.h). Helpers below are LIVE 1:1 on explicit
+ * params; the device tails (CREATEDIALOG/palette/GfxPort textures/RSC
+ * decode) stay STUB in main_run_startup_sequence above with TODO Orig
+ * 11e0:0000, never fake CIV_OK. No exit(), C17. */
+
+/* Orig GfxPort_Create @ 10d0:0000 x2 pair backing for the 0x94 intro host
+ * (Anim_OpenSequence @ 10b0:008a ctx offs +9/+0x62 + Dlg_CreateTracked @
+ * 1098:124f preset 0x200x0x140) -> main_startup_port_pair_ok. 1:1 1 when
+ * anim_seq_port_count() == 2 && anim_seq_port_off(0) == 9 &&
+ * anim_seq_port_off(1) == 0x62 && gfx_startup_port_size_ok(0x200,0x140)
+ * == 1 && gfx_port_bitmap_pitch(0x200) == 0x200 &&
+ * art_port_padded_width(0x200) == 0x200 && gfx_remap_stride(0x200) ==
+ * 0x200 (even pitch ((w+1)/2*2); INDEX8 TARGET textures need a borrowed
+ * renderer, see gfx_port_create, so geometry only here). 0 otherwise
+ * (any geometry drift = BAD host, caller maps to BAD_DATA). No SDL
+ * init, no globals. */
+int main_startup_port_pair_ok(void);
+
+/* Orig same loop-done shape (loop#1 c != 0 done + loop#2 DAT_13e0_001e
+ * break) -> main_startup_modal_is_done. 1:1 1 when adv_done != 0 (loop#1
+ * Anim_AdvanceFrames finished, nonzero = done) or break_flag != 0
+ * (loop#2 DAT_13e0_001e / SDL dismiss, see main_startup_pump_events),
+ * 0 while busy (adv 0 + no break = keep pumping). No globals. */
+int main_startup_modal_is_done(int adv_done, int break_flag);
+
+/* Orig Dialog_MenuZ_Modal @ 1220:0156 dismiss shape (button/ESC/close vs
+ * motion/window noise) -> main_startup_event_is_dismiss. 1:1 1 for the
+ * SDL dismiss family (SDL_EVENT_QUIT close + SDL_EVENT_KEY_DOWN key incl.
+ * ESC + SDL_EVENT_MOUSE_BUTTON_DOWN click = MenuZ button/close), 0 for
+ * everything else (motion/window/user-noise = keep pumping). Takes the
+ * SDL event type explicitly (Uint32 image, no SDL init needed for the
+ * predicate). No globals. */
+int main_startup_event_is_dismiss(uint32_t sdl_type);
+
+/* Orig same modal pump (PEEKMESSAGE/ISDIALOGMESSAGE drain per tick) ->
+ * main_startup_pump_events. SDL3 drain bridge LIVE (no Win16, no
+ * globals, read-only except the explicit out): SDL_PollEvent loop, any
+ * dismiss event (see main_startup_event_is_dismiss) sets *break_flag = 1
+ * (sticky: already-1 stays 1; DAT_13e0_001e image for loop#2); noise
+ * events are dropped like ISDIALOGMESSAGE-non-dialog msgs. NULL
+ * break_flag -> NOENT (untouched); else CIV_OK after draining (0 events
+ * is still OK, caller keeps pumping while modal_is_done == 0). Safe
+ * before SDL_Init (SDL_PollEvent reports none). TODO: Orig
+ * FUN_11e0_0000 @ 11e0:0000 (100 ms MenuZ timer tick via
+ * menuz_timer_interval_ms + Sys_GetTickScaled pacing TBD caller-side). */
+civ_error_t main_startup_pump_events(int *break_flag);
 
 #endif /* CIVLIN_BOOT_H */

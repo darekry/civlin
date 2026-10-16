@@ -196,6 +196,10 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `main_startup_intro_proc_h` | LIVE | 1098:124f |  |
 | `main_startup_procedural_ready` | LIVE | 1098:124f, 1190:0a29 |  |
 | `main_startup_needs_rsc_frame` | LIVE | 1190:0a29, 1190:0fda |  |
+| `main_startup_port_pair_ok` | LIVE | 1098:124f, 10b0:008a, 10d0:0000, 11e0:0000 |  |
+| `main_startup_modal_is_done` | LIVE | 10b0:0461, 11e0:0000, 11e0:0221 |  |
+| `main_startup_event_is_dismiss` | LIVE | 1220:0156 |  |
+| `main_startup_pump_events` | LIVE | 1100:02e1, 11e0:0000, 1220:0156, 1220:0202 |  |
 
 ### `src/civ_common.c`
 
@@ -916,7 +920,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `mainmenu_choice_is_valid` | LIVE | 1008:0329, 1130:000e, 11e0:0221, 1220:0000, 1420:435b |  |
 | `mainmenu_item_count` | LIVE | 1000:36b2, 11e0:0221, 1220:0000, 1220:0156, 1420:435b |  |
 | `mainmenu_item_at` | LIVE | 1000:36b2, 1220:0156, 1420:435b |  |
-| `mainmenu_dispatch` | PARTIAL | 1008:0329, 1080:0023, 1080:0119, 10e8:0000, 1108:0243, 1130:000e, 11e0:0221, 1220:0156 | has TODO |
+| `mainmenu_dispatch` | PARTIAL | 1008:0329, 1080:0023, 1080:0119, 10e8:0000, 1108:0243, 1130:000e, 11e0:0221, 1420:435b | has TODO |
 | `menu_dispatch_count` | LIVE | 1048:01e4 |  |
 | `menu_dispatch_find` | LIVE | 1048:01cd |  |
 | `menu_dispatch_id_at` | LIVE |  |  |
@@ -1409,7 +1413,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 
 | Function | State | Orig addr | Note |
 |---|---|---|---|
-| `title_play_intro` | STUB | 1030:0000, 1098:1104, 1098:124f, 10b0:008a, 10b0:0287, 10b0:0461, 11e0:0000 | has TODO |
+| `title_play_intro` | PARTIAL | 1098:1104, 1098:124f, 10b0:005b, 10b0:008a, 10b0:0287, 10b0:0461, 1150:00c9, 11e0:0000, 1220:0156, 1420:4a41 | has TODO |
 | `title_play_anim_loop` | PARTIAL | 1018:0be0, 1018:1d5b, 1018:208f, 1030:0000, 1030:79ce, 1038:0000, 1038:0d09, 1040:068e, 1040:1137, 1080:099b, 1098:1104, 1098:124f, 1098:1612, 10b0:005b, 10b0:008a, 10b0:0287, 10b0:0461, 10b8:079d, 1170:0000, 1170:05af, 1170:05ca, 1188:0db8, 1188:123a, 11b8:0f26, 11e0:0000 | has TODO |
 | `title_decode_frame` | STUB | 1018:015d, 1088:1dd0, 1138:0000, 11b0:0000, 11b8:14e5 | has TODO |
 | `pic_decompress_chunk` | LIVE | 10f8:040a, 10f8:05da, 1420:23ce |  |
