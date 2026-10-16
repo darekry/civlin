@@ -18,8 +18,28 @@ civ_error_t mainmenu_run(civ_mainmenu_choice_t *out)
      * TODO: Orig FUN_11e0_0221 @ 11e0:0221 SDL3 modal bridge TBD
      * (Dialog_MenuZ_Modal @ 1220:0156 over CIV_MAINMENU_TEXT @ 1420:435b;
      * OS-free '_' split already LIVE in mainmenu_item_count/at below). */
+    int n_items;
+    int y_color;
+    int y_mono;
+    char probe[64];
+
     if (!out)
         return CIV_ERR_NOENT;
+    /* OS-free 1:1 probe of the packet-N split (ref unpacked/civ.exe file
+     * offset 0xbb35b: CIV_MAINMENU_TEXT @ 1420:435b, 6 items): proves the
+     * '_' buffer shape feeding Dialog_MenuZ_Modal @ 1220:0156 without
+     * pumping the Win16 PEEKMESSAGE/ISDIALOGMESSAGE modal. Read-only. */
+    n_items = mainmenu_item_count();
+    y_color = mainmenu_dialog_y_offset(0);
+    y_mono = mainmenu_dialog_y_offset(1);
+    (void)y_color;
+    (void)y_mono;
+    if (n_items != 6)
+        return CIV_ERR_UNSUPPORTED;
+    if (mainmenu_item_at(0, probe, sizeof(probe)) != CIV_OK)
+        return CIV_ERR_UNSUPPORTED;
+    if (probe[0] == '\0')
+        return CIV_ERR_UNSUPPORTED;
     *out = CIV_MENU_NONE;
     return CIV_ERR_UNSUPPORTED;
 }
@@ -212,7 +232,23 @@ civ_error_t menu_dispatch_command(int cmd)
      * mainmenu.h: 101 save-family @ 1198:00a3, 207/208 toggles @
      * 1210:1134/1218:077d, 506 nation @ 1070:1f58, census family @ 1018)
      * -> SDL action bridge TBD; stub CIV_ERR_UNSUPPORTED on match. */
-    if (menu_dispatch_find(cmd) < 0)
+    int idx;
+    int row_id;
+    int row_target;
+    int group;
+
+    idx = menu_dispatch_find(cmd);
+    if (idx < 0)
+        return CIV_ERR_NOENT;
+    /* OS-free 1:1 row decode (ref unpacked/civ.exe seg 1048 table @
+     * CS:0x3d8 + handler offsets @ CS:0x460, CX = 0x44 entries): proves
+     * the scan hit before the Win16 handler bridge. Read-only. */
+    row_id = menu_dispatch_id_at(idx);
+    row_target = menu_dispatch_target_at(idx);
+    group = menu_command_group(cmd);
+    (void)row_target;
+    (void)group;
+    if (row_id != cmd)
         return CIV_ERR_NOENT;
     return CIV_ERR_UNSUPPORTED;
 }

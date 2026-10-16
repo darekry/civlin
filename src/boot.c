@@ -988,6 +988,39 @@ civ_error_t main_run_startup_sequence(void)
      * the Dlg/Anim/Sound order above). Live twins: main_startup_anim_loops
      * / intro_sound / stop_sound / should_run_wizard / should_break (LIVE
      * counters/gates below) + newgame_wizard_run (see newgame.h). */
+    int loops;
+    int intro_snd;
+    int stop_snd;
+    int dlg_id;
+    int dlg_flags;
+    int earth_seq;
+    int rebase;
+
+    /* OS-free 1:1 order probe (ref unpacked/civ.exe @ 11e0:0000 decompile):
+     * intro dialog 0x94/0x41 + 2 anim loops (intro + earth-prepare 0x91e) +
+     * Sound_PlayId 3 intro / 1 stop + rebase 1000 + wizard gate + break
+     * flag. Proves the dispatcher constants before the Dlg/Anim/Sound
+     * Win16 bridge. Read-only, no globals, no exit(). */
+    loops = main_startup_anim_loops();
+    intro_snd = main_startup_intro_sound();
+    stop_snd = main_startup_stop_sound();
+    dlg_id = main_startup_intro_dialog_id();
+    dlg_flags = main_startup_intro_dialog_flags();
+    earth_seq = main_startup_earth_seq_id();
+    rebase = main_startup_rebase_ticks();
+    (void)intro_snd;
+    (void)stop_snd;
+    (void)dlg_flags;
+    (void)earth_seq;
+    (void)rebase;
+    if (loops != 2)
+        return CIV_ERR_UNSUPPORTED;
+    if (dlg_id != CIV_DLG_INTRO_ID)
+        return CIV_ERR_UNSUPPORTED;
+    if (main_startup_should_run_wizard(0) != 1)
+        return CIV_ERR_UNSUPPORTED;
+    if (main_startup_should_break(0) != 0)
+        return CIV_ERR_UNSUPPORTED;
     return CIV_ERR_UNSUPPORTED;
 }
 

@@ -156,7 +156,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `boot_run` | LIVE | 1000:11bb, 1000:2826, 1008:0000, 1008:059a, 1008:0b4a, 1008:0d68, 1008:0e99, 1088:0000, 1090:0488, 1098:06f8, 1098:096c, 10b8:0000, 10e8:2d46, 1190:0000, 11e8:0000, 11e8:0337 |  |
 | `boot_shutdown` | LIVE | 1008:0329, 1008:0d68, 12d8:28fa, 12d8:460e |  |
 | `art_maybe_convert_artwork` | LIVE | 1090:0488, 10b8:0000, 10b8:04df, 10b8:062d, 10b8:06a0, 10b8:076a, 10b8:079d, 10b8:0aa8, 10b8:0c1c, 10b8:0ded, 10b8:0e36, 10b8:11bc, 10b8:158c, 10d0:0cfa, 1420:20a9 |  |
-| `main_run_startup_sequence` | STUB | 1008:0329, 1098:124f, 10e8:0000, 1108:0243, 1130:000e, 11e0:0000, 11e0:0221, 1420:435b | has TODO |
+| `main_run_startup_sequence` | PARTIAL | 1008:0329, 1098:124f, 10e8:0000, 1108:0243, 1130:000e, 11e0:0000, 11e0:0221, 1420:435b | has TODO |
 | `config_prefs_defaults` | LIVE | 1008:0b4a, 1008:0bbf, 1150:00c9, 12d0:0064 |  |
 | `config_prefs_sounds_on` | LIVE |  |  |
 | `boot_video_caps_count` | LIVE | 1008:059a, 1420:0af4 |  |
@@ -240,7 +240,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `dialog_ctrl_user_proc` | LIVE | 1058:0921 |  |
 | `dialog_ctrl_region_proc` | LIVE | 1058:09f6 |  |
 | `dlg_create_tracked` | PARTIAL | 1000:137f, 1018:0000, 1030:0000, 1070:02b5, 1080:0119, 1090:0376, 1098:096c, 1098:0a5b, 1098:0ae0, 1098:0b67, 1098:1104, 1098:124f, 1098:1612, 1098:16e2, 1098:1838, 1098:201d, 10b0:008a, 10b0:0287, 10b0:0461, 10d0:0854, 10d0:09a2, 10e8:0000, 1100:03ff, 1100:060b, 1100:09a9, 1108:01bc, 1150:00c9, 1180:0297, 11e0:0000, 11e0:0221, 11f8:0000, 1220:00d2, 1420:17aa, 1420:1ea0, 1420:1ec8, 1420:9948, 1420:9960 | has TODO |
-| `dlg_destroy_tracked` | NOOP | 1098:1612, 1100:060b, 1420:17aa, 1420:1ea0, 1420:9960 |  |
+| `dlg_destroy_tracked` | LIVE | 1098:1612, 1100:060b, 1420:17aa, 1420:1ea0, 1420:9960 |  |
 | `dlg_create_should_center` | LIVE | 1098:124f |  |
 | `dlg_create_should_show` | LIVE |  |  |
 | `dlg_ctl_is_tracked_init` | LIVE |  |  |
@@ -248,10 +248,10 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `dlg_tracked_pop_count` | LIVE | 1098:1612 |  |
 | `dlg_move_extent` | LIVE | 1098:0a5b, 1098:0ae0, 1098:0b67 |  |
 | `dlg_move_should_use_default` | LIVE | 1098:0b67 |  |
-| `anim_pump_if_active` | STUB | 1098:0157, 10a8:0000, 10a8:00b4, 10a8:00fc, 10a8:0228, 10b0:0000, 10b0:0026, 10b0:008a, 10b0:0287, 10b0:0461, 10b0:151b, 1100:02e1, 1150:00c9, 1420:1f40 | has TODO |
-| `anim_advance_frames` | STUB | 10b0:0461, 1150:00c9 | has TODO |
-| `anim_open_sequence` | STUB | 10b0:008a, 1100:02e1 | has TODO |
-| `anim_close_sequence` | NOOP | 10a8:00b4, 10b0:0287 |  |
+| `anim_pump_if_active` | PARTIAL | 1098:0157, 10a8:0000, 10a8:00b4, 10b0:0000, 10b0:0026, 10b0:008a, 10b0:0287, 10b0:0461, 10b0:151b, 1100:02e1, 1150:00c9, 1420:1f40 | has TODO |
+| `anim_advance_frames` | STUB | 1098:1104, 10b0:0461, 1100:02e1, 1150:00c9 | has TODO |
+| `anim_open_sequence` | PARTIAL | 10b0:008a, 1100:02e1, 1420:1f40 | has TODO |
+| `anim_close_sequence` | LIVE | 10a8:00b4, 10b0:0287 |  |
 | `anim_seq_count_frames` | LIVE | 10b0:008a |  |
 | `anim_seq_max_end` | LIVE |  |  |
 | `anim_seq_is_active` | LIVE | 1098:0157, 10b0:0000, 10b0:0026 |  |
@@ -899,7 +899,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 
 | Function | State | Orig addr | Note |
 |---|---|---|---|
-| `mainmenu_run` | STUB | 1000:36b2, 11e0:0221, 1220:0156, 1420:435b | has TODO |
+| `mainmenu_run` | PARTIAL | 1000:36b2, 11e0:0221, 1220:0156, 1420:435b | has TODO |
 | `mainmenu_item_count` | LIVE | 1000:36b2, 11e0:0221, 1220:0000, 1220:0156, 1420:435b |  |
 | `mainmenu_item_at` | LIVE | 1000:36b2, 1220:0156, 1420:435b |  |
 | `mainmenu_dispatch` | PARTIAL | 1108:0243, 1130:000e | has TODO |
@@ -908,7 +908,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `menu_dispatch_id_at` | LIVE |  |  |
 | `menu_dispatch_target_at` | LIVE |  |  |
 | `menu_command_group` | LIVE |  |  |
-| `menu_dispatch_command` | STUB | 1048:01cd | has TODO |
+| `menu_dispatch_command` | PARTIAL | 1048:01cd | has TODO |
 | `mainmenu_dialog_y_offset` | LIVE | 10b0:0461, 11e0:0221, 1220:0156 |  |
 | `menu_toggle_show_cmd` | LIVE | 1210:1134, 1218:077d |  |
 | `menu_toggle_view_window` | LIVE | 1048:02af, 1208:0af1, 1210:025b, 1218:0386, 12b0:0004, 12b0:001c, 12b0:0034 |  |

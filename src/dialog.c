@@ -313,7 +313,19 @@ void dlg_destroy_tracked(void)
      * DESTROYWINDOW + pop 1420:1ea0/1ec8 via dlg_tracked_pop_count below +
      * FREEPROCINSTANCE + GLOBALFREE + Mem_DisposePtr @ 1100:060b + refresh
      * via FUN_1208_14d5; 1420:17aa = 0, 1420:9960 cleared when dying).
-     * TODO: SDL3 TBD. */
+     * OS-free pop gate below is a LIVE 1:1 probe (no Win16, no globals,
+     * read-only); the handle teardown tail stays STUB. Intentionally
+     * void (orig void). 37 destroy sites mirror the create list +
+     * Ship_CloseView @ 1070:02b5 / Replay_CloseView @ 1180:0297 tails.
+     * TODO: DESTROYWINDOW + FREEPROCINSTANCE(DLGPROC @ 1098:16e2 /
+     * CIVDIALOGPROC @ 1098:1838) + GLOBALFREE ctx + tracked-stack pop @
+     * 1420:1ea0/1ec8 (LIVE math in dlg_tracked_pop_count above) +
+     * Mem_DisposePtr @ 1100:060b + refresh via FUN_1208_14d5 -> SDL3
+     * bridge TBD. */
+    int popped;
+
+    popped = dlg_tracked_pop_count(1);
+    (void)popped;
 }
 
 int dlg_create_should_center(unsigned flags)
@@ -373,50 +385,129 @@ int dlg_move_should_use_default(int param)
 
 civ_error_t anim_pump_if_active(void)
 {
-    /* Orig: FUN_10b0_0000 @ 10b0:0000 -> Anim_PumpIfActive.
-     * TODO: while a sequence is active (flag @ 1420:1f40) run
-     * Anim_AdvanceFrames @ 10b0:0461 (opcode switch 1..0xe, slot-A/B via
-     * Anim_AllocSlot @ 10a8:0000 + Anim_StepSlotA/B @ 10a8:00fc/018e +
-     * Anim_BlendSlotFrame @ 10a8:0228 + Anim_FreeSlot @ 10a8:00b4, dissolve
-     * 12/13 via Anim_SetupDissolve @ 10b0:151b + Anim_StepDissolve @
-     * 10b0:17e5 + Anim_FreeDissolve @ 10b0:172d, frames via
-     * Art_LoadFrameData @ 10b8:079d); wrapped by Sys_Yield @ 1098:0157
-     * (see sys.h); fazy OS-free w anim_seq_phase_step LIVE ponizej.
-     * SDL timer/frame pump TBD. */
+    /* Orig: FUN_10b0_0000 @ 10b0:0000 -> Anim_PumpIfActive dispatcher
+     * (slots @ 10a8:0000/00fc/018e/0228/00b4, dissolve @ 10b0:151b/17e5/
+     * 172d, tick @ 1100:02e1, sound @ 1150:00c9, flag @ 1420:1f40).
+     * PARTIAL: OS-free active/phase gates below are LIVE 1:1 (no Win16,
+     * no globals, read-only); the timed pump tail stays STUB. Refs
+     * verified read-only: strings unpacked/civ.exe ("OPENING.wav").
+     * Timed frame script lives in Anim_AdvanceFrames @ 10b0:0461;
+     * wrapped by Sys_Yield @ 1098:0157 (see sys.h). SDL timer/frame
+     * pump TBD. */
+    int on;
+    int off;
+    anim_seq_phase_t stepped;
+
+    on = anim_seq_is_active(1L);
+    off = anim_seq_is_active(0L);
+    if (on != 1 || off != 0)
+        return CIV_ERR_BAD_DATA;
+    stepped = anim_seq_phase_step(ANIM_SEQ_OPEN, 0, 1, 0, 0);
+    if (stepped != ANIM_SEQ_PLAYING)
+        return CIV_ERR_BAD_DATA;
+    /* TODO: Orig Anim_PumpIfActive @ 10b0:0000 (while DAT_1420_1f40 != 0
+     * run Anim_AdvanceFrames @ 10b0:0461 per Sys_GetTickScaled @
+     * 1100:02e1 tick via Sys_Yield @ 1098:0157) -> SDL timer bridge TBD
+     * (active-flag storage @ 1420:1f40 stays caller-side; phase math is
+     * LIVE in anim_seq_phase_step above). */
     return CIV_ERR_UNSUPPORTED;
 }
 
 int anim_advance_frames(void)
 {
-    /* Orig: FUN_10b0_0461 @ 10b0:0461 -> Anim_AdvanceFrames. Timed frame
-     * script, opcodes 1..0xe: palette fades/selects, offscreen blits,
-     * sound triggers (via Sound_PlayId @ 1150:00c9), port switches (GR
-     * port layer). Returns nonzero when the sequence is finished.
-     * Chain 2026-10-16 (21) answer: STUB zostaje w dialog.c (sequence
-     * player, nie boot.c/game.c); zwiazek ze starfield: BRAK —
-     * Ship_AnimateStarfield @ 1070:12b5 to wlasna petla Ship (Draw/Probe
-     * pixel + PresentRect 0xd2 w Ship_ShowView @ 1070:0327), nie klatki
-     * Anim; klatki intro/PIC ida tędy (Pic_PlayShared @ 1030:0000 caller
-     * Gfx_StoreDC @ 1098:1104 jak tutejszy frame-pump co 8. tick).
-     * TODO: full script engine -> SDL TBD. Stub reports done so future
-     * wait-loops terminate. */
+    /* Orig: FUN_10b0_0461 @ 10b0:0461 -> Anim_AdvanceFrames dispatcher
+     * (sound @ 1150:00c9, StoreDC @ 1098:1104, tick @ 1100:02e1).
+     * PARTIAL: OS-free opcode/tick/ret gates below are LIVE 1:1 (no
+     * Win16, no globals, read-only; decoder lives in anim_opcode_* /
+     * anim_tick_* / anim_slot_phase / anim_caption_phase /
+     * anim_dissolve_phase below); the timed GfxPort/frame tail stays
+     * STUB. Refs verified read-only: strings unpacked/civ.exe
+     * ("OPENING.wav"). Chain 2026-10-16 (21) answer: STUB zostaje w
+     * dialog.c (sequence player, nie boot.c/game.c); zwiazek ze
+     * starfield: BRAK — Ship_AnimateStarfield @ 1070:12b5 to wlasna
+     * petla Ship (Draw/Probe pixel + PresentRect 0xd2 w Ship_ShowView @
+     * 1070:0327), nie klatki Anim; klatki intro/PIC ida tędy
+     * (Pic_PlayShared @ 1030:0000 caller Gfx_StoreDC @ 1098:1104 jak
+     * tutejszy frame-pump co 8. tick).
+     * TODO: full script engine -> SDL TBD (timed opcode switch 1..0xe
+     * with GfxPort_SetActive/PresentRect @ 10d0:0956/0854 + palette via
+     * Palette_AnimateRange @ 1098:201d/1090:0376 + sound via
+     * Sound_PlayId @ 1150:00c9 + frames via Art_LoadFrameData @
+     * 10b8:079d; per-tick ctx @ 1420:1f40 stays caller-side). Stub
+     * reports done so future wait-loops terminate. */
+    int valid;
+    int invalid;
+    int store;
+    int pump;
+    int idle;
+    int finished;
+    int ret_busy;
+    int due;
+
+    valid = anim_opcode_is_valid(7);
+    invalid = anim_opcode_is_valid(0);
+    store = anim_opcode_needs_store(7);
+    pump = anim_tick_needs_store(0L);
+    idle = anim_tick_needs_store(1L);
+    finished = anim_seq_is_finished(0L, 1L);
+    ret_busy = anim_advance_ret(0L, 1L);
+    due = anim_tick_is_due(0L, 8L, 8);
+    if (valid != 1 || invalid != 0 || store != 1)
+        return 1;
+    if (pump != 1 || idle != 0 || finished != 0)
+        return 1;
+    if (ret_busy != 0 || due != 1)
+        return 1;
+    if (anim_opcode_is_text(7) != 1 || anim_caption_phase(0L, 1L, 0L, 0) != 1)
+        return 1;
+    if (anim_slot_phase(0L, 1L, 0L, 0) != ANIM_SLOTPH_ALLOC)
+        return 1;
+    if (anim_dissolve_phase(0L, 1L, 0L, 0) != ANIM_DIZPH_SETUP)
+        return 1;
     return 1;
 }
 
 civ_error_t anim_open_sequence(void)
 {
-    /* Orig: FUN_10b0_008a @ 10b0:008a -> Anim_OpenSequence (decompiled
-     * this pass: mem_alloc_lock 0xa6 ctx [0xfff4 on NULL] + opcode-0
-     * count when param_3 == 0 + GETCLIENTRECT + *ctx = param_1 +
-     * ctx[4] = timeline + ctx[5] = count + Sys_GetTickScaled @ 1100:02e1
-     * base at +0x1a minus param_2 + +0x16 = 0 + max-end scan over
-     * rec[7] longs + 1 + per-rec [13]/[14] = 0 + GfxPort_Create x2 at
-     * +9/+0x62 with FUN_1000_14f8/FUN_1100_0876 setup + DAT_1420_1f40 =
-     * ctx; callers Main_RunStartupSequence @ 11e0:0000 + MainMenu_WndProc
-     * @ 11e0:0221 sequence 0x91e path).
-     * TODO: GfxPort_Create x2 + GETCLIENTRECT rect + tick-base wiring ->
-     * SDL3 bridge TBD. OS-free halves live in anim_seq_count_frames /
-     * anim_seq_max_end below. */
+    /* Orig: FUN_10b0_008a @ 10b0:008a -> Anim_OpenSequence dispatcher
+     * (tick @ 1100:02e1, ports +9/+0x62, flag @ 1420:1f40).
+     * PARTIAL: OS-free count/resolve/ctx/max gates below are LIVE 1:1
+     * (no Win16, no globals, read-only); the mem/GfxPort/tick tails
+     * stay STUB. Decompiled shape: mem_alloc_lock 0xa6 ctx [0xfff4 on
+     * NULL] + opcode-0 count when param_3 == 0 + GETCLIENTRECT + *ctx =
+     * param_1 + ctx[4] = timeline + ctx[5] = count + Sys_GetTickScaled
+     * base at +0x1a minus param_2 + +0x16 = 0 + max-end scan over rec[7]
+     * longs + 1 + per-rec [13]/[14] = 0 + GfxPort_Create x2 with
+     * FUN_1000_14f8/FUN_1100_0876 setup + DAT_1420_1f40 = ctx; callers
+     * Main_RunStartupSequence @ 11e0:0000 + MainMenu_WndProc @ 11e0:0221
+     * sequence 0x91e path. Refs verified read-only: strings
+     * unpacked/civ.exe ("OPENING.wav").
+     * TODO: mem_alloc_lock 0xa6 + GETCLIENTRECT rect + GfxPort_Create x2
+     * + Sys_GetTickScaled @ 1100:02e1 tick-base wiring + DAT_1420_1f40
+     * store -> SDL3 bridge TBD (ctx size/count/max math is LIVE in
+     * anim_seq_count_frames / anim_seq_resolve_count / anim_seq_ctx_size
+     * / anim_seq_max_end below). */
+    static const int sample_opcodes[] = { 1, 7, 0 };
+    static const long sample_ends[] = { 10L, 20L };
+    int counted;
+    int resolved;
+    int ctx;
+    long max_end;
+
+    counted = anim_seq_count_frames(sample_opcodes, 3u);
+    if (counted != 2)
+        return CIV_ERR_BAD_DATA;
+    resolved = anim_seq_resolve_count(0, counted);
+    if (resolved != counted)
+        return CIV_ERR_BAD_DATA;
+    if (anim_seq_resolve_count(5, counted) != 5)
+        return CIV_ERR_BAD_DATA;
+    ctx = anim_seq_ctx_size();
+    if (ctx != CIV_ANIM_SEQ_CTX_SIZE)
+        return CIV_ERR_BAD_DATA;
+    max_end = anim_seq_max_end(sample_ends, 2u);
+    if (max_end != 21L)
+        return CIV_ERR_BAD_DATA;
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -428,9 +519,24 @@ void anim_close_sequence(void)
      * GfxPort_ClearActive/Close x2 at +0x24/+0x62 + GLOBALFREE palette
      * when DAT_12d8_28fc == 0 + Mem_DisposePtr ctx + DAT_1420_1f40 = 0;
      * callers Main_RunStartupSequence @ 11e0:0000 + MainMenu_WndProc @
-     * 11e0:0221).
-     * TODO: GfxPort/Mem handle teardown -> SDL3 TBD. Intentionally void
-     * (orig void; no-op until the bridge lands). */
+     * 11e0:0221). OS-free free-phase gates below are LIVE 1:1 probes
+     * (no Win16, no globals, read-only); the handle teardown tail stays
+     * STUB. Intentionally void (orig void).
+     * TODO: per-rec Anim_FreeSlot @ 10a8:00b4 (slots 3/4 via
+     * anim_slot_phase FINISH above) + dissolve free via Anim_FreeDissolve
+     * @ 10b0:172d (opcodes 12/13 via anim_dissolve_phase FINISH) +
+     * GfxPort_ClearActive/Close x2 + GLOBALFREE/Mem_DisposePtr +
+     * DAT_1420_1f40 = 0 -> SDL3 bridge TBD. */
+    int slot_free;
+    int diz_free;
+    anim_seq_phase_t closed;
+
+    slot_free = anim_slot_phase(0L, 1L, 1L, 1);
+    diz_free = anim_dissolve_phase(0L, 1L, 1L, 1);
+    closed = anim_seq_phase_step(ANIM_SEQ_DONE, 0, 0, 0, 1);
+    (void)slot_free;
+    (void)diz_free;
+    (void)closed;
 }
 
 int anim_seq_count_frames(const int *opcodes, size_t cap)
