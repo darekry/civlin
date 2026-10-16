@@ -217,6 +217,8 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `util_str_case_cmp` | LIVE | 1000:36de, 11f8:01af |  |
 | `util_format_message` | LIVE | 1000:2928, 1000:2c9c, 1000:36b2, 1088:1dd0, 1190:17d0 |  |
 | `util_compare_bounded` | LIVE | 1000:36de, 1000:3744, 1000:377e, 1008:0e12, 1008:0e99, 11f8:014a, 11f8:01af, 11f8:0207, 1420:011b |  |
+| `util_str_len` | LIVE | 1000:19f2, 1000:2e85, 1000:3088, 1000:3722, 1100:0000, 1100:00ea, 1608:0220 |  |
+| `util_str_rchr` | LIVE | 1000:37b2, 1000:4124 |  |
 
 ### `src/dialog.c`
 
@@ -899,7 +901,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 
 | Function | State | Orig addr | Note |
 |---|---|---|---|
-| `mainmenu_run` | PARTIAL | 1000:36b2, 11e0:0221, 1220:0156, 1420:435b | has TODO |
+| `mainmenu_run` | PARTIAL | 1000:36b2, 1048:01cd, 1098:124f, 11e0:0221, 1220:0156, 1420:435b | has TODO |
 | `mainmenu_item_count` | LIVE | 1000:36b2, 11e0:0221, 1220:0000, 1220:0156, 1420:435b |  |
 | `mainmenu_item_at` | LIVE | 1000:36b2, 1220:0156, 1420:435b |  |
 | `mainmenu_dispatch` | PARTIAL | 1108:0243, 1130:000e | has TODO |
@@ -910,6 +912,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `menu_command_group` | LIVE |  |  |
 | `menu_dispatch_command` | PARTIAL | 1048:01cd | has TODO |
 | `mainmenu_dialog_y_offset` | LIVE | 10b0:0461, 11e0:0221, 1220:0156 |  |
+| `mainmenu_should_loop` | LIVE | 1000:36b2, 11e0:0000, 11e0:0221, 1220:0156, 12d8:44e2 |  |
 | `menu_toggle_show_cmd` | LIVE | 1210:1134, 1218:077d |  |
 | `menu_toggle_view_window` | LIVE | 1048:02af, 1208:0af1, 1210:025b, 1218:0386, 12b0:0004, 12b0:001c, 12b0:0034 |  |
 
@@ -1308,7 +1311,9 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `main_pump_message` | STUB | 1008:0329, 1008:0a8d, 1098:0157, 1098:02d1, 1108:0000, 11e8:02fb, 1208:0000, 1608:0134, 1608:013c, 1608:0140 | has TODO |
 | `main_key_to_res_char` | LIVE | 1098:02d1, 1208:0000, 1420:1400, 1420:142c |  |
 | `sys_get_client_rect` | STUB | 1000:137f, 1218:0956, 1218:0a06 | has TODO |
+| `sys_client_rect_is_valid` | LIVE | 1218:0956, 1218:0a06 |  |
 | `status_measure_row` | STUB | 1088:1460, 1098:0dda, 1138:0269, 11f0:4754, 1220:0b88 | has TODO |
+| `status_row_stride` | LIVE | 1138:0269 |  |
 | `sys_check_runtime_memory` | LIVE | 11e8:0075, 1420:43b4, 1420:4473, 1420:44ff |  |
 | `sys_check_free_memory` | LIVE | 11e8:0000, 1420:43b8 |  |
 | `file_write_chunk` | LIVE | 1000:272a |  |
@@ -1414,13 +1419,13 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `palette_init` | LIVE | 1090:0488 |  |
 | `gfx_brush_is_solid` | LIVE | 1098:00b5 |  |
 | `gfx_color_table_kind` | LIVE | 1098:01b0 |  |
-| `gfx_port_create` | LIVE | 10d0:0000, 10d0:0cfa |  |
+| `gfx_port_create` | LIVE | 10b0:008a, 10d0:0000, 10d0:0854, 10d0:08f1, 10d0:0cfa, 1208:0af1, 1210:025b, 1218:0386 |  |
 | `gfx_port_destroy` | LIVE | 10d0:0000, 10d0:0172 |  |
 | `gfx_port_alloc_bitmap` | LIVE | 10d0:0000, 10d0:08f1, 10d0:0cfa |  |
 | `gfx_port_set_active` | PARTIAL | 10d0:0956, 12d8:44ff | has TODO |
 | `gfx_port_present_rect` | LIVE | 1080:0119, 1080:06ff, 10d0:0854, 10d0:08f1, 10d0:0cfa |  |
 | `gfx_port_blit` | PARTIAL | 10d0:0000, 10d0:0854, 10d0:08f1, 10d0:0cfa | has TODO |
-| `mainport_get_or_create` | STUB | 1098:114a, 10d0:0956, 1208:0af1, 1210:025b, 1218:0386 | has TODO |
+| `mainport_get_or_create` | PARTIAL | 1090:0376, 1098:114a, 10b0:008a, 10d0:0000, 10d0:0956, 1200:00a8, 1208:0af1, 1210:025b, 1218:0386 | has TODO |
 | `gfx_port_fill_or_copy` | STUB | 1098:00b5, 10b0:0461, 10b8:079d, 10d0:0854, 10d0:08f1 | has TODO |
 | `gfx_port_load_rsc_frame` | STUB | 1090:0376, 1090:0488, 10d0:0000, 10d0:0854, 10d0:08f1, 10d0:0cfa | has TODO |
 | `util_draw_progress_bar` | STUB | 1000:29ea, 10d0:08f1 | has TODO |
