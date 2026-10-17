@@ -1,8 +1,9 @@
-/* Win16 + DOS INT 21h -> SDL3/stdio wrappers. See win16.h for anchors/policy.
- * No exit() here; arena state is private to this file. SDL3 only. */
+/* Win16 + DOS INT 21h -> SDL3 wrappers (SDL_IO + SDL_filesystem).
+ * See win16.h for anchors/policy. No exit() here; arena state is private
+ * to this file. SDL3 only. File tables are int-fd -> SDL_IOStream*
+ * (dualism with sys.c dos table stays: separate arrays, fd from 5). */
 #include "win16.h"
 
-#include <dirent.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -129,20 +130,39 @@ int win16_dos_get_drive(void)
 
 civ_error_t win16_dos_get_cwd(char *buf, size_t cap)
 {
-    /* AH=47h @ 1000:139c: getcwd (Orig returns path without drive prefix). */
-    char tmp[4096];
+    /* AH=47h @ 1000:139c: getcwd (Orig returns path without drive prefix).
+     * [PORT-SDL] Replaces: getcwd -> SDL_GetCurrentDirectory (malloc'd,
+     * SDL_free after copy). POSIX getcwd stays only as fallback when SDL
+     * returns NULL. SDL_GetError() is log-only, contract is civ_error_t. */
+    char *cwd = NULL;
     const char *rel;
     size_t n;
     if (!buf || cap == 0)
         return CIV_ERR_NOENT;
-    if (!getcwd(tmp, sizeof(tmp)))
-        return CIV_ERR_IO;
-    rel = (tmp[0] == '/') ? tmp + 1 : tmp;
-    n = strlen(rel) + 1;
-    if (n > cap)
-        return CIV_ERR_TRUNCATED;
-    memcpy(buf, rel, n);
-    return CIV_OK;
+    cwd = SDL_GetCurrentDirectory();
+    if (cwd) {
+        rel = (cwd[0] == '/') ? cwd + 1 : cwd;
+        n = strlen(rel) + 1;
+        if (n > cap) {
+            SDL_free(cwd);
+            return CIV_ERR_TRUNCATED;
+        }
+        memcpy(buf, rel, n);
+        SDL_free(cwd);
+        return CIV_OK;
+    }
+    /* POSIX-FALLBACK (no SDL twin): SDL_GetCurrentDirectory failed. */
+    {
+        char tmp[4096];
+        if (!getcwd(tmp, sizeof(tmp))) /* POSIX-FALLBACK (no SDL twin) */
+            return CIV_ERR_IO;
+        rel = (tmp[0] == '/') ? tmp + 1 : tmp;
+        n = strlen(rel) + 1;
+        if (n > cap)
+            return CIV_ERR_TRUNCATED;
+        memcpy(buf, rel, n);
+        return CIV_OK;
+    }
 }
 
 civ_error_t win16_dos_chdir(const char *path)
@@ -156,9 +176,9 @@ civ_error_t win16_dos_chdir(const char *path)
 
 #define WIN16_MAX_FILES 64
 
-static FILE *s_files[WIN16_MAX_FILES];
+static SDL_IOStream *s_files[WIN16_MAX_FILES];
 
-static int win16_fd_alloc(FILE *fp)
+static int win16_fd_alloc(SDL_IOStream *fp)
 {
     int i;
     if (!fp)
@@ -172,7 +192,7 @@ static int win16_fd_alloc(FILE *fp)
     return -1;
 }
 
-static FILE *win16_fd_get(int fd)
+static SDL_IOStream *win16_fd_get(int fd)
 {
     int idx = fd - 5;
     if (idx < 0 || idx >= WIN16_MAX_FILES)
@@ -182,76 +202,96 @@ static FILE *win16_fd_get(int fd)
 
 int win16_lopen(const char *path, int mode)
 {
-    /* _LOPEN @ 1000:2ad9 (AH=3Dh): 0 = rb, 1 = wb, else r+b. */
+    /* _LOPEN @ 1000:2ad9 (AH=3Dh): 0 = rb, 1 = wb, else r+b.
+     * [PORT-SDL] Replaces: fopen -> SDL_IOFromFile (same modes, no
+     * create/truncate beyond "wb"). Table int-fd shape unchanged (fd 5+). */
     const char *m = "rb";
-    FILE *fp;
+    SDL_IOStream *fp;
     if (!path)
         return -1;
     if (mode == 1)
         m = "wb";
     else if (mode == 2)
         m = "r+b";
-    fp = fopen(path, m);
+    fp = SDL_IOFromFile(path, m);
     if (!fp)
         return -1;
-    return win16_fd_alloc(fp);
+    {
+        int fd = win16_fd_alloc(fp);
+        if (fd < 0)
+            (void)SDL_CloseIO(fp);
+        return fd;
+    }
 }
 
 int win16_lread(int fd, void *buf, unsigned len)
 {
-    /* _LREAD/_HREAD @ 1000:1750 (AH=3Fh): short counts preserved. */
-    FILE *fp = win16_fd_get(fd);
+    /* _LREAD/_HREAD @ 1000:1750 (AH=3Fh): short counts preserved.
+     * [PORT-SDL] Replaces: fread -> SDL_ReadIO (short preserved, 0 at
+     * len==0, -1 on missing slot/fail). SDL_GetError() log-only. */
+    SDL_IOStream *fp = win16_fd_get(fd);
     size_t n;
     if (!fp || (!buf && len > 0))
         return -1;
     if (len == 0)
         return 0;
-    n = fread(buf, 1, len, fp);
-    if (n == 0 && ferror(fp))
+    n = SDL_ReadIO(fp, buf, (size_t)len);
+    if (n == (size_t)len)
+        return (int)n;
+    if (SDL_GetIOStatus(fp) == SDL_IO_STATUS_ERROR)
         return -1;
     return (int)n;
 }
 
 int win16_lwrite(int fd, const void *buf, unsigned len)
 {
-    /* _LWRITE/_HWRITE @ 1000:3fc4 (AH=40h). */
-    FILE *fp = win16_fd_get(fd);
+    /* _LWRITE/_HWRITE @ 1000:3fc4 (AH=40h).
+     * [PORT-SDL] Replaces: fwrite -> SDL_WriteIO (same short/-1 shape). */
+    SDL_IOStream *fp = win16_fd_get(fd);
     size_t n;
     if (!fp || (!buf && len > 0))
         return -1;
     if (len == 0)
         return 0;
-    n = fwrite(buf, 1, len, fp);
-    if (n < len && ferror(fp))
+    n = SDL_WriteIO(fp, buf, (size_t)len);
+    if (n == (size_t)len)
+        return (int)n;
+    if (SDL_GetIOStatus(fp) == SDL_IO_STATUS_ERROR)
         return -1;
     return (int)n;
 }
 
 long win16_llseek(int fd, long off, int origin)
 {
-    /* _LLSEEK @ 1000:161c (AH=42h): 0/1/2 = SET/CUR/END. */
-    FILE *fp = win16_fd_get(fd);
-    int whence = SEEK_SET;
+    /* _LLSEEK @ 1000:161c (AH=42h): 0/1/2 = SET/CUR/END.
+     * [PORT-SDL] Replaces: fseek/ftell -> SDL_SeekIO (returns pos, -1L
+     * on fail; OOR origin falls to SET like before). */
+    SDL_IOStream *fp = win16_fd_get(fd);
+    SDL_IOWhence whence = SDL_IO_SEEK_SET;
+    Sint64 pos;
     if (!fp)
         return -1L;
     if (origin == 1)
-        whence = SEEK_CUR;
+        whence = SDL_IO_SEEK_CUR;
     else if (origin == 2)
-        whence = SEEK_END;
-    if (fseek(fp, off, whence) != 0)
+        whence = SDL_IO_SEEK_END;
+    pos = SDL_SeekIO(fp, (Sint64)off, whence);
+    if (pos < 0)
         return -1L;
-    return ftell(fp);
+    return (long)pos;
 }
 
 int win16_lclose(int fd)
 {
-    /* _LCLOSE @ 1000:1fa6 (AH=3Eh). */
+    /* _LCLOSE @ 1000:1fa6 (AH=3Eh).
+     * [PORT-SDL] Replaces: fclose -> SDL_CloseIO + NULL slot. */
     int idx = fd - 5;
+    bool ok;
     if (idx < 0 || idx >= WIN16_MAX_FILES || !s_files[idx])
         return -1;
-    fclose(s_files[idx]);
+    ok = SDL_CloseIO(s_files[idx]);
     s_files[idx] = NULL;
-    return 0;
+    return ok ? 0 : -1;
 }
 
 /* --- USER --- */
@@ -334,55 +374,78 @@ civ_error_t win16_delete_object(void)
     return CIV_OK;
 }
 
-/* --- Assets --- */
+/* --- Assets (HOST probes, read-only) --- */
 
 static const char *const s_asset_dirs[] = { "civ1win", ".", "unpacked" };
+
+typedef struct win16_asset_scan {
+    const char *want;
+    char hit[1024];
+    int found;
+    int truncated;
+} win16_asset_scan_t;
+
+static SDL_EnumerationResult SDLCALL win16_asset_cb(void *userdata,
+                                                   const char *dirname,
+                                                   const char *fname)
+{
+    win16_asset_scan_t *s = (win16_asset_scan_t *)userdata;
+    int n;
+    if (!s || s->found)
+        return SDL_ENUM_SUCCESS;
+    if (!fname || !s->want)
+        return SDL_ENUM_CONTINUE;
+    if (strcasecmp(fname, s->want) != 0)
+        return SDL_ENUM_CONTINUE;
+    n = snprintf(s->hit, sizeof(s->hit), "%s%s", dirname ? dirname : "",
+        fname);
+    if (n <= 0 || (size_t)n >= sizeof(s->hit))
+        return SDL_ENUM_CONTINUE;
+    s->found = 1;
+    return SDL_ENUM_SUCCESS;
+}
 
 civ_error_t win16_find_asset(const char *name, char *out, size_t cap)
 {
     /* Case-sensitive fast path first (exact civ1win names), then a
      * case-insensitive directory scan: on-disk case varies per file
      * (Civdata0.rsc vs CIVDATA1.RSC vs Civdata3.rsc) and ext4 is
-     * case-sensitive, so exact/lower/upper guessing is not enough. */
+     * case-sensitive, so exact/lower/upper guessing is not enough.
+     * [PORT-SDL] Replaces: fopen probe -> SDL_GetPathInfo, opendir/
+     * readdir scan -> SDL_EnumerateDirectory (case-insensitive match in
+     * callback). Contract out/cap, TRUNCATED, NOENT unchanged. */
     size_t i;
     if (!name || !out || cap == 0)
         return CIV_ERR_NOENT;
     out[0] = '\0';
     for (i = 0; i < sizeof(s_asset_dirs) / sizeof(s_asset_dirs[0]); i++) {
         char cand[1024];
-        FILE *fp;
+        SDL_PathInfo info;
         int n = snprintf(cand, sizeof(cand), "%s/%s", s_asset_dirs[i], name);
         if (n > 0 && (size_t)n < sizeof(cand)) {
-            fp = fopen(cand, "rb");
-            if (fp) {
-                fclose(fp);
+            if (SDL_GetPathInfo(cand, &info) &&
+                info.type == SDL_PATHTYPE_FILE) {
                 if ((size_t)n + 1 > cap)
                     return CIV_ERR_TRUNCATED;
                 memcpy(out, cand, (size_t)n + 1);
                 return CIV_OK;
             }
         }
-        /* Slow path: scan the directory case-insensitively. */
+        /* Slow path: scan the directory case-insensitively via SDL. */
         {
-            DIR *d = opendir(s_asset_dirs[i]);
-            if (d) {
-                struct dirent *e;
-                while ((e = readdir(d)) != NULL) {
-                    if (strcasecmp(e->d_name, name) != 0)
-                        continue;
-                    n = snprintf(cand, sizeof(cand), "%s/%s", s_asset_dirs[i],
-                        e->d_name);
-                    if (n <= 0 || (size_t)n >= sizeof(cand))
-                        continue;
-                    if ((size_t)n + 1 > cap) {
-                        closedir(d);
-                        return CIV_ERR_TRUNCATED;
-                    }
-                    memcpy(out, cand, (size_t)n + 1);
-                    closedir(d);
-                    return CIV_OK;
-                }
-                closedir(d);
+            win16_asset_scan_t scan;
+            scan.want = name;
+            scan.hit[0] = '\0';
+            scan.found = 0;
+            scan.truncated = 0;
+            (void)SDL_EnumerateDirectory(s_asset_dirs[i], win16_asset_cb,
+                &scan);
+            if (scan.found) {
+                size_t hn = strlen(scan.hit) + 1;
+                if (hn > cap)
+                    return CIV_ERR_TRUNCATED;
+                memcpy(out, scan.hit, hn);
+                return CIV_OK;
             }
         }
     }

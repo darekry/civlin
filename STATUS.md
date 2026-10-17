@@ -40,7 +40,7 @@ tylko gdy krok jest dowodliwie pusty).
 | ResMgr_LoadRsc x5 | `boot_load_resources` | LIVE | sonda 5 plików via `win16_probe_resources` (case-insensitive); `rsc_load_rsc` LIVE, właściciel mgr TBD |
 | Video_CheckDriverCaps | `video_init` | LIVE | check renderera tam gdzie renderer istnieje (arg-less step usunięty, fala H) |
 | Art_MaybeConvertArtwork | `art_maybe_convert_artwork` | LIVE | na Linuksie zbędne — no-op CIV_OK |
-| Config_LoadPrefs | `boot_load_prefs` | LIVE | domyślne (sounds on); I/O `civ.prf` zostaje w `config_load_prefs` (STUB) |
+| Config_LoadPrefs | `boot_load_prefs` | LIVE | domyślne (sounds on); I/O `civ.prf` LIVE w `config_load_prefs`/`config_save_prefs` via `win16_l*` na SDL_IO |
 | Palette_Init | `palette_init` | LIVE | no-op (paleta per-tekstura) |
 | Game_InitGlobalTables | `boot_init_tables` | LIVE | rng + arena 16 MB; WONTFIX: Win16-lock selektora (bufor mapy w `map.c` `.bss`) |
 | Main_RunStartupSequence (intro) | `main_run_startup_sequence` | STUB | **krytyczna ścieżka**: Anim_OpenSequence @ 10b0:008a + pętla AdvanceFrames @ 10b0:0461 nad dialogiem 0x94 (P0); menu dopiero po intrze |
@@ -136,7 +136,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `font_fon_u32le` | LIVE |  |  |
 | `font_fon_parse` | LIVE | 1008:0e99, 1420:00a4 |  |
 | `font_face_count` | LIVE | 1008:0e99 |  |
-| `font_face_list` | STUB | 1008:0e99 | has TODO |
+| `font_face_list` | LIVE | 1008:0e99 |  |
 | `font_fnt_parse` | LIVE | 1008:0e99 |  |
 | `font_face_bitmap` | LIVE | 1008:0e99 |  |
 | `font_fnt_row_ptr` | LIVE |  |  |
@@ -155,7 +155,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `menu_strings_count` | LIVE | 1048:0000, 1420:435b, 14b0:0010, 14b0:0092, 14d0:0028 |  |
 | `menu_string_at` | LIVE |  |  |
 | `config_load_prefs` | LIVE | 1008:0b4a, 12d0:0064, 1420:010b |  |
-| `config_save_prefs` | PARTIAL | 1000:116a, 1000:1184, 1008:0bbf, 1228:0002, 12d0:0064, 1420:010b, 1420:0113 | has TODO |
+| `config_save_prefs` | LIVE | 1000:116a, 1000:1184, 1008:0bbf, 1228:0002, 12d0:0064, 1420:010b, 1420:0113 |  |
 | `boot_run` | LIVE | 1008:0000, 1058:0b4d, 1088:0000, 1098:06f8, 11e8:0000 |  |
 | `boot_shutdown` | LIVE | 1008:0329, 1008:0d68, 12d8:28fa, 12d8:460e |  |
 | `art_maybe_convert_artwork` | LIVE | 1090:0488, 10b8:0000, 10b8:04df, 10b8:062d, 10b8:06a0, 10b8:076a, 10b8:079d, 10b8:0aa8, 10b8:0c1c, 10b8:0ded, 10b8:0e36, 10b8:11bc, 10b8:158c, 10d0:0cfa, 1420:20a9 |  |
@@ -496,6 +496,10 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `anim_seq_resolve_count` | LIVE | 10b0:008a |  |
 | `anim_seq_ctx_size` | LIVE | 10b0:008a |  |
 | `anim_seq_rec_stride` | LIVE | 10b0:008a |  |
+| `anim_seq_op_word` | LIVE | 10b0:008a |  |
+| `anim_seq_end_word` | LIVE |  |  |
+| `anim_seq_zero_word0` | LIVE |  |  |
+| `anim_seq_zero_word1` | LIVE | 10b0:008a, 1100:02e1 |  |
 | `anim_seq_port_count` | LIVE | 10b0:008a, 10b0:0287, 10d0:0000 |  |
 | `anim_seq_port_off` | LIVE | 10b0:008a, 10d0:0000 |  |
 | `anim_tick_is_due` | LIVE | 10b0:0461 |  |
@@ -1393,6 +1397,9 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `file_emit_char` | LIVE | 1000:2cba, 1000:2cd8, 1000:2e85 |  |
 | `file_buffered_is_direct` | LIVE | 1000:2152, 1000:2cd8, 1000:2e85, 1420:4cd0 |  |
 | `file_is_text_mode` | LIVE | 1000:1750, 1000:33c0, 1000:3e70, 1000:3fc4 |  |
+| `dos_fd_alloc` | LIVE |  |  |
+| `dos_fd_get` | LIVE |  |  |
+| `dos_os_fd` | LIVE |  |  |
 | `dos_errno_e0010` | LIVE |  |  |
 | `dos_errno_e4e7a` | LIVE |  |  |
 | `dos_map_error` | LIVE | 1000:151a, 1420:4e7c |  |
@@ -1404,7 +1411,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `dos_seek_origin_ok` | LIVE | 1000:151a, 1000:161c |  |
 | `dos_read` | LIVE | 1000:151a, 1000:1566, 1000:1750, 1000:33c0, 1140:019d, 1420:4fc4 |  |
 | `dos_read_is_blocked` | LIVE | 1000:151a, 1000:1566, 1000:1750, 1420:4fc4 |  |
-| `dos_unlink` | LIVE | 1000:151a, 1000:19a6, 1000:1f5c, 1000:2098 |  |
+| `dos_unlink` | LIVE | 1000:151a, 1000:19a6 |  |
 | `dos_file_attr` | LIVE | 1000:151a, 1000:1f5c, 1000:2ad9 |  |
 | `dos_file_attr_func_ok` | LIVE | 1000:1f5c, 1000:2ad9 |  |
 | `dos_close` | LIVE | 1000:151a, 1000:1f7c, 1000:1fa6 |  |
@@ -1560,7 +1567,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `video_driver_needs_convert` | LIVE | 10b8:0000 |  |
 | `mainport_palette_handle` | LIVE | 1098:1120, 1098:114a |  |
 | `gfx_stored_dc_uses_stored` | LIVE | 1030:0000, 1098:114a, 1098:2687, 10b0:008a, 10b0:0461 |  |
-| `mem_alloc_with_hook` | STUB | 1000:2826, 1000:3496, 1000:41e4, 1000:46f1 | has TODO |
+| `mem_alloc_with_hook` | LIVE | 1000:2826, 1000:3496, 1000:41e4, 1000:46f1 |  |
 | `gfx_scroll_copy_w` | LIVE | 10d0:03fa |  |
 | `gfx_scroll_copy_h` | LIVE |  |  |
 | `palette_snapshot_size` | LIVE | 1090:0119, 1098:25b9 |  |
@@ -1706,6 +1713,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `win16_animate_palette` | LIVE | 1090:0376 |  |
 | `win16_dispose_palette` | LIVE |  |  |
 | `win16_delete_object` | LIVE |  |  |
+| `win16_asset_cb` | LIVE |  |  |
 | `win16_find_asset` | LIVE |  |  |
 | `win16_probe_resources` | LIVE |  |  |
 | `win16_probe_fonts` | LIVE |  |  |

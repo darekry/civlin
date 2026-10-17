@@ -186,7 +186,15 @@ int file_is_text_mode(unsigned flags)
     return ((flags & 0x4000u) != 0u) ? 1 : 0;
 }
 
-/* --- DOS-file primitives (INT 21h effect port via stdio/POSIX) --- */
+/* --- DOS-file primitives (INT 21h effect port via SDL_IO) ---
+ * [PORT-SDL] Dual table stays: this dos table (INT 21h) is independent
+ * from the win16 _L* table in win16.c (same fd-from-5 shape, separate
+ * SDL_IOStream arrays, never shared). fd here is a table index, never
+ * a POSIX fd. EINTR-retry is gone (SDL guarantees); 0x8000 chunking
+ * stays (orig shape). Errors: SDL fail -> dos_map_error(EIO-ish)
+ * staging + dos_error_from_errno mapping (ENOENT->NOENT, ENOMEM->NOMEM,
+ * rest IO); short -> TRUNCATED; SDL_GetError() log-only. Lines without
+ * an SDL twin stay marked with the POSIX-FALLBACK marker. */
 
 /* DAT_1420_0010 / DAT_1420_4e7a images (odblokowanie 2026-10-16):
  * DOS errno words written by Dos_MapError @ 1000:151a on every CF=1 path.
@@ -199,6 +207,63 @@ static int s_dos_e4e7a = 0;
  * (defined below dos_is_char_device; dos_map_error stages the images
  * and reports CIV_OK = staged, so it must not be a failure return). */
 static civ_error_t dos_error_from_errno(int e);
+
+#define DOS_MAX_FILES 64
+
+static SDL_IOStream *s_dos_files[DOS_MAX_FILES];
+
+/* Reserve allocator for the dos SDL_IOStream table (followers wave:
+ * save_file and file chunk clients will allocate dos-fds here; dos_open @
+ * 1000:2c4a stays a probe in this wave, so this is unused for now). */
+static int dos_fd_alloc(SDL_IOStream *s) __attribute__((unused));
+static int dos_fd_alloc(SDL_IOStream *s)
+{
+    int i;
+    if (!s)
+        return -1;
+    for (i = 0; i < DOS_MAX_FILES; i++) {
+        if (!s_dos_files[i]) {
+            s_dos_files[i] = s;
+            return i + 5;
+        }
+    }
+    return -1;
+}
+
+static SDL_IOStream *dos_fd_get(int fd)
+{
+    int idx = fd - 5;
+    if (idx < 0 || idx >= DOS_MAX_FILES)
+        return NULL;
+    return s_dos_files[idx];
+}
+
+/* POSIX-FALLBACK helper: underlying OS fd behind an SDL file stream
+ * (SDL_PROP_IOSTREAM_FILE_DESCRIPTOR_NUMBER, else STDIO FILE* + fileno).
+ * -1 when the stream has no OS fd (e.g. memory streams). */
+static int dos_os_fd(SDL_IOStream *s)
+{
+    SDL_PropertiesID props;
+    Sint64 num;
+    void *fp;
+    if (!s)
+        return -1;
+    props = SDL_GetIOProperties(s);
+    if (!props)
+        return -1;
+    num = SDL_GetNumberProperty(props,
+        SDL_PROP_IOSTREAM_FILE_DESCRIPTOR_NUMBER, -1);
+    if (num >= 0)
+        return (int)num;
+    fp = SDL_GetPointerProperty(props,
+        SDL_PROP_IOSTREAM_STDIO_FILE_POINTER, NULL);
+    if (fp) {
+        /* POSIX-FALLBACK (no SDL twin): fileno behind SDL stdio. */
+        int fd = fileno((FILE *)fp); /* POSIX-FALLBACK (no SDL twin) */
+        return fd;
+    }
+    return -1;
+}
 
 int dos_errno_e0010(void)
 {
@@ -274,19 +339,23 @@ civ_error_t dos_is_char_device(int fd)
 {
     /* Orig FUN_1000_1566 @ 1000:1566 (Dos_IsCharDevice: INT 21h AX=0x4400,
      * BX=fd -> DX & 0x80; routes the Dos_Read @ 1000:1750 / Dos_Write @
-     * 1000:3fc4 hook vectors 1420:4fc4/4fc8). Linux LIVE via the same
-     * isatty/fstat console/device query as Dos_Ioctl func 0 @ 1000:4252
-     * (no verr/DGROUP on Linux): validates fd via fstat (console probe
-     * via isatty, result discrimination lives in dos_is_char_device_bit
-     * @ 1000:1566, LIVE) and returns CIV_OK on a successful query.
-     * RANGE on fd < 0, dos_map_error(errno) on fstat failure. No globals,
-     * no exit(). */
+     * 1000:3fc4 hook vectors 1420:4fc4/4fc8).
+     * [PORT-SDL + POSIX-FALLBACK] fd is a dos-table index (never a POSIX
+     * fd); the query itself has no SDL twin, so the OS fd behind the
+     * SDL stream is queried via isatty/fstat (no verr/DGROUP on Linux).
+     * RANGE on bad fd/slot, dos_map_error(errno) on fstat failure. */
+    SDL_IOStream *s;
+    int osfd;
     struct stat st;
 
-    if (fd < 0)
+    s = dos_fd_get(fd);
+    if (!s)
         return CIV_ERR_RANGE;
-    (void)isatty(fd);
-    if (fstat(fd, &st) != 0)
+    osfd = dos_os_fd(s);
+    if (osfd < 0)
+        { int e = EIO; (void)dos_map_error(e); return dos_error_from_errno(e); }
+    (void)isatty(osfd); /* POSIX-FALLBACK (no SDL twin) */
+    if (fstat(osfd, &st) != 0) /* POSIX-FALLBACK (no SDL twin) */
         { int e = errno; (void)dos_map_error(e); return dos_error_from_errno(e); }
     return CIV_OK;
 }
@@ -316,18 +385,24 @@ static civ_error_t dos_error_from_errno(int e)
 civ_error_t dos_seek(int fd, long offset, int origin)
 {
     /* Orig FUN_1000_161c @ 1000:161c (Dos_Seek: INT 21h AH=0x42, AL=origin,
-     * CX:DX=offset; live twin file_seek_wrapper in save.h). Linux LIVE via
-     * lseek (fseek twin; DOS 0/1/2 == SEEK_SET/SEEK_CUR/SEEK_END, the
-     * 0x4e4e-table bit-0x200 clear has no Linux equivalent). No globals. */
-    off_t r;
+     * CX:DX=offset; live twin file_seek_wrapper in save.h).
+     * [PORT-SDL] Replaces: lseek -> SDL_SeekIO (DOS 0/1/2 == SET/CUR/END;
+     * 0x4e4e-table bit-0x200 clear has no Linux equivalent). fd is a
+     * dos-table index. SDL_GetError() log-only. No globals. */
+    SDL_IOStream *s = dos_fd_get(fd);
+    SDL_IOWhence whence;
+    Sint64 r;
 
-    if (fd < 0)
+    if (!s)
         return CIV_ERR_RANGE;
     if (!dos_seek_origin_ok(origin))
         return CIV_ERR_RANGE;
-    r = lseek(fd, (off_t)offset, origin);
-    if (r == (off_t)-1)
-        { int e = errno; (void)dos_map_error(e); return dos_error_from_errno(e); }
+    whence = (origin == 1) ? SDL_IO_SEEK_CUR
+        : (origin == 2) ? SDL_IO_SEEK_END
+        : SDL_IO_SEEK_SET;
+    r = SDL_SeekIO(s, (Sint64)offset, whence);
+    if (r < 0)
+        { int e = EIO; (void)dos_map_error(e); return dos_error_from_errno(e); }
     return CIV_OK;
 }
 
@@ -342,11 +417,13 @@ int dos_seek_origin_ok(int origin)
 civ_error_t dos_read(int fd, void *buf, unsigned len)
 {
     /* Orig FUN_1000_1750 @ 1000:1750 (Dos_Read: INT 21h AH=0x3f; live twin
-     * save_file_read @ 1140:019d chunked 0x8000). Linux LIVE via read
-     * (fread twin; 0x8000 chunk shape like save_file_read, EINTR retried;
-     * 0x4e4e-table bit-1 guard via dos_read_is_blocked has no table on
-     * Linux and is skipped, hook 1420:4fc4 + text-mode 0x4000 live one
-     * level up). No globals. */
+     * save_file_read @ 1140:019d chunked 0x8000).
+     * [PORT-SDL] Replaces: read -> SDL_ReadIO in 0x8000 chunks (same shape
+     * as save_file_read; no EINTR-retry: SDL guarantees; 0x4e4e-table
+     * bit-1 guard via dos_read_is_blocked has no table and is skipped,
+     * hook 1420:4fc4 + text-mode 0x4000 live one level up). fd is a
+     * dos-table index. SDL_GetError() log-only. No globals. */
+    SDL_IOStream *s = dos_fd_get(fd);
     uint8_t *dst;
     unsigned total = 0;
 
@@ -354,24 +431,31 @@ civ_error_t dos_read(int fd, void *buf, unsigned len)
         return CIV_ERR_NOENT;
     if (len == 0)
         return CIV_OK;
-    if (fd < 0)
+    if (!s)
         return CIV_ERR_RANGE;
     dst = (uint8_t *)buf;
     while (total < len) {
         unsigned left = len - total;
         unsigned want = left > 0x8000u ? 0x8000u : left;
-        ssize_t n = read(fd, dst + total, (size_t)want);
+        size_t n = SDL_ReadIO(s, dst + total, (size_t)want);
 
-        if (n < 0) {
-            if (errno == EINTR)
-                continue;
-            { int e = errno; (void)dos_map_error(e); return dos_error_from_errno(e); }
+        if (n == 0) {
+            if (SDL_GetIOStatus(s) == SDL_IO_STATUS_ERROR) {
+                int e = EIO;
+                (void)dos_map_error(e);
+                return dos_error_from_errno(e);
+            }
+            break;
         }
-        if (n == 0)
-            break;
         total += (unsigned)n;
-        if ((unsigned)n < want)
+        if ((unsigned)n < want) {
+            if (SDL_GetIOStatus(s) == SDL_IO_STATUS_ERROR) {
+                int e = EIO;
+                (void)dos_map_error(e);
+                return dos_error_from_errno(e);
+            }
             break;
+        }
     }
     if (total == len)
         return CIV_OK;
@@ -390,28 +474,35 @@ civ_error_t dos_unlink(const char *path)
 {
     /* Orig FUN_1000_19a6 @ 1000:19a6 (Dos_Unlink: INT 21h AH=0x41,
      * DS:DX=path; CF=1 -> Dos_MapError @ 1000:151a, else 0; verified ref
-     * unpacked/civ.exe). Linux LIVE via remove (unlink twin, same
-     * File_CloseEntry @ 1000:2098 tmp-unlink tail shape as dos_file_attr
-     * @ 1000:1f5c stat/chmod above). NULL path -> NOENT (orig faulted);
-     * empty path falls through to remove -> ENOENT -> NOENT via mapping.
-     * CIV_OK on deletion, else dos_map_error(errno) staging (ENOENT ->
-     * NOENT, ENOMEM -> NOMEM, else IO). No globals, no exit(). */
+     * unpacked/civ.exe).
+     * [PORT-SDL] Replaces: remove -> SDL_GetPathInfo (existence gate) +
+     * SDL_RemovePath, fallback remove. The gate is required because SDL
+     * 3.5.0 removal is idempotent (missing path still reports true),
+     * while Orig fails CF=1 on a missing file: without it a second
+     * unlink would fake CIV_OK. Same File_CloseEntry @ 1000:2098
+     * tmp-unlink tail shape as dos_file_attr @ 1000:1f5c stat/chmod.
+     * NULL/missing -> NOENT. */
+    SDL_PathInfo info;
+
     if (!path)
         return CIV_ERR_NOENT;
-    if (remove(path) == 0)
+    if (!SDL_GetPathInfo(path, &info) || info.type == SDL_PATHTYPE_NONE)
+        { int e = ENOENT; (void)dos_map_error(e); return dos_error_from_errno(e); }
+    if (SDL_RemovePath(path))
         return CIV_OK;
-    { int e = errno; (void)dos_map_error(e); return dos_error_from_errno(e); }
+    if (remove(path) == 0) /* POSIX-FALLBACK (no SDL twin) */
+        return CIV_OK;
+    { int e = errno ? errno : EIO; (void)dos_map_error(e); return dos_error_from_errno(e); }
 }
 
 civ_error_t dos_file_attr(const char *path, int func, int attrs)
 {
     /* Orig FUN_1000_1f5c @ 1000:1f5c (Dos_FileAttr: INT 21h AH=0x43,
-     * AL=func, CX=attrs). Linux LIVE via stat (get) / chmod (set): func
-     * validated via dos_file_attr_func_ok @ 1000:1f5c; get returns CIV_OK
-     * when stat succeeds (real query, no mutation); set maps DOS 0x01
-     * read-only to owner-write clear/set preserving other mode bits
-     * (File_Open @ 1000:2ad9 uses func 0 probe + func 1 arg 1 restore).
-     * No globals. */
+     * AL=func, CX=attrs).
+     * [PORT-SDL + POSIX-FALLBACK] get (func 0) via SDL_GetPathInfo
+     * (exists query, no mutation); set (func 1) has no SDL twin and stays
+     * stat/chmod. DOS 0x01 maps to write-clear/set preserving other bits
+     * (File_Open @ 1000:2ad9 probe + restore). No globals. */
     struct stat st;
 
     if (!path)
@@ -421,17 +512,18 @@ civ_error_t dos_file_attr(const char *path, int func, int attrs)
     if (!dos_file_attr_func_ok(func))
         return CIV_ERR_RANGE;
     if (func == 0) {
-        if (stat(path, &st) == 0)
+        SDL_PathInfo info;
+        if (SDL_GetPathInfo(path, &info) && info.type != SDL_PATHTYPE_NONE)
             return CIV_OK;
-        { int e = errno; (void)dos_map_error(e); return dos_error_from_errno(e); }
+        { int e = ENOENT; (void)dos_map_error(e); return dos_error_from_errno(e); }
     }
-    if (stat(path, &st) != 0)
+    if (stat(path, &st) != 0) /* POSIX-FALLBACK (no SDL twin) */
         { int e = errno; (void)dos_map_error(e); return dos_error_from_errno(e); }
     if ((attrs & 1) != 0)
         st.st_mode &= (mode_t) ~(S_IWUSR | S_IWGRP | S_IWOTH);
     else
         st.st_mode |= (mode_t)S_IWUSR;
-    if (chmod(path, st.st_mode) == 0)
+    if (chmod(path, st.st_mode) == 0) /* POSIX-FALLBACK (no SDL twin) */
         return CIV_OK;
     { int e = errno; (void)dos_map_error(e); return dos_error_from_errno(e); }
 }
@@ -447,38 +539,44 @@ int dos_file_attr_func_ok(int func)
 civ_error_t dos_close(int fd)
 {
     /* Orig FUN_1000_1fa6 @ 1000:1fa6 (Dos_Close: INT 21h AH=0x3e +
-     * 0x4e4e-table clear; live twin save_file_close in save.h). Linux
-     * LIVE via close (fclose twin; no table clear on Linux). No globals. */
-    if (fd < 0)
+     * 0x4e4e-table clear; live twin save_file_close in save.h).
+     * [PORT-SDL] Replaces: close -> SDL_CloseIO + NULL dos-table slot.
+     * fd is a dos-table index. */
+    int idx = fd - 5;
+    bool ok;
+    if (idx < 0 || idx >= DOS_MAX_FILES || !s_dos_files[idx])
         return CIV_ERR_RANGE;
-    if (close(fd) == 0)
+    ok = SDL_CloseIO(s_dos_files[idx]);
+    s_dos_files[idx] = NULL;
+    if (ok)
         return CIV_OK;
-    { int e = errno; (void)dos_map_error(e); return dos_error_from_errno(e); }
+    { int e = EIO; (void)dos_map_error(e); return dos_error_from_errno(e); }
 }
 
 civ_error_t dos_is_eof(int fd, int *out_eof)
 {
     /* Orig FUN_1000_201e @ 1000:201e (Dos_IsEof: 4400-device gate +
-     * 4201/4202/4200 tell/end/restore probe). Linux LIVE via the same
-     * lseek triple (fseek/ftell twin file_seek_wrapper; table/high-water/
-     * char-device gates skipped, tail compare via dos_eof_at_end @
-     * 1000:201e). No globals. */
-    off_t cur;
-    off_t end;
+     * 4201/4202/4200 tell/end/restore probe).
+     * [PORT-SDL] Replaces: lseek triple -> SDL_TellIO(CUR) +
+     * SDL_GetIOSize(END) + SDL_SeekIO(SET restore), compare via
+     * dos_eof_at_end @ 1000:201e. fd is a dos-table index. */
+    SDL_IOStream *s = dos_fd_get(fd);
+    Sint64 cur;
+    Sint64 end;
 
     if (!out_eof)
         return CIV_ERR_NOENT;
     *out_eof = 0;
-    if (fd < 0)
+    if (!s)
         return CIV_ERR_RANGE;
-    cur = lseek(fd, (off_t)0, SEEK_CUR);
-    if (cur == (off_t)-1)
-        { int e = errno; (void)dos_map_error(e); return dos_error_from_errno(e); }
-    end = lseek(fd, (off_t)0, SEEK_END);
-    if (end == (off_t)-1)
-        { int e = errno; (void)dos_map_error(e); return dos_error_from_errno(e); }
-    if (lseek(fd, cur, SEEK_SET) == (off_t)-1)
-        { int e = errno; (void)dos_map_error(e); return dos_error_from_errno(e); }
+    cur = SDL_TellIO(s);
+    if (cur < 0)
+        { int e = EIO; (void)dos_map_error(e); return dos_error_from_errno(e); }
+    end = SDL_GetIOSize(s);
+    if (end < 0)
+        { int e = EIO; (void)dos_map_error(e); return dos_error_from_errno(e); }
+    if (SDL_SeekIO(s, cur, SDL_IO_SEEK_SET) < 0)
+        { int e = EIO; (void)dos_map_error(e); return dos_error_from_errno(e); }
     *out_eof = dos_eof_at_end((long)cur, (long)end);
     return CIV_OK;
 }
@@ -494,34 +592,29 @@ civ_error_t dos_create(const char *path, int attrs)
 {
     /* Orig FUN_1000_2aac @ 1000:2aac (Dos_Create: INT 21h AH=0x3c,
      * DS:DX=path [BP+6], CX=attrs [BP+4]; CF=1 -> Dos_MapError(AX), else
-     * AX=new fd; sole File_Open @ 1000:2ad9 create-path caller). Linux
-     * LIVE via open(O_WRONLY|O_CREAT|O_TRUNC) (same flags as the live
-     * twin save_file_open @ 1140:0139 write path in save.c) then close:
-     * probe-create mirroring the dos_open @ 1000:2c4a probe pattern
-     * (no DOS fd table kept on Linux). DOS read-only bit (attrs & 1)
-     * maps to owner/group/other write clear via chmod (same mapping as
-     * dos_file_attr @ 1000:1f5c set path); hidden/system/archive bits
-     * have no Linux equivalent and are ignored. NULL/empty path ->
-     * NOENT (orig faulted). CIV_OK on creation, else dos_map_error(errno)
-     * staging (ENOENT -> NOENT, ENOMEM -> NOMEM, else IO). No globals,
-     * no exit(). */
-    int fd;
+     * AX=new fd; sole File_Open @ 1000:2ad9 create-path caller).
+     * [PORT-SDL] Replaces: open(O_WRONLY|O_CREAT|O_TRUNC)+close ->
+     * SDL_IOFromFile "wb" + SDL_CloseIO (probe-create like _LCREAT, same
+     * flags as save_file_open @ 1140:0139). DOS read-only bit maps via
+     * chmod (same as dos_file_attr @ 1000:1f5c); hidden/system/archive
+     * ignored. NULL/empty -> NOENT. No globals, no exit(). */
+    SDL_IOStream *s;
 
     if (!path)
         return CIV_ERR_NOENT;
     if (*path == '\0')
         return CIV_ERR_NOENT;
-    fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-    if (fd < 0)
-        { int e = errno; (void)dos_map_error(e); return dos_error_from_errno(e); }
-    (void)close(fd);
+    s = SDL_IOFromFile(path, "wb");
+    if (!s)
+        { int e = EIO; (void)dos_map_error(e); return dos_error_from_errno(e); }
+    (void)SDL_CloseIO(s);
     if ((attrs & 1) != 0) {
         struct stat st;
 
-        if (stat(path, &st) != 0)
+        if (stat(path, &st) != 0) /* POSIX-FALLBACK (no SDL twin) */
             { int e = errno; (void)dos_map_error(e); return dos_error_from_errno(e); }
         st.st_mode &= (mode_t) ~(S_IWUSR | S_IWGRP | S_IWOTH);
-        if (chmod(path, st.st_mode) != 0)
+        if (chmod(path, st.st_mode) != 0) /* POSIX-FALLBACK (no SDL twin) */
             { int e = errno; (void)dos_map_error(e); return dos_error_from_errno(e); }
     }
     return CIV_OK;
@@ -530,21 +623,25 @@ civ_error_t dos_create(const char *path, int attrs)
 civ_error_t dos_truncate(int fd)
 {
     /* Orig FUN_1000_2ac7 @ 1000:2ac7 (Dos_Truncate: INT 21h AH=0x40 with
-     * CX=0, DX=0 zero-byte write at the cursor = truncate there, BX=fd
-     * [BP+4]; sole caller File_Open @ 1000:2ad9 O_TRUNC-style flag 0x200
-     * on non-char handles). Linux LIVE via lseek(SEEK_CUR) + ftruncate
-     * (POSIX twin of the zero-byte write at the cursor; O_TRUNC inside
-     * save_file_open only truncates to 0, so the cursor form needs its
-     * own twin here). RANGE on fd < 0, dos_map_error(errno) on
-     * lseek/ftruncate failure, else CIV_OK. No globals, no exit(). */
-    off_t cur;
+     * CX=0 zero-byte write at the cursor = truncate there, BX=fd [BP+4];
+     * sole caller File_Open @ 1000:2ad9 O_TRUNC-style flag 0x200).
+     * [PORT-SDL + POSIX-FALLBACK] SDL 3.5.0 has no SDL_TruncateIO, so the
+     * cursor is read via SDL_TellIO and the cut uses POSIX ftruncate on
+     * the OS fd behind the stream (no SDL twin). fd is a dos-table index.
+     * RANGE on bad slot, dos_map_error(errno) on failure. */
+    SDL_IOStream *s = dos_fd_get(fd);
+    Sint64 cur;
+    int osfd;
 
-    if (fd < 0)
+    if (!s)
         return CIV_ERR_RANGE;
-    cur = lseek(fd, (off_t)0, SEEK_CUR);
-    if (cur == (off_t)-1)
-        { int e = errno; (void)dos_map_error(e); return dos_error_from_errno(e); }
-    if (ftruncate(fd, cur) != 0)
+    cur = SDL_TellIO(s);
+    if (cur < 0)
+        { int e = EIO; (void)dos_map_error(e); return dos_error_from_errno(e); }
+    osfd = dos_os_fd(s);
+    if (osfd < 0)
+        { int e = EIO; (void)dos_map_error(e); return dos_error_from_errno(e); }
+    if (ftruncate(osfd, (off_t)cur) != 0) /* POSIX-FALLBACK (no SDL twin) */
         { int e = errno; (void)dos_map_error(e); return dos_error_from_errno(e); }
     return CIV_OK;
 }
@@ -552,15 +649,15 @@ civ_error_t dos_truncate(int fd)
 civ_error_t dos_open(const char *path, int mode_flags)
 {
     /* Orig FUN_1000_2c4a @ 1000:2c4a (Dos_Open: INT 21h AH=0x3d, AL=mode
-     * from flags; live twin save_file_open O_RDONLY in save.h). Linux
-     * LIVE existence/readability probe via fopen (no create/truncate like
-     * the orig; mode via dos_open_mode_map @ 1000:2c4a: base 0 -> "rb",
-     * 1/2 -> "r+b"; table word via dos_open_table_word for RE-map
-     * fidelity, no table write on Linux). Opens then closes immediately:
-     * CIV_OK when open succeeded, else dos_map_error(errno). No globals. */
+     * from flags; live twin save_file_open O_RDONLY in save.h).
+     * [PORT-SDL] Replaces: fopen probe -> SDL_IOFromFile probe (no
+     * create/truncate; base 0 -> "rb", 1/2 -> "r+b" via dos_open_mode_map
+     * @ 1000:2c4a; table word via dos_open_table_word for RE-map, no
+     * table write). Opens then closes immediately: CIV_OK or
+     * dos_map_error staging. No globals. */
     int m;
     const char *fmode;
-    FILE *fp;
+    SDL_IOStream *s;
 
     if (!path)
         return CIV_ERR_NOENT;
@@ -569,10 +666,10 @@ civ_error_t dos_open(const char *path, int mode_flags)
     m = dos_open_mode_map(mode_flags);
     (void)dos_open_table_word(mode_flags);
     fmode = ((m & 3) == 0) ? "rb" : "r+b";
-    fp = fopen(path, fmode);
-    if (!fp)
-        { int e = errno; (void)dos_map_error(e); return dos_error_from_errno(e); }
-    (void)fclose(fp);
+    s = SDL_IOFromFile(path, fmode);
+    if (!s)
+        { int e = ENOENT; (void)dos_map_error(e); return dos_error_from_errno(e); }
+    (void)SDL_CloseIO(s);
     return CIV_OK;
 }
 
@@ -602,11 +699,12 @@ unsigned dos_open_table_word(int flags)
 civ_error_t dos_write(int fd, const void *buf, unsigned len)
 {
     /* Orig FUN_1000_3fc4 @ 1000:3fc4 (Dos_Write: INT 21h AH=0x40; live
-     * twin save_file_write @ 1140:0245 chunked 0x8000). Linux LIVE via
-     * write (fwrite twin; 0x8000 chunk shape like save_file_write, EINTR
-     * retried; 0x4e4e-table bit-0 guard via dos_write_is_blocked has no
-     * table on Linux and is skipped, hook 1420:4fc8 + text-mode 0x4000
-     * live one level up). No globals. */
+     * twin save_file_write @ 1140:0245 chunked 0x8000).
+     * [PORT-SDL] Replaces: write -> SDL_WriteIO in 0x8000 chunks (same
+     * shape; no EINTR-retry; bit-0 guard via dos_write_is_blocked skipped,
+     * hook 1420:4fc8 + text-mode 0x4000 live one level up). fd is a
+     * dos-table index. SDL_GetError() log-only. No globals. */
+    SDL_IOStream *s = dos_fd_get(fd);
     const uint8_t *src;
     unsigned total = 0;
 
@@ -614,24 +712,31 @@ civ_error_t dos_write(int fd, const void *buf, unsigned len)
         return CIV_ERR_NOENT;
     if (len == 0)
         return CIV_OK;
-    if (fd < 0)
+    if (!s)
         return CIV_ERR_RANGE;
     src = (const uint8_t *)buf;
     while (total < len) {
         unsigned left = len - total;
         unsigned want = left > 0x8000u ? 0x8000u : left;
-        ssize_t n = write(fd, src + total, (size_t)want);
+        size_t n = SDL_WriteIO(s, src + total, (size_t)want);
 
-        if (n < 0) {
-            if (errno == EINTR)
-                continue;
-            { int e = errno; (void)dos_map_error(e); return dos_error_from_errno(e); }
+        if (n == 0) {
+            if (SDL_GetIOStatus(s) == SDL_IO_STATUS_ERROR) {
+                int e = EIO;
+                (void)dos_map_error(e);
+                return dos_error_from_errno(e);
+            }
+            break;
         }
-        if (n == 0)
-            break;
         total += (unsigned)n;
-        if ((unsigned)n < want)
+        if ((unsigned)n < want) {
+            if (SDL_GetIOStatus(s) == SDL_IO_STATUS_ERROR) {
+                int e = EIO;
+                (void)dos_map_error(e);
+                return dos_error_from_errno(e);
+            }
             break;
+        }
     }
     if (total == len)
         return CIV_OK;
@@ -649,21 +754,25 @@ int dos_write_is_blocked(unsigned flags)
 civ_error_t dos_ioctl(int fd, int func)
 {
     /* Orig FUN_1000_4252 @ 1000:4252 (Dos_Ioctl: INT 21h AH=0x44
-     * subfunction dispatch with verr() gate). Linux PARTIAL via
-     * isatty/fstat console/device query (no verr/DGROUP on Linux):
-     * non-direct funcs keep CIV_ERR_UNSUPPORTED (no real effect, Fala H);
-     * direct funcs (0/6/7/8/9/10/0xe/0xf via dos_ioctl_is_direct @
-     * 1000:4252) validate fd via fstat (func 0 additionally queries
-     * isatty) and return CIV_OK on a successful query. No globals. */
+     * subfunction dispatch with verr() gate).
+     * [PORT-SDL + POSIX-FALLBACK] fd is a dos-table index; direct funcs
+     * (0/6/7/8/9/10/0xe/0xf via dos_ioctl_is_direct @ 1000:4252) query the
+     * OS fd behind the SDL stream via isatty/fstat (no verr/DGROUP, no SDL
+     * twin). Non-direct funcs keep UNSUPPORTED. No globals. */
+    SDL_IOStream *s = dos_fd_get(fd);
+    int osfd;
     struct stat st;
 
-    if (fd < 0)
+    if (!s)
         return CIV_ERR_RANGE;
     if (!dos_ioctl_is_direct(func))
         return CIV_ERR_UNSUPPORTED;
+    osfd = dos_os_fd(s);
+    if (osfd < 0)
+        { int e = EIO; (void)dos_map_error(e); return dos_error_from_errno(e); }
     if (func == 0)
-        (void)isatty(fd);
-    if (fstat(fd, &st) != 0)
+        (void)isatty(osfd); /* POSIX-FALLBACK (no SDL twin) */
+    if (fstat(osfd, &st) != 0) /* POSIX-FALLBACK (no SDL twin) */
         { int e = errno; (void)dos_map_error(e); return dos_error_from_errno(e); }
     return CIV_OK;
 }
@@ -707,7 +816,9 @@ int dos_get_current_dir(int drive, char *buf, size_t cap)
 {
     /* Dos_GetCurrentDir @ 1000:139c (INT 21h AH=47h). Drive ignored on
      * Linux. Orig returns the path WITHOUT drive/leading backslash, so
-     * the leading '/' is stripped to match. */
+     * the leading '/' is stripped to match. SDL twin lives in
+     * win16_dos_get_cwd (win16.c); this int-contract sibling keeps the
+     * HOST getcwd shape. */
     char tmp[SYS_TMP_PATH];
     const char *rel;
     size_t n;
@@ -715,7 +826,7 @@ int dos_get_current_dir(int drive, char *buf, size_t cap)
     (void)drive;
     if (!buf || cap == 0)
         return -1;
-    if (!getcwd(tmp, sizeof(tmp)))
+    if (!getcwd(tmp, sizeof(tmp))) /* POSIX-FALLBACK (no SDL twin) */
         return -1;
     rel = tmp[0] == '/' ? tmp + 1 : tmp;
     n = strlen(rel) + 1;
@@ -743,13 +854,14 @@ char *sys_build_current_dir_path(char *dst, size_t cap)
     /* Sys_BuildCurrentDirPath @ 1000:2826. Orig composes "D:\curdir" and
      * fails NULL when the length exceeds max or the buffer must be
      * allocated and allocation fails. Linux: getcwd() full path, same
-     * contract (dst on success, NULL when too long / getcwd fails). */
+     * contract (dst on success, NULL when too long / getcwd fails).
+     * HOST shape (needs the leading '/', unlike win16_dos_get_cwd). */
     char tmp[SYS_TMP_PATH];
     size_t n;
 
     if (!dst || cap == 0)
         return NULL;
-    if (!getcwd(tmp, sizeof(tmp)))
+    if (!getcwd(tmp, sizeof(tmp))) /* POSIX-FALLBACK (no SDL twin) */
         return NULL;
     n = strlen(tmp) + 1;
     if (n > cap)

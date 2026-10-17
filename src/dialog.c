@@ -978,6 +978,17 @@ civ_error_t anim_open_sequence(void)
     /* stride half (0xf words per frame rec, [0] = opcode; scan step). */
     if (anim_seq_rec_stride() != 0x0f)
         return CIV_ERR_BAD_DATA;
+    /* timeline word half (rec word map at seq+8: [0] opcode scan gate via
+     * anim_seq_count_frames + [7] end scan via anim_seq_max_end + per-rec
+     * [13]/[14] = 0 init before the GfxPort_Create x2 setup; OS-free 1:1,
+     * no Win16, no globals; device tails stay UNSUPPORTED below). */
+    if (anim_seq_op_word() != ANIM_SEQ_OP_WORD)
+        return CIV_ERR_BAD_DATA;
+    if (anim_seq_end_word() != ANIM_SEQ_END_WORD)
+        return CIV_ERR_BAD_DATA;
+    if (anim_seq_zero_word0() != ANIM_SEQ_ZERO_WORD0 ||
+        anim_seq_zero_word1() != ANIM_SEQ_ZERO_WORD1)
+        return CIV_ERR_BAD_DATA;
     /* max half (max of rec[7] longs + 1; empty -> 1). */
     max_end = anim_seq_max_end(sample_ends, 2u);
     if (max_end != 21L)
@@ -5081,6 +5092,44 @@ int anim_seq_rec_stride(void)
      * globals. Refs verified read-only 1:1 vs unpacked/civ.exe (NE LE,
      * no copy). */
     return 0x0f;
+}
+
+int anim_seq_op_word(void)
+{
+    /* Orig Anim_OpenSequence @ 10b0:008a timeline rec [0] = opcode (count
+     * half scans [0] with the 0xf-word stride until opcode 0, see
+     * anim_seq_count_frames). OS-free 1:1, no Win16, no globals. Refs
+     * verified read-only 1:1 vs unpacked/civ.exe (NE LE, no copy). */
+    return ANIM_SEQ_OP_WORD;
+}
+
+int anim_seq_end_word(void)
+{
+    /* Orig same rec [7] = end tick (max-end half scans rec[7] longs + 1,
+     * see anim_seq_max_end). OS-free 1:1, no Win16, no globals. Refs
+     * verified read-only 1:1 vs unpacked/civ.exe (NE LE, no copy). */
+    return ANIM_SEQ_END_WORD;
+}
+
+int anim_seq_zero_word0(void)
+{
+    /* Orig same per-rec [13] = 0 init (OpenSequence zeroes [13]/[14] per
+     * rec before the GfxPort_Create x2 setup at offs +9/+0x62; mem/port
+     * tails stay Win16 -> SDL3 TBD in the anim_open_sequence TODO above).
+     * OS-free 1:1, no Win16, no globals. Refs verified read-only 1:1 vs
+     * unpacked/civ.exe (NE LE, no copy). */
+    return ANIM_SEQ_ZERO_WORD0;
+}
+
+int anim_seq_zero_word1(void)
+{
+    /* Orig same per-rec [14] = 0 init (sibling of the [13] word above;
+     * TODO: Orig Anim_OpenSequence @ 10b0:008a device tail -> SDL3 bridge
+     * TBD: mem_alloc_lock 0xa6 ctx store + GETCLIENTRECT rect +
+     * GfxPort_Create x2 (offs +9/+0x62) + FUN_1000_14f8/FUN_1100_0876
+     * setup + Sys_GetTickScaled @ 1100:02e1 tick-base + DAT_1420_1f40 = ctx;
+     * handles stay in the GfxPort_Create @ 10d0:0000 bridge, see video.h). */
+    return ANIM_SEQ_ZERO_WORD1;
 }
 
 int anim_seq_port_count(void)

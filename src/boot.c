@@ -525,21 +525,58 @@ int font_face_count(const font_fon_info_t *info)
 const char *font_face_list(const font_fon_info_t *info, int index)
 {
     /* Orig ENUMFONTFAMILIES @ 1008:0e99 family-name side (ref unpacked/
-     * civfonts.fon read-only 244224 B: RT_FONT 0x8008 x21, fontdir file
-     * 0x600 nfonts 21, names CIVBABYLON..CIVTIMES36 at 0x676..0x1054).
-     * OS-free guard half LIVE 1:1 via sys_font_face_index_ok @ 1008:0e99
-     * (see sys.h/sys.c; 1 when 0 <= index < face_count, else 0); the
-     * family-string store (fontdir order vs ENUMFONTFAMILIES order) stays
-     * TBD -> NULL until wired (same contract as tribe_get_name_list /
-     * boot_video_caps_describe). NULL info -> NULL. No SDL, no globals,
-     * no exit(), read-only.
-     * TODO: Orig Font_EnumFamiliesInit @ 1008:0e99 string store (wire
-     * fontdir face strings in ENUMFONTFAMILIES order; GDI callback filter
-     * dwType&1 + match Util_CompareBounded @ 1000:3744 stays out). */
+     * civfonts.fon read-only 244224 B, never written: RT_FONT 0x8008 x21,
+     * fontdir file 0x600 u16 nfonts = 21, C NUL face strings at 0x676
+     * CIVBABYLON, 0x6f5 CIVZULU, 0x771 CIVEGYPT, 0x7ee CIVENGLISH, 0x86d
+     * CIVGREEK, 0x8ea CIVRUSSIAN, 0x969 CIVGERMAN, 0x9e7 CIVCHINESE, 0xa66
+     * CIVFRENCH, 0xae4 CIVROMAN, 0xb61 CIVINDIAN, 0xbdf CIVAMERICAN, 0xc5f
+     * CIVAZTEC, 0xcdc CIVMONGOL, 0xd5a CIVTIMES10, 0xdd9 CIVTIMES12, 0xe58
+     * CIVTIMES14, 0xed7 CIVTIMES18, 0xf56 CIVTIMES24, 0xfd5 CIVTIMES30,
+     * 0x1054 CIVTIMES36; same order at each FNT base+dfFace, e.g.
+     * 0x1400+0x18c4 CIVBABYLON .. 0x30e00+0xaaf8 CIVTIMES36; all 21 faces
+     * v2 0x0200). OS-free static-const store 1:1 in RT_FONT/fontdir order
+     * (= ENUMFONTFAMILIES enumeration order; GDI may reorder but the
+     * callback keeps insertion order into DAT_1420_5484, so index order is
+     * the table order). Guard half LIVE 1:1 via sys_font_face_index_ok @
+     * 1008:0e99 (see sys.h/sys.c; 1 when 0 <= index < face_count, else 0);
+     * OOB -> NULL (same contract as tribe_get_name_list /
+     * boot_video_caps_describe / menu_string_at). NULL info -> NULL. No
+     * SDL, no globals mutated, no exit(), read-only (borrowed pointer to
+     * the static store, valid for the process lifetime).
+     * TODO: Orig Font_EnumFamiliesCallback @ 1008:0e12 GDI filter +
+     * install tail (dwType & 1 + facename match via Util_CompareBounded @
+     * 1000:3744, then CREATEFONTINDIRECT into DAT_1420_5484 slot +
+     * ADDFONTRESOURCE CIV_FONT_FILE @ 1420:00a4/00fe) -> SDL3/stdio bridge
+     * TBD in font_install_slot @ 1008:062f/0e12 (STUB, no fake-OK). */
+    static const char *const faces[CIV_FONT_FACE_N] = {
+        "CIVBABYLON", /* 0x676 */
+        "CIVZULU",    /* 0x6f5 */
+        "CIVEGYPT",   /* 0x771 */
+        "CIVENGLISH", /* 0x7ee */
+        "CIVGREEK",   /* 0x86d */
+        "CIVRUSSIAN", /* 0x8ea */
+        "CIVGERMAN",  /* 0x969 */
+        "CIVCHINESE", /* 0x9e7 */
+        "CIVFRENCH",  /* 0xa66 */
+        "CIVROMAN",   /* 0xae4 */
+        "CIVINDIAN",  /* 0xb61 */
+        "CIVAMERICAN",/* 0xbdf */
+        "CIVAZTEC",   /* 0xc5f */
+        "CIVMONGOL",  /* 0xcdc */
+        "CIVTIMES10", /* 0xd5a */
+        "CIVTIMES12", /* 0xdd9 */
+        "CIVTIMES14", /* 0xe58 */
+        "CIVTIMES18", /* 0xed7 */
+        "CIVTIMES24", /* 0xf56 */
+        "CIVTIMES30", /* 0xfd5 */
+        "CIVTIMES36", /* 0x1054 */
+    };
+
     if (!info || !sys_font_face_index_ok((int)info->face_count, index))
         return NULL;
-    /* TODO: wire fontdir face strings in ENUMFONTFAMILIES order. */
-    return NULL;
+    if (index < 0 || index >= CIV_FONT_FACE_N)
+        return NULL;
+    return faces[index];
 }
 
 /* AG2: FNT raster + menu strings (see boot.h). OS-free, no SDL. Reuses the
@@ -1054,19 +1091,42 @@ civ_error_t config_load_prefs(void)
      * strings "civ.prf" @ file 0xb710b/0xb7113 = 1420:010b/0113): orig
      * fills DAT_1420_17ca -> g_nOptionFlags @ 12d0:0064 with built-in
      * defaults first (sounds on, see config_prefs_defaults), then tries
-     * _LOPEN (OF_READ) + _LREAD 0x1a into DAT_1420_17b2 + _LCLOSE;
-     * missing/short file keeps the defaults and still succeeds, so the
-     * defaults path below is the success path -> CIV_OK. Full 26 B image
-     * shape LIVE in config_prefs_unpack (chunks 485a/48fa/4964 + flags).
-     * TODO: Orig FUN_1008_0b4a @ 1008:0b4a Win16 file-handle tail (_LOPEN/
-     * _LREAD/_LCLOSE via win16.* stdio bridge TBD; would return
-     * CIV_ERR_UNSUPPORTED on I/O failure once wired).
-     * Read-only: never creates civ.prf. No globals, no exit(). */
+     * _LOPEN (OF_READ) + _LREAD 0x1a into DAT_1420_17b2 + _LCLOSE.
+     * [PORT-SDL] Transport is SDL_IO via win16_lopen/lread/lclose (same
+     * _LOPEN/_LREAD/_LCLOSE shape, modes unchanged). Missing file keeps
+     * the defaults -> CIV_OK (orig-shape); short/fail -> TRUNCATED/IO
+     * (never silent defaults, Fala H). Full 26 B image LIVE in
+     * config_prefs_unpack (chunks 485a/48fa/4964 + flags, zero-preserved
+     * driver chunks, WONTFIX content). Read-only: never creates civ.prf.
+     * No globals, no exit(). */
     civ_prefs_t prefs;
+    int fd;
+    uint8_t img[CIV_PREFS_LEN];
+    uint8_t c0[CIV_PREFS_CHUNK_LEN];
+    uint8_t c1[CIV_PREFS_CHUNK_LEN];
+    uint8_t c2[CIV_PREFS_CHUNK_LEN];
+    uint16_t flags = 0u;
 
     prefs = config_prefs_defaults();
     if (!config_prefs_sounds_on(&prefs))
         return CIV_ERR_BAD_DATA;
+    fd = win16_lopen(CIV_PREFS_FILE, 0);
+    if (fd < 0)
+        return CIV_OK;
+    {
+        int n = win16_lread(fd, img, (unsigned)CIV_PREFS_LEN);
+        (void)win16_lclose(fd);
+        if (n < 0)
+            return CIV_ERR_IO;
+        if ((size_t)n != (size_t)CIV_PREFS_LEN)
+            return CIV_ERR_TRUNCATED;
+    }
+    if (config_prefs_unpack(img, sizeof(img), c0, c1, c2, &flags) != CIV_OK)
+        return CIV_ERR_BAD_DATA;
+    (void)c0;
+    (void)c1;
+    (void)c2;
+    (void)flags;
     return CIV_OK;
 }
 
@@ -1080,13 +1140,13 @@ civ_error_t config_save_prefs(void)
      * option-word store g_nOptionFlags @ 12d0:0064 -> DAT_1420_17ca + 3x
      * GLOBALLOCK 8 B copies (485a -> 17b2, 48fa -> 17ba, 4964 -> 17c2 via
      * Util_MemCopyFar @ 1000:137f) + _LLSEEK 0,0 + _LWRITE 0x1a from
-     * DAT_1420_17b2 + _LCLOSE. PARTIAL dispatcher: OS-free guard +
-     * pack halves below are LIVE 1:1 (no far, no handle, no globals, no
-     * exit(), read-only, never creates civ.prf); Win16 file-handle tail
-     * stays STUB -> CIV_ERR_UNSUPPORTED (no fake-OK).
-     * TODO: Orig FUN_1008_0bbf @ 1008:0bbf Win16 tail (_LCREAT "civ.prf"
-     * @ 1420:0113 + _LLSEEK 0,0 + _LWRITE 0x1a z DAT_1420_17b2 + _LCLOSE
-     * via win16 stdio bridge TBD; GLOBALLOCK driver-chunk carve TBD). */
+     * DAT_1420_17b2 + _LCLOSE.
+     * [PORT-SDL] Transport is SDL_IO via win16_lopen/lwrite/llseek/lclose
+     * (same _LCREAT/_LLSEEK/_LWRITE/_LCLOSE shape: mode 1 truncates like
+     * _LCREAT; driver chunks A/B/C are opaque from dump, zeros preserved
+     * for roundtrip-safe 0x1a, content WONTFIX). CIV_OK only on full
+     * 0x1a bytes on disk, else IO/TRUNCATED (no fake-OK, Fala H). No
+     * globals, no exit(). */
     civ_prefs_t prefs;
     uint8_t c0[CIV_PREFS_CHUNK_LEN] = { 0 };
     uint8_t c1[CIV_PREFS_CHUNK_LEN] = { 0 };
@@ -1098,6 +1158,8 @@ civ_error_t config_save_prefs(void)
     uint16_t flags = 0u;
     civ_error_t rc;
     size_t i;
+    int fd;
+    int n;
 
     /* OS-free guard half LIVE 1:1 (Linux drive is 0, so no DOS path
      * setup; drive > 0 would take Dos_DriveReady + Dos_SetPath). */
@@ -1116,7 +1178,7 @@ civ_error_t config_save_prefs(void)
         return CIV_ERR_BAD_DATA;
     /* OS-free 26 B image half LIVE via config_prefs_pack @ 1008:0bbf
      * (opaque driver chunks A/B/C TBD from dump, never guessed — zeros
-     * only as the placeholder probe input here). */
+     * preserved for roundtrip). */
     rc = config_prefs_pack(c0, c1, c2, prefs.option_flags, img,
                            sizeof(img));
     if (rc != CIV_OK)
@@ -1131,7 +1193,17 @@ civ_error_t config_save_prefs(void)
         if (d0[i] != c0[i] || d1[i] != c1[i] || d2[i] != c2[i])
             return CIV_ERR_BAD_DATA;
     }
-    return CIV_ERR_UNSUPPORTED;
+    fd = win16_lopen(CIV_PREFS_FILE, 1);
+    if (fd < 0)
+        return CIV_ERR_IO;
+    (void)win16_llseek(fd, 0L, 0);
+    n = win16_lwrite(fd, img, (unsigned)CIV_PREFS_LEN);
+    (void)win16_lclose(fd);
+    if (n < 0)
+        return CIV_ERR_IO;
+    if ((size_t)n != (size_t)CIV_PREFS_LEN)
+        return CIV_ERR_TRUNCATED;
+    return CIV_OK;
 }
 
 civ_error_t boot_run(SDL_Window *win, SDL_Renderer *ren)

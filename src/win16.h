@@ -90,19 +90,24 @@ int win16_get_free_resources(int which);
 civ_error_t win16_check_free_memory(void);
 civ_error_t win16_check_runtime_memory(int already_warned, int warned_final);
 
-/* --- DOS INT 21h / KERNEL file layer -> stdio ---
+/* --- DOS INT 21h / KERNEL file layer -> SDL_IO (PORT-SDL/HOST) ---
  *
  * Orig: AH=19h/47h/3Bh (drive/cwd/chdir) + AH=3Dh/3Eh/3Fh/40h/41h/42h/43h/44h
- * + _LOPEN/_LREAD/_LWRITE/_LLSEEK/_LCLOSE. Linux: drive always 0 (no drive
- * letters), cwd via getcwd, chdir is a no-op CIV_OK (cwd owned by launcher),
- * file ops via an fd table over fopen/fread/fwrite/fseek/fclose. */
+ * + _LOPEN/_LREAD/_LWRITE/_LLSEEK/_LCLOSE (Replaces: fopen/fread/fwrite/
+ * fseek/ftell/fclose -> SDL_IOFromFile/ReadIO/WriteIO/SeekIO/TellIO/CloseIO;
+ * opendir/readdir -> SDL_EnumerateDirectory; fopen probe -> SDL_GetPathInfo;
+ * getcwd -> SDL_GetCurrentDirectory with POSIX getcwd fallback).
+ * Linux: drive always 0 (no drive letters), cwd via SDL_GetCurrentDirectory
+ * (fallback getcwd), chdir is a no-op CIV_OK (cwd owned by launcher),
+ * file ops via an int-fd table over SDL_IOStream* (fd 5+, dualism with the
+ * dos table in sys.h stays: separate arrays, never shared). */
 
 int win16_dos_get_drive(void);
 civ_error_t win16_dos_get_cwd(char *buf, size_t cap);
 civ_error_t win16_dos_chdir(const char *path);
 /* Minimal _L* table: fd >= 0, -1 (WIN16_HFILE_ERROR) on failure. Mode 0 =
  * read ("rb"), 1 = write/create ("wb"), 2 = read/write ("r+b"). Origin
- * 0/1/2 = SEEK_SET/CUR/END (as _LLSEEK). */
+ * 0/1/2 = SEEK_SET/CUR/END (as _LLSEEK). [PORT-SDL] backend SDL_IOStream*. */
 int win16_lopen(const char *path, int mode);
 int win16_lread(int fd, void *buf, unsigned len);
 int win16_lwrite(int fd, const void *buf, unsigned len);
@@ -141,11 +146,13 @@ civ_error_t win16_animate_palette(int first, int count);
 civ_error_t win16_dispose_palette(void);
 civ_error_t win16_delete_object(void);
 
-/* --- Assets: read-only search (never writes civ1win/unpacked) ---
+/* --- Assets: read-only search (never writes civ1win/unpacked) [PORT-SDL/HOST] ---
  *
  * Probes "civfonts.fon", "CivData0..4.rsc", "*.wav" next to the checkout:
  * civ1win/, ., unpacked/. Copies the first hit path into out (cap incl.
- * NUL). NOENT when nothing found. */
+ * NUL). NOENT when nothing found. Replaces: opendir/readdir+fopen probe
+ * -> SDL_EnumerateDirectory + SDL_GetPathInfo (HOST case-insensitive
+ * match in callback, same out/cap/TRUNCATED/NOENT contract). */
 
 civ_error_t win16_find_asset(const char *name, char *out, size_t cap);
 civ_error_t win16_probe_resources(void);

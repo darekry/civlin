@@ -57,11 +57,9 @@ faithful to the Windows release.
     decompiler output. Dotyczy to także stanu gry: globale DGROUP
     (`DAT_1420_*`, `DAT_12d8_*`, `DAT_13f8_0000` shared-static,
     stos dialogów, bufory map/save, dane palety, tablice).
-    Stan trzymamy na jawnych kontekstach (`struct Game_State`,
-    `Dialog_Ctx`, `Rsc_Mgr`, parametry `out/cap`) albo — gdy oryginał
-    używał proces-global/static o semantyce nadpisywania przy następnym
-    wywołaniu (np. `Res_GetStringCopy/Raw @ 11f8:0080/00c5`) — na
-    module-static z tą samą semantyką + adnotacją Orig adresu.
+    Stan gry trzymamy 1:1  Gdy oryginał używał semantyki nadpisywania przy następnym wywołaniu
+    (np. `Res_GetStringCopy/Raw @ 11f8:0080/00c5`) zachowujemy tę samą
+    semantykę na module-static.
     NIE zostawiamy STUB tylko dlatego, że oryginał użył globala,
     `__far` pointera albo segmentu. Segmenty/`__far`/DOS-owe layouty
     mapujemy na jawne offsety/rozmiary z komentarzem Orig.
@@ -81,6 +79,16 @@ faithful to the Windows release.
     `*out untouched` + TODO z porównaniem.
 - Close the loop: implement → `make clean && make CC=clang-24` must pass
   with zero warnings → `nm -g civlin` shows the new symbols.
+- Pliki tylko przez SDL_IO (fala file/mem/timer): dwie niezależne tablice
+  int-fd → `SDL_IOStream*` (fd od 5, `win16_l*` + osobna dos-owa, bez
+  unifikacji); `dos-fd` to indeks, nigdy POSIX-fd; operacje bez twina SDL
+  (`isatty`/`fstat`, `stat`/`chmod`, `getcwd`, `ftruncate`, `remove`
+  fallback) zostają w tej samej funkcji z markerem
+  `/* POSIX-FALLBACK (no SDL twin) */`; błędy via staging
+  `DAT_1420_0010/4e7a` + `dos_error_from_errno` (`ENOENT→NOENT`,
+  `ENOMEM→NOMEM`, reszta `IO`, short → `TRUNCATED`), `SDL_GetError()`
+  tylko do logu; timery to store+poll (`win16_set/kill_timer` +
+  `sys_get_tick_scaled`/`sys_wait_next_tick`, bez `SDL_AddTimer`).
 
 ## Git (one repo at root, `git init` done 2026-10-15)
 

@@ -2803,6 +2803,35 @@ int anim_seq_ctx_size(void);
  * read-only 1:1 vs unpacked/civ.exe (NE LE, no copy). */
 int anim_seq_rec_stride(void);
 
+/* Orig Anim_OpenSequence @ 10b0:008a timeline rec word map (civ.exe,
+ * x86:LE:16:Protected Mode; frame recs at seq+8, count at seq+10, each 0xf
+ * words; per-rec [13]/[14] = 0 init + max-end scan over rec[7] longs + 1;
+ * see anim_open_sequence PARTIAL dispatcher + anim_seq_count_frames /
+ * anim_seq_max_end above; exact full word map TBD vs dump, never faked
+ * beyond these indices). OS-free 1:1 word indices on explicit params (no
+ * Win16, no globals, read-only). Refs verified read-only 1:1 vs
+ * unpacked/civ.exe (NE LE, no copy): opcode switch 1..0xe (see
+ * anim_advance_frames @ 10b0:0461) + 0xf-word recs + GfxPort pair offs
+ * +9/+0x62 (see anim_seq_port_count/off below). */
+#define ANIM_SEQ_OP_WORD 0
+#define ANIM_SEQ_END_WORD 7
+#define ANIM_SEQ_ZERO_WORD0 13
+#define ANIM_SEQ_ZERO_WORD1 14
+
+/* Orig same [0] opcode word (count half scans [0] until opcode 0) ->
+ * anim_seq_op_word. 1:1 0 (ANIM_SEQ_OP_WORD). No Win16, no globals. */
+int anim_seq_op_word(void);
+
+/* Orig same [7] end-tick word (max-end half scans rec[7] longs + 1 via
+ * anim_seq_max_end) -> anim_seq_end_word. 1:1 7 (ANIM_SEQ_END_WORD). */
+int anim_seq_end_word(void);
+
+/* Orig same per-rec [13]/[14] = 0 init pair (OpenSequence zeroes both words
+ * per rec before the GfxPort_Create x2 setup) -> anim_seq_zero_word0/1.
+ * 1:1 13 / 14 (ANIM_SEQ_ZERO_WORD0/1). No Win16, no globals. */
+int anim_seq_zero_word0(void);
+int anim_seq_zero_word1(void);
+
 /* Orig Anim_OpenSequence @ 10b0:008a GfxPort pair (GfxPort_Create x2 at
  * ctx offs +9/+0x62; see anim_open_sequence PARTIAL dispatcher) ->
  * anim_seq_port_count / anim_seq_port_off. 1:1 two ports; slot 0 -> 9,

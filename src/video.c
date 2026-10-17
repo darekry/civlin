@@ -6,6 +6,7 @@
 #include <stdlib.h>
 
 #include "gfx_indexed.h"
+#include "win16.h"
 
 /* Concrete port backing store (Orig ~0x20-word struct @ 10d0:0000
  * family: DC + compatible DC + bitmap via 10d0:0cfa + clip rect +
@@ -271,11 +272,27 @@ civ_error_t mem_alloc_with_hook(unsigned size)
 {
     /* Orig Mem_AllocWithHook @ 1000:41e4 (see video.h; callers
      * Sys_BuildCurrentDirPath @ 1000:2826 + File_SetBuffer @ 1000:3496
-     * via DAT_1420_0027 hook + heap 1000:46f1). 16-bit segmented heap
-     * has no Linux equivalent (malloc/arena own this) -> stub.
-     * TODO: Orig Mem_AllocWithHook @ 1000:41e4 (hook + heap bridge). */
-    (void)size;
-    return CIV_ERR_UNSUPPORTED;
+     * via DAT_1420_0027 hook + heap 1000:46f1).
+     * [PORT-SDL] Replaces: segmented heap -> startup arena / malloc.
+     * No HANDLE/SELECTOR (WONTFIX-Win16); hook DAT_1420_0027 has no Linux
+     * counterpart (malloc never hooks). Probe: arena capacity first,
+     * else malloc/free probe. CIV_OK = host can satisfy size, NOMEM =
+     * both fail, RANGE on size==0. No globals here (arena owner is
+     * win16.c), no exit(). */
+    void *probe;
+    if (size == 0)
+        return CIV_ERR_RANGE;
+    if (size <= WIN16_ARENA_SIZE) {
+        size_t used = win16_arena_used();
+        size_t cap = win16_arena_size();
+        if (used + (size_t)size <= cap)
+            return CIV_OK;
+    }
+    probe = malloc((size_t)size);
+    if (!probe)
+        return CIV_ERR_NOMEM;
+    free(probe);
+    return CIV_OK;
 }
 
 int gfx_scroll_copy_w(int dst_w, int src_w)

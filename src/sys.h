@@ -134,20 +134,25 @@ int dos_get_current_drive_index(void);
  * drive ignored. 0 on success, -1 on error (buf too small etc.). */
 int dos_get_current_dir(int drive, char *buf, size_t cap);
 
-/* --- DOS-file primitives (raw INT 21h layer; stdio effect port) ---
+/* --- DOS-file primitives (raw INT 21h layer; SDL_IO effect port) [PORT-SDL/HOST] ---
  * Renamed 2026-10-16 from FUN_1000_* (Orig addr kept per-function).
  * Every primitive ended in INT 21h with CF=1 mapped through Dos_MapError
  * @ 1000:151a (sets DAT_1420_0010/DAT_1420_4e7a, returns 0xffff); on Linux
- * the effect is ported to stdio/POSIX (fopen/fread/fwrite/fseek/fclose +
- * remove/stat, errors via dos_map_error(errno), no DGROUP writes, no
- * globals, explicit params only). CIV_OK is returned only on a real effect
- * (open/read/write/seek/close/unlink/stat query succeeded); validation
- * failures use NOENT/RANGE, I/O failures use dos_map_error(errno)
- * (usually IO), and console-only ioctl tails keep UNSUPPORTED. The bulk
- * save path still uses save_file_open/read/write/close @ 1140:0139/019d/
- * 0245/037c (POSIX open/read/write/lseek/close, see save.h) and RSC
- * streaming uses file_read_chunk (fread twin File_ReadChunk @ 1000:272a,
- * see rsc_loader.h). No exit() in any of them. */
+ * the effect is ported to SDL_IO (Replaces: fopen -> SDL_IOFromFile,
+ * fread/fwrite -> SDL_ReadIO/WriteIO in 0x8000 chunks, fseek/ftell ->
+ * SDL_SeekIO/TellIO, GetIOSize for eof, SDL_RemovePath for unlink,
+ * SDL_GetPathInfo for attr-get, fclose/close -> SDL_CloseIO; no
+ * SDL_TruncateIO in 3.5.0 so truncate stays POSIX ftruncate with marker).
+ * fd here is a dos-table index (SDL_IOStream*, fd 5+, separate array from
+ * the win16 _L* table in win16.h, never shared; never a POSIX fd).
+ * Errors via dos_map_error staging (EIO/ENOENT/ENOMEM) + SDL_GetError()
+ * log-only; NOENT/RANGE on validation, TRUNCATED on short, UNSUPPORTED
+ * on non-direct ioctl. Lines without an SDL twin stay marked with the
+ * POSIX-FALLBACK marker (isatty/fstat, stat/chmod, getcwd,
+ * ftruncate, remove fallback). The bulk save path still uses
+ * save_file_open/read/write/close @ 1140:0139/019d/0245/037c (POSIX
+ * followers, next wave) and RSC streaming uses file_read_chunk (fread
+ * twin File_ReadChunk @ 1000:272a, see rsc_loader.h). No exit(). */
 
 /* Orig: FUN_1000_151a @ 1000:151a, now Dos_MapError in Ghidra.
  * DOS errno mapper behind every CF=1 path above. Contract: param < 0
@@ -225,8 +230,10 @@ int dos_read_is_blocked(unsigned flags);
 /* Orig: FUN_1000_19a6 @ 1000:19a6, now Dos_Unlink in Ghidra.
  * INT 21h AH=0x41 (delete file): DS:DX=path [BP+6]. CF=1 ->
  * Dos_MapError @ 1000:151a, else 0. NULL path -> NOENT (orig faulted).
- * Linux LIVE via remove (unlink twin). CIV_OK on deletion, else
- * dos_map_error(errno) (ENOENT -> NOENT). No globals, no exit(). */
+ * Linux LIVE via SDL_GetPathInfo (existence gate: SDL 3.5.0 removal is
+ * idempotent, Orig fails on missing) + SDL_RemovePath, fallback remove.
+ * CIV_OK on deletion, NOENT when missing, else dos_map_error(errno).
+ * No globals, no exit(). */
 civ_error_t dos_unlink(const char *path);
 /* Orig: FUN_1000_1f5c @ 1000:1f5c, now Dos_FileAttr in Ghidra.
  * INT 21h AH=0x43 (get/set file attributes): AL=func [BP+0x0a] (0 get /

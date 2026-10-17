@@ -258,16 +258,26 @@ civ_error_t font_fon_parse(const uint8_t *data, size_t len,
                            font_fon_info_t *out);
 
 /* AF2: FON face list (count + names via ENUMFONTFAMILIES @ 1008:0e99).
- * OS-free stubs over font_fon_info_t (no SDL, no globals, no exit(),
- * read-only): count reports parsed RT_FONT faces (0 on NULL info);
- * list maps index -> family name, NULL until the fontdir-string order is
- * wired to the ENUMFONTFAMILIES enumeration order (expected 21 faces:
- * CIVBABYLON/CIVZULU/CIVEGYPT/CIVENGLISH/CIVGREEK/CIVRUSSIAN/CIVGERMAN/
- * CIVCHINESE/CIVFRENCH/CIVROMAN/CIVINDIAN/CIVAMERICAN/CIVAZTEC/CIVMONGOL/
- * CIVTIMES10/12/14/18/24/30/36 seen in the 0x600 fontdir dump; do not
- * hardcode here, ENUMFONTFAMILIES order TBD from Ghidra). Guard half LIVE
- * 1:1 via sys_font_face_index_ok @ 1008:0e99 (see sys.h; ref unpacked/
- * civfonts.fon read-only 244224 B); the string store stays TBD -> STUB. */
+ * OS-free static-const port over font_fon_info_t (no SDL, no globals
+ * mutated, no exit(), read-only): count reports parsed RT_FONT faces (0
+ * on NULL info); list maps index -> family name from the fontdir-string
+ * store below in RT_FONT/ENUMFONTFAMILIES order (21 faces, dump-confirmed
+ * 1:1 from unpacked/civfonts.fon read-only 244224 B: fontdir at file
+ * 0x600, u16 nfonts = 21, C NUL strings at 0x676 CIVBABYLON, 0x6f5
+ * CIVZULU, 0x771 CIVEGYPT, 0x7ee CIVENGLISH, 0x86d CIVGREEK, 0x8ea
+ * CIVRUSSIAN, 0x969 CIVGERMAN, 0x9e7 CIVCHINESE, 0xa66 CIVFRENCH, 0xae4
+ * CIVROMAN, 0xb61 CIVINDIAN, 0xbdf CIVAMERICAN, 0xc5f CIVAZTEC, 0xcdc
+ * CIVMONGOL, 0xd5a CIVTIMES10, 0xdd9 CIVTIMES12, 0xe58 CIVTIMES14, 0xed7
+ * CIVTIMES18, 0xf56 CIVTIMES24, 0xfd5 CIVTIMES30, 0x1054 CIVTIMES36; same
+ * order at each FNT base+dfFace, e.g. 0x1400+0x18c4 CIVBABYLON ..
+ * 0x30e00+0xaaf8 CIVTIMES36). Guard half LIVE 1:1 via
+ * sys_font_face_index_ok @ 1008:0e99 (see sys.h); OOB -> NULL (same
+ * contract as tribe_get_name_list / boot_video_caps_describe /
+ * menu_string_at). GDI ENUMFONTFAMILIES callback filter (dwType & 1 +
+ * Util_CompareBounded @ 1000:3744 match) + CREATEFONTINDIRECT/
+ * ADDFONTRESOURCE install tail stay STUB in font_install_slot @
+ * 1008:0e12/062f (no fake-OK, see TODO there). */
+#define CIV_FONT_FACE_N 21 /* RT_FONT faces = fontdir nfonts (0x600) */
 int font_face_count(const font_fon_info_t *info);
 const char *font_face_list(const font_fon_info_t *info, int index);
 
@@ -677,8 +687,11 @@ const char *menu_string_at(int index);
  * "civ.prf" @ file 0xb710b/0xb7113 = 1420:010b/0113): defaults DAT_1420_17ca
  * -> g_nOptionFlags @ 12d0:0064 (sounds on, see config_prefs_defaults);
  * missing/short file keeps the defaults (success path -> CIV_OK). Full
- * 26 B image shape LIVE in config_prefs_unpack; Win16 _LOPEN/_LREAD/_LCLOSE
- * file-handle tail TBD (see boot.c TODO Orig). Read-only: never creates
+ * 26 B image shape LIVE in config_prefs_unpack; transport LIVE via
+ * win16_lopen/lread/lclose on SDL_IO ([PORT-SDL] Replaces:
+ * _LOPEN/_LREAD/_LCLOSE -> SDL_IOFromFile/ReadIO/CloseIO, same modes).
+ * Missing file keeps the defaults -> CIV_OK (orig-shape); short/fail ->
+ * TRUNCATED/IO (never silent defaults, Fala H). Read-only: never creates
  * civ.prf. No globals, no exit(). */
 civ_error_t config_load_prefs(void);
 
@@ -688,11 +701,12 @@ civ_error_t config_load_prefs(void);
  * LIVE via config_prefs_needs_path_setup (drive > 0 -> dos_drive_ready @
  * 1000:1184 + dos_set_path @ 1000:116a) + OS-free 26 B image half LIVE
  * via config_prefs_pack (c0/c1/c2 + flags -> CIV_PREFS_LEN, round-tripped
- * via config_prefs_unpack; opaque driver chunks TBD, zeros only as probe
- * input); Win16 _LCREAT/_LLSEEK/_LWRITE/_LCLOSE file-handle tail of
- * CIV_PREFS_FILE stays STUB -> CIV_ERR_UNSUPPORTED with TODO Orig in
- * boot.c (no fake-OK). Read-only: never creates civ.prf. No globals, no
- * exit(). */
+ * via config_prefs_unpack; opaque driver chunks TBD from dump, zeros
+ * preserved for roundtrip); transport LIVE via win16_lopen (mode 1
+ * truncates like _LCREAT)/llseek/lwrite/lclose on SDL_IO ([PORT-SDL]
+ * Replaces: _LCREAT/_LLSEEK/_LWRITE/_LCLOSE ->
+ * SDL_IOFromFile/SeekIO/WriteIO/CloseIO). CIV_OK only on full 0x1a bytes
+ * on disk, else IO/TRUNCATED (no fake-OK, Fala H). No globals, no exit(). */
 civ_error_t config_save_prefs(void);
 
 /* Orig: FUN_1000_1184 @ 1000:1184 -> dos_drive_ready (Dos_DriveReady).
@@ -727,8 +741,8 @@ civ_error_t dos_set_path(int drive, const char *path);
  *     @ 11e0:0221; NewGame_Wizard @ 10e8:0000 via newgame_wizard_run,
  *     see newgame.h / mainmenu.h)
  *   Config_LoadPrefs        @ 1008:0b4a / Config_SavePrefs @ 1008:0bbf
- *     (CIV_PREFS_FILE "civ.prf"; defaults below; file I/O tail stays
- *     stubbed, read-only: never creates civ.prf)
+ *     (CIV_PREFS_FILE "civ.prf"; defaults below; file I/O LIVE via
+ *     win16_l* on SDL_IO, load is read-only)
  *   Video_CheckDriverCaps   @ 1008:059a (GETDEVICECAPS checklist @
  *     1420:0af4; SDL mapping via video_check_driver_caps, see video.h)
  * No globals, no exit(), read-only. Win16 tails stub CIV_ERR_UNSUPPORTED;
