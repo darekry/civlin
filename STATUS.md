@@ -1363,7 +1363,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `dos_errno_e4e7a` | LIVE |  |  |
 | `dos_map_error` | LIVE | 1000:151a, 1420:4e7c |  |
 | `dos_map_error_lookup` | LIVE | 1000:151a, 1420:4e7c |  |
-| `dos_is_char_device` | STUB | 1000:1566, 1000:1750, 1000:3fc4, 1420:4fc4, 1420:4fc8 | has TODO |
+| `dos_is_char_device` | LIVE | 1000:1566, 1000:1750, 1000:3fc4, 1000:4252, 1420:4fc4, 1420:4fc8 |  |
 | `dos_is_char_device_bit` | LIVE | 1000:1566, 1000:1750, 1000:3fc4, 1420:4fc4 |  |
 | `dos_error_from_errno` | LIVE |  |  |
 | `dos_seek` | LIVE | 1000:151a, 1000:161c |  |
@@ -1376,8 +1376,8 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `dos_close` | LIVE | 1000:151a, 1000:1f7c, 1000:1fa6 |  |
 | `dos_is_eof` | LIVE | 1000:151a, 1000:201e |  |
 | `dos_eof_at_end` | LIVE | 1000:201e |  |
-| `dos_create` | STUB | 1000:2aac, 1000:2ad9 | has TODO |
-| `dos_truncate` | STUB | 1000:2ac7, 1000:2ad9 | has TODO |
+| `dos_create` | LIVE | 1000:1f5c, 1000:2aac, 1000:2ad9, 1000:2c4a, 1140:0139 |  |
+| `dos_truncate` | LIVE | 1000:2ac7, 1000:2ad9 |  |
 | `dos_open` | LIVE | 1000:151a, 1000:2ad9, 1000:2c4a |  |
 | `dos_open_mode_map` | LIVE | 1000:2c4a |  |
 | `dos_open_table_word` | LIVE | 1000:2c4a |  |
@@ -1687,7 +1687,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `worldgen_earth_frame` | LIVE | 1028:0000, 10b8:0aa8, 10b8:11bc |  |
 | `worldgen_earth_preset_bytes` | LIVE | 10b8:079d |  |
 | `worldgen_copy_preset` | LIVE | 1028:0000, 10b8:0000, 10b8:079d, 1420:20a9 |  |
-| `worldgen_customize` | STUB |  | has TODO |
+| `worldgen_customize` | PARTIAL | 1058:06ab, 1058:081a, 1058:0921, 1058:09f6, 1058:0b4d, 1098:124f, 10e8:0000, 1220:0156, 1220:16fd | has TODO |
 | `worldgen_customize_dialog` | PARTIAL | 1058:06ab, 1058:081a, 1058:0921, 1058:09f6, 1058:0b4d, 1098:124f, 1098:1612 | has TODO |
 | `worldgen_seed_one_island` | LIVE | 1028:0945 |  |
 | `worldgen_paint_blob` | LIVE | 1028:09ef |  |

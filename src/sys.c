@@ -1,10 +1,12 @@
 /* DOS / system helpers + RNG. 1:1 ports where the logic is OS-free,
  * documented adaptations where DOS/Win16 has no Linux equivalent. */
+#define _POSIX_C_SOURCE 200809L
 #include "sys.h"
 
 #include "win16.h"
 
 #include <errno.h>
+#include <fcntl.h>
 #include <math.h>
 #include <limits.h>
 #include <stdarg.h>
@@ -193,6 +195,11 @@ int file_is_text_mode(unsigned flags)
 static int s_dos_e0010 = 0;
 static int s_dos_e4e7a = 0;
 
+/* Forward: errno -> civ_error_t mapping for the dos_* failure paths
+ * (defined below dos_is_char_device; dos_map_error stages the images
+ * and reports CIV_OK = staged, so it must not be a failure return). */
+static civ_error_t dos_error_from_errno(int e);
+
 int dos_errno_e0010(void)
 {
     return s_dos_e0010;
@@ -265,12 +272,23 @@ int dos_map_error_lookup(int dos_code, int *out_e0010, int *out_e4e7a)
 
 civ_error_t dos_is_char_device(int fd)
 {
-    (void)fd;
-    /* TODO: Orig FUN_1000_1566 @ 1000:1566 (Dos_IsCharDevice: INT 21h
-     * AX=0x4400, BX=fd -> DX & 0x80). No DOS ioctls on Linux.
-     * Live twin: isatty() one level up (not at this layer).
-     * Pure bit kernel: dos_is_char_device_bit below (LIVE). */
-    return CIV_ERR_UNSUPPORTED;
+    /* Orig FUN_1000_1566 @ 1000:1566 (Dos_IsCharDevice: INT 21h AX=0x4400,
+     * BX=fd -> DX & 0x80; routes the Dos_Read @ 1000:1750 / Dos_Write @
+     * 1000:3fc4 hook vectors 1420:4fc4/4fc8). Linux LIVE via the same
+     * isatty/fstat console/device query as Dos_Ioctl func 0 @ 1000:4252
+     * (no verr/DGROUP on Linux): validates fd via fstat (console probe
+     * via isatty, result discrimination lives in dos_is_char_device_bit
+     * @ 1000:1566, LIVE) and returns CIV_OK on a successful query.
+     * RANGE on fd < 0, dos_map_error(errno) on fstat failure. No globals,
+     * no exit(). */
+    struct stat st;
+
+    if (fd < 0)
+        return CIV_ERR_RANGE;
+    (void)isatty(fd);
+    if (fstat(fd, &st) != 0)
+        { int e = errno; (void)dos_map_error(e); return dos_error_from_errno(e); }
+    return CIV_OK;
 }
 
 int dos_is_char_device_bit(unsigned dx)
@@ -474,22 +492,61 @@ int dos_eof_at_end(long cur, long end)
 
 civ_error_t dos_create(const char *path, int attrs)
 {
+    /* Orig FUN_1000_2aac @ 1000:2aac (Dos_Create: INT 21h AH=0x3c,
+     * DS:DX=path [BP+6], CX=attrs [BP+4]; CF=1 -> Dos_MapError(AX), else
+     * AX=new fd; sole File_Open @ 1000:2ad9 create-path caller). Linux
+     * LIVE via open(O_WRONLY|O_CREAT|O_TRUNC) (same flags as the live
+     * twin save_file_open @ 1140:0139 write path in save.c) then close:
+     * probe-create mirroring the dos_open @ 1000:2c4a probe pattern
+     * (no DOS fd table kept on Linux). DOS read-only bit (attrs & 1)
+     * maps to owner/group/other write clear via chmod (same mapping as
+     * dos_file_attr @ 1000:1f5c set path); hidden/system/archive bits
+     * have no Linux equivalent and are ignored. NULL/empty path ->
+     * NOENT (orig faulted). CIV_OK on creation, else dos_map_error(errno)
+     * staging (ENOENT -> NOENT, ENOMEM -> NOMEM, else IO). No globals,
+     * no exit(). */
+    int fd;
+
     if (!path)
         return CIV_ERR_NOENT;
-    /* TODO: Orig FUN_1000_2aac @ 1000:2aac (Dos_Create: INT 21h AH=0x3c,
-     * CX=attrs; live twin save_file_open O_CREAT in save.c). */
-    (void)attrs;
-    return CIV_ERR_UNSUPPORTED;
+    if (*path == '\0')
+        return CIV_ERR_NOENT;
+    fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (fd < 0)
+        { int e = errno; (void)dos_map_error(e); return dos_error_from_errno(e); }
+    (void)close(fd);
+    if ((attrs & 1) != 0) {
+        struct stat st;
+
+        if (stat(path, &st) != 0)
+            { int e = errno; (void)dos_map_error(e); return dos_error_from_errno(e); }
+        st.st_mode &= (mode_t) ~(S_IWUSR | S_IWGRP | S_IWOTH);
+        if (chmod(path, st.st_mode) != 0)
+            { int e = errno; (void)dos_map_error(e); return dos_error_from_errno(e); }
+    }
+    return CIV_OK;
 }
 
 civ_error_t dos_truncate(int fd)
 {
-    (void)fd;
-    /* TODO: Orig FUN_1000_2ac7 @ 1000:2ac7 (Dos_Truncate: INT 21h AH=0x40
-     * CX=0 zero-write at cursor; sole caller File_Open @ 1000:2ad9).
-     * No standalone live twin here (O_TRUNC lives inside save_file_open
-     * in save.c). */
-    return CIV_ERR_UNSUPPORTED;
+    /* Orig FUN_1000_2ac7 @ 1000:2ac7 (Dos_Truncate: INT 21h AH=0x40 with
+     * CX=0, DX=0 zero-byte write at the cursor = truncate there, BX=fd
+     * [BP+4]; sole caller File_Open @ 1000:2ad9 O_TRUNC-style flag 0x200
+     * on non-char handles). Linux LIVE via lseek(SEEK_CUR) + ftruncate
+     * (POSIX twin of the zero-byte write at the cursor; O_TRUNC inside
+     * save_file_open only truncates to 0, so the cursor form needs its
+     * own twin here). RANGE on fd < 0, dos_map_error(errno) on
+     * lseek/ftruncate failure, else CIV_OK. No globals, no exit(). */
+    off_t cur;
+
+    if (fd < 0)
+        return CIV_ERR_RANGE;
+    cur = lseek(fd, (off_t)0, SEEK_CUR);
+    if (cur == (off_t)-1)
+        { int e = errno; (void)dos_map_error(e); return dos_error_from_errno(e); }
+    if (ftruncate(fd, cur) != 0)
+        { int e = errno; (void)dos_map_error(e); return dos_error_from_errno(e); }
+    return CIV_OK;
 }
 
 civ_error_t dos_open(const char *path, int mode_flags)

@@ -179,9 +179,13 @@ int dos_map_error_lookup(int dos_code, int *out_e0010, int *out_e4e7a);
  * INT 21h AX=0x4400 (IOCTL get device info), BX=fd. Returns DX & 0x80
  * (1 = char device e.g. console, 0 = block file). Used to route the
  * Dos_Read @ 1000:1750 / Dos_Write @ 1000:3fc4 hook vectors
- * (1420:4fc4 / 1420:4fc8) for console handles. No Linux equivalent at
- * this layer (isatty lives one level up) -> stub CIV_ERR_UNSUPPORTED.
- * Pure bit kernel: dos_is_char_device_bit below (LIVE). */
+ * (1420:4fc4 / 1420:4fc8). Linux LIVE via the same isatty/fstat
+ * console/device query as Dos_Ioctl func 0 @ 1000:4252 (no
+ * verr/DGROUP on Linux): validates fd via fstat (console probe via
+ * isatty) and returns CIV_OK on a successful query; the 0x80
+ * discrimination lives in dos_is_char_device_bit below (LIVE).
+ * RANGE on fd < 0, dos_map_error(errno) on fstat failure. No globals,
+ * no exit(). */
 civ_error_t dos_is_char_device(int fd);
 /* Orig Dos_IsCharDevice @ 1000:1566 return tail (MOV AX,DX / AND AX,0x80:
  * nonzero = char device). OS-free 1:1 on the explicit DX word: 1 when
@@ -267,16 +271,22 @@ int dos_eof_at_end(long cur, long end);
 /* Orig: FUN_1000_2aac @ 1000:2aac, now Dos_Create in Ghidra.
  * INT 21h AH=0x3c (create/truncate file): DS:DX=path [BP+6],
  * CX=attrs [BP+4]. CF=1 -> Dos_MapError(AX), else AX=new fd.
- * Called from File_Open @ 1000:2ad9 (create path). Live twin:
- * save_file_open O_WRONLY|O_CREAT|O_TRUNC. Raw primitive stays stub
- * CIV_ERR_UNSUPPORTED; NULL path -> NOENT. */
+ * Called from File_Open @ 1000:2ad9 (create path). Linux LIVE via
+ * open(O_WRONLY|O_CREAT|O_TRUNC) (same flags as save_file_open @
+ * 1140:0139 write path, see save.h) then close — probe-create mirroring
+ * the dos_open @ 1000:2c4a probe pattern (no DOS fd table kept).
+ * DOS read-only bit maps to write-clear via chmod (same as
+ * dos_file_attr @ 1000:1f5c); hidden/system/archive bits ignored.
+ * NULL/empty path -> NOENT, else CIV_OK or dos_map_error(errno).
+ * No globals, no exit(). */
 civ_error_t dos_create(const char *path, int attrs);
 /* Orig: FUN_1000_2ac7 @ 1000:2ac7, now Dos_Truncate in Ghidra.
  * INT 21h AH=0x40 with CX=0, DX=0 (zero-byte write at the cursor =
  * truncate there): BX=fd [BP+4]. Single caller File_Open @ 1000:2ad9
- * (O_TRUNC-style flag 0x200 on non-char handles). Returns nothing
- * (orig pops BP, CF ignored). Raw primitive stays stub
- * CIV_ERR_UNSUPPORTED. */
+ * (O_TRUNC-style flag 0x200 on non-char handles). Linux LIVE via
+ * lseek(SEEK_CUR) + ftruncate (POSIX twin of the zero-byte write at
+ * the cursor). RANGE on fd < 0, else CIV_OK or dos_map_error(errno).
+ * No globals, no exit(). */
 civ_error_t dos_truncate(int fd);
 /* Orig: FUN_1000_2c4a @ 1000:2c4a, now Dos_Open in Ghidra.
  * INT 21h AH=0x3d: DS:DX=path [BP+6], AL=mode derived from flags

@@ -186,7 +186,22 @@ unsigned worldgen_earth_preset_bytes(void);
  * conversion before this copy. OS-free memcpy wrapper -> ported 1:1. */
 civ_error_t worldgen_copy_preset(uint8_t *dst, const uint8_t *src, size_t len);
 
-/* Custom-world editor (wizard steps 3/4 + 1058 controls). */
+/* Orig: WorldGen_Customize entry driving NewGame_Wizard @ 10e8:0000 steps
+ * 3/4 (via newgame_customize_world + custom Dialog_MenuZ_Modal variant @
+ * 1220:16fd) + Ctrl_* @ 1058 (RANDOMRADIOPROC @ 1058:06ab,
+ * RANDOMSTATICPROC @ 1058:081a, RANDOMUSERPROC @ 1058:0921, REGIONPROC @
+ * 1058:09f6; classes registered by Ctrl_RegisterCustomClasses @ 1058:0b4d)
+ * -> worldgen_customize. Custom-world editor entry; feeds
+ * WorldGen_CustomizeDialog host below (Orig @ 1060:xxxx, see
+ * worldgen_customize_dialog). PARTIAL: OS-free dispatcher gates via
+ * worldgen_prepare_mode / worldgen_is_preset + dialog ID->cell/settings
+ * gates via worldgen_dialog_id_to_cell / worldgen_custom_apply LIVE 1:1
+ * below (BAD_DATA on drift, no fake-OK); Win16 USER/GDI modal pump
+ * (Dlg_CreateTracked @ 1098:124f + MenuZ @ 1220:0156/16fd +
+ * PEEKMESSAGE/ISDIALOGMESSAGE + control fan-out) -> CIV_ERR_UNSUPPORTED.
+ * Control/dialog symbols are referenced by Orig address only here (owned
+ * by the dialog module) to keep this parallel slice disjoint -- dialog.h
+ * is intentionally not edited. */
 civ_error_t worldgen_customize(void);
 
 /* Orig: WorldGen_CustomizeDialog host driving Ctrl_* @ 1058
