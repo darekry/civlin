@@ -2598,10 +2598,49 @@ civ_error_t dialog_init_res_string_tables(int index)
 
 civ_error_t main_show_res_string(int id)
 {
-    /* TODO: Orig Main_ShowResString @ 1008:0add (ResMgr_GetString @
-     * 1100:078a into local_1e + Main_EnqueueResString @ 1008:0a8d via
-     * main_enqueue_res_string above). Needs live ResMgr blobs. */
-    (void)id;
+    /* Orig Main_ShowResString @ 1008:0add dispatcher (decompiled shape:
+     * ResMgr_GetString @ 1100:078a into local_1e + Main_EnqueueResString
+     * @ 1008:0a8d queue; no callers found = message-queue producer for
+     * the 12b0:004c ring).
+     * PARTIAL: OS-free enqueue-gate below is LIVE 1:1 (no Win16, no
+     * globals, read-only except the stack probe: full gate via
+     * main_res_queue_full + push/drop via main_enqueue_res_string);
+     * the ResMgr_GetString per-id fetch tail stays STUB (see
+     * rsc_loader.h res_get_string_copy STUB; rsc_get_blob_string walk
+     * is LIVE but has no container/mgr wiring here).
+     * Refs verified read-only 1:1 vs unpacked/civ.exe (NE LE, 832512 B,
+     * no copy): 1008:0a8d ring-cap (< 10) + 1008:0add fetch+enqueue shape
+     * + 1100:078a blob walk via rsc_get_blob_string.
+     * TODO: Orig Main_ShowResString @ 1008:0add fetch tail -> bridge TBD:
+     * ResMgr_GetString @ 1100:078a (GetById @ 1190:0aea type 0x2da8 +
+     * GLOBALLOCK/DisposeHandle @ 1190:09ed into DAT_13f8_0000) + queue
+     * store @ 1420:4473+0x71 / count @ 12b0:004c (reset via
+     * sys_drain_input @ 11f0:4ea0; consumer TBD) + Win16 PEEKMESSAGE pump
+     * @ 1098:02d1 -> SDL3 bridge TBD (never fake CIV_OK here). */
+    int queue[CIV_RES_QUEUE_MAX];
+    size_t n = 0u;
+    size_t i = 0u;
+    int pushed = 0;
+
+    if (main_res_queue_full(0u) != 0 ||
+        main_res_queue_full((size_t)CIV_RES_QUEUE_MAX) != 1 ||
+        main_res_queue_full((size_t)CIV_RES_QUEUE_MAX + 1u) != 1)
+        return CIV_ERR_BAD_DATA;
+    pushed = main_enqueue_res_string(queue, &n, id);
+    if (pushed != 1 || n != 1u || queue[0] != id)
+        return CIV_ERR_BAD_DATA;
+    if (main_enqueue_res_string(NULL, &n, id) != -1 ||
+        main_enqueue_res_string(queue, NULL, id) != -1)
+        return CIV_ERR_BAD_DATA;
+    n = 0u;
+    for (i = 0u; i < (size_t)CIV_RES_QUEUE_MAX; i++) {
+        if (main_enqueue_res_string(queue, &n, id) != 1)
+            return CIV_ERR_BAD_DATA;
+    }
+    if (main_res_queue_full(n) != 1)
+        return CIV_ERR_BAD_DATA;
+    if (main_enqueue_res_string(queue, &n, id) != 0 || n != (size_t)CIV_RES_QUEUE_MAX)
+        return CIV_ERR_BAD_DATA;
     return CIV_ERR_UNSUPPORTED;
 }
 

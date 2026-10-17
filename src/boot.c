@@ -994,11 +994,65 @@ civ_error_t config_load_prefs(void)
 
 civ_error_t config_save_prefs(void)
 {
-    /* TODO: Orig FUN_1008_0bbf @ 1008:0bbf -> Config_SavePrefs. Guard
-     * config_prefs_needs_path_setup (drive > 0 -> Dos_DriveReady @
-     * 1000:1184 + Dos_SetPath @ 1000:116a) przed _LCREAT "civ.prf" @
-     * 1420:0113 + _LLSEEK 0,0 + _LWRITE 0x1a z 17b2 + _LCLOSE. Obraz 26 B
-     * LIVE w config_prefs_pack; Win16 file-handle mostek TBD. */
+    /* Orig FUN_1008_0bbf @ 1008:0bbf -> Config_SavePrefs (ref unpacked/
+     * civ.exe read-only NE Win3.x 832512 B, "civ.prf" @ file 0xb710b/
+     * 0xb7113 = 1420:010b/0113). Orig shape: drive guard (0 <
+     * g_nCurrentDrive @ 1228:0002 via Dos_DriveReady @ 1000:1184 +
+     * Dos_SetPath @ 1000:116a) then _LCREAT "civ.prf" @ 1420:0113 +
+     * option-word store g_nOptionFlags @ 12d0:0064 -> DAT_1420_17ca + 3x
+     * GLOBALLOCK 8 B copies (485a -> 17b2, 48fa -> 17ba, 4964 -> 17c2 via
+     * Util_MemCopyFar @ 1000:137f) + _LLSEEK 0,0 + _LWRITE 0x1a from
+     * DAT_1420_17b2 + _LCLOSE. PARTIAL dispatcher: OS-free guard +
+     * pack halves below are LIVE 1:1 (no far, no handle, no globals, no
+     * exit(), read-only, never creates civ.prf); Win16 file-handle tail
+     * stays STUB -> CIV_ERR_UNSUPPORTED (no fake-OK).
+     * TODO: Orig FUN_1008_0bbf @ 1008:0bbf Win16 tail (_LCREAT "civ.prf"
+     * @ 1420:0113 + _LLSEEK 0,0 + _LWRITE 0x1a z DAT_1420_17b2 + _LCLOSE
+     * via win16 stdio bridge TBD; GLOBALLOCK driver-chunk carve TBD). */
+    civ_prefs_t prefs;
+    uint8_t c0[CIV_PREFS_CHUNK_LEN] = { 0 };
+    uint8_t c1[CIV_PREFS_CHUNK_LEN] = { 0 };
+    uint8_t c2[CIV_PREFS_CHUNK_LEN] = { 0 };
+    uint8_t img[CIV_PREFS_LEN];
+    uint8_t d0[CIV_PREFS_CHUNK_LEN];
+    uint8_t d1[CIV_PREFS_CHUNK_LEN];
+    uint8_t d2[CIV_PREFS_CHUNK_LEN];
+    uint16_t flags = 0u;
+    civ_error_t rc;
+    size_t i;
+
+    /* OS-free guard half LIVE 1:1 (Linux drive is 0, so no DOS path
+     * setup; drive > 0 would take Dos_DriveReady + Dos_SetPath). */
+    if (config_prefs_needs_path_setup(0) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (config_prefs_needs_path_setup(1) != 1)
+        return CIV_ERR_BAD_DATA;
+    if (dos_drive_ready(0) != 1)
+        return CIV_ERR_BAD_DATA;
+    if (dos_set_path(0, ".") != CIV_OK)
+        return CIV_ERR_BAD_DATA;
+    /* OS-free defaults half LIVE (same source as Config_LoadPrefs @
+     * 1008:0b4a when civ.prf is missing: sounds on). */
+    prefs = config_prefs_defaults();
+    if (!config_prefs_sounds_on(&prefs))
+        return CIV_ERR_BAD_DATA;
+    /* OS-free 26 B image half LIVE via config_prefs_pack @ 1008:0bbf
+     * (opaque driver chunks A/B/C TBD from dump, never guessed — zeros
+     * only as the placeholder probe input here). */
+    rc = config_prefs_pack(c0, c1, c2, prefs.option_flags, img,
+                           sizeof(img));
+    if (rc != CIV_OK)
+        return CIV_ERR_BAD_DATA;
+    /* Round-trip probe via config_prefs_unpack (flags + chunks agree). */
+    rc = config_prefs_unpack(img, sizeof(img), d0, d1, d2, &flags);
+    if (rc != CIV_OK)
+        return CIV_ERR_BAD_DATA;
+    if (flags != prefs.option_flags)
+        return CIV_ERR_BAD_DATA;
+    for (i = 0; i < (size_t)CIV_PREFS_CHUNK_LEN; i++) {
+        if (d0[i] != c0[i] || d1[i] != c1[i] || d2[i] != c2[i])
+            return CIV_ERR_BAD_DATA;
+    }
     return CIV_ERR_UNSUPPORTED;
 }
 

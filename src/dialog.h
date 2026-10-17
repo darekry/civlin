@@ -1074,7 +1074,13 @@ int text_res_list_fits(size_t cur_off, size_t entry_len, size_t cap);
 
 /* Orig Main_ShowResString @ 1008:0add -> main_show_res_string.
  * Per-string producer (ResMgr_GetString @ 1100:078a fetch + enqueue via
- * main_enqueue_res_string above). Needs live ResMgr blobs -> STUB. */
+ * main_enqueue_res_string @ 1008:0a8d above). PARTIAL dispatcher:
+ * OS-free enqueue-gate LIVE 1:1 (main_res_queue_full +
+ * main_enqueue_res_string probes in dialog.c, no Win16, no globals);
+ * the ResMgr_GetString per-id fetch (see rsc_loader.h
+ * res_get_string_copy STUB) + queue store @ 1420:4473 / count @
+ * 12b0:004c stay STUB (CIV_ERR_UNSUPPORTED, never fake CIV_OK).
+ * No callers found = message-queue producer for the 12b0:004c ring. */
 civ_error_t main_show_res_string(int id);
 
 /* Orig Text_DrawDlgItemString @ 1098:2796 source choice ->

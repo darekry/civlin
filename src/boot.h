@@ -668,9 +668,16 @@ const char *menu_string_at(int index);
 civ_error_t config_load_prefs(void);
 
 /* Orig: FUN_1008_0bbf @ 1008:0bbf -> config_save_prefs (Config_SavePrefs).
- * Guarded by dos_drive_ready @ 1000:1184 (must be ready) + dos_set_path @
- * 1000:116a (cwd in place) before the _LCREAT/_LWRITE of CIV_PREFS_FILE.
- * Win16 file-handle path -> stdio bridge TBD; stub. */
+ * PARTIAL dispatcher (ref unpacked/civ.exe read-only NE Win3.x 832512 B,
+ * "civ.prf" @ file 0xb710b/0xb7113 = 1420:010b/0113): OS-free guard half
+ * LIVE via config_prefs_needs_path_setup (drive > 0 -> dos_drive_ready @
+ * 1000:1184 + dos_set_path @ 1000:116a) + OS-free 26 B image half LIVE
+ * via config_prefs_pack (c0/c1/c2 + flags -> CIV_PREFS_LEN, round-tripped
+ * via config_prefs_unpack; opaque driver chunks TBD, zeros only as probe
+ * input); Win16 _LCREAT/_LLSEEK/_LWRITE/_LCLOSE file-handle tail of
+ * CIV_PREFS_FILE stays STUB -> CIV_ERR_UNSUPPORTED with TODO Orig in
+ * boot.c (no fake-OK). Read-only: never creates civ.prf. No globals, no
+ * exit(). */
 civ_error_t config_save_prefs(void);
 
 /* Orig: FUN_1000_1184 @ 1000:1184 -> dos_drive_ready (Dos_DriveReady).
