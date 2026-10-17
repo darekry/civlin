@@ -2609,3 +2609,41 @@ int sys_runtime_check_order(void)
      * 1 = check runs BEFORE the unit-move pump. */
     return 1;
 }
+
+/* --- Chain 2026-10-17 (sys): font enumeration / slot guards ---
+ * See sys.h block. OS-free guards LIVE 1:1; GDI install tail STUB. */
+
+int sys_font_face_index_ok(int face_count, int index)
+{
+    /* Orig font_face_list @ 1008:0e99 guard (ENUMFONTFAMILIES face list:
+     * RT_FONT 0x8008 x21 @ unpacked/civfonts.fon, fontdir @ file 0x600
+     * nfonts 21, names CIVBABYLON..CIVTIMES36 @ 0x676..0x1054; boot
+     * font_face_list STUB keeps the string wiring, this is the index
+     * kernel). */
+    if (face_count <= 0)
+        return 0;
+    if (index < 0 || index >= face_count)
+        return 0;
+    return 1;
+}
+
+int sys_font_slot_ok(int slot)
+{
+    /* Orig font_install_slot @ 1008:062f guard (DAT_1420_5484 array,
+     * 0x1e entries per Font_FreeSlots @ 1008:062f loop SI 0..0x1d;
+     * text_font_table @ 11e8:0d1d uses 0x00..0x14). */
+    if (slot < 0 || slot >= SYS_FONT_SLOT_MAX)
+        return 0;
+    return 1;
+}
+
+civ_error_t sys_font_install_slot(int slot)
+{
+    /* Orig Font_EnumFamiliesCallback @ 1008:0e12 / Font_FreeSlots @
+     * 1008:062f (see sys.h). Range half LIVE above, GDI tail STUB. */
+    if (!sys_font_slot_ok(slot))
+        return CIV_ERR_RANGE;
+    /* TODO: Orig CREATEFONTINDIRECT install into DAT_1420_5484 +
+     * ADDFONTRESOURCE civfonts.fon @ 1420:00a4/00fe bridge TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}

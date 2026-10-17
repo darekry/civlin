@@ -1307,4 +1307,60 @@ const char *sys_runtime_warn_body_final(void);
  * Civ_ProcessUnitMoves(local_6); return gdy move != 0). */
 int sys_runtime_check_order(void);
 
+/* --- Chain 2026-10-17 (sys): font enumeration / slot guards (goals
+ * font_face_list @ 1008:0e99 / font_install_slot @ 1008:062f) ---
+ * Orig (unpacked/civ.exe + unpacked/civfonts.fon, read-only, never written):
+ *   Font_EnumFamiliesInit @ 1008:0e99 (GETDC + ENUMFONTFAMILIES via
+ *     Font_EnumFamiliesCallback @ 1008:0e12 + ADDFONTRESOURCE civfonts.fon
+ *     @ 1420:00a4/00fe; sole caller WinMain @ 1008:0000) enumerates the
+ *     21 RT_FONT faces (fontdir @ file 0x600, nfonts 0x15 = 21, names
+ *     CIVBABYLON..CIVTIMES36 @ 0x676..0x1054, same as FNT base+dfFace).
+ *   Font_EnumFamiliesCallback @ 1008:0e12 installs one GDI face per hit via
+ *     CREATEFONTINDIRECT into DAT_1420_5484[DAT_12d8_0022++] (slot array
+ *     freed in Font_FreeSlots @ 1008:062f over 0x1e entries; select later
+ *     per-draw via Text_SelectFont @ 1100:0a33 -> Text_DispatchFontHandler
+ *     @ 11e8:0b40, table @ 11e8:0d1d 25 id -> 20 slots 0x00..0x14).
+ * Port (this header, sys-owned twins; boot.h keeps the canonical
+ * font_face_list / font_install_slot / font_slot_claim / font_free_slots
+ * symbols, NOT redeclared here to avoid duplicate symbols):
+ *   enumeration + slot-range guards below are OS-free 1:1 LIVE on explicit
+ *   params (no Win16, no globals, no exit(), read-only); the GDI
+ *   CREATEFONTINDIRECT / ADDFONTRESOURCE install tail stays STUB
+ *   CIV_ERR_UNSUPPORTED with TODO Orig (no fake-OK, Fala H; raster FNT is
+ *   canonical, no fontconfig / FNT->TTF / SDL_ttf here). No exit(). */
+
+/* Orig Font_FreeSlots @ 1008:062f slot-array shape (DAT_1420_5484, 0x1e
+ * entries; text_font_table @ 11e8:0d1d uses 0x00..0x14, 21 faces < 30 so
+ * no overflow in practice). Sys-side image of CIV_FONT_SLOT_MAX (boot.h),
+ * kept separate to avoid a boot.h include cycle. */
+#define SYS_FONT_SLOT_MAX 0x1e
+
+/* Orig font_face_list @ 1008:0e99 enumeration guard (index into the RT_FONT
+ * face list, face_count = parsed RT_FONT faces, 21 on disk). OS-free 1:1:
+ * 1 when 0 <= index < face_count, else 0 (face_count <= 0 -> 0). Verified
+ * ref unpacked/civfonts.fon (RT_FONT 0x8008 x21, fontdir 0x600 nfonts 21).
+ * No Win16, no globals, no exit(). The family-string wiring (ENUM order vs
+ * fontdir 0x676..0x1054) stays in boot font_face_list STUB. */
+int sys_font_face_index_ok(int face_count, int index);
+
+/* Orig font_install_slot @ 1008:062f / Font_FreeSlots @ 1008:062f slot
+ * guard (DAT_1420_5484 array, 0x1e entries). OS-free 1:1: 1 when
+ * 0 <= slot < SYS_FONT_SLOT_MAX (0x1e), else 0. Verified ref
+ * unpacked/civ.exe (loop SI 0..0x1d over DAT_1420_5484). No Win16,
+ * no globals, no exit(). */
+int sys_font_slot_ok(int slot);
+
+/* Orig Font_EnumFamiliesCallback @ 1008:0e12 slot-install side ->
+ * sys_font_install_slot (sys-owned twin of boot font_install_slot @
+ * 1008:062f). Slot-range half LIVE via sys_font_slot_ok above (< 0 /
+ * >= 0x1e -> RANGE); the GDI CREATEFONTINDIRECT into DAT_1420_5484 +
+ * ADDFONTRESOURCE(CIV_FONT_FILE @ 1420:00a4/00fe) install has no Linux
+ * equivalent -> CIV_ERR_UNSUPPORTED (no fake-OK). No globals, no exit().
+ * TODO: Orig CREATEFONTINDIRECT/ADDFONTRESOURCE install tail (DAT_1420_5484
+ * image + ADDFONTRESOURCE civfonts.fon @ 1420:00a4/00fe) -> bundled-FNT
+ * raster bridge TBD (no fontconfig, no FNT->TTF, no SDL_ttf here; see
+ * boot.h chain-13/14). Live twins: sys_font_slot_ok + sys_font_face_index_ok
+ * (both LIVE) + boot font_slot_claim/font_free_slots (LIVE). */
+civ_error_t sys_font_install_slot(int slot);
+
 #endif /* CIVLIN_SYS_H */

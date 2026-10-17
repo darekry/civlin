@@ -33,18 +33,80 @@ civ_error_t boot_check_memory(void)
 civ_error_t app_register_window_classes(void)
 {
     /* Orig: FUN_1098_06f8 @ 1098:06f8 -> App_RegisterWindowClasses.
-     * HONEST STOP (fala H): 3x CREATESOLIDBRUSH colors (0xc0c0c0 gray /
-     * 0xffffff white / 0x000000 black -> DAT_1420_179e/17a0/17a2) +
-     * REGISTERCLASS x4 (map 1208:0054, smmap 1210:0000, status 1218:0000,
-     * dialog 1098:1838) + Ctrl_RegisterCustomClasses @ 1058:0b4d (see
-     * dialog.h) + GETSYSTEMMETRICS x7 (menu/cursor/frame/caption/
+     * PARTIAL dispatcher (AGENTS.md triage: OS-free 1:1 LIVE, OS stays
+     * STUB, no fake-OK): OS-free probe-gate below is LIVE (custom-class
+     * count/names/index via Ctrl_RegisterCustomClasses @ 1058:0b4d side
+     * in dialog.h + metrics via GETSYSTEMMETRICS side in win16.h +
+     * brush-branch via Gfx_MakeBrush @ 1098:00b5 / Gfx_LookupColor @
+     * 1098:01b0 side in video.h + timer via SETTIMER 16 ms tail, ref
+     * unpacked/civ.exe read-only NE Win3.x 832512 B: "RanDoMRadio" @
+     * file 0xb7ac6 / "RanDoMStatic" @ 0xb7ad2 / "RanDoMUser" @ 0xb7adf /
+     * "Region" @ 0xb7aea = seg 1058 strings @ 0xac6/0xad2/0xadf/0xaea);
+     * 3x CREATESOLIDBRUSH handles (0xc0c0c0 gray / 0xffffff white /
+     * 0x000000 black -> DAT_1420_179e/17a0/17a2) + REGISTERCLASS x4 (map
+     * 1208:0054, smmap 1210:0000, status 1218:0000, dialog 1098:1838) +
+     * Ctrl_RegisterCustomClasses @ 1058:0b4d REGISTERCLASS x4 install +
+     * shared brushes/pens (DELETEOBJECT side in dialog_ctrl_free @
+     * 1058:0d71) + GETSYSTEMMETRICS x7 cache (menu/cursor/frame/caption/
      * dialog-frame -> 12d8/12e0 words) + cursor pos + SETTIMER(0,0,16,
-     * NULL) id -> DAT_12d8_460e (decompiled 2026-10-16) have no SDL3
-     * window-class equivalent yet (brush colors + metrics via SDL are the
-     * portable halves, owner TBD with the U2 dialog layer) ->
-     * CIV_ERR_UNSUPPORTED. No globals, no exit(), read-only.
-     * TODO: Orig FUN_1098_06f8 @ 1098:06f8 portable halves (SDL dialog/
-     * modal owner, U2). */
+     * NULL) id -> DAT_12d8_460e (decompiled 2026-10-16) USER/GDI tails
+     * stay STUB -> CIV_ERR_UNSUPPORTED (U2 dialog layer owns the SDL3
+     * widget/modal bridge via win16 + dialog + video, TBD). No
+     * globals, no exit(), read-only.
+     * TODO: Orig FUN_1098_06f8 @ 1098:06f8 USER tail (REGISTERCLASS x4 +
+     * Ctrl_RegisterCustomClasses @ 1058:0b4d install via win16 SDL3
+     * widget bridge, U2) + Orig GDI tail (3x CREATESOLIDBRUSH handles
+     * -> DAT_1420_179e/17a0/17a2 via SDL palette/brush bridge) +
+     * GETSYSTEMMETRICS x7 full cache + SETTIMER 16 ms live timer. */
+    int n;
+    const char *s0;
+    const char *s1;
+    const char *s2;
+    const char *s3;
+    const char *sbad;
+
+    /* OS-free custom-class half LIVE 1:1 (no USER, no GDI install). */
+    n = dialog_ctrl_class_count();
+    if (n != CIV_CTRL_CLASS_COUNT)
+        return CIV_ERR_BAD_DATA;
+    if (dialog_ctrl_class_valid(0) != 1)
+        return CIV_ERR_BAD_DATA;
+    if (dialog_ctrl_class_valid(CIV_CTRL_CLASS_COUNT - 1) != 1)
+        return CIV_ERR_BAD_DATA;
+    if (dialog_ctrl_class_valid(-1) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (dialog_ctrl_class_valid(CIV_CTRL_CLASS_COUNT) != 0)
+        return CIV_ERR_BAD_DATA;
+    s0 = ctrl_class_names(0);
+    s1 = ctrl_class_names(1);
+    s2 = ctrl_class_names(2);
+    s3 = ctrl_class_names(3);
+    sbad = ctrl_class_names(CIV_CTRL_CLASS_COUNT);
+    if (!s0 || !s1 || !s2 || !s3 || sbad)
+        return CIV_ERR_BAD_DATA;
+    /* OS-free metrics half LIVE 1:1 (640x480 base, see win16.h). */
+    if (win16_get_system_metrics(0) != 640)
+        return CIV_ERR_BAD_DATA;
+    if (win16_get_system_metrics(1) != 480)
+        return CIV_ERR_BAD_DATA;
+    /* OS-free brush-branch half LIVE 1:1 (handles stay STUB below). */
+    if (gfx_brush_is_solid(0, 0) != 1)
+        return CIV_ERR_BAD_DATA;
+    if (gfx_brush_is_solid(20, 0) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (gfx_brush_is_solid(20, 1) != 1)
+        return CIV_ERR_BAD_DATA;
+    if (gfx_color_table_kind(0) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (gfx_color_table_kind(20) != 1)
+        return CIV_ERR_BAD_DATA;
+    if (gfx_color_table_kind(0xf6) != 2)
+        return CIV_ERR_BAD_DATA;
+    if (gfx_color_table_kind(10) != -1)
+        return CIV_ERR_BAD_DATA;
+    /* OS-free timer half LIVE 1:1 (16 ms tail id -> DAT_12d8_460e). */
+    if (app_timer_interval_ms() != 16)
+        return CIV_ERR_BAD_DATA;
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -1061,8 +1123,9 @@ civ_error_t boot_run(SDL_Window *win, SDL_Renderer *ren)
     /* Orig WinMain @ 1008:0000 order, SDL window/renderer caller-owned:
      * drive/path (boot_setup_paths live via sys_init_paths) -> memory
      * (boot_check_memory stub via Sys_CheckFreeMemory @ 11e8:0000) ->
-     * classes (boot_register_classes stub via App_RegisterWindowClasses @
-     * 1098:06f8) -> timer/accel/font (boot_load_fonts stub via
+     * classes (boot_register_classes PARTIAL probe-gate via
+     * App_RegisterWindowClasses @ 1098:06f8 + Ctrl @ 1058:0b4d) ->
+     * timer/accel/font (boot_load_fonts stub via
      * Font_EnumFamiliesInit @ 1008:0e99; 5 ms SETTIMER TIMERPROC @
      * 1008:0d68 (24f0 countdown, see chain-21 in boot.h; 200 ms map
      * WM_TIMER installed later by WdwMap_Open @ 1208:0af1) -> 5x RSC

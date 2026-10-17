@@ -115,7 +115,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 |---|---|---|---|
 | `boot_setup_paths` | LIVE | 1000:11bb, 1000:2826 |  |
 | `boot_check_memory` | LIVE | 11e8:0000, 1420:43b8 |  |
-| `app_register_window_classes` | STUB | 1058:0b4d, 1098:06f8, 1098:1838, 1208:0054, 1210:0000, 1218:0000 | has TODO |
+| `app_register_window_classes` | PARTIAL | 1058:0b4d, 1098:00b5, 1098:01b0, 1098:06f8, 1098:1838, 1208:0054, 1210:0000, 1218:0000 | has TODO |
 | `boot_register_classes` | LIVE | 1098:06f8 |  |
 | `boot_load_fonts` | LIVE | 1008:0e99 |  |
 | `boot_load_resources` | LIVE | 1190:0000 |  |
@@ -156,7 +156,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `menu_string_at` | LIVE |  |  |
 | `config_load_prefs` | LIVE | 1008:0b4a, 12d0:0064, 1420:010b |  |
 | `config_save_prefs` | PARTIAL | 1000:116a, 1000:1184, 1008:0bbf, 1228:0002, 12d0:0064, 1420:010b, 1420:0113 | has TODO |
-| `boot_run` | LIVE | 1008:0000, 1008:0e99, 1088:0000, 1098:06f8, 11e8:0000 |  |
+| `boot_run` | LIVE | 1008:0000, 1058:0b4d, 1088:0000, 1098:06f8, 11e8:0000 |  |
 | `boot_shutdown` | LIVE | 1008:0329, 1008:0d68, 12d8:28fa, 12d8:460e |  |
 | `art_maybe_convert_artwork` | LIVE | 1090:0488, 10b8:0000, 10b8:04df, 10b8:062d, 10b8:06a0, 10b8:076a, 10b8:079d, 10b8:0aa8, 10b8:0c1c, 10b8:0ded, 10b8:0e36, 10b8:11bc, 10b8:158c, 10d0:0cfa, 1420:20a9 |  |
 | `main_run_startup_sequence` | PARTIAL | 1008:0329, 1098:0b33, 1098:124f, 1098:1612, 10b0:005b, 10b0:008a, 10b0:0461, 10b8:079d, 10d0:0000, 10e8:0000, 1108:0243, 1130:000e, 11e0:0000, 11e0:0221, 1220:0156, 1420:435b | has TODO |
@@ -1517,6 +1517,9 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `sys_runtime_warn_title_final` | LIVE | 1420:4578 |  |
 | `sys_runtime_warn_body_final` | LIVE | 1420:44ff |  |
 | `sys_runtime_check_order` | LIVE | 1088:0000 |  |
+| `sys_font_face_index_ok` | LIVE | 1008:0e99 |  |
+| `sys_font_slot_ok` | LIVE | 1008:062f, 11e8:0d1d |  |
+| `sys_font_install_slot` | STUB | 1008:062f, 1008:0e12, 1420:00a4 | has TODO |
 
 ### `src/title.c`
 

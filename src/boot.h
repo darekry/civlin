@@ -68,8 +68,9 @@
  * non-OK short-circuits, main.c aborts like orig MESSAGEBOX+exit.
  *
  * drive/path (live) -> memory (live check) -> classes
- * (App_RegisterWindowClasses @ 1098:06f8, HONEST STOP: brushes/metrics/
- * custom classes TBD, U2) -> timer/accel/font (font probe live; 5/16 ms
+ * (App_RegisterWindowClasses @ 1098:06f8, PARTIAL probe-gate: metrics/
+ * classes/brush-branch/timer LIVE, brushes/USER tail STUB U2) ->
+ * timer/accel/font (font probe live; 5/16 ms
  * timers documented, SDL bridge TBD) -> 5x RSC probe gate (presence live,
  * full image owner TBD) -> artwork (honest no-op: vacuous on SDL) ->
  * prefs (defaults live, consumed by audio_play_id; civ.prf read needs a
@@ -92,15 +93,24 @@ civ_error_t boot_setup_paths(void);
  * SDL_GetSystemRAM mapping lands. */
 civ_error_t boot_check_memory(void);
 /* Boot window-class step: delegates to App_RegisterWindowClasses @
- * 1098:06f8 (below). Stub CIV_ERR_UNSUPPORTED until the SDL3 window
+ * 1098:06f8 (below). PARTIAL probe-gate (metrics/classes LIVE, brushes/
+ * USER tail STUB U2) -> CIV_ERR_UNSUPPORTED until the SDL3 window
  * mapping lands. */
 civ_error_t boot_register_classes(void);
 /* Orig: FUN_1098_06f8 @ 1098:06f8 -> App_RegisterWindowClasses.
- * Registers the 4 WinMain window classes via REGISTERCLASS, then the
- * custom controls via Ctrl_RegisterCustomClasses @ 1058:0b4d (see
- * dialog.h) and caches GETSYSTEMMETRICS. Win16 USER -> SDL3 TBD; stub
- * CIV_ERR_UNSUPPORTED. Owns the registration; boot_register_classes
- * delegates to it. No globals, no exit(), read-only. */
+ * PARTIAL dispatcher (AGENTS.md triage): OS-free probe-gate LIVE 1:1
+ * (custom-class count/names/index via Ctrl_RegisterCustomClasses @
+ * 1058:0b4d side in dialog.h + metrics 640x480 via win16.h +
+ * brush-branch via Gfx_MakeBrush @ 1098:00b5 / Gfx_LookupColor @
+ * 1098:01b0 side in video.h + 16 ms timer; ref unpacked/civ.exe
+ * read-only 832512 B: "RanDoMRadio" @ file 0xb7ac6 / "RanDoMStatic" @
+ * 0xb7ad2 / "RanDoMUser" @ 0xb7adf / "Region" @ 0xb7aea); 3x
+ * CREATESOLIDBRUSH handles + REGISTERCLASS x4 (map 1208:0054, smmap
+ * 1210:0000, status 1218:0000, dialog 1098:1838) + Ctrl install +
+ * GETSYSTEMMETRICS x7 cache + SETTIMER id -> DAT_12d8_460e USER/GDI
+ * tails stay STUB -> CIV_ERR_UNSUPPORTED (U2; TODO Orig in boot.c).
+ * Owns the registration; boot_register_classes delegates to it. No
+ * globals, no exit(), read-only. */
 civ_error_t app_register_window_classes(void);
 civ_error_t boot_load_fonts(void);
 civ_error_t boot_load_resources(void);
