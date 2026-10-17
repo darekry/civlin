@@ -3097,4 +3097,84 @@ int dlg_destroy_clears_top(int count);
  * stay caller-side in MainMenu_WndProc @ 11e0:0221). No globals. */
 int dlg_intro_rebase_ticks(void);
 
+/* --- Batch 2026-10-17 (A+D): anim tail + pedia/text (P0) ---
+ * Renamed this pass (Orig FUN_* kept):
+ *   Anim_GetActive @ 10b0:0026, Anim_ResetTimeToMax @ 10b0:003d,
+ *   Anim_PresentActive @ 10b0:03b0, Pedia_ShowListDialog @ 1068:0026,
+ *   Pedia_PresentArtFrame @ 1068:062f, Pedia_AnimateTechIconZoom @
+ *   1068:1c13, Text_DispatchDlgChar @ 1068:1f7e, Text_CreateWrappedBox @
+ *   1068:2302, Text_GetExclamationMark @ 1068:2716,
+ *   Pedia_ModalPumpOkCancel @ 1068:2728, Pedia_ModalSubclassProc @
+ *   1068:282d. Fala H triage in dialog.c (LIVE only with SDL facade,
+ *   else UNSUPPORTED + TODO; WONTFIX no-op only if provably empty). */
+
+/* Orig Anim_GetActive @ 10b0:0026 (MOV DX/AX <- DAT_1420_1f40 far ptr;
+ * caller Save_LoadDialog @ 1130:000e guard). LIVE pure DGROUP read
+ * (module-static image, overwritten next Anim_Open/Close @
+ * 10b0:008a/0287). No Win16. */
+void *anim_get_active(void);
+
+/* Orig Anim_ResetTimeToMax @ 10b0:003d (seq+0x16 cur := seq+0x1e max,
+ * both long; caller MainMenu_WndProc @ 11e0:0221 rewind). LIVE pure
+ * struct copy on explicit hdr (offsets 1:1 Orig). NULL -> NOENT (orig
+ * faulted on bad far ptr). */
+typedef struct anim_seq_hdr {
+    char pad[0x16];
+    int32_t cur;
+    char pad2[4];
+    int32_t max;
+} anim_seq_hdr_t;
+civ_error_t anim_reset_time_to_max(anim_seq_hdr_t *seq);
+
+/* Orig Anim_PresentActive @ 10b0:03b0 (StoreDC + GETCLIENTRECT + palette
+ * gate DAT_12d8_28fc + SETRECT + SetActive + PresentRect; callers
+ * Save_LoadDialog + MainMenu_WndProc redraws). PARTIAL: logic ported
+ * 1:1, GfxPort/palette present tails need SDL bridge -> UNSUPPORTED.
+ * TODO: Orig Gfx_StoreDC @ 1098:1104 + GETCLIENTRECT @ 1608:00b0 +
+ * Palette_AnimateLockedRange @ 1090:0119 + SETRECT @ 1608:0100 +
+ * GfxPort_SetActive @ 10d0:0956 + GfxPort_PresentRect @ 10d0:0854. */
+civ_error_t anim_present_active(void *seq);
+
+/* Orig Pedia_ShowListDialog @ 1068:0026 (6x PUSH imm + CALLF 1098:18f7
+ * template 0x80). Modal list needs SDL modal/listbox facade (cf.
+ * FUN_1098_1909). STUB UNSUPPORTED. */
+civ_error_t pedia_show_list_dialog(void);
+
+/* Orig Pedia_PresentArtFrame @ 1068:062f (Art_LoadFrame + palette gate
+ * DAT_12d8_28fc + PresentRect + Close). Needs video/art SDL bridge.
+ * STUB UNSUPPORTED (*out untouched, no guessed RLE). */
+civ_error_t pedia_present_art_frame(int art_id, int pal_a, int pal_b);
+
+/* Orig Pedia_AnimateTechIconZoom @ 1068:1c13 (compat-DC save + zoom loop
+ * via Gfx_SetIconScale/Gfx_DrawTechIcon/PresentRect; callers
+ * Pedia_ShowEntry @ 1068:06af + Tech_ChooseResearch @ 1170:21b3).
+ * Needs offscreen-texture + stretch-blit facade. STUB UNSUPPORTED. */
+civ_error_t pedia_animate_tech_icon_zoom(int icon_id, int steps);
+
+/* Orig Text_DispatchDlgChar @ 1068:1f7e (kind==0xD8 7-entry CS:2056
+ * dispatch else Text_DispatchFontHandler + Text_SetColor; callers
+ * Dialog_MenuZ_Modal @ 1220:0156 + NewGame_CustomHelpDialog @
+ * 10e0:03a2). Font table + GDI color tails TBD. STUB UNSUPPORTED. */
+civ_error_t text_dispatch_dlg_char(int kind, int id, int color);
+
+/* Orig Text_CreateWrappedBox @ 1068:2302 (OldTextBoxSetup:dialogs.c:
+ * GETTEXTMETRICS + GLOBALALLOC 0x51A + word-wrap into start/len tables).
+ * Wrap math pure but metrics + mem facades TBD. STUB UNSUPPORTED. */
+civ_error_t text_create_wrapped_box(const char *text, int *out_h);
+
+/* Orig Text_GetExclamationMark @ 1068:2716 (returns "!" @ 1420:1401,
+ * tail of "Launch CONFIRMED!"). LIVE pure constant. No Win16. */
+const char *text_get_exclamation_mark(void);
+
+/* Orig Pedia_ModalPumpOkCancel @ 1068:2728 (MAKEPROCINSTANCE 1068:282d +
+ * SETWINDOWLONG -4 subclass + PEEKMESSAGE/TRANS/DISPATCH loop until
+ * DAT_12d8_0030; caller Pedia_ShowEntry). Needs SDL modal/event-pump
+ * facade. STUB UNSUPPORTED (*out untouched). */
+civ_error_t pedia_modal_pump_ok_cancel(int *out_code);
+
+/* Orig Pedia_ModalSubclassProc @ 1068:282d (__stdcall, 5-entry CS:29E7
+ * dispatch, e.g. wparam==0x0D -> SENDMESSAGE WM_COMMAND 0x65; default
+ * DEFDLGPROC). Win16 DLGPROC body -> dialog facade TBD. STUB. */
+civ_error_t pedia_modal_subclass_proc(int msg, int wparam);
+
 #endif /* CIVLIN_DIALOG_H */

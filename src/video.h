@@ -466,16 +466,17 @@ civ_error_t gfx_port_change_color(gfx_port_t *port, int old_index,
  * the port (orig: GETDC on the main window; SELECTPALETTE/REALIZEPALETTE
  * applied by the MainPort_GetOrCreate @ 1098:114a caller). SDL3: the
  * renderer stands in for the HDC (no separate DC object; borrow only,
- * no ownership transfer). NULL port/out reports NOENT; otherwise
- * UNSUPPORTED. */
+ * no ownership transfer, never Destroyed here). NULL port/out reports
+ * NOENT; port with no renderer wired (corrupt, see gfx_port_present_rect)
+ * reports BAD_DATA; else the borrowed renderer + CIV_OK. */
 civ_error_t gfx_port_get_dc(gfx_port_t *port, SDL_Renderer **out_dc);
 
 /* Orig: RELEASEDC pair to the GETDC above (same FUN_1098_114a @
  * 1098:114a + FUN_10d0_0000 @ 10d0:0000 sites) -> gfx_port_release_dc
  * (GfxPort_ReleaseDC). Releases a DC borrowed via gfx_port_get_dc
- * (orig: RELEASEDC). SDL3: renderer borrow needs no release; stub keeps
- * the pairing for RE-map fidelity. NULL port/dc reports NOENT;
- * otherwise UNSUPPORTED. */
+ * (orig: RELEASEDC). SDL3: renderer borrow needs no release; validated
+ * no-op pairing kept for RE-map fidelity. NULL port/dc reports NOENT;
+ * dc foreign to the port reports BAD_DATA; else CIV_OK. */
 civ_error_t gfx_port_release_dc(gfx_port_t *port, SDL_Renderer *dc);
 
 /* Orig: CREATECOMPATIBLEDC + FUN_10d0_0cfa @ 10d0:0cfa bitmap select ->
@@ -1661,5 +1662,102 @@ civ_error_t art_load_frame_data(int frame_id, int convert_flag, int res_ok,
  * SETRECT 0,0,w,h clip at +0x20) stays UNSUPPORTED. w/h <= 0 -> RANGE.
  * Ref unpacked/civ.exe read-only. */
 civ_error_t art_port_data_to_bitmap(int w, int h, int mono, int free_flag);
+
+/* --- Batch 2026-10-17 (A+E): Gfx DIB + palette quant 10c0 (P0) ---
+ * Renamed this pass:
+ *   Palette_FindColorIndex @ 10b0:168a, GfxPort_GetIndexedPixel @
+ *   10b0:1749, GfxPort_SetIndexedPixel @ 10b0:17a0, Gfx_BuildDibHandle @
+ *   10a0:0000, Gfx_DibHandleToBitmap @ 10a0:037c, Palette_NoopPoll @
+ *   1098:11c8, Palette_NoopSetEntry @ 1098:11f0, Pal_FreeQuantTables @
+ *   10c0:0000, Pal_InitQuantTables @ 10c0:0044, Pal_ExpandPalette @
+ *   10c0:00e0, Pal_QuantInit @ 10c0:013d, Pal_KdBuild @ 10c0:023e,
+ *   Pal_FindNearest @ 10c0:0413, Pal_KdRangeSearch @ 10c0:07c3,
+ *   Pal_CmpR @ 10c0:0a71, Pal_CmpG @ 10c0:0ad9, Pal_CmpB @ 10c0:0b45.
+ * Fala H triage in video.c. */
+
+typedef struct pal_quant_ctx {
+    uint32_t sqr[0x200];
+    const uint8_t *pal;
+} pal_quant_ctx_t;
+
+/* Orig Palette_FindColorIndex @ 10b0:168a (reverse of Gfx_LookupColor @
+ * 1098:01B0: 0xEC entries at locked DAT_1420_9964+4, base +10). LIVE
+ * pure on explicit pal (hidden GLOBALLOCK handle -> param). NULL pal or
+ * n <= 0 -> 0. */
+int palette_find_color_index(const uint8_t *pal, int n, uint32_t rgb);
+
+/* Orig GfxPort_GetIndexedPixel @ 10b0:1749 (stride @ +0x10, hdc @ +0x18,
+ * GETPIXEL @ 1608:0214 of idx/stride, idx%stride). Div/mod math LIVE,
+ * GETPIXEL bridge TBD -> PARTIAL UNSUPPORTED (*out untouched). */
+civ_error_t gfxport_get_indexed_pixel(int stride, long idx, uint32_t *out);
+
+/* Orig GfxPort_SetIndexedPixel @ 10b0:17a0 (same layout, SETPIXEL @
+ * 1608:01C8). PARTIAL UNSUPPORTED (same bridge). */
+civ_error_t gfxport_set_indexed_pixel(int stride, long idx, uint32_t color);
+
+/* Orig Gfx_BuildDibHandle @ 10a0:0000 (8bpp DIB: w4=(w+3)/4*4, palette
+ * from locked DAT_1420_9964+4 or passed handle, GLOBALALLOC w4*h+0x428,
+ * BITMAPINFOHEADER + 256 BGR0, HMEMCPY rows; caller GfxPort_AllocBitmap
+ * @ 10d0:0cfa). Needs mem/arena facade -> STUB (0 = NULL handle). */
+uint16_t gfx_build_dib_handle(uint16_t w, int16_t h);
+
+/* Orig Gfx_DibHandleToBitmap @ 10a0:037c (LOCK + bits=+*p+[0x20]*4 +
+ * GETDC + CREATEDIBITMAP CBM_INIT=4 + RELEASEDC + UNLOCK/FREE).
+ * Needs video bitmap facade -> STUB (0). */
+uint16_t gfx_dib_handle_to_bitmap(uint16_t dib_handle);
+
+/* Orig Palette_NoopPoll @ 1098:11c8 (DAT_12d8_28FC gate + discarded
+ * Gfx_GetZeroPaletteWord @ 1098:1184). Provably empty on SDL ->
+ * WONTFIX-Win16 NOOP CIV_OK. */
+civ_error_t palette_noop_poll(void);
+
+/* Orig Palette_NoopSetEntry @ 1098:11f0 (same gate + GetZero()==0 so
+ * SETPALETTEENTRIES unreachable). WONTFIX-Win16 NOOP CIV_OK. */
+civ_error_t palette_noop_set_entry(uint16_t idx, uint16_t n,
+                                   const void *rgb);
+
+/* Orig Pal_FreeQuantTables @ 10c0:0000 (GLOBALUNLOCK/FREE 998c/998a/
+ * 9988). Win16 heap free, no SDL/mem facade wired -> STUB UNSUPPORTED
+ * (frees matter, never WONTFIX). */
+civ_error_t pal_free_quant_tables(void);
+
+/* Orig Pal_InitQuantTables @ 10c0:0044 (sqr[i]=i*i @ 12f0:0902 +
+ * GLOBALALLOC 60000/20000/40000 + LOCK to 9992/998e/9996). Squares LIVE,
+ * allocs need win16/arena facade -> STUB UNSUPPORTED. */
+civ_error_t pal_init_quant_tables(pal_quant_ctx_t *ctx);
+
+/* Orig Pal_ExpandPalette @ 10c0:00e0 (packed RGBx -> word triplets,
+ * stride 4 both sides; caller 10c8:0075 with DS:9AC0 <- 12f8:FA22
+ * n=0x100). LIVE OS-free 1:1. NULL either -> NOENT, n <= 0 -> RANGE. */
+civ_error_t pal_expand_palette(uint16_t *dst, const uint8_t *src, int n);
+
+/* Orig Pal_QuantInit @ 10c0:013d (kd-tree + buffer init + Pal_KdBuild;
+ * caller 10c8:002f). Needs explicit 12f0 tables + win16 buffers +
+ * qsort bridge -> STUB UNSUPPORTED. */
+civ_error_t pal_quant_init(pal_quant_ctx_t *ctx, const uint8_t *pal, int n);
+
+/* Orig Pal_KdBuild @ 10c0:023e (qsort via FUN_1000_3396 + median +
+ * R/G/B rotate via 1420:2420 + recursion; callers 013d + self). Needs
+ * qsort comparator bridge -> STUB UNSUPPORTED. */
+civ_error_t pal_kd_build(pal_quant_ctx_t *ctx, int lo, int hi, int node);
+
+/* Orig Pal_FindNearest @ 10c0:0413 (12-bit key + L4/L5/L6 refine +
+ * box-search via Pal_KdRangeSearch + sqr best; caller 10c8:063c).
+ * Needs win16 buffers + box search ctx -> STUB UNSUPPORTED. */
+uint16_t pal_find_nearest(pal_quant_ctx_t *ctx, uint16_t r, uint16_t g,
+                          uint16_t b);
+
+/* Orig Pal_KdRangeSearch @ 10c0:07c3 (kd range walk on 2432%3 channel;
+ * callers 0413 + self). Logic pure but touches DGROUP tree/box ->
+ * STUB UNSUPPORTED until explicit ctx lands. */
+void pal_kd_range_search(pal_quant_ctx_t *ctx, int node);
+
+/* Orig Pal_CmpR @ 10c0:0a71 / Pal_CmpG @ 10c0:0ad9 / Pal_CmpB @
+ * 10c0:0b45 (qsort comparators via 1420:2420 table: reversed vs strcmp,
+ * 1 when b<a). LIVE OS-free on explicit pal (module-static 99b6 1:1
+ * allowed). NULL pal -> 0. */
+int pal_cmp_r(const uint8_t *pal, uint16_t a, uint16_t b);
+int pal_cmp_g(const uint8_t *pal, uint16_t a, uint16_t b);
+int pal_cmp_b(const uint8_t *pal, uint16_t a, uint16_t b);
 
 #endif /* CIVLIN_VIDEO_H */

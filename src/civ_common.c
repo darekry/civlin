@@ -376,3 +376,30 @@ char *util_str_rchr(const char *s, int c)
         return NULL;
     return (char *)strrchr(s, c);
 }
+
+int32_t float_ftol(long double x)
+{
+    /* Orig Float_Ftol @ 1000:110d: FSTCW/OR chop/FLDCW + FISTP, low DX:AX.
+     * C cast truncates toward zero identically for in-range inputs. */
+    return (int32_t)x;
+}
+
+uint32_t u32_mul32_far(uint32_t a, uint32_t b)
+{
+    /* Orig U32_Mul32Far @ 1000:1368 (far twin of U32_Mul32 @ 1000:16fe). */
+    return a * b;
+}
+
+int32_t s32_div32(int32_t a, int32_t b)
+{
+    /* Orig S32_Div32 @ 1000:1423 (DIV fast path + 0x20 loop, DI signs). */
+    return a / b;
+}
+
+uint32_t u32_shl32(uint32_t v, unsigned c)
+{
+    /* Orig U32_Shl32 @ 1000:14d4 (SHL/SHR/XCHG paths). */
+    if (c >= 32u)
+        return 0u;
+    return v << c;
+}

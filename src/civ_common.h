@@ -218,4 +218,26 @@ size_t util_str_len(const char *s);
  * No Win16, no globals, no exit(). */
 char *util_str_rchr(const char *s, int c);
 
+/* Orig: FUN_1000_110d @ 1000:110d -> Float_Ftol.
+ * x87 chop (FSTCW/OR 0x0c/FLDCW + FISTP qword, low DX:AX). OS-free 1:1
+ * via C truncation toward zero (callers feed in-range Pow results).
+ * No Win16, no globals, no exit(). */
+int32_t float_ftol(long double x);
+
+/* Orig: FUN_1000_1368 @ 1000:1368 -> U32_Mul32Far.
+ * Far twin of U32_Mul32 @ 1000:16fe (same MUL/JCXZ chain, RETF vs RET).
+ * Low-32 DX:AX*CX:BX, sign-agnostic. OS-free 1:1. No globals. */
+uint32_t u32_mul32_far(uint32_t a, uint32_t b);
+
+/* Orig: FUN_1000_1423 @ 1000:1423 -> S32_Div32.
+ * Signed 32/32->32 (DIV fast path + 0x20 shift/sub loop, DI sign flags).
+ * OS-free 1:1 via int32_t /. Divisor 0 faults in orig (#DE), same UB
+ * here (callers pass nonzero elemSize @ 1420:b4aa). No globals. */
+int32_t s32_div32(int32_t a, int32_t b);
+
+/* Orig: FUN_1000_14d4 @ 1000:14d4 -> U32_Shl32.
+ * 32-bit SHL DX:AX by CL (<0x10 carry-via-BX, else XCHG path).
+ * OS-free 1:1: v << c, 0 when c >= 32. No globals. */
+uint32_t u32_shl32(uint32_t v, unsigned c);
+
 #endif /* CIVLIN_COMMON_H */

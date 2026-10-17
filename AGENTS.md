@@ -52,26 +52,43 @@ faithful to the Windows release.
 - Name in Ghidra as soon as behavior is clear (`Module_VerbNoun`,
   e.g. `Rsc_OpenContainer`, `Map_FillRect`); keep `Orig FUN_seg_off`
   + address in every `src/*.h` comment so the RE map survives.
-- Triage per function (2026-10-16 update: odblokowanie STUB):
-  - WSZYSTKO dekodujemy i przenosimy 1:1 do `src/`, staying close to
-    decompiler output. Dotyczy to także stanu gry: globale DGROUP
-    (`DAT_1420_*`, `DAT_12d8_*`, `DAT_13f8_0000` shared-static,
-    stos dialogów, bufory map/save, dane palety, tablice).
-    Stan gry trzymamy 1:1  Gdy oryginał używał semantyki nadpisywania przy następnym wywołaniu
-    (np. `Res_GetStringCopy/Raw @ 11f8:0080/00c5`) zachowujemy tę samą
-    semantykę na module-static.
-    NIE zostawiamy STUB tylko dlatego, że oryginał użył globala,
-    `__far` pointera albo segmentu. Segmenty/`__far`/DOS-owe layouty
-    mapujemy na jawne offsety/rozmiary z komentarzem Orig.
-  - Tylko mechanika OS zostaje STUB/PARTIAL: USER/GDI/KERNEL plumbing
-    (`REGISTERCLASS`, `CREATEDIALOG` + pompa `PEEKMESSAGE/ISDIALOGMESSAGE`,
-    `SELECTPALETTE`/DC/pędzle, selektory, DOS inty, handle okien,
-    timery, `MESSAGEBOX`/`WINHELP`/MCI, bezpośrednie bufory video).
-    Te zwracają `CIV_ERR_UNSUPPORTED` / `RSC_ERR_UNSUPPORTED`
-    z `TODO: Orig ...` opisującym brakujący mostek SDL3/stdio
-    (`win16.*`, `video.*`, `dialog.*` modal). Wrappery efektu, których
-    efekt jest próżniowy na SDL, mogą być uczciwym no-op `CIV_OK`
-    z komentarzem `WONTFIX-Win16`.
+- Triage per function (2026-10-17 update: port 1:1 wszystkiego, LIVE tylko z fasadą):
+  - WSZYSTKO portujemy 1:1 do `src/`, staying close to decompiler
+    output, ŁĄCZNIE z funkcjami wołającymi USER/GDI/KERNEL/Win16
+    (`REGISTERCLASS`, `CREATEWINDOW`/`CREATEDIALOG` + pompa
+    `PEEKMESSAGE`/`ISDIALOGMESSAGE`, `SELECTPALETTE`/DC/pędzle/pióra,
+    `TEXTOUT`/`BITBLT`, selektory, DOS inty, handle okien, timery,
+    `MESSAGEBOX`/`WINHELP`/MCI, bezpośrednie bufory video). Nie
+    pomijamy funkcji dlatego, że dotyka Win16. Dotyczy to także stanu
+    gry: globale DGROUP (`DAT_1420_*`, `DAT_12d8_*`, `DAT_13f8_0000`
+    shared-static, stos dialogów, bufory map/save, dane palety,
+    tablice). Stan gry trzymamy 1:1. Gdy oryginał używał semantyki
+    nadpisywania przy następnym wywołaniu (np.
+    `Res_GetStringCopy/Raw @ 11f8:0080/00c5`) zachowujemy tę samą
+    semantykę na module-static. NIE zostawiamy STUB tylko dlatego, że
+    oryginał użył globala, `__far` pointera albo segmentu.
+    Segmenty/`__far`/DOS-owe layouty mapujemy na jawne
+    offsety/rozmiary z komentarzem Orig.
+  - LIVE tylko z fasadą: funkcji NIE opisujemy jako LIVE, chyba że
+    istnieje implementacja bazująca na SDL (albo inna fasada: mem/
+    arena, tick/event via `SDL_GetTicks`/`PumpEvents`/`PollEvent`,
+    file via `SDL_IO`, rysowanie tekstur via `SDL_RenderTexture`/
+    `SetRenderTarget`/`SetPaletteColors`, audio via
+    `SDL_OpenAudioDeviceStream`). Bez fasady portujemy wiernie logikę
+    (parametry, gałęzie, matematyka, dyskryminatory, kształt wywołań
+    Win16 jako wołania naszych `win16.*`/`video.*`/`dialog.*`) i
+    zwracamy `CIV_ERR_UNSUPPORTED` / `RSC_ERR_UNSUPPORTED` z
+    `TODO: Orig ...` opisującym brakujący mostek. Wrappery efektu,
+    których efekt jest próżniowy na SDL, mogą być uczciwym no-op
+    `CIV_OK` z komentarzem `WONTFIX-Win16`.
+  - Mały refactor dozwolony wewnątrz funkcji: ukryty stan GDI/DC
+    (`SetColor(x)` + `PutPixel(x,y)`, `SELECTOBJECT`/`GETDC`, globalny
+    brush/DC) można zamienić na jawny parametr/kontekst
+    (`putPixel(x,y,color)`, `port`/`ren`/`rect`/`pal`), o ile zmiana
+    nie wychodzi poza funkcję. Nazwa + adres Orig ZOSTAJĄ, `Replaces:`
+    opisuje mapowanie orig-call → SDL-call, wołający bez zmian poza
+    podaniem już ustalonego jawnego kontekstu (port/ren). Bez
+    przeprojektowania architektury po cichu.
   - Zasada H (Fala H) bez zmian: `CIV_OK` tylko gdy efekt osiągnięty
     albo krok dowodliwie próżniowy na SDL, inaczej `UNSUPPORTED`
     (no fake-OK); nie zgadujemy dekoderów (1198 RLE/tagged-frame,

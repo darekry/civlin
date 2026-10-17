@@ -1370,4 +1370,47 @@ int sys_font_slot_ok(int slot);
  * (both LIVE) + boot font_slot_claim/font_free_slots (LIVE). */
 civ_error_t sys_font_install_slot(int slot);
 
+/* Orig: FUN_1000_11d6 @ 1000:11d6 -> Dos_GetDiskFree.
+ * INT 21h AH=0x36 (DL=drive, ES:BX=dst: [0]=DX total, [1]=BX avail,
+ * [2]=AX sec/clust, [3]=CX bytes/sec; AX==FFFF -> AX=0x13 +
+ * DAT_1420_0010=0x13). Callers Art_CheckDiskSpace @ 10b8:04df +
+ * Art_SaveConvertedFrame @ 10b8:0c1c (9 MB gate). No SDL twin ->
+ * STUB UNSUPPORTED (*out untouched). NULL out -> NOENT (orig faulted). */
+typedef struct dos_diskfree {
+    uint16_t total;
+    uint16_t avail;
+    uint16_t sectors_per_cluster;
+    uint16_t bytes_per_sector;
+} dos_diskfree_t;
+civ_error_t dos_get_disk_free(unsigned drive, dos_diskfree_t *out);
+
+/* Orig: FUN_1000_127e @ 1000:127e -> Sys_NoopDefault.
+ * Empty RETF before Sys_DoExit @ 1000:127f; default target of the
+ * 4cb0/4cb4/4cb8 indirect vectors. Provably empty -> void NOOP
+ * (WONTFIX-Win16). No globals, no exit(). */
+void sys_noop_default(void);
+
+/* Orig: FUN_1000_1316 @ 1000:1316 -> File_GetPosition.
+ * Tell-into-far-long via FUN_1000_2578 (Dos_Seek CUR/END + text adjust):
+ * save-point before File_SetPosition restores in ResMgr_LoadRscDisk @
+ * 1190:0501. Needs Borland FILE + Dos_Seek @ 1000:161c -> SDL_TellIO TBD.
+ * STUB UNSUPPORTED (*out untouched). */
+civ_error_t file_get_position(int fd, long *out_pos);
+
+/* Orig: FUN_1000_1346 @ 1000:1346 -> File_SetPosition.
+ * Seek-to-saved (origin 0) via FUN_1000_24f6 (File_Flush + Dos_Seek);
+ * status discarded in orig. SDL_SeekIO(SET) TBD. STUB UNSUPPORTED. */
+civ_error_t file_set_position(int fd, long pos);
+
+/* Orig: FUN_1000_13bc @ 1000:13bc -> Dos_GetDate.
+ * INT 21h AH=0x2a -> far struct: [0]=CX year, [2]=DX month/day.
+ * Sole caller Sys_GetDate @ 1000:18d4 (+ time slot below). No SDL twin ->
+ * STUB UNSUPPORTED (outs untouched). */
+civ_error_t dos_get_date(uint16_t *year_out, uint16_t *md_out);
+
+/* Orig: FUN_1000_13d1 @ 1000:13d1 -> Dos_GetTime.
+ * INT 21h AH=0x2c -> far struct: [0]=CX hr/min, [2]=DX sec/hund.
+ * Sole caller Sys_GetDate @ 1000:18d4. STUB UNSUPPORTED. */
+civ_error_t dos_get_time(uint16_t *hm_out, uint16_t *sh_out);
+
 #endif /* CIVLIN_SYS_H */

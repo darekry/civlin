@@ -5463,3 +5463,116 @@ int dlg_intro_rebase_ticks(void)
      * MainMenu_WndProc @ 11e0:0221 stay caller-side. */
     return 1000;
 }
+
+/* --- Batch 2026-10-17 (A+D): anim tail + pedia/text --- */
+
+static void *s_anim_active;
+
+void *anim_get_active(void)
+{
+    /* Orig Anim_GetActive @ 10b0:0026 (DAT_1420_1f40 image; set by
+     * Anim_OpenSequence @ 10b0:008a, cleared by Anim_CloseSequence @
+     * 10b0:0287). */
+    return s_anim_active;
+}
+
+civ_error_t anim_reset_time_to_max(anim_seq_hdr_t *seq)
+{
+    /* Orig Anim_ResetTimeToMax @ 10b0:003d (seq+0x16 := seq+0x1e). */
+    if (!seq)
+        return CIV_ERR_NOENT;
+    seq->cur = seq->max;
+    return CIV_OK;
+}
+
+civ_error_t anim_present_active(void *seq)
+{
+    /* Orig Anim_PresentActive @ 10b0:03b0 (see dialog.h). Logic 1:1, tails
+     * need SDL bridge.
+     * TODO: Orig Gfx_StoreDC @ 1098:1104 + GETCLIENTRECT @ 1608:00b0 +
+     * Palette_AnimateLockedRange @ 1090:0119 + SETRECT @ 1608:0100 +
+     * GfxPort_SetActive @ 10d0:0956 + GfxPort_PresentRect @ 10d0:0854. */
+    (void)seq;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t pedia_show_list_dialog(void)
+{
+    /* Orig Pedia_ShowListDialog @ 1068:0026 (template 0x80 via 1098:18f7).
+     * TODO: Orig modal-list facade (cf. FUN_1098_1909 Dlg_CreateTracked +
+     * Listbox + PEEKMESSAGE) -> SDL modal TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t pedia_present_art_frame(int art_id, int pal_a, int pal_b)
+{
+    /* Orig Pedia_PresentArtFrame @ 1068:062f (Art_LoadFrame @ 10b8:0e00 +
+     * GfxPort_ApplyPalette @ 1200:0116 + PresentRect @ 10d0:0854 + Close @
+     * 10d0:0172, gate DAT_12d8_28fc).
+     * TODO: Orig art/video SDL bridge (no guessed RLE, *out untouched). */
+    (void)art_id;
+    (void)pal_a;
+    (void)pal_b;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t pedia_animate_tech_icon_zoom(int icon_id, int steps)
+{
+    /* Orig Pedia_AnimateTechIconZoom @ 1068:1c13 (see dialog.h).
+     * TODO: Orig CREATECOMPATIBLEDC/BITBLT/SELECTOBJECT/DELETEOBJECT/
+     * DELETEDC -> video offscreen + Gfx_SetIconScale/Gfx_DrawTechIcon/
+     * PresentRect -> SDL bridge TBD. */
+    (void)icon_id;
+    (void)steps;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t text_dispatch_dlg_char(int kind, int id, int color)
+{
+    /* Orig Text_DispatchDlgChar @ 1068:1f7e (CS:2056 table + font/color
+     * tails; see dialog.h).
+     * TODO: Orig font table + Text_SetColor GDI tails -> SDL font/color
+     * facade TBD. */
+    (void)kind;
+    (void)id;
+    (void)color;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t text_create_wrapped_box(const char *text, int *out_h)
+{
+    /* Orig Text_CreateWrappedBox @ 1068:2302 (OldTextBoxSetup; see
+     * dialog.h).
+     * TODO: Orig GETTEXTMETRICS + GLOBALALLOC/LOCK/UNLOCK -> font/mem
+     * facade TBD (no guessed metrics, *out untouched). */
+    (void)text;
+    if (!out_h)
+        return CIV_ERR_NOENT;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+const char *text_get_exclamation_mark(void)
+{
+    /* Orig Text_GetExclamationMark @ 1068:2716 ("!" @ 1420:1401). */
+    return "!";
+}
+
+civ_error_t pedia_modal_pump_ok_cancel(int *out_code)
+{
+    /* Orig Pedia_ModalPumpOkCancel @ 1068:2728 (subclass + PEEKMESSAGE
+     * loop; see dialog.h).
+     * TODO: Orig MAKEPROCINSTANCE/SETWINDOWLONG/PEEKMESSAGE/SENDMESSAGE ->
+     * dialog/SDL modal facade TBD (*out untouched). */
+    (void)out_code;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t pedia_modal_subclass_proc(int msg, int wparam)
+{
+    /* Orig Pedia_ModalSubclassProc @ 1068:282d (CS:29E7 dispatch +
+     * DEFDLGPROC; see dialog.h).
+     * TODO: Orig DLGPROC -> dialog facade TBD. */
+    (void)msg;
+    (void)wparam;
+    return CIV_ERR_UNSUPPORTED;
+}

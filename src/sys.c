@@ -2759,3 +2759,58 @@ civ_error_t sys_font_install_slot(int slot)
      * ADDFONTRESOURCE civfonts.fon @ 1420:00a4/00fe bridge TBD. */
     return CIV_ERR_UNSUPPORTED;
 }
+
+civ_error_t dos_get_disk_free(unsigned drive, dos_diskfree_t *out)
+{
+    /* Orig Dos_GetDiskFree @ 1000:11d6 (INT 21h AH=0x36 + DAT_1420_0010
+     * staging; see sys.h). No SDL twin.
+     * TODO: Orig INT 21h AH=36h + dos_map_error staging + diskfree_t. */
+    (void)drive;
+    if (!out)
+        return CIV_ERR_NOENT;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+void sys_noop_default(void)
+{
+    /* Orig Sys_NoopDefault @ 1000:127e (empty RETF; WONTFIX-Win16). */
+}
+
+civ_error_t file_get_position(int fd, long *out_pos)
+{
+    /* Orig File_GetPosition @ 1000:1316 via FUN_1000_2578 + Dos_Seek @
+     * 1000:161c. SDL_TellIO TBD.
+     * TODO: Orig FUN_1000_2578 @ 1000:2578 + Dos_Seek @ 1000:161c. */
+    (void)fd;
+    if (!out_pos)
+        return CIV_ERR_NOENT;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t file_set_position(int fd, long pos)
+{
+    /* Orig File_SetPosition @ 1000:1346 via FUN_1000_24f6 + File_Flush @
+     * 1000:2152 + Dos_Seek @ 1000:161c. SDL_SeekIO(SET) TBD.
+     * TODO: Orig FUN_1000_24f6 @ 1000:24f6 chain. */
+    (void)fd;
+    (void)pos;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t dos_get_date(uint16_t *year_out, uint16_t *md_out)
+{
+    /* Orig Dos_GetDate @ 1000:13bc (INT 21h AH=0x2a; see sys.h).
+     * TODO: Orig INT 21h AH=2Ah + Sys_GetDate @ 1000:18d4 pairing. */
+    if (!year_out || !md_out)
+        return CIV_ERR_NOENT;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t dos_get_time(uint16_t *hm_out, uint16_t *sh_out)
+{
+    /* Orig Dos_GetTime @ 1000:13d1 (INT 21h AH=0x2c; see sys.h).
+     * TODO: Orig INT 21h AH=2Ch + Sys_GetDate @ 1000:18d4 pairing. */
+    if (!hm_out || !sh_out)
+        return CIV_ERR_NOENT;
+    return CIV_ERR_UNSUPPORTED;
+}

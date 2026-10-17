@@ -5320,3 +5320,189 @@ int diplomat_affords_cost(int treasury, int cost)
         return -1;
     return (treasury >= cost) ? 1 : 0;
 }
+
+/* --- Batch 2026-10-17 (B+D): shared player 1030 + city/ship --- */
+
+civ_error_t map_set_irrigation_flag(uint8_t *occ)
+{
+    /* Orig Map_SetIrrigationFlag @ 1030:7f1e (occ @ 1110:199b + SetBits @
+     * 1110:1a8f + Mirror @ 1110:1a2f + DAT_12d8_42f4++; counter stays
+     * caller-side). */
+    if (!occ)
+        return CIV_ERR_NOENT;
+    if ((*occ & 0x40u) == 0u)
+        *occ |= 0x40u;
+    return CIV_OK;
+}
+
+int city_count_specialist_type(const int8_t specs[8], int type)
+{
+    /* Orig City_CountSpecialistType @ 1030:7ffe (City_GetSpecialist @
+     * 1030:7fc1 2-bit field). */
+    int n = 0;
+    int i;
+
+    if (!specs)
+        return 0;
+    for (i = 0; i < 8; i++) {
+        if ((int)specs[i] == type)
+            n++;
+    }
+    return n;
+}
+
+civ_error_t city_normalize_labor_counts(int size, int reserve, int *de_out,
+                                        int *ae_out, int *eo_out)
+{
+    /* Orig City_NormalizeLaborCounts @ 1030:802c (Util_Clamp @ 11c8:0063
+     * loops; see game.h). Hidden DGROUP -> explicit outs. */
+    int de;
+    int ae;
+    int eo;
+    int limit;
+
+    if (!de_out || !ae_out || !eo_out)
+        return CIV_ERR_NOENT;
+    de = *de_out;
+    ae = *ae_out;
+    eo = *eo_out;
+    de = util_clamp(de, 0, size);
+    while (ae != 0 && eo < ae) {
+        ae--;
+        eo++;
+    }
+    for (;;) {
+        eo = util_clamp(eo, 0, size);
+        limit = util_clamp(size - reserve, 0, 99);
+        if (de + eo <= limit)
+            break;
+        if (ae == 0)
+            de = util_clamp(de - 1, 0, size);
+        else
+            ae--;
+        eo--;
+    }
+    *de_out = de;
+    *ae_out = ae;
+    *eo_out = eo;
+    return CIV_OK;
+}
+
+civ_error_t city_draw_labor_row_raw(int city_idx, int x, int y, int max_w)
+{
+    /* Orig City_DrawLaborRowRaw @ 1030:817e (raw blit FUN_11a8_15ce).
+     * TODO: Orig GDI/DC + GLOBALLOCK blit -> SDL_RenderTexture/
+     * SetRenderTarget facade TBD. */
+    (void)city_idx;
+    (void)x;
+    (void)y;
+    (void)max_w;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t city_draw_labor_row_icons(int city_idx, int x, int y, int max_w)
+{
+    /* Orig City_DrawLaborRowIcons @ 1030:830c (Gfx_DrawTechIcon @
+     * 11a8:0cb1).
+     * TODO: Orig icon blit -> SDL_RenderTexture/SetPaletteColors TBD. */
+    (void)city_idx;
+    (void)x;
+    (void)y;
+    (void)max_w;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t city_draw_discovery_icon(int id, int x, int y)
+{
+    /* Orig City_DrawDiscoveryIcon @ 1030:8529 (id remap + 1420:98f4 table
+     * + Gfx_DrawTechIcon).
+     * TODO: Orig video facade TBD. */
+    (void)id;
+    (void)x;
+    (void)y;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t map_draw_minimap_dots(void)
+{
+    /* Orig Map_DrawMinimapDots @ 1030:8586 (framed panel + visibility /
+     * units / trade 8847 dots; see game.h).
+     * TODO: Orig SETRECT/FILLRECT/Text_SetColor/GfxPort_SetActive ->
+     * SDL render-target + palette facade TBD (DAT_12d8_45xx colors,
+     * DAT_1420_17cc port, DAT_1420_9960 DC). */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t map_plot_minimap_dot(int x, int y, int color)
+{
+    /* Orig Map_PlotMinimapDot @ 1030:8847 (Map_WrapX @ 1128:177e +
+     * SETRECT/OFFSETRECT + Text_SetColor + FILLRECT).
+     * TODO: Orig DC/brush -> SDL render-target facade TBD (explicit
+     * port/rect/pal refactor allowed). */
+    (void)x;
+    (void)y;
+    (void)color;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t pic_show_info_message(void)
+{
+    /* Orig Pic_ShowInfoMessage @ 1030:892a (Util_StrCopy 0671->24fa +
+     * Dialog_ShowMessage @ 1220:00d2 -> MenuZ modal).
+     * TODO: Orig dialog modal facade (MenuZ @ 1220:0156 + SDL_PumpEvents/
+     * PollEvent) TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t pic_draw_framed_panel(int h, int w)
+{
+    /* Orig Pic_DrawFramedPanel @ 1030:895c (SetActive + brushes + fill/
+     * frame + stock frame; see game.h).
+     * TODO: Orig render-target + brush facade TBD (DAT_1420_17a6 clamp,
+     * DAT_1420_9960 DC, 44fc/44fd colors). */
+    (void)h;
+    (void)w;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t city_show_find_and_center_dialog(void)
+{
+    /* Orig City_ShowFindAndCenterDialog @ 1068:004c (city filter + sort +
+     * modal 0x83 + Map_CenterOnTile @ 1110:03ae; see game.h).
+     * TODO: Orig arena + SDL modal-list + map facade TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+void ship_update_connection_bits(uint8_t *tiles, int s1, int s2, int p1,
+                                 int p2, int p3)
+{
+    /* Orig Ship_UpdateConnectionBits @ 1070:1cfa (SEG 1290 tile byte at
+     * p1*0xB4+p2*0x0C+p3+0x1B2; deltas 12c8/12d0 N/E/S/W; t in [0,2] ->
+     * 4-neigh mask -> (m|(m>>2))&3 -> 2/0/1). */
+    static const int dx[4] = { 0, 1, 0, -1 };
+    static const int dy[4] = { -1, 0, 1, 0 };
+    int base;
+    int t;
+    unsigned m;
+    int k;
+
+    if (!tiles)
+        return;
+    base = p1 * s1 + p2 * s2 + p3 + 0x1B2;
+    t = (int)(int8_t)tiles[base];
+    if (t < 0 || t >= 3)
+        return;
+    m = 0u;
+    for (k = 0; k < 4; k++) {
+        int nb = (int)(int8_t)tiles[base + dy[k] * s2 + dx[k]];
+
+        m <<= 1;
+        if (nb >= 0 && nb < 3)
+            m |= 1u;
+    }
+    m = (m | (m >> 2)) & 3u;
+    if (m == 0u || m == 3u)
+        tiles[base] = 2u;
+    else
+        tiles[base] = (m == 1u) ? 0u : 1u;
+}

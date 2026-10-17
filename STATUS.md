@@ -254,6 +254,10 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `util_compare_bounded` | LIVE | 1000:36de, 1000:3744, 1000:377e, 1008:0e12, 1008:0e99, 11f8:014a, 11f8:01af, 11f8:0207, 1420:011b |  |
 | `util_str_len` | LIVE | 1000:19f2, 1000:2e85, 1000:3088, 1000:3722, 1100:0000, 1100:00ea, 1608:0220 |  |
 | `util_str_rchr` | LIVE | 1000:37b2, 1000:4124 |  |
+| `float_ftol` | LIVE | 1000:110d |  |
+| `u32_mul32_far` | LIVE | 1000:1368, 1000:16fe |  |
+| `s32_div32` | LIVE | 1000:1423, 1420:b4aa |  |
+| `u32_shl32` | LIVE | 1000:14d4 |  |
 
 ### `src/dialog.c`
 
@@ -534,6 +538,17 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `dlg_tracked_top_off` | LIVE | 1098:1612 |  |
 | `dlg_destroy_clears_top` | LIVE | 1420:17aa, 1420:9960 |  |
 | `dlg_intro_rebase_ticks` | LIVE | 10b0:005b, 11e0:0000, 11e0:0221 |  |
+| `anim_get_active` | LIVE | 10b0:0026, 10b0:008a, 10b0:0287, 1130:000e |  |
+| `anim_reset_time_to_max` | LIVE | 10b0:003d, 11e0:0221 |  |
+| `anim_present_active` | STUB | 1090:0119, 1098:1104, 10b0:03b0, 10d0:0854, 10d0:0956, 1608:00b0, 1608:0100 | has TODO |
+| `pedia_show_list_dialog` | STUB | 1068:0026, 1098:18f7 | has TODO |
+| `pedia_present_art_frame` | STUB | 1068:062f, 10b8:0e00, 10d0:0172, 10d0:0854, 1200:0116 | has TODO |
+| `pedia_animate_tech_icon_zoom` | STUB | 1068:06af, 1068:1c13, 1170:21b3 | has TODO |
+| `text_dispatch_dlg_char` | STUB | 1068:1f7e, 10e0:03a2, 1220:0156 | has TODO |
+| `text_create_wrapped_box` | STUB | 1068:2302 | has TODO |
+| `text_get_exclamation_mark` | LIVE | 1068:2716, 1420:1401 |  |
+| `pedia_modal_pump_ok_cancel` | STUB | 1068:2728, 1068:282d | has TODO |
+| `pedia_modal_subclass_proc` | STUB | 1068:282d | has TODO |
 
 ### `src/game.c`
 
@@ -905,6 +920,18 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `city_disaster_pick` | PARTIAL | 1030:0000, 1040:068e, 1088:0000, 1110:03ae, 11c8:003d, 1220:00d2, 1420:07f0, 1420:3efe, 1420:54fc, 1420:5502, 1420:5503 |  |
 | `trade_apply_bonus` | LIVE | 1038:0d09, 1088:13d5, 1110:1d99, 11c0:16a4, 1220:00d2, 1420:5513 |  |
 | `diplomat_affords_cost` | LIVE | 1110:03ae, 1168:12c1, 11b8:0000, 11b8:07c2, 1420:5502 |  |
+| `map_set_irrigation_flag` | LIVE | 1030:7f1e, 1110:199b, 1110:1a2f, 1110:1a8f |  |
+| `city_count_specialist_type` | LIVE | 1030:7fc1, 1030:7ffe |  |
+| `city_normalize_labor_counts` | LIVE | 1030:802c, 11c8:0063, 1260:00de, 1420:5503 |  |
+| `city_draw_labor_row_raw` | STUB | 1030:817e | has TODO |
+| `city_draw_labor_row_icons` | STUB | 1018:1e9b, 1030:830c, 1030:8c02, 1080:0c5a, 11a8:0cb1 | has TODO |
+| `city_draw_discovery_icon` | STUB | 1030:8529, 1420:98f4 | has TODO |
+| `map_draw_minimap_dots` | STUB | 1030:8586 | has TODO |
+| `map_plot_minimap_dot` | STUB | 1030:8847, 1128:177e | has TODO |
+| `pic_show_info_message` | STUB | 1030:892a, 1220:00d2, 1220:0156, 12d8:0671 | has TODO |
+| `pic_draw_framed_panel` | STUB | 1030:895c | has TODO |
+| `city_show_find_and_center_dialog` | STUB | 1068:004c, 1110:03ae | has TODO |
+| `ship_update_connection_bits` | LIVE | 1070:1cfa |  |
 
 ### `src/gfx_indexed.c`
 
@@ -1528,6 +1555,12 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `sys_font_face_index_ok` | LIVE | 1008:0e99 |  |
 | `sys_font_slot_ok` | LIVE | 1008:062f, 11e8:0d1d |  |
 | `sys_font_install_slot` | STUB | 1008:062f, 1008:0e12, 1420:00a4 | has TODO |
+| `dos_get_disk_free` | STUB | 1000:11d6, 10b8:04df, 10b8:0c1c | has TODO |
+| `sys_noop_default` | NOOP | 1000:127e, 1000:127f |  |
+| `file_get_position` | STUB | 1000:1316, 1000:161c, 1000:2578, 1190:0501 | has TODO |
+| `file_set_position` | STUB | 1000:1346, 1000:161c, 1000:2152, 1000:24f6 | has TODO |
+| `dos_get_date` | STUB | 1000:13bc, 1000:18d4 | has TODO |
+| `dos_get_time` | STUB | 1000:13d1, 1000:18d4 | has TODO |
 
 ### `src/title.c`
 
@@ -1587,8 +1620,8 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `gfx_port_load_rsc_frame` | STUB | 1090:0376, 1090:0488, 10d0:0000, 10d0:0854, 10d0:08f1, 10d0:0cfa | has TODO |
 | `util_draw_progress_bar` | STUB | 1000:29ea, 10d0:08f1 | has TODO |
 | `gfx_port_change_color` | STUB | 10d0:0000, 10d0:0854, 10d0:08f1, 10d0:0956, 10d0:09ee, 10d0:0cfa | has TODO |
-| `gfx_port_get_dc` | STUB | 1098:114a, 10d0:0000 | has TODO |
-| `gfx_port_release_dc` | STUB | 1098:114a, 10d0:0000 | has TODO |
+| `gfx_port_get_dc` | LIVE | 1098:114a, 10d0:0000 |  |
+| `gfx_port_release_dc` | LIVE | 1098:114a, 10d0:0000 |  |
 | `gfx_port_create_compatible` | LIVE | 10d0:0000, 10d0:0cfa |  |
 | `palette_apply_to_port` | LIVE | 1080:0119, 1080:06ff, 1090:0376, 10b0:0461, 10d0:0854, 1200:00a8 |  |
 | `video_shutdown_display` | NOOP | 1008:0329, 1008:0e99, 10d0:0854, 10d0:08f1, 10d0:0cfa, 1420:00a4 |  |
@@ -1677,6 +1710,24 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `art_port_frees_bits` | LIVE | 10b8:116d |  |
 | `art_load_frame_data` | PARTIAL | 1098:1104, 10b8:079d, 10b8:0aa8, 10b8:0c1c, 10b8:11bc, 10b8:158c, 10d0:0000, 10f8:040a | has TODO |
 | `art_port_data_to_bitmap` | PARTIAL | 10b8:0e36, 10d0:0cfa | has TODO |
+| `palette_find_color_index` | LIVE | 1070:127A, 1098:01B0, 10b0:168a |  |
+| `gfxport_get_indexed_pixel` | STUB | 10b0:1749, 1608:0214 | has TODO |
+| `gfxport_set_indexed_pixel` | STUB | 10b0:17a0, 1608:01C8 | has TODO |
+| `gfx_build_dib_handle` | LIVE | 10a0:0000, 10d0:0cfa |  |
+| `gfx_dib_handle_to_bitmap` | LIVE | 10a0:037c |  |
+| `palette_noop_poll` | LIVE | 1098:1184, 1098:11c8 |  |
+| `palette_noop_set_entry` | LIVE | 1098:11f0 |  |
+| `pal_free_quant_tables` | STUB | 10c0:0000 | has TODO |
+| `pal_init_quant_tables` | PARTIAL | 10c0:0044, 10c8:0012, 12f0:0902 | has TODO |
+| `pal_expand_palette` | LIVE | 10c0:00e0, 10c8:0075, 12f8:FA22 |  |
+| `pal_quant_init` | STUB | 10c0:013d, 10c8:002f | has TODO |
+| `pal_kd_build` | STUB | 10c0:023e, 1420:2420 | has TODO |
+| `pal_find_nearest` | LIVE | 10c0:0413, 10c8:063c |  |
+| `pal_kd_range_search` | NOOP | 10c0:07c3 |  |
+| `pal_cmp_channel` | LIVE |  |  |
+| `pal_cmp_r` | LIVE | 10c0:0a71, 10c0:0ad9, 10c0:0b45, 1420:2420 |  |
+| `pal_cmp_g` | LIVE | 10c0:0ad9 |  |
+| `pal_cmp_b` | LIVE | 10c0:0b45 |  |
 
 ### `src/win16.c`
 

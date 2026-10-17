@@ -3648,4 +3648,80 @@ civ_error_t trade_apply_bonus(int treasury, int bonus, int *new_treasury_out);
  * 0 short, -1 on treasury < 0 or cost < 0. No globals. */
 int diplomat_affords_cost(int treasury, int cost);
 
+/* --- Batch 2026-10-17 (B+D): shared player 1030 + city/ship (P0) ---
+ * Renamed this pass:
+ *   Map_SetIrrigationFlag @ 1030:7f1e, City_CountSpecialistType @
+ *   1030:7ffe, City_NormalizeLaborCounts @ 1030:802c,
+ *   City_DrawLaborRowRaw @ 1030:817e, City_DrawLaborRowIcons @ 1030:830c,
+ *   City_DrawDiscoveryIcon @ 1030:8529, Map_DrawMinimapDots @ 1030:8586,
+ *   Map_PlotMinimapDot @ 1030:8847, Pic_ShowInfoMessage @ 1030:892a,
+ *   Pic_DrawFramedPanel @ 1030:895c, City_ShowFindAndCenterDialog @
+ *   1068:004c, Ship_UpdateConnectionBits @ 1070:1cfa. Fala H triage in
+ *   game.c. */
+
+/* Orig Map_SetIrrigationFlag @ 1030:7f1e (occ & 0x40 gate + SetBits +
+ * Mirror + DAT_12d8_42f4++). LIVE pure occupancy-bit kernel on explicit
+ * byte (hidden tile array -> explicit param, Orig kept). NULL -> NOENT. */
+civ_error_t map_set_irrigation_flag(uint8_t *occ);
+
+/* Orig City_CountSpecialistType @ 1030:7ffe (8x City_GetSpecialist @
+ * 1030:7fc1 count). LIVE pure on explicit 8-entry specs (hidden city
+ * table -> explicit param). NULL -> 0. */
+int city_count_specialist_type(const int8_t specs[8], int type);
+
+/* Orig City_NormalizeLaborCounts @ 1030:802c (labor split @ 1260:00de /
+ * 00ae / 00e0 vs citySize @ 1420:5503 via Util_Clamp @ 11c8:0063).
+ * LIVE pure arithmetic on explicit outs (hidden DGROUP -> params).
+ * NULL any out -> NOENT. */
+civ_error_t city_normalize_labor_counts(int size, int reserve, int *de_out,
+                                        int *ae_out, int *eo_out);
+
+/* Orig City_DrawLaborRowRaw @ 1030:817e (4 labor runs via raw masked blit
+ * FUN_11a8_15ce + City_GetSpecialist). Effect is GDI blits to DC/port ->
+ * SDL bridge TBD. STUB UNSUPPORTED (no guessed decode). */
+civ_error_t city_draw_labor_row_raw(int city_idx, int x, int y, int max_w);
+
+/* Orig City_DrawLaborRowIcons @ 1030:830c (same 4 runs via
+ * Gfx_DrawTechIcon @ 11a8:0cb1; callers City_ShowInfoDialog @ 1030:8c02 +
+ * Census @ 1018:1e9b + TopFive @ 1080:0c5a). STUB UNSUPPORTED. */
+civ_error_t city_draw_labor_row_icons(int city_idx, int x, int y, int max_w);
+
+/* Orig City_DrawDiscoveryIcon @ 1030:8529 (tech/wonder id -> icon table
+ * 1420:98f4, skips 0x16-0x18, via Gfx_DrawTechIcon). STUB UNSUPPORTED. */
+civ_error_t city_draw_discovery_icon(int id, int x, int y);
+
+/* Orig Map_DrawMinimapDots @ 1030:8586 (framed panel via Pic_DrawFramed
+ * Panel below + 80x50 visibility sweep + 0x80 units + 3 trade routes via
+ * Map_PlotMinimapDot). Needs render-target + palette facade. STUB. */
+civ_error_t map_draw_minimap_dots(void);
+
+/* Orig Map_PlotMinimapDot @ 1030:8847 (Map_WrapX + SETRECT/OFFSETRECT +
+ * Text_SetColor + FILLRECT 3x dot). Needs render-target facade (hidden
+ * brush/DC -> explicit port/rect/pal param refactor allowed). STUB. */
+civ_error_t map_plot_minimap_dot(int x, int y, int color);
+
+/* Orig Pic_ShowInfoMessage @ 1030:892a (Util_StrCopy 12d8:0671->24fa +
+ * Dialog_ShowMessage @ 1220:00d2 modal MenuZ). Needs dialog SDL facade.
+ * STUB UNSUPPORTED. */
+civ_error_t pic_show_info_message(void);
+
+/* Orig Pic_DrawFramedPanel @ 1030:895c (SetActive + SETRECT + MakeBrush /
+ * FILLRECT + raw fill + DELETEOBJECT + FRAMERECT x2 + INFLATERECT +
+ * GETSTOCKOBJECT; 9 callers incl. Pic_PlayShared + city/info/tech).
+ * Needs render-target + brush facade. STUB. */
+civ_error_t pic_draw_framed_panel(int h, int w);
+
+/* Orig City_ShowFindAndCenterDialog @ 1068:004c (128-city owner filter +
+ * sort via FUN_1000_3396 + modal list 0x83 via FUN_1098_1909 + re-scan +
+ * Map_CenterOnTile @ 1110:03ae). Needs arena + SDL modal + map facade.
+ * STUB UNSUPPORTED. */
+civ_error_t city_show_find_and_center_dialog(void);
+
+/* Orig Ship_UpdateConnectionBits @ 1070:1cfa (4-neighbour N/E/S/W fix via
+ * deltas 12c8:[0,1,0,-1]/12d0:[-1,0,1,0] on SEG 1290 tile byte). LIVE
+ * pure on explicit tiles (hidden SEG base -> params, Orig kept). NULL
+ * tiles -> NOENT guard via early return (orig faulted). */
+void ship_update_connection_bits(uint8_t *tiles, int s1, int s2, int p1,
+                                 int p2, int p3);
+
 #endif /* CIVLIN_GAME_H */

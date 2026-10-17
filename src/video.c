@@ -839,30 +839,40 @@ civ_error_t gfx_port_change_color(gfx_port_t *port, int old_index,
 
 civ_error_t gfx_port_get_dc(gfx_port_t *port, SDL_Renderer **out_dc)
 {
+    /* Orig GETDC step behind FUN_1098_114a @ 1098:114a
+     * (MainPort_GetOrCreate) + FUN_10d0_0000 @ 10d0:0000 (GfxPort_Create /
+     * GR_PortOpen).
+     * [PORT-SDL] Replaces: GETDC -> borrow the port's renderer (the SDL3
+     * stand-in for the HDC; no separate DC object, no ownership transfer,
+     * never Destroyed here — caller owns it via main.c). SELECTPALETTE /
+     * REALIZEPALETTE stay caller-side in MainPort_GetOrCreate @ 1098:114a
+     * (via palette_apply_to_port). NULL port/out -> NOENT (orig faulted
+     * on a bad handle); port with no renderer wired (corrupt port, see
+     * gfx_port_present_rect) -> BAD_DATA; else the borrowed renderer. */
     if (out_dc)
         *out_dc = NULL;
-    (void)port;
     if (!port || !out_dc)
         return CIV_ERR_NOENT;
-    /* TODO: Orig GETDC step behind FUN_1098_114a @ 1098:114a
-     * (MainPort_GetOrCreate) + FUN_10d0_0000 @ 10d0:0000 (GfxPort_Create /
-     * GR_PortOpen). Borrows the display DC (SELECTPALETTE/REALIZEPALETTE
-     * applied by the MainPort_GetOrCreate caller); SDL3 renderer stands
-     * in for the HDC, borrow only. */
-    return CIV_ERR_UNSUPPORTED;
+    if (!port->ren)
+        return CIV_ERR_BAD_DATA;
+    *out_dc = port->ren;
+    return CIV_OK;
 }
 
 civ_error_t gfx_port_release_dc(gfx_port_t *port, SDL_Renderer *dc)
 {
-    (void)port;
-    (void)dc;
+    /* Orig RELEASEDC pair to gfx_port_get_dc above (same
+     * FUN_1098_114a @ 1098:114a + FUN_10d0_0000 @ 10d0:0000 sites).
+     * [PORT-SDL] Replaces: RELEASEDC -> validated no-op (the borrow owns
+     * nothing, so there is nothing to release; the pairing is kept for
+     * RE-map fidelity). NULL port/dc -> NOENT; dc foreign to the port
+     * (not the borrowed renderer) -> BAD_DATA (orig RELEASEDC failed on
+     * a foreign DC); else CIV_OK. */
     if (!port || !dc)
         return CIV_ERR_NOENT;
-    /* TODO: Orig RELEASEDC pair to gfx_port_get_dc above (same
-     * FUN_1098_114a @ 1098:114a + FUN_10d0_0000 @ 10d0:0000 sites).
-     * SDL3 renderer borrow needs no release; pairing kept for RE-map
-     * fidelity. */
-    return CIV_ERR_UNSUPPORTED;
+    if (dc != port->ren)
+        return CIV_ERR_BAD_DATA;
+    return CIV_OK;
 }
 
 civ_error_t gfx_port_create_compatible(SDL_Renderer *ren, int w, int h,
@@ -2222,4 +2232,212 @@ civ_error_t art_port_data_to_bitmap(int w, int h, int mono, int free_flag)
     if (art_port_frees_bits(free_flag) != ((free_flag != 0) ? 1 : 0))
         return CIV_ERR_BAD_DATA;
     return CIV_ERR_UNSUPPORTED;
+}
+
+/* --- Batch 2026-10-17 (A+E): Gfx DIB + palette quant 10c0 --- */
+
+int palette_find_color_index(const uint8_t *pal, int n, uint32_t rgb)
+{
+    /* Orig Palette_FindColorIndex @ 10b0:168a (locked DAT_1420_9964+4,
+     * 0xEC entries, base +10; reverse of Gfx_LookupColor @ 1098:01B0;
+     * caller Ship_ProbeStarPixel @ 1070:127A). Hidden GLOBALLOCK handle
+     * -> explicit pal (allowed param refactor, Orig kept). */
+    int i;
+
+    if (!pal || n <= 0)
+        return 0;
+    for (i = 0; i < n; i++) {
+        uint32_t c = (uint32_t)pal[i * 4]
+            | ((uint32_t)pal[i * 4 + 1] << 8)
+            | ((uint32_t)pal[i * 4 + 2] << 16);
+
+        if (c == (rgb & 0xFFFFFFu))
+            return i + 10;
+    }
+    return 0;
+}
+
+civ_error_t gfxport_get_indexed_pixel(int stride, long idx, uint32_t *out)
+{
+    /* Orig GfxPort_GetIndexedPixel @ 10b0:1749 (idx/stride, idx%stride via
+     * GETPIXEL @ 1608:0214; orphan vtable tail, no callers).
+     * TODO: Orig GETPIXEL bridge via SDL_RenderReadPixels/surface TBD
+     * (*out untouched until confirmed, no fake-OK). */
+    (void)stride;
+    (void)idx;
+    if (!out)
+        return CIV_ERR_NOENT;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t gfxport_set_indexed_pixel(int stride, long idx, uint32_t color)
+{
+    /* Orig GfxPort_SetIndexedPixel @ 10b0:17a0 (SETPIXEL @ 1608:01C8).
+     * TODO: Orig SETPIXEL bridge via SetRenderTarget/RenderPoint TBD. */
+    (void)stride;
+    (void)idx;
+    (void)color;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+uint16_t gfx_build_dib_handle(uint16_t w, int16_t h)
+{
+    /* Orig Gfx_BuildDibHandle @ 10a0:0000 (w4 + palette select DAT_1420_
+     * 9964 vs DAT_12E8_0042 + GLOBALALLOC/LOCK + BITMAPINFOHEADER + HMEMCPY;
+     * caller GfxPort_AllocBitmap @ 10d0:0cfa).
+     * TODO: Orig mem_alloc_lock/mem_copy_far + palette ctx -> arena TBD. */
+    (void)w;
+    (void)h;
+    return 0;
+}
+
+uint16_t gfx_dib_handle_to_bitmap(uint16_t dib_handle)
+{
+    /* Orig Gfx_DibHandleToBitmap @ 10a0:037c (GETDC + CREATEDIBITMAP
+     * CBM_INIT=4 + RELEASEDC + UNLOCK/FREE; caller GfxPort_AllocBitmap).
+     * TODO: Orig video_get_dc/create_bitmap_from_dib/release_dc + mem_*
+     * -> SDL_CreateSurfaceFrom/texture TBD. */
+    (void)dib_handle;
+    return 0;
+}
+
+civ_error_t palette_noop_poll(void)
+{
+    /* Orig Palette_NoopPoll @ 1098:11c8 (gate + discarded GetZero;
+     * WONTFIX-Win16: no SDL effect). */
+    return CIV_OK;
+}
+
+civ_error_t palette_noop_set_entry(uint16_t idx, uint16_t n,
+                                   const void *rgb)
+{
+    /* Orig Palette_NoopSetEntry @ 1098:11f0 (SETPALETTEENTRIES unreachable,
+     * GetZero==0; WONTFIX-Win16). */
+    (void)idx;
+    (void)n;
+    (void)rgb;
+    return CIV_OK;
+}
+
+civ_error_t pal_free_quant_tables(void)
+{
+    /* Orig Pal_FreeQuantTables @ 10c0:0000 (UNLOCK/FREE 998c/998a/9988).
+     * TODO: Orig win16_global_free(ctx 60k/20k/40k) TBD (frees matter). */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t pal_init_quant_tables(pal_quant_ctx_t *ctx)
+{
+    /* Orig Pal_InitQuantTables @ 10c0:0044 (sqr @ 12f0:0902 + ALLOC/LOCK;
+     * caller 10c8:0012).
+     * TODO: Orig win16_global_alloc(60000/20000/40000) + sqr ctx TBD. */
+    int i;
+
+    if (!ctx)
+        return CIV_ERR_NOENT;
+    for (i = 0; i < 0x200; i++)
+        ctx->sqr[i] = (uint32_t)i * (uint32_t)i;
+    ctx->pal = NULL;
+    /* TODO: Orig buffer allocs -> win16_global_alloc TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t pal_expand_palette(uint16_t *dst, const uint8_t *src, int n)
+{
+    /* Orig Pal_ExpandPalette @ 10c0:00e0 (RGBx stride 4 both sides;
+     * caller 10c8:0075 DS:9AC0 <- 12f8:FA22 n=0x100). */
+    int i;
+
+    if (!dst || !src)
+        return CIV_ERR_NOENT;
+    if (n <= 0)
+        return CIV_ERR_RANGE;
+    for (i = 0; i < n; i++) {
+        dst[0] = (uint16_t)src[0];
+        dst[1] = (uint16_t)src[1];
+        dst[2] = (uint16_t)src[2];
+        dst += 4;
+        src += 4;
+    }
+    return CIV_OK;
+}
+
+civ_error_t pal_quant_init(pal_quant_ctx_t *ctx, const uint8_t *pal, int n)
+{
+    /* Orig Pal_QuantInit @ 10c0:013d (tables + Pal_KdBuild; caller
+     * 10c8:002f).
+     * TODO: Orig 12f0 tables + win16 buffers + qsort bridge TBD. */
+    (void)ctx;
+    (void)pal;
+    (void)n;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t pal_kd_build(pal_quant_ctx_t *ctx, int lo, int hi, int node)
+{
+    /* Orig Pal_KdBuild @ 10c0:023e (qsort + median + R/G/B rotate).
+     * TODO: Orig FUN_1000_3396 qsort + DAT_1420_242c/2430/2432 ctx TBD. */
+    (void)ctx;
+    (void)lo;
+    (void)hi;
+    (void)node;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+uint16_t pal_find_nearest(pal_quant_ctx_t *ctx, uint16_t r, uint16_t g,
+                          uint16_t b)
+{
+    /* Orig Pal_FindNearest @ 10c0:0413 (12-bit key + L4/L5/L6 + box search
+     * + sqr best; caller 10c8:063c).
+     * TODO: Orig win16 buffers + Pal_KdRangeSearch + sqr ctx TBD (*out
+     * untouched, no guessed palette). */
+    (void)ctx;
+    (void)r;
+    (void)g;
+    (void)b;
+    return 0;
+}
+
+void pal_kd_range_search(pal_quant_ctx_t *ctx, int node)
+{
+    /* Orig Pal_KdRangeSearch @ 10c0:07c3 (channel 2432%3 walk; callers
+     * 0413 + self).
+     * TODO: Orig tree/box DGROUP -> explicit ctx TBD. */
+    (void)ctx;
+    (void)node;
+}
+
+static int pal_cmp_channel(const uint8_t *pal, uint16_t a, uint16_t b,
+                           int ch)
+{
+    uint8_t pa;
+    uint8_t pb;
+
+    if (!pal)
+        return 0;
+    pa = pal[(size_t)a * 4u + (size_t)ch];
+    pb = pal[(size_t)b * 4u + (size_t)ch];
+    if (pb < pa)
+        return 1;
+    if (pa < pb)
+        return -1;
+    return 0;
+}
+
+int pal_cmp_r(const uint8_t *pal, uint16_t a, uint16_t b)
+{
+    /* Orig Pal_CmpR @ 10c0:0a71 (ch 0; via 1420:2420 table). */
+    return pal_cmp_channel(pal, a, b, 0);
+}
+
+int pal_cmp_g(const uint8_t *pal, uint16_t a, uint16_t b)
+{
+    /* Orig Pal_CmpG @ 10c0:0ad9 (ch 1). */
+    return pal_cmp_channel(pal, a, b, 1);
+}
+
+int pal_cmp_b(const uint8_t *pal, uint16_t a, uint16_t b)
+{
+    /* Orig Pal_CmpB @ 10c0:0b45 (ch 2). */
+    return pal_cmp_channel(pal, a, b, 2);
 }
