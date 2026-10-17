@@ -1291,4 +1291,16 @@ const uint8_t *res_raw_static_pascal(void);
  * known groups, "?" otherwise (never NULL). No globals, no exit(). */
 const char *res_blob_entry_kind(unsigned table);
 
+/* --- Batch 2026-10-17 fala 4 (Q): Win16 resource wrappers ---
+ *   Res_FreeResourceLoop @ 1100:0263, Res_FindAndLoad @ 1100:028a. */
+
+/* Orig Res_FreeResourceLoop @ 1100:0263 (while (FREERESOURCE @ 1608:0038
+ * != 0) {}; orphan). Win16 res-handle facade TBD -> STUB. */
+rsc_error_t res_free_resource_loop(int hres);
+
+/* Orig Res_FindAndLoad @ 1100:028a (FINDRESOURCE @ 1608:0030 +
+ * LOADRESOURCE @ 1608:0034 with hInst = g_nHInstance @ 1420:54fa; 0 on
+ * either miss; orphan). Same facade TBD -> STUB (*out untouched). */
+rsc_error_t res_find_and_load(int a, int b, int c, int d, int *h_out);
+
 #endif /* CIVLIN_RSC_LOADER_H */

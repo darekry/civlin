@@ -702,4 +702,14 @@ int worldgen_video_caps_needs_raster_ext(int caps26);
  * (boot_free_memory_is_low + boot_runtime_*). No globals, no exit(). */
 civ_error_t worldgen_show_video_caps_dialog(void);
 
+/* --- Batch 2026-10-17 fala 4 (T): link-graph bounds ---
+ *   Map_IsLinkGridInBounds @ 1028:1acf. */
+
+/* Orig Map_IsLinkGridInBounds @ 1028:1acf (0 <= x < 0x14 && 0 <= y < 0x0D
+ * on the 0x104-B link graph @ 1248:0004; orphan; matches
+ * Map_BuildContinentLinks @ 1028:12c6 0x13/0x0C loops + MemSet 0x104 and
+ * Map_BuildOceanLinks @ 1028:162c edge guard; NOT the 0x50x0x32 tile map).
+ * LIVE pure. */
+int map_is_link_grid_in_bounds(int x, int y);
+
 #endif /* CIVLIN_WORLDGEN_H */

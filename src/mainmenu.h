@@ -419,4 +419,14 @@ int menu_command_group(int cmd);
  * pudlo (orig 0) -> CIV_ERR_NOENT. */
 civ_error_t menu_dispatch_command(int cmd);
 
+/* --- Batch 2026-10-17 fala 4 (T): help contents ---
+ *   Menu_ShowHelpContents @ 1048:04e8. */
+
+/* Orig Menu_ShowHelpContents @ 1048:04e8 (if g_nCurrentDrive @ 1228:0002
+ * > 0 && Dos_DriveReady @ 1000:1184 == 0: Dos_SetPath @ 1000:116a; then
+ * WINHELP @ 1608:016c on hwnd @ 12b0:0004 with helpfile DS:0x9c8,
+ * HELP_CONTENTS = 3; one case of Menu_DispatchCommand @ 1048:01cd
+ * jumptable). DOS + WinHelp, no SDL help twin -> STUB UNSUPPORTED. */
+civ_error_t menu_show_help_contents(void);
+
 #endif /* CIVLIN_MAINMENU_H */

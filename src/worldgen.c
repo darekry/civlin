@@ -1756,3 +1756,15 @@ civ_error_t worldgen_show_video_caps_dialog(void)
         return CIV_ERR_BAD_DATA;
     return CIV_ERR_UNSUPPORTED;
 }
+
+/* --- Batch 2026-10-17 fala 4 (T): link-graph bounds --- */
+
+int map_is_link_grid_in_bounds(int x, int y)
+{
+    /* Orig Map_IsLinkGridInBounds @ 1028:1acf (link graph, not tiles). */
+    if (x < 0 || y < 0)
+        return 0;
+    if (x >= 0x14 || y >= 0x0D)
+        return 0;
+    return 1;
+}

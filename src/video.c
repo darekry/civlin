@@ -2620,3 +2620,91 @@ civ_error_t gfx_noop_gap_2727(void)
     /* Orig Gfx_NoopGap2727 @ 1098:2727 (empty; WONTFIX-Win16). */
     return CIV_OK;
 }
+
+/* --- Batch 2026-10-17 fala 4 (Q+R+S): fill/stroke/hooks + godpal --- */
+
+civ_error_t gfx_fill_stack_rect(const int16_t rect[4])
+{
+    /* Orig Gfx_FillStackRect @ 1100:0876 (see video.h; hidden SS RECT ->
+     * explicit param).
+     * TODO: Orig FILLRECT + DAT_1420_9960/995e -> gfx_port present/fill
+     * (SDL_RenderTexture/SetRenderTarget/SetPaletteColors) TBD. */
+    (void)rect;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t gfx_pre_store_stub(int a, int b)
+{
+    /* Orig Gfx_PreStoreStub @ 1100:0996 (empty; WONTFIX-Win16). */
+    (void)a;
+    (void)b;
+    return CIV_OK;
+}
+
+civ_error_t gfx_post_set_dc_stub(const void *data_far)
+{
+    /* Orig Gfx_PostSetDcStub @ 1100:0a0d (empty; WONTFIX-Win16). */
+    (void)data_far;
+    return CIV_OK;
+}
+
+civ_error_t gfx_validate_stored_rect(void)
+{
+    /* Orig Gfx_ValidateStoredRect @ 1100:09e7 (VALIDATERECT on
+     * *DAT_1420_9960).
+     * TODO: Orig VALIDATERECT @ 1608:014c -> video/win16 window facade. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t gfx_stroke_rect(const int16_t p[4])
+{
+    /* Orig Gfx_StrokeRect @ 1100:0ae5 (see video.h).
+     * TODO: Orig MOVETO/LINETO + 1420:9960 DC -> SDL_RenderRect TBD. */
+    (void)p;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t palette_push_palette(void)
+{
+    /* Orig Palette_PushPalette @ 1090:015e (godpal.c; see video.h).
+     * TODO: Orig GLOBALALLOC/LOCK/UNLOCK + flag copy + Dlg_MessageBox
+     * Prefixed @ 1098:28e4 (STUB) -> win16_global_* + SDL_SetPaletteColors
+     * staging TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t palette_pop_palette(void)
+{
+    /* Orig Palette_PopPalette @ 1090:02d2 (see video.h).
+     * TODO: Orig GLOBALLOCK/UNLOCK/FREE bridge TBD (animate half is LIVE
+     * via palette_animate_range when the saved slot lands). */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t palette_zero_god_palette(void)
+{
+    /* Orig Palette_ZeroGodPalette @ 1090:05db (see video.h; preserves the
+     * repeated-store bug when bridged).
+     * TODO: Orig GLOBAL* + ANIMATEPALETTE + ClearRangeFlags TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t palette_clear_range_flags(int first, int count)
+{
+    /* Orig Palette_ClearRangeFlags @ 1090:0670 (see video.h).
+     * TODO: Orig GLOBALLOCK + ANIMATEPALETTE -> win16_global_* + SDL
+     * staging TBD; RANGE on bad range when bridged. */
+    (void)first;
+    (void)count;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t palette_set_range_flags(int first, int count)
+{
+    /* Orig Palette_SetRangeFlags @ 1090:06fd (mono flag @ DAT_1420_17a6;
+     * value half LIVE via palette_flag_for_mono).
+     * TODO: Orig GLOBALLOCK + ANIMATEPALETTE TBD. */
+    (void)first;
+    (void)count;
+    return CIV_ERR_UNSUPPORTED;
+}

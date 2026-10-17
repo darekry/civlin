@@ -2719,3 +2719,61 @@ void boot_empty_thunk_0e02(void)
 {
     /* Orig Boot_EmptyThunk_0E02 @ 1008:0e02 (+JMP+0 nop, before 0e12). */
 }
+
+/* --- Batch 2026-10-17 fala 4 (Q+T): win rect + pump/beep/noop --- */
+
+civ_error_t win_destroy_window_and_clear(void *wnd_far)
+{
+    /* Orig Win_DestroyWindowAndClear @ 1100:03bb (LES hwnd + DESTROYWINDOW
+     * + 3-word clear; hidden far -> param).
+     * TODO: Orig DESTROYWINDOW @ 1608:00dc -> win16_destroy_window TBD. */
+    (void)wnd_far;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t win_resize_window_stored_rect(void *wnd_far, int w, int h,
+                                          int repaint)
+{
+    /* Orig Win_ResizeWindowStoredRect @ 1100:04e1 (see boot.h).
+     * TODO: Orig GETWINDOWRECT @ 1608:00ac + MOVEWINDOW @ 1608:00e0 ->
+     * win16_get_window_rect/move_window TBD. */
+    (void)wnd_far;
+    (void)w;
+    (void)h;
+    (void)repaint;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+int win_is_point_in_client_rect(int hwnd, unsigned long pt_packed)
+{
+    /* Orig Win_IsPointInClientRect @ 1100:0534 (GETCLIENTRECT + PTINRECT
+     * passthrough).
+     * TODO: Orig HWND/client-rect -> SDL window facade TBD (0 = unknown,
+     * never fake-inside). */
+    (void)hwnd;
+    (void)pt_packed;
+    return 0;
+}
+
+civ_error_t main_pump_until_quit(void)
+{
+    /* Orig Main_PumpUntilQuit @ 1008:0f2b (see boot.h; MSG @ 1420:54e6,
+     * 0x12 = WM_QUIT).
+     * TODO: Orig PEEKMESSAGE/TRANSLATE/DISPATCH -> win16 MSG bridge to
+     * SDL_PumpEvents/PollEvent TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t main_noop_stub(void)
+{
+    /* Orig Main_NoopStub @ 1008:101d (empty; WONTFIX-Win16). */
+    return CIV_OK;
+}
+
+civ_error_t main_beep_repeated(void)
+{
+    /* Orig Main_BeepRepeated @ 1008:103d (MESSAGEBEEP(-1) x14).
+     * TODO: Orig MESSAGEBEEP @ 1608:012c -> win16_message_beep fronting
+     * SDL_OpenAudioDeviceStream TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}

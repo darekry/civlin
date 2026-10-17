@@ -815,3 +815,14 @@ int mainmenu_menuz_tail_ok(void)
         return 0;
     return 1;
 }
+
+/* --- Batch 2026-10-17 fala 4 (T): help contents --- */
+
+civ_error_t menu_show_help_contents(void)
+{
+    /* Orig Menu_ShowHelpContents @ 1048:04e8 (see mainmenu.h).
+     * TODO: Orig Dos_DriveReady @ 1000:1184 + Dos_SetPath @ 1000:116a
+     * (SDL_IO twin where present, POSIX-FALLBACK otherwise) + WINHELP
+     * @ 1608:016c -> win16_winhelp (no SDL twin) TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}

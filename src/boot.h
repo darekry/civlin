@@ -1615,4 +1615,38 @@ void boot_empty_thunk_0d4c(void);
 void boot_empty_thunk_0d5a(void);
 void boot_empty_thunk_0e02(void);
 
+/* --- Batch 2026-10-17 fala 4 (Q+T): win rect + pump/beep/noop ---
+ *   Win_DestroyWindowAndClear @ 1100:03bb, Win_ResizeWindowStoredRect @
+ *   1100:04e1, Win_IsPointInClientRect @ 1100:0534, Main_PumpUntilQuit @
+ *   1008:0f2b, Main_NoopStub @ 1008:101d, Main_BeepRepeated @ 1008:103d. */
+
+/* Orig Win_DestroyWindowAndClear @ 1100:03bb (DESTROYWINDOW @ 1608:00dc
+ * on far hwnd + 3-word clear; orphan). HWND facade TBD -> STUB. */
+civ_error_t win_destroy_window_and_clear(void *wnd_far);
+
+/* Orig Win_ResizeWindowStoredRect @ 1100:04e1 (GETWINDOWRECT +
+ * MOVEWINDOW(hwnd, oldLeft, oldTop, w, h, repaint) + GETWINDOWRECT into
+ * +10; callers 10e0/1170/11c0/MenuZ x5). Same facade TBD -> STUB. */
+civ_error_t win_resize_window_stored_rect(void *wnd_far, int w, int h,
+                                          int repaint);
+
+/* Orig Win_IsPointInClientRect @ 1100:0534 (GETCLIENTRECT + PTINRECT @
+ * 1608:0104 passthrough; orphan). HWND/client-rect facade TBD -> 0
+ * (unknown, never fake-inside) with TODO. */
+int win_is_point_in_client_rect(int hwnd, unsigned long pt_packed);
+
+/* Orig Main_PumpUntilQuit @ 1008:0f2b (PEEK/TRANSLATE/DISPATCH until
+ * MSG.message @ 1420:54e8 == 0x12 WM_QUIT; orphan tail; sibling of
+ * DispatchQuit @ 1098:062f + WaitForInput @ 1038:0c1d). MSG -> SDL poll
+ * bridge TBD -> STUB UNSUPPORTED. */
+civ_error_t main_pump_until_quit(void);
+
+/* Orig Main_NoopStub @ 1008:101d (empty + JMP+0 nop; orphan). Distinct
+ * from Main_ReturnZeroStub @ 1008:0acb (returns 0). WONTFIX NOOP. */
+civ_error_t main_noop_stub(void);
+
+/* Orig Main_BeepRepeated @ 1008:103d (MESSAGEBEEP(-1) x14; orphan).
+ * SDL audio-beep facade TBD -> STUB UNSUPPORTED. */
+civ_error_t main_beep_repeated(void);
+
 #endif /* CIVLIN_BOOT_H */

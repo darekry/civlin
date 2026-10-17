@@ -1871,4 +1871,67 @@ int gfx_return_true_byte(void);
  * as 26b3; decompiler string is stale-DS). WONTFIX-Win16 NOOP. */
 civ_error_t gfx_noop_gap_2727(void);
 
+/* --- Batch 2026-10-17 fala 4 (Q+R+S): fill/stroke/hooks + godpal ---
+ *   Gfx_FillStackRect @ 1100:0876, Gfx_PreStoreStub @ 1100:0996,
+ *   Gfx_ValidateStoredRect @ 1100:09e7, Gfx_PostSetDcStub @ 1100:0a0d,
+ *   Gfx_StrokeRect @ 1100:0ae5, Palette_PushPalette @ 1090:015e,
+ *   Palette_PopPalette @ 1090:02d2, Palette_ZeroGodPalette @ 1090:05db,
+ *   Palette_ClearRangeFlags @ 1090:0670, Palette_SetRangeFlags @
+ *   1090:06fd. (0670 is NOT the Zero entry — corrects older comments.) */
+
+/* Orig Gfx_FillStackRect @ 1100:0876 (FILLRECT @ 1608:0110 with hDC =
+ * DAT_1420_9960+2, hbr = DAT_1420_995e, rect = SS stack copy staged by
+ * Sys_StackPushCopy @ 1000:14f8; 8 callers incl. Anim_OpenSequence +
+ * DrawDialogFrame + map repaints). Stored-DC/brush -> SDL bridge TBD ->
+ * STUB (hidden stack RECT -> explicit param). */
+civ_error_t gfx_fill_stack_rect(const int16_t rect[4]);
+
+/* Orig Gfx_PreStoreStub @ 1100:0996 (empty pre-StoreDC hook; callers
+ * NewGame_Wizard @ 10e8:012e + WorldGen_LoadEarth @ 1108:02cf) and twin
+ * Gfx_PostSetDcStub @ 1100:0a0d (empty post-SetCurrentDC hook with far
+ * 1420:B3C2; callers combat/diplo/move-anim). WONTFIX NOOPs. */
+civ_error_t gfx_pre_store_stub(int a, int b);
+civ_error_t gfx_post_set_dc_stub(const void *data_far);
+
+/* Orig Gfx_ValidateStoredRect @ 1100:09e7 (VALIDATERECT @ 1608:014c with
+ * hWnd = *DAT_1420_9960 set by Gfx_SetCurrentDC @ 1100:09a9; sole caller
+ * Pic_PlayShared @ 1030:5732). Window facade TBD -> STUB. */
+civ_error_t gfx_validate_stored_rect(void);
+
+/* Orig Gfx_StrokeRect @ 1100:0ae5 (MOVETO(p[1],p[0]) + 4x LINETO closed
+ * rect, -1 on max edges, hDC = [DAT_1420_9960]+2; sole caller
+ * FUN_1098_1909 dialog listbox host). GDI line + global-DC bridge TBD ->
+ * STUB. */
+civ_error_t gfx_stroke_rect(const int16_t p[4]);
+
+/* Orig Palette_PushPalette @ 1090:015e (godpal.c PushPalette: depth @
+ * DAT_1420_1d66 max 5 else MessageBox Overflow + return 1; GLOBALALLOC
+ * 0x3B0 = 0xEC*4 -> slots @ DAT_1420_9968; LOCK dst + LOCK 9964 src;
+ * RGB+flag copy (flag = (DAT_1420_17a6==0) ? src+7 : 0); UNLOCK x2;
+ * depth++; alloc-fail -> MessageBox + 1; sole caller Pedia_ShowEntry @
+ * 1068:06af). GLOBAL + MessageBox bridges TBD -> STUB. */
+civ_error_t palette_push_palette(void);
+
+/* Orig Palette_PopPalette @ 1090:02d2 (LogTrace + depth == 0 ->
+ * MessageBox Empty + 1; else depth--, LOCK saved, Palette_AnimateRange @
+ * 1090:0376 (0,0xEC), UNLOCK/FREE; sole caller Pedia_ShowEntry exit @
+ * 1068:1bc6). PARTIAL: animate half LIVE via palette_animate_range;
+ * lock/free TBD -> STUB with TODO. */
+civ_error_t palette_pop_palette(void);
+
+/* Orig Palette_ZeroGodPalette @ 1090:05db (the true Zero entry:
+ * LogTrace + ALLOC 0x3B0 + LOCK + Orig bug: zero loop rewrites the same
+ * 3 B (no ptr advance) + Palette_AnimateRange(0,0xEC) + ClearRangeFlags
+ * (0,0xEC); orphan). GLOBAL + ANIMATE tails TBD -> STUB (bug-faithful
+ * zero when bridged). */
+civ_error_t palette_zero_god_palette(void);
+
+/* Orig Palette_ClearRangeFlags @ 1090:0670 (LOCK 9964 + flag
+ * [first,first+count) := 0 + ANIMATEPALETTE 0xEC; sole caller ZeroGod)
+ * and Palette_SetRangeFlags @ 1090:06fd (same shape, flag :=
+ * (DAT_1420_17a6==0 ? 1 : 0); orphan). Lock + device tails TBD -> STUBs
+ * (range/flag probes LIVE via palette_animate_clamp/flag_for_mono). */
+civ_error_t palette_clear_range_flags(int first, int count);
+civ_error_t palette_set_range_flags(int first, int count);
+
 #endif /* CIVLIN_VIDEO_H */

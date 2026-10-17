@@ -3108,3 +3108,56 @@ civ_error_t mem_free_with_mode(void *p, unsigned mode)
     (void)mode;
     return CIV_ERR_UNSUPPORTED;
 }
+
+/* --- Batch 2026-10-17 fala 4 (Q+R+T): rng/mem/win/poll/date --- */
+
+uint16_t rng_next15(void)
+{
+    /* Orig Rng_Next15 @ 1100:03ea (far thunk, no stack args). */
+    return (uint16_t)(rng_next_raw() & 0x7FFFu);
+}
+
+civ_error_t mem_get_global_size(int hmem, unsigned long *out_size)
+{
+    /* Orig Mem_GetGlobalSize @ 1100:0212 (GLOBALSIZE @ 1608:0014).
+     * TODO: Orig win16 locked-handle table -> win16_global_size TBD. */
+    (void)hmem;
+    if (!out_size)
+        return CIV_ERR_NOENT;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t mem_get_global_size_alt(int hmem, unsigned long *out_size)
+{
+    /* Orig Mem_GetGlobalSizeAlt @ 1100:0ab7 (same GLOBALSIZE twin). */
+    (void)hmem;
+    if (!out_size)
+        return CIV_ERR_NOENT;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t sys_poll_lbutton_down(int *out_clicked)
+{
+    /* Orig Sys_PollLButtonDown @ 1100:0a5d (see sys.h).
+     * TODO: Orig PEEKMESSAGE drain -> SDL_PumpEvents/PollEvent
+     * mouse-button filter TBD (never fake click). */
+    if (!out_clicked)
+        return CIV_ERR_NOENT;
+    *out_clicked = 0;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t sys_reserved_stub(void)
+{
+    /* Orig Sys_ReservedStub @ 1100:0a20 (empty; WONTFIX-Win16). */
+    return CIV_OK;
+}
+
+civ_error_t sys_wait_date_delay(int delay)
+{
+    /* Orig Sys_WaitDateDelay @ 1008:0fcb (see sys.h).
+     * TODO: Orig Sys_GetDate @ 1000:18d4 packed date -> sys_get_tick_scaled
+     * / sys_wait_next_tick bridge TBD. */
+    (void)delay;
+    return CIV_ERR_UNSUPPORTED;
+}

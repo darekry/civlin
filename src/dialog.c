@@ -5671,3 +5671,64 @@ civ_error_t dlg_open_indirect(int tmpl_handle, unsigned flags)
     (void)flags;
     return CIV_ERR_UNSUPPORTED;
 }
+
+/* --- Batch 2026-10-17 fala 4 (R+T): item/show/text + cursor read --- */
+
+civ_error_t dlg_show_item(int hdlg, int item)
+{
+    /* Orig Dlg_ShowItem @ 1100:08a6 (GETDLGITEM + SHOWWINDOW 5).
+     * TODO: Orig -> win16_get_dlg_item + dialog_show_item TBD. */
+    (void)hdlg;
+    (void)item;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t dlg_hide_item(int hdlg, int item)
+{
+    /* Orig Dlg_HideItem @ 1100:08d3 (GETDLGITEM + SHOWWINDOW 0). */
+    (void)hdlg;
+    (void)item;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t dlg_hook_item_state(int item, int val)
+{
+    /* Orig Dlg_HookItemState @ 1100:0900 (empty; WONTFIX-Win16). */
+    (void)item;
+    (void)val;
+    return CIV_OK;
+}
+
+civ_error_t dlg_send_item_user_msg401(int hdlg, int item, int lo, int hi)
+{
+    /* Orig Dlg_SendItemUserMsg401 @ 1100:0913 (see dialog.h).
+     * TODO: Orig SENDDLGITEMMESSAGE -> dialog_send_item_message + msg
+     * 0x401 handler dump TBD. */
+    (void)hdlg;
+    (void)item;
+    (void)lo;
+    (void)hi;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t dlg_get_window_text255(int hwnd, char *buf, int cap,
+                                   int *out_len)
+{
+    /* Orig Dlg_GetWindowText255 @ 1100:0970 (GETWINDOWTEXT 0xff).
+     * TODO: Orig -> dialog_get_window_text TBD (*out untouched). */
+    (void)hwnd;
+    (void)buf;
+    (void)cap;
+    if (!out_len)
+        return CIV_ERR_NOENT;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+int text_next_char_inc(const uint8_t *s)
+{
+    /* Orig Text_NextCharInc @ 1098:013d (pure (int)(int8_t)*s; the Orig
+     * INC is vacuous on the by-value far cursor). */
+    if (!s)
+        return 0;
+    return (int)(int8_t)*s;
+}

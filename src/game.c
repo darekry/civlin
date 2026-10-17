@@ -5863,3 +5863,214 @@ civ_error_t ship_poll_launch_confirm(long tick, const char **out)
     (void)out;
     return CIV_ERR_UNSUPPORTED;
 }
+
+/* --- Batch 2026-10-17 fala 4 (P): 1078 unit-AI queues + assess --- */
+
+civ_error_t ai_assess_civ_position(int civ)
+{
+    /* Orig Ai_AssessCivPosition @ 1078:0000 (5248 B; see game.h; caller
+     * Game_TurnLoopTick).
+     * TODO: Orig Map_ScanZOCDetail/GetTileClass/GetContinentId/WrapStepDist
+     * /FindUnitAt/GetOccupancy + Tech_HasTech + Unit_QueueOrder/
+     * FoundCityIfHome + City_Notify/Diplo_ChangeGovernment/Game_Eliminate
+     * + Util_Clamp bridges TBD. */
+    (void)civ;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t unit_queue_restore_orders(int8_t goal_types[32],
+                                      int8_t order_types[16])
+{
+    /* Orig Unit_QueueRestoreOrders @ 1078:448f (goals cleared, orders
+     * with type != 0xFF && <= 2 kept = re-queued, rest dropped). */
+    int i;
+
+    if (!goal_types || !order_types)
+        return CIV_ERR_NOENT;
+    for (i = 0; i < 32; i++)
+        goal_types[i] = (int8_t)0xFF;
+    for (i = 0; i < 16; i++) {
+        if (order_types[i] != (int8_t)0xFF && order_types[i] > 2)
+            order_types[i] = (int8_t)0xFF;
+    }
+    return CIV_OK;
+}
+
+civ_error_t unit_queue_init_orders(int8_t types[16], int8_t prios[16])
+{
+    /* Orig Unit_QueueInitOrders @ 1078:48f8. */
+    int i;
+
+    if (!types || !prios)
+        return CIV_ERR_NOENT;
+    for (i = 0; i < 16; i++) {
+        types[i] = (int8_t)0xFF;
+        prios[i] = 0;
+    }
+    return CIV_OK;
+}
+
+civ_error_t unit_queue_insert_order(int8_t types[16], int8_t prios[16],
+                                    int16_t xs[16], int16_t ys[16], int x,
+                                    int y, int type, int prio)
+{
+    /* Orig Unit_QueueInsertOrder @ 1078:4937 (dedup exact, else
+     * first-free/lower-prio + shift via MakeGap). */
+    int i;
+    int slot = -1;
+
+    if (!types || !prios || !xs || !ys)
+        return CIV_ERR_NOENT;
+    for (i = 0; i < 16; i++) {
+        if (types[i] == (int8_t)type && prios[i] == (int8_t)prio
+            && xs[i] == (int16_t)x && ys[i] == (int16_t)y)
+            return CIV_OK;
+    }
+    for (i = 0; i < 16; i++) {
+        if (types[i] == (int8_t)0xFF || prios[i] < (int8_t)prio) {
+            slot = i;
+            break;
+        }
+    }
+    if (slot < 0)
+        return CIV_ERR_RANGE;
+    {
+        civ_error_t r = unit_queue_make_gap(types, prios, xs, ys, slot);
+
+        if (r != CIV_OK)
+            return r;
+    }
+    types[slot] = (int8_t)type;
+    prios[slot] = (int8_t)prio;
+    xs[slot] = (int16_t)x;
+    ys[slot] = (int16_t)y;
+    return CIV_OK;
+}
+
+civ_error_t unit_queue_make_gap(int8_t types[16], int8_t prios[16],
+                                int16_t xs[16], int16_t ys[16], int slot)
+{
+    /* Orig Unit_QueueMakeGap @ 1078:4a4c (for i = 0xE..slot: occupied
+     * shifts i -> i+1). */
+    int i;
+
+    if (!types || !prios || !xs || !ys)
+        return CIV_ERR_NOENT;
+    if (slot < 0 || slot > 0x0E)
+        return CIV_ERR_RANGE;
+    for (i = 0x0E; i >= slot; i--) {
+        if (types[i] != (int8_t)0xFF) {
+            types[i + 1] = types[i];
+            prios[i + 1] = prios[i];
+            xs[i + 1] = xs[i];
+            ys[i + 1] = ys[i];
+        }
+    }
+    return CIV_OK;
+}
+
+int unit_queue_find_nearest(const int8_t *types, int type)
+{
+    /* Orig Unit_QueueFindNearest @ 1078:4b0d (orphan; see game.h).
+     * TODO: Orig Map_GetContinentId @ 1110:1d99 + Map_WrapStepDist @
+     * 11c8:02ec + DAT_1298_000C best-dist out TBD. */
+    (void)types;
+    (void)type;
+    return -1;
+}
+
+civ_error_t unit_queue_cancel_near(int civ, int type, int x, int y,
+                                   int radius)
+{
+    /* Orig Unit_QueueCancelNear @ 1078:4c1a (see game.h).
+     * TODO: Orig Map_WrapStepDist @ 11c8:02ec bridge TBD. */
+    (void)civ;
+    (void)type;
+    (void)x;
+    (void)y;
+    (void)radius;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t city_reselect_production(int city_idx)
+{
+    /* Orig City_ReselectProduction @ 1078:4d28 (histogram + ChooseProduction;
+     * see game.h).
+     * TODO: Orig City_ChooseProduction @ 1170:05ca + DAT_1420_3f5c table
+     * TBD. */
+    (void)city_idx;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+int ai_choose_coastal_dir(int civ, int x, int y)
+{
+    /* Orig Ai_ChooseCoastalDir @ 1078:4dd2 (9-dir ocean scan; see game.h).
+     * TODO: Orig Map_GetTileClass @ 1110:16c0 + Map_GetUnitAt @ 1110:18ce
+     * + Map_GetTile @ 11e8:0dcf + 12c8/12d0 dir tables TBD (-1 = none,
+     * the Orig miss value). */
+    (void)civ;
+    (void)x;
+    (void)y;
+    return -1;
+}
+
+civ_error_t ai_retarget_sea_units(int city_idx)
+{
+    /* Orig Ai_RetargetSeaUnits @ 1078:5b4e (see game.h).
+     * TODO: Orig unit-table images (62fd/62fe/6302/6303/6306) + WrapStepDist
+     * TBD. */
+    (void)city_idx;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+/* --- Batch 2026-10-17 fala 4 (S+T): census reset + turn-loop + hook --- */
+
+void city_reset_census_state(int16_t *a1328_0012, int16_t *b1d50,
+                             int16_t *b1d4c, int16_t *b1d4a)
+{
+    /* Orig City_ResetCensusState @ 1100:0be5 (4 word stores; caller
+     * City_CloseCensusView @ 1018:0380; neighbours 1420:1d53 "Version
+     * 1.2.0" untouched). */
+    if (a1328_0012)
+        *a1328_0012 = 0;
+    if (b1d50)
+        *b1d50 = 0;
+    if (b1d4c)
+        *b1d4c = 0;
+    if (b1d4a)
+        *b1d4a = 0;
+}
+
+civ_error_t game_fill_scaled_rect(int x, int y, int w, int h)
+{
+    /* Orig Game_FillScaledRect @ 1088:2335 (see game.h; hidden Select/Scale
+     * + DC/brush -> explicit port/rect/pal refactor allowed).
+     * TODO: Orig GfxPort_SelectForCoords @ 1220:0f2f + Gfx_ScaleIconX/Y @
+     * 11e8:0d81/0da8 + SETRECT + Text_SetColor + FILLRECT -> SDL
+     * RenderFillRect bridge TBD. */
+    (void)x;
+    (void)y;
+    (void)w;
+    (void)h;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+int game_calc_triangular_level(int score)
+{
+    /* Orig Game_CalcTriangularLevel @ 1088:23bb (caller score screen @
+     * 1188:11ab; extra pushes there belong to Status_DrawTechIcons). */
+    int step = 0;
+
+    do {
+        step += 5;
+        score -= step;
+    } while (score > 0);
+    return step / 5 - 1;
+}
+
+civ_error_t ship_frame_end_hook(void)
+{
+    /* Orig Ship_FrameEndHook @ 1008:102d (empty per-frame tail of
+     * Ship_AnimateStarfield @ 1070:12b5; WONTFIX-Win16). */
+    return CIV_OK;
+}

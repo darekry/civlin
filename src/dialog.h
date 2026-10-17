@@ -3232,4 +3232,37 @@ civ_error_t dlg_compact_template(int hmem);
  * STUB UNSUPPORTED. */
 civ_error_t dlg_open_indirect(int tmpl_handle, unsigned flags);
 
+/* --- Batch 2026-10-17 fala 4 (R+T): item/show/text + cursor read ---
+ *   Dlg_ShowItem @ 1100:08a6, Dlg_HideItem @ 1100:08d3, Dlg_HookItemState
+ *   @ 1100:0900, Dlg_SendItemUserMsg401 @ 1100:0913, Dlg_GetWindowText255
+ *   @ 1100:0970, Text_NextCharInc @ 1098:013d. */
+
+/* Orig Dlg_ShowItem @ 1100:08a6 (GetDlgItem @ 1608:0124 + ShowWindow @
+ * 1608:00d0 SW_SHOW = 5; orphan) and twin Dlg_HideItem @ 1100:08d3
+ * (SW_HIDE = 0). Dialog facade TBD -> STUBs UNSUPPORTED. */
+civ_error_t dlg_show_item(int hdlg, int item);
+civ_error_t dlg_hide_item(int hdlg, int item);
+
+/* Orig Dlg_HookItemState @ 1100:0900 (empty, ignores (item,val); 3
+ * callers in Dlg_UpdateItemEnableShow @ 1098:2829 with 0/0xff/1).
+ * WONTFIX-Win16 NOOP. */
+civ_error_t dlg_hook_item_state(int item, int val);
+
+/* Orig Dlg_SendItemUserMsg401 @ 1100:0913 (SendDlgItemMessage @ 1608:0128
+ * Msg = 0x401 WM_USER+1, wParam = 0, lParam = MAKELONG(lo,hi); callers
+ * FUN_10f0_0066 + NewGame_CustomWorldModal @ 1220:1832 with hi = 999).
+ * Control semantics TBD (no guessed LB/EM decoder) -> STUB. */
+civ_error_t dlg_send_item_user_msg401(int hdlg, int item, int lo, int hi);
+
+/* Orig Dlg_GetWindowText255 @ 1100:0970 (GETWINDOWTEXT @ 1608:00bc with
+ * nMaxCount 0xff; sole caller Dlg_CopyItemTextToFar @ 1098:2735 via 256 B
+ * stack buf). Text facade TBD -> STUB (*out untouched). */
+civ_error_t dlg_get_window_text255(int hwnd, char *buf, int cap,
+                                   int *out_len);
+
+/* Orig Text_NextCharInc @ 1098:013d (LES far byte + CBW; the INC touches
+ * only the callee-stack copy, caller-visible effect nil; orphan).
+ * LIVE pure deref on explicit pointer (far -> flat). NULL -> NOENT. */
+int text_next_char_inc(const uint8_t *s);
+
 #endif /* CIVLIN_DIALOG_H */

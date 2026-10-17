@@ -3892,4 +3892,98 @@ int ship_validate_placement(int w_cells, int h_cells, int x0, int y0);
  * untouched). */
 civ_error_t ship_poll_launch_confirm(long tick, const char **out);
 
+/* --- Batch 2026-10-17 fala 4 (P): 1078 unit-AI queues + assess ---
+ * Renamed this pass:
+ *   Ai_AssessCivPosition @ 1078:0000, Unit_QueueRestoreOrders @ 1078:448f,
+ *   Unit_QueueInitOrders @ 1078:48f8, Unit_QueueInsertOrder @ 1078:4937,
+ *   Unit_QueueMakeGap @ 1078:4a4c, Unit_QueueFindNearest @ 1078:4b0d,
+ *   Unit_QueueCancelNear @ 1078:4c1a, City_ReselectProduction @ 1078:4d28,
+ *   Ai_ChooseCoastalDir @ 1078:4dd2, Ai_RetargetSeaUnits @ 1078:5b4e.
+ * Queue tables: per-civ 0x10 order slots (type @ 1298:0192, prio @ 0112,
+ * x @ 0212, y @ 0292) + 0x20 goal slots (type @ +0412); hidden SEG ->
+ * explicit arrays. */
+
+/* Orig Ai_AssessCivPosition @ 1078:0000 (5248 B civ census: continent
+ * tables, 0x80 units + 0x80 cities scan, threat, eliminate/gov switch,
+ * attack/found orders, settler goals; sole caller Game_TurnLoopTick @
+ * 1088:0000). Entangled with STUB callees (FoundCityIfHome, Notify,
+ * ChooseProduction) -> STUB UNSUPPORTED with TODO. */
+civ_error_t ai_assess_civ_position(int civ);
+
+/* Orig Unit_QueueRestoreOrders @ 1078:448f (32 goal slots type = 0xFF /
+ * moves = 0; 16 order slots with type != 0xFF && <= 2 re-queued; sole
+ * caller TurnLoopTick). Re-queue is a keep (QueueOrder stores) -> LIVE
+ * pure: clears goals + drops type > 2. */
+civ_error_t unit_queue_restore_orders(int8_t goal_types[32],
+                                      int8_t order_types[16]);
+
+/* Orig Unit_QueueInitOrders @ 1078:48f8 (16 slots type = 0xFF / prio = 0;
+ * sole caller NewGame_InitCivState @ 10e8:12b5). LIVE pure. */
+civ_error_t unit_queue_init_orders(int8_t types[16], int8_t prios[16]);
+
+/* Orig Unit_QueueInsertOrder @ 1078:4937 (pass1 exact-match return; pass2
+ * first free/lower-prio + MakeGap shift + store; sole caller
+ * Unit_ChooseOrder @ 1078:1480). LIVE pure on explicit arrays. */
+civ_error_t unit_queue_insert_order(int8_t types[16], int8_t prios[16],
+                                    int16_t xs[16], int16_t ys[16], int x,
+                                    int y, int type, int prio);
+
+/* Orig Unit_QueueMakeGap @ 1078:4a4c (for i = 0xE..slot: if occupied
+ * shift i -> i+1 across the 4 field arrays; sole caller InsertOrder).
+ * LIVE pure. */
+civ_error_t unit_queue_make_gap(int8_t types[16], int8_t prios[16],
+                                int16_t xs[16], int16_t ys[16], int slot);
+
+/* Orig Unit_QueueFindNearest @ 1078:4b0d (16-slot scan type == param2
+ * with continent gate, cost = WrapDist/(moves+1), min wins; orphan).
+ * Needs Map_GetContinentId/WrapStepDist bridges -> STUB. */
+int unit_queue_find_nearest(const int8_t *types, int type);
+
+/* Orig Unit_QueueCancelNear @ 1078:4c1a (consume type == param2 orders
+ * within WrapDist <= radius; callers City_FoundCity @ 1040:0000 +
+ * ChooseOrder + Unit_DoMove @ 1038:0000). Same bridge TBD -> STUB. */
+civ_error_t unit_queue_cancel_near(int civ, int type, int x, int y,
+                                   int radius);
+
+/* Orig City_ReselectProduction @ 1078:4d28 (dec old prod histogram @
+ * 1420:3f5c, prod = City_ChooseProduction @ 1170:05ca, inc new; callers
+ * City_NotifyCivCities @ 1078:4ca5 + Pic_PlayShared capture path).
+ * ChooseProduction STUB -> STUB UNSUPPORTED. */
+civ_error_t city_reselect_production(int city_idx);
+
+/* Orig Ai_ChooseCoastalDir @ 1078:4dd2 (9-dir ocean(10) harbor scan, max
+ * land-neighbour score; sole caller ChooseOrder). Needs Map_GetTileClass
+ * /GetUnitAt/GetTile bridges -> -1 (none, the Orig miss value) with TODO. */
+int ai_choose_coastal_dir(int civ, int x, int y);
+
+/* Orig Ai_RetargetSeaUnits @ 1078:5b4e (on combat: enemy transports on
+ * ocean within 3*range retarget to city; sole caller Combat_ResolveAttack
+ * @ 1050:0000). Needs unit-table images -> STUB UNSUPPORTED. */
+civ_error_t ai_retarget_sea_units(int city_idx);
+
+/* --- Batch 2026-10-17 fala 4 (S+T): census reset + turn-loop + hook ---
+ *   City_ResetCensusState @ 1100:0be5, Game_FillScaledRect @ 1088:2335,
+ *   Game_CalcTriangularLevel @ 1088:23bb, Ship_FrameEndHook @ 1008:102d. */
+
+/* Orig City_ResetCensusState @ 1100:0be5 (zero DAT_1328_0012 +
+ * DAT_1420_1d50/1d4c/1d4a; sole caller City_CloseCensusView @ 1018:0380).
+ * LIVE pure (explicit outs; hidden statics -> params). */
+void city_reset_census_state(int16_t *a1328_0012, int16_t *b1d50,
+                             int16_t *b1d4c, int16_t *b1d4a);
+
+/* Orig Game_FillScaledRect @ 1088:2335 (GfxPort_SelectForCoords @
+ * 1220:0f2f + ScaleIconX/Y @ 11e8:0d81/0da8 + SETRECT + Text_SetColor
+ * DAT_12d8_45fb + FILLRECT via DAT_1420_9960; orphan). Port/DC bridge
+ * TBD -> STUB UNSUPPORTED. */
+civ_error_t game_fill_scaled_rect(int x, int y, int w, int h);
+
+/* Orig Game_CalcTriangularLevel @ 1088:23bb (CX = 0; do { CX += 5; score
+ * -= CX; } while (score > 0); return CX/5-1; sole caller score screen @
+ * 1188:11ab -> Status_DrawTechIcons). LIVE pure. */
+int game_calc_triangular_level(int score);
+
+/* Orig Ship_FrameEndHook @ 1008:102d (empty; sole caller
+ * Ship_AnimateStarfield @ 1070:12b5 per-frame tail). WONTFIX-Win16 NOOP. */
+civ_error_t ship_frame_end_hook(void);
+
 #endif /* CIVLIN_GAME_H */

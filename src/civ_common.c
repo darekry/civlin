@@ -630,3 +630,29 @@ void *util_mem_set_far(void *dst, int c, size_t n)
     /* Orig Util_MemSetFar @ 1000:40f6 (wrapper reordering to core). */
     return util_mem_set_far_core(dst, c, n);
 }
+
+/* --- Batch 2026-10-17 fala 4 (Q+S): swap + strupper --- */
+
+uint16_t util_swap_bytes16(uint16_t x)
+{
+    /* Orig Util_SwapBytes16 @ 1100:0565 (twin of util_byte_swap16). */
+    return util_byte_swap16(x);
+}
+
+uint32_t util_swap_bytes32(uint16_t lo, uint16_t hi)
+{
+    /* Orig Util_SwapBytes32 @ 1100:0586 ((bswap lo)<<16 | bswap hi). */
+    return ((uint32_t)util_byte_swap16(lo) << 16) | util_byte_swap16(hi);
+}
+
+char *util_str_upper(char *s)
+{
+    /* Orig Util_StrUpper @ 1100:0b9d (0xFFFF passthrough kept). */
+    size_t i;
+
+    if (!s)
+        return NULL;
+    for (i = 0; s[i] != '\0'; i++)
+        s[i] = (char)util_to_upper(s[i] & 0xFF);
+    return s;
+}

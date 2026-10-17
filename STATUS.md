@@ -237,6 +237,12 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `boot_empty_thunk_0d4c` | NOOP | 1008:0d4c |  |
 | `boot_empty_thunk_0d5a` | NOOP | 1008:0d5a |  |
 | `boot_empty_thunk_0e02` | NOOP | 1008:0e02 |  |
+| `win_destroy_window_and_clear` | STUB | 1100:03bb, 1608:00dc | has TODO |
+| `win_resize_window_stored_rect` | STUB | 1100:04e1, 1608:00ac, 1608:00e0 | has TODO |
+| `win_is_point_in_client_rect` | LIVE | 1100:0534, 1608:0104 |  |
+| `main_pump_until_quit` | STUB | 1008:0f2b, 1038:0c1d, 1098:062f, 1420:54e6, 1420:54e8 | has TODO |
+| `main_noop_stub` | LIVE | 1008:0acb, 1008:101d |  |
+| `main_beep_repeated` | STUB | 1008:103d, 1608:012c | has TODO |
 
 ### `src/civ_common.c`
 
@@ -285,6 +291,9 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `util_mem_copy_far_dst_first` | LIVE | 1000:137f, 1000:40aa, 1098:2a85, 10c0:0413 |  |
 | `util_mem_set_far_core` | LIVE | 1000:29c4, 1000:40d0 |  |
 | `util_mem_set_far` | LIVE | 1000:40f6, 10c0:013d |  |
+| `util_swap_bytes16` | LIVE | 10b8:11bc, 1100:0565, 1140:04b5 |  |
+| `util_swap_bytes32` | LIVE | 1100:0586 |  |
+| `util_str_upper` | LIVE | 1000:1978, 1000:3722, 1068:1dd7, 1100:0b9d |  |
 
 ### `src/dialog.c`
 
@@ -585,6 +594,12 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `dlg_append_template_item` | STUB | 1098:2c36 | has TODO |
 | `dlg_compact_template` | STUB | 1098:2def | has TODO |
 | `dlg_open_indirect` | STUB | 1098:124f, 1098:2e41, 1608:0184 | has TODO |
+| `dlg_show_item` | STUB | 1100:08a6, 1100:08d3, 1608:00d0, 1608:0124 | has TODO |
+| `dlg_hide_item` | STUB | 1100:08d3 |  |
+| `dlg_hook_item_state` | LIVE | 1098:2829, 1100:0900 |  |
+| `dlg_send_item_user_msg401` | STUB | 1100:0913, 1220:1832, 1608:0128 | has TODO |
+| `dlg_get_window_text255` | STUB | 1098:2735, 1100:0970, 1608:00bc | has TODO |
+| `text_next_char_inc` | LIVE | 1098:013d |  |
 
 ### `src/game.c`
 
@@ -1002,6 +1017,20 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `ship_can_place_at` | LIVE | 1070:11f2, 1070:1e77, 1420:12b0 |  |
 | `ship_validate_placement` | LIVE | 1070:1cfa, 1070:1dfb |  |
 | `ship_poll_launch_confirm` | STUB | 1010:00d6, 1420:13D2 | has TODO |
+| `ai_assess_civ_position` | STUB | 1078:0000, 1088:0000 | has TODO |
+| `unit_queue_restore_orders` | LIVE | 1078:448f |  |
+| `unit_queue_init_orders` | LIVE | 1078:48f8, 10e8:12b5 |  |
+| `unit_queue_insert_order` | LIVE | 1078:1480, 1078:4937 |  |
+| `unit_queue_make_gap` | LIVE | 1078:4a4c |  |
+| `unit_queue_find_nearest` | LIVE | 1078:4b0d, 1110:1d99, 11c8:02ec |  |
+| `unit_queue_cancel_near` | STUB | 1038:0000, 1040:0000, 1078:4c1a, 11c8:02ec | has TODO |
+| `city_reselect_production` | STUB | 1078:4ca5, 1078:4d28, 1170:05ca, 1420:3f5c | has TODO |
+| `ai_choose_coastal_dir` | LIVE | 1078:4dd2, 1110:16c0, 1110:18ce, 11e8:0dcf |  |
+| `ai_retarget_sea_units` | STUB | 1050:0000, 1078:5b4e | has TODO |
+| `city_reset_census_state` | LIVE | 1018:0380, 1100:0be5, 1420:1d53 |  |
+| `game_fill_scaled_rect` | STUB | 1088:2335, 11e8:0d81, 1220:0f2f | has TODO |
+| `game_calc_triangular_level` | LIVE | 1088:23bb, 1188:11ab |  |
+| `ship_frame_end_hook` | LIVE | 1008:102d, 1070:12b5 |  |
 
 ### `src/gfx_indexed.c`
 
@@ -1126,6 +1155,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `mainmenu_tick_is_due` | LIVE | 1100:02e1, 1220:0156, 1220:0202, 1220:0cfd, 1420:435b, 1420:4a41 |  |
 | `mainmenu_menuz_timer_ok` | LIVE | 1100:02e1, 1220:0156, 1220:0202, 1220:0cfd, 1420:4a41 |  |
 | `mainmenu_menuz_tail_ok` | LIVE | 11e0:0221, 1220:0156 |  |
+| `menu_show_help_contents` | STUB | 1000:116a, 1000:1184, 1048:01cd, 1048:04e8, 1228:0002, 12b0:0004, 1608:016c | has TODO |
 
 ### `src/map.c`
 
@@ -1417,6 +1447,8 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `res_get_string_copy` | PARTIAL | 1000:299e, 1100:078a, 1190:09ed, 1190:0aea, 11f8:0080, 13f8:0000 | has TODO |
 | `res_get_string_raw` | PARTIAL | 1100:078a, 1190:0aea, 11f8:00c5, 13f8:0000 | has TODO |
 | `res_blob_entry_kind` | LIVE | 1100:078a |  |
+| `res_free_resource_loop` | STUB | 1100:0263, 1608:0038 | has TODO |
+| `res_find_and_load` | STUB | 1100:028a, 1420:54fa, 1608:0030, 1608:0034 | has TODO |
 
 ### `src/save.c`
 
@@ -1656,6 +1688,12 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `mem_release_handle` | STUB | 1000:4961 | has TODO |
 | `mem_alloc_with_mode` | STUB | 1000:41e4, 1000:46f1, 1000:498c | has TODO |
 | `mem_free_with_mode` | STUB | 1000:4239, 1000:4870, 1000:4a52 | has TODO |
+| `rng_next15` | LIVE | 1000:1729, 10b0:151b, 1100:03ea |  |
+| `mem_get_global_size` | STUB | 1068:1dd7, 1100:0212, 1100:0ab7, 1608:0014 | has TODO |
+| `mem_get_global_size_alt` | STUB | 1100:0ab7 |  |
+| `sys_poll_lbutton_down` | STUB | 1100:0a5d | has TODO |
+| `sys_reserved_stub` | LIVE | 1100:0a20 |  |
+| `sys_wait_date_delay` | STUB | 1000:18d4, 1008:0fcb | has TODO |
 
 ### `src/title.c`
 
@@ -1844,6 +1882,16 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `gfx_return_one_alt` | LIVE | 1098:200a, 1098:26c1 |  |
 | `gfx_return_true_byte` | LIVE | 1098:2715 |  |
 | `gfx_noop_gap_2727` | LIVE | 1098:2727 |  |
+| `gfx_fill_stack_rect` | STUB | 1000:14f8, 1100:0876, 1608:0110 | has TODO |
+| `gfx_pre_store_stub` | LIVE | 10e8:012e, 1100:0996, 1100:0a0d, 1108:02cf, 1420:B3C2 |  |
+| `gfx_post_set_dc_stub` | LIVE | 1100:0a0d |  |
+| `gfx_validate_stored_rect` | STUB | 1030:5732, 1100:09a9, 1100:09e7, 1608:014c | has TODO |
+| `gfx_stroke_rect` | STUB | 1100:0ae5, 1420:9960 | has TODO |
+| `palette_push_palette` | STUB | 1068:06af, 1090:015e, 1098:28e4 | has TODO |
+| `palette_pop_palette` | STUB | 1068:1bc6, 1090:02d2, 1090:0376 | has TODO |
+| `palette_zero_god_palette` | STUB | 1090:05db | has TODO |
+| `palette_clear_range_flags` | STUB | 1090:0670, 1090:06fd | has TODO |
+| `palette_set_range_flags` | STUB | 1090:06fd | has TODO |
 
 ### `src/win16.c`
 
@@ -1949,3 +1997,4 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `worldgen_video_caps_query_at` | LIVE |  |  |
 | `worldgen_video_caps_needs_raster_ext` | LIVE |  |  |
 | `worldgen_show_video_caps_dialog` | PARTIAL | 1038:0c1d, 1060:0000, 1060:005b, 1060:00d1, 1060:01c1, 1098:124f, 1098:1612 | has TODO |
+| `map_is_link_grid_in_bounds` | LIVE | 1028:12c6, 1028:162c, 1028:1acf, 1248:0004 |  |

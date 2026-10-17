@@ -3225,3 +3225,28 @@ const char *res_blob_entry_kind(unsigned table)
         return "?";
     }
 }
+
+/* --- Batch 2026-10-17 fala 4 (Q): Win16 resource wrappers --- */
+
+rsc_error_t res_free_resource_loop(int hres)
+{
+    /* Orig Res_FreeResourceLoop @ 1100:0263 (FREERESOURCE loop-until-0).
+     * TODO: Orig FREERESOURCE @ 1608:0038 -> res-handle facade TBD. */
+    (void)hres;
+    return RSC_ERR_UNSUPPORTED;
+}
+
+rsc_error_t res_find_and_load(int a, int b, int c, int d, int *h_out)
+{
+    /* Orig Res_FindAndLoad @ 1100:028a (FIND+LOAD with g_nHInstance;
+     * 0 on either miss).
+     * TODO: Orig FINDRESOURCE/LOADRESOURCE @ 1608:0030/0034 -> res/instance
+     * facade TBD (*out untouched). */
+    (void)a;
+    (void)b;
+    (void)c;
+    (void)d;
+    if (!h_out)
+        return RSC_ERR_NOENT;
+    return RSC_ERR_UNSUPPORTED;
+}

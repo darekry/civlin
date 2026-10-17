@@ -351,4 +351,22 @@ void *util_mem_set_far_core(void *dst, int c, size_t n);
  * delegate, same contract. */
 void *util_mem_set_far(void *dst, int c, size_t n);
 
+/* --- Batch 2026-10-17 fala 4 (Q+S): swap + strupper ---
+ *   Util_SwapBytes16 @ 1100:0565, Util_SwapBytes32 @ 1100:0586,
+ *   Util_StrUpper @ 1100:0b9d. All LIVE OS-free 1:1. */
+
+/* Orig Util_SwapBytes16 @ 1100:0565 (BL/BH bswap16; callers
+ * Art_LoadResPaletted @ 10b8:11bc x2 w/h endian fix; behavior-twin of
+ * util_byte_swap16 @ 1140:04b5). Thin delegate (alias pattern). */
+uint16_t util_swap_bytes16(uint16_t x);
+
+/* Orig Util_SwapBytes32 @ 1100:0586 (dual bswap + combine =
+ * bswap32((hi<<16)|lo); orphan). */
+uint32_t util_swap_bytes32(uint16_t lo, uint16_t hi);
+
+/* Orig Util_StrUpper @ 1100:0b9d (strupr via StrLen @ 1000:3722 +
+ * ToUpper @ 1000:1978 per byte; caller Text_ShowTextByName @ 1068:1dd7).
+ * NULL -> NULL (orig faulted). */
+char *util_str_upper(char *s);
+
 #endif /* CIVLIN_COMMON_H */

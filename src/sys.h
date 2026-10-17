@@ -1560,4 +1560,36 @@ civ_error_t mem_alloc_with_mode(unsigned mode, size_t n, void **out);
  * @ 1000:4239). STUB. */
 civ_error_t mem_free_with_mode(void *p, unsigned mode);
 
+/* --- Batch 2026-10-17 fala 4 (Q+R+T): rng/mem/win/poll/date ---
+ *   Rng_Next15 @ 1100:03ea, Mem_GetGlobalSize @ 1100:0212,
+ *   Mem_GetGlobalSizeAlt @ 1100:0ab7, Sys_PollLButtonDown @ 1100:0a5d,
+ *   Sys_ReservedStub @ 1100:0a20, Sys_WaitDateDelay @ 1008:0fcb. */
+
+/* Orig Rng_Next15 @ 1100:03ea (far thunk to Rng_NextRaw @ 1000:1729,
+ * 0..0x7FFF; callers Anim_SetupDissolve @ 10b0:151b x3). LIVE thin
+ * delegate (same alias pattern as util_to_lower_alias). */
+uint16_t rng_next15(void);
+
+/* Orig Mem_GetGlobalSize @ 1100:0212 (GLOBALSIZE @ 1608:0014; callers
+ * Text_ShowTextByName @ 1068:1dd7 x2 + FUN_11d0_0115) and twin
+ * Mem_GetGlobalSizeAlt @ 1100:0ab7 (same GLOBALSIZE shape, orphan).
+ * Win16 handle table TBD -> STUBs UNSUPPORTED (*out untouched). */
+civ_error_t mem_get_global_size(int hmem, unsigned long *out_size);
+civ_error_t mem_get_global_size_alt(int hmem, unsigned long *out_size);
+
+/* Orig Sys_PollLButtonDown @ 1100:0a5d (PEEKMESSAGE drain mouse
+ * 0x200-0x209 PM_REMOVE, clicked = msg == 0x201; callers 11b0 x3 +
+ * 11b8 modal waits). SDL mouse-button filter TBD -> STUB (*out = 0,
+ * never fake click). */
+civ_error_t sys_poll_lbutton_down(int *out_clicked);
+
+/* Orig Sys_ReservedStub @ 1100:0a20 (empty, no callers; sibling of
+ * 0900/0996/0a0d empties). WONTFIX-Win16 NOOP. */
+civ_error_t sys_reserved_stub(void);
+
+/* Orig Sys_WaitDateDelay @ 1008:0fcb (start = Sys_GetDate @ 1000:18d4,
+ * poll until now >= start + delay; orphan). Packed-date -> tick bridge
+ * TBD -> STUB UNSUPPORTED. */
+civ_error_t sys_wait_date_delay(int delay);
+
 #endif /* CIVLIN_SYS_H */
