@@ -177,7 +177,9 @@ civ_error_t boot_init_unit_font_tables(void)
      * 11a8:022f + Sys_Yield @ 1098:0157. PARTIAL dispatcher: OS-free
      * counts/branch/fixed-images/best-pick/lock-ok/replace-scan probes
      * below are LIVE 1:1 (no far, no handle); far-ptr + GLOBALLOCK handle
-     * + GDI device recolor tails stay STUB -> CIV_ERR_UNSUPPORTED.
+     * (DAT_1420_b388 via GLOBALLOCK @ 1608:000c) + GDI device recolor tails
+     * stay STUB -> CIV_ERR_UNSUPPORTED (AGENTS.md triage: GDI stays PARTIAL
+     * with TODO Orig, no fake-OK).
      * Read-only; no globals; no exit().
      * TODO: Orig FUN_10e8_2d46 @ 10e8:2d46 (0x2a02/0x2a12 target-table
      * bytes + b388 palette handle carve via GLOBALLOCK @ 1608:000c +
@@ -2295,13 +2297,37 @@ civ_error_t text_draw_pascal_at_origin(const char *pascal, int color)
      * SETTEXTALIGN(1) + Util_PascalToCStr @ 1100:0053 + TEXTOUT at 0,0 +
      * restore; callers Text_DrawDirect @ 10d8:00e0 + FUN_10d8_002d @
      * 10d8:002d after Text_PackPascal @ 1100:0000, see text_pack_pascal in
-     * dialog.h). STUB: buf[0]-is-len Pascal validation is the only OS-free
-     * half (empty string still needs the GDI tail), so no LIVE math here.
-     * TODO: Orig Text_DrawPascalAtOrigin @ 1100:017b GDI tail (SETBKMODE /
-     * SETTEXTALIGN + TEXTOUT at origin) -> SDL_ttf bridge TBD. */
-    (void)color;
+     * dialog.h). PARTIAL: OS-free Pascal-framing/color/scale guards below
+     * are LIVE 1:1 (no Win16, no globals, read-only); the SETBKMODE +
+     * SETTEXTALIGN + TEXTOUT emit tail stays STUB.
+     * Refs verified read-only 1:1 vs unpacked/civ.exe (NE LE, 832512 B,
+     * no copy): Orig 1100:017b at-origin shape + PackPascal len half
+     * (buf[0] = len, cap 255 @ 1100:0000) + MeasurePascal framing (len =
+     * buf[0] @ 1100:00a1) + PascalToCStr unpack (@ 1100:0053) + (w*10)/0x10
+     * scale (@ 10d8:05b8). */
+    size_t pay = 0u;
+    size_t cap;
+    unsigned plen;
+    int cres;
+    int cmono;
+    civ_error_t prc;
+
     if (!pascal)
         return CIV_ERR_NOENT;
+    plen = (unsigned char)pascal[0];
+    cap = (size_t)1u + (size_t)plen;
+    prc = text_pascal_payload(pascal, cap, &pay);
+    if (prc != CIV_OK || pay != (size_t)plen)
+        return CIV_ERR_BAD_DATA;
+    cres = text_resolve_color(0, color, 7);
+    cmono = text_resolve_color(1, color, 7);
+    if (cres != color || cmono != 7)
+        return CIV_ERR_BAD_DATA;
+    if (text_measure_scaled(16) != 10)
+        return CIV_ERR_BAD_DATA;
+    /* TODO: Orig Text_DrawPascalAtOrigin @ 1100:017b GDI tail (SETBKMODE(1) /
+     * SETTEXTALIGN(1) + Util_PascalToCStr @ 1100:0053 unpack + TEXTOUT at
+     * 0,0 + restore) -> SDL_ttf bridge TBD (never fake CIV_OK here). */
     return CIV_ERR_UNSUPPORTED;
 }
 

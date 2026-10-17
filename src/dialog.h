@@ -2425,13 +2425,16 @@ int text_wrapped_list_cap(void);
 
 /* Orig Text_DrawAlignedList @ 1068:258f GDI tail (SELECTOBJECT slot +
  * SETBKMODE(1) + GLOBALLOCK + per-row Measure + TEXTOUT + UNLOCK/SELECT
- * restore). SDL_ttf bridge TBD; stub CIV_ERR_UNSUPPORTED. Layout lives in
- * text_aligned_list_* above (LIVE). No globals, no exit(). */
+ * restore). PARTIAL dispatcher: OS-free layout probes LIVE in dialog.c
+ * (text_aligned_list_x/row_y/should_stop/needs_unlock + cap, same set as
+ * the boot-owned boot_draw_aligned_list twin); SDL_ttf bridge TBD ->
+ * CIV_ERR_UNSUPPORTED (never fake CIV_OK). No globals, no exit(). */
 civ_error_t text_draw_aligned_list(int handle, int mode);
 
 /* Orig Text_DrawAlignedListFree @ 1068:255a (trace + List + GLOBALFREE).
- * Same GDI tail + trace; stub CIV_ERR_UNSUPPORTED. Free gate lives in
- * text_aligned_list_needs_unlock above (LIVE). */
+ * PARTIAL dispatcher: free-gate probe LIVE in dialog.c via
+ * text_aligned_list_needs_unlock (handle != 0); trace + List + GLOBALFREE
+ * tail STUB -> CIV_ERR_UNSUPPORTED. */
 civ_error_t text_draw_aligned_list_free(int handle, int mode);
 
 /* --- Chain 2026-10-16 (29): Text_BuildWrappedList wrap rules (task goal 1) ---

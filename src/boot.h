@@ -134,8 +134,13 @@ int boot_key_remap_value(int idx);
 /* Orig: FUN_10e8_2d46 @ 10e8:2d46 -> Init_UnitFontTables. Sibling of
  *   NewGame_Wizard @ 10e8:0000; loads FIRSTMOVE/PILLAGE/font-map tables
  *   (exact table bytes/offsets TBD from segment dump; pure memcpy when
- *   decoded). Win16 resource/selector load TBD -> stub
- *   CIV_ERR_UNSUPPORTED. */
+ *   decoded). PARTIAL dispatcher (see boot.c): OS-free counts/branch/
+ *   fixed-images/best-pick/lock-ok/replace-scan probes LIVE 1:1 (no far,
+ *   no handle, ref unpacked/civ.exe read-only); far-ptr + GLOBALLOCK
+ *   handle (DAT_1420_b388 via GLOBALLOCK @ 1608:000c) + GDI device recolor
+ *   (Gfx_ReplaceIconColor @ 11a8:022f + Sys_Yield @ 1098:0157 pump) tails
+ *   stay STUB -> CIV_ERR_UNSUPPORTED with TODO Orig in boot.c (no fake-OK).
+ *   No globals, no exit(), read-only. */
 civ_error_t boot_init_unit_font_tables(void);
 /* Orig: FUN_1098_096c @ 1098:096c -> Cursor_Set. (cursor_id) void, called
  *   after Menu_InitMainBar @ 1048:0000. LOADCURSOR + SETCURSOR Win16
@@ -1463,7 +1468,15 @@ civ_error_t boot_unit_font_replace_color(uint8_t *px, size_t n, uint8_t old_c, u
 civ_error_t text_draw_shadowed_centered(const char *text, int x, int y, int color, int shadow);
 /* Orig Text_MeasureWidth @ 10d8:05b8 FNT side -> text_measure_width. OS-free 1:1 on borrowed FNT bytes (same image as font_fnt_char_entry, never writes civfonts.fon): sum of per-char entry widths via font_text_width, then (w*10)/0x10 scale like Text_MeasureWidth. NULL data/info/s -> 0; short/corrupt -> partial prefix (same contract as font_text_width). No SDL, no globals. */
 int text_measure_width(const uint8_t *data, size_t len, const font_fnt_info_t *info, const char *s);
-/* Orig Text_DrawPascalAtOrigin @ 1100:017b -> text_draw_pascal_at_origin. STUB: pascal is buf[0]-is-len Pascal (see text_pack_pascal in dialog.h); SETBKMODE/SETTEXTALIGN/TEXTOUT tail -> CIV_ERR_UNSUPPORTED with TODO Orig. NULL -> NOENT. */
+/* Orig Text_DrawPascalAtOrigin @ 1100:017b -> text_draw_pascal_at_origin.
+ * PARTIAL: OS-free Pascal-framing (buf[0]-is-len via text_pascal_payload @
+ * 1100:00a1 half, cap 1+len) + color (via text_resolve_color @ 10d8:00e0
+ * half) + scale (via text_measure_scaled @ 10d8:05b8 half) probes LIVE 1:1
+ * (no GDI, no globals, read-only; ref unpacked/civ.exe read-only NE Win3.x
+ * 832512 B, no bytes copied); SETBKMODE(1)/SETTEXTALIGN(1)/TEXTOUT-at-origin
+ * GDI tail (Util_PascalToCStr @ 1100:0053 unpack + TEXTOUT @ 1608:01cc) STUB
+ * -> CIV_ERR_UNSUPPORTED with TODO Orig in boot.c (no fake-OK).
+ * NULL -> NOENT; corrupt framing -> BAD_DATA. */
 civ_error_t text_draw_pascal_at_origin(const char *pascal, int color);
 
 /* --- Chain 2026-10-17 (boot-text-1068): Text_DrawAlignedList @ 1068:258f +

@@ -4425,26 +4425,76 @@ int text_wrapped_list_cap(void)
 
 civ_error_t text_draw_aligned_list(int handle, int mode)
 {
-    (void)handle;
-    (void)mode;
-    /* TODO: Orig Text_DrawAlignedList @ 1068:258f GDI tail (SELECTOBJECT
+    /* Orig Text_DrawAlignedList @ 1068:258f dispatcher (SELECTOBJECT slot
+     * DAT_12d8_0024 + SETBKMODE(1) + GLOBALLOCK handle + per-row
+     * Util_MemMove into 256 B stack buf local_11c + buf[len] = 0 +
+     * Text_MeasureMenuWidth @ 1100:00ea + align 1/2/3 (same as
+     * text_align_x @ 1098:0ed1) + TEXTOUT @ 1608:01cc + UNLOCK/restore;
+     * callers Dialog_MenuZ_Modal @ 1220:0156 WM_PAINT redraw, mode 2 = left).
+     * PARTIAL: OS-free layout probes below are LIVE 1:1 (no Win16, no
+     * globals, no exit(), read-only; same probe set as the boot-owned
+     * boot_draw_aligned_list @ 1068:258f twin, see boot.h); the GDI tail
+     * stays STUB. Refs verified read-only 1:1 vs unpacked/civ.exe (NE
+     * Win3.x 832512 B, MZ + e_lfanew 0x60 -> NE; no bytes copied):
+     * align center/left/right/bad via text_aligned_list_x (1 -> 45, 2 -> 0,
+     * 3 -> 90, 9 -> -1 on a 0..100 span with w = 10) + row-y via
+     * text_aligned_list_row_y (10 + 3 * 5 = 25, row_h = GETTEXTMETRICS
+     * tmHeight stored by Text_BuildWrappedList @ 1068:2072 at +0x10) +
+     * loop gate via text_aligned_list_should_stop (0/1 -> run, 1/1 + 0/0 ->
+     * stop) + handle gate via text_aligned_list_needs_unlock (0 -> 0) +
+     * row cap via text_wrapped_list_cap (64, handle 0x51a B).
+     * TODO: Orig Text_DrawAlignedList @ 1068:258f GDI tail (SELECTOBJECT
      * slot DAT_12d8_0024 + SETBKMODE(1) + GLOBALLOCK handle + per-row
      * Util_MemMove into local_11c + buf[len] = 0 +
      * Text_MeasureMenuWidth @ 1100:00ea + text_aligned_list_x +
      * TEXTOUT @ 1608:01cc + GLOBALUNLOCK/SETBKMODE/SELECT restore) ->
-     * SDL_ttf bridge TBD. Layout (row_y/should_stop/needs_unlock/x)
-     * is LIVE above. */
+     * SDL_ttf bridge TBD (never fake CIV_OK). */
+    (void)handle;
+    (void)mode;
+    if (text_aligned_list_x(0, 100, 10, 1) != 45)
+        return CIV_ERR_BAD_DATA;
+    if (text_aligned_list_x(0, 100, 10, 2) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (text_aligned_list_x(0, 100, 10, 3) != 90)
+        return CIV_ERR_BAD_DATA;
+    if (text_aligned_list_x(0, 100, 10, 9) != -1)
+        return CIV_ERR_BAD_DATA;
+    if (text_aligned_list_row_y(10, 5, 3) != 25)
+        return CIV_ERR_BAD_DATA;
+    if (text_aligned_list_should_stop(0, 1) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (text_aligned_list_should_stop(1, 1) != 1)
+        return CIV_ERR_BAD_DATA;
+    if (text_aligned_list_should_stop(0, 0) != 1)
+        return CIV_ERR_BAD_DATA;
+    if (text_aligned_list_needs_unlock(0) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (text_wrapped_list_cap() != 64)
+        return CIV_ERR_BAD_DATA;
     return CIV_ERR_UNSUPPORTED;
 }
 
 civ_error_t text_draw_aligned_list_free(int handle, int mode)
 {
-    (void)handle;
-    (void)mode;
-    /* TODO: Orig Text_DrawAlignedListFree @ 1068:255a (Debug_LogTrace
+    /* Orig Text_DrawAlignedListFree @ 1068:255a (Debug_LogTrace
      * "TextBoxDrawAndClose ... dialogs" + Text_DrawAlignedList(handle,
-     * mode) + GLOBALFREE handle when != 0) -> SDL_ttf + heap-owner TBD.
-     * Free gate is LIVE in text_aligned_list_needs_unlock above. */
+     * mode) + GLOBALFREE handle when != 0). PARTIAL: OS-free free-gate
+     * probe below is LIVE 1:1 via text_aligned_list_needs_unlock
+     * (handle != 0; same probe as the boot-owned
+     * boot_draw_aligned_list_free @ 1068:255a twin, see boot.h; no Win16,
+     * no globals, no exit(), read-only); trace + List + GLOBALFREE tail
+     * stays STUB. Refs verified read-only 1:1 vs unpacked/civ.exe (NE
+     * Win3.x 832512 B, no bytes copied).
+     * TODO: Orig Text_DrawAlignedListFree @ 1068:255a trace + List +
+     * GLOBALFREE tail -> SDL_ttf + heap-owner TBD (never fake CIV_OK). */
+    int gate;
+
+    (void)mode;
+    gate = text_aligned_list_needs_unlock(handle);
+    if (handle == 0 && gate != 0)
+        return CIV_ERR_BAD_DATA;
+    if (handle != 0 && gate != 1)
+        return CIV_ERR_BAD_DATA;
     return CIV_ERR_UNSUPPORTED;
 }
 

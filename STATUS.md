@@ -124,7 +124,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `boot_init_palette` | LIVE | 1090:0488 |  |
 | `boot_key_remap_value` | LIVE | 10e8:2d46, 11e8:0337 |  |
 | `boot_init_tables` | LIVE | 1090:0488, 10e8:2d46, 11c8:0000, 11e0:0000, 11e8:0337, 11f8:0080, 1420:b394 |  |
-| `boot_init_unit_font_tables` | PARTIAL | 10e8:0000, 10e8:2d46 | has TODO |
+| `boot_init_unit_font_tables` | PARTIAL | 1098:0157, 10e8:0000, 10e8:2d46, 11a8:022f, 1608:000c | has TODO |
 | `cursor_set` | NOOP | 1048:0000, 1098:096c |  |
 | `boot_open_windows` | PARTIAL | 1098:114a, 10d0:0000, 1208:0af1, 1210:025b, 1218:0386 | has TODO |
 | `menu_init_mainbar` | LIVE | 1048:0000, 1098:096c, 14b0:0010, 14b0:0092, 14d0:0028 |  |
@@ -222,7 +222,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `boot_unit_font_replace_color` | LIVE | 1098:0157, 10e8:2d46, 11a8:022f |  |
 | `text_draw_shadowed_centered` | PARTIAL | 10d8:02df, 10d8:046e, 10d8:0495, 10d8:05b8, 11e8:0b40 | has TODO |
 | `text_measure_width` | LIVE | 10d8:05b8, 1100:0000, 1100:00a1 |  |
-| `text_draw_pascal_at_origin` | STUB | 10d8:002d, 10d8:00e0, 1100:0000, 1100:0053, 1100:017b | has TODO |
+| `text_draw_pascal_at_origin` | PARTIAL | 10d8:002d, 10d8:00e0, 10d8:05b8, 1100:0000, 1100:0053, 1100:00a1, 1100:017b, 1608:01cc | has TODO |
 | `boot_unit_font_target_small_len` | LIVE | 10e8:2d46 |  |
 | `boot_unit_font_target_big_len` | LIVE | 10e8:2d46 |  |
 | `boot_draw_aligned_list` | PARTIAL | 1068:258f, 1100:00ea, 1608:01cc | has TODO |
@@ -455,8 +455,8 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `text_aligned_list_should_stop` | LIVE | 1068:2072, 1068:258f |  |
 | `text_aligned_list_needs_unlock` | LIVE | 1068:255a |  |
 | `text_wrapped_list_cap` | LIVE | 1068:2072 |  |
-| `text_draw_aligned_list` | STUB | 1068:258f, 1100:00ea, 1608:01cc | has TODO |
-| `text_draw_aligned_list_free` | STUB | 1068:255a | has TODO |
+| `text_draw_aligned_list` | PARTIAL | 1068:258f, 1098:0ed1, 1100:00ea, 1220:0156, 1608:01cc | has TODO |
+| `text_draw_aligned_list_free` | PARTIAL | 1068:255a | has TODO |
 | `text_wrap_is_space` | LIVE | 1068:2072 |  |
 | `text_wrap_is_hard_break` | LIVE | 1068:2072 |  |
 | `text_wrapped_char_fix` | LIVE | 1068:2072 |  |
