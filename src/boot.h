@@ -1400,4 +1400,64 @@ int main_startup_intro_seq_resolve(int counted);
  * No Win16, no globals. */
 int main_startup_menu_text_ok(void);
 
+/* --- Chain 2026-10-17 (boot-text): Init_UnitFontTables @ 10e8:2d46 OS-free
+ * + Text_Draw* @ 10d8:* OS-free (goal; boot-owned only, dialog/video/map
+ * untouched) ---
+ * Orig (civ.exe NE Win3.x, ref unpacked/civ.exe read-only 832512 B, MZ at
+ * +0 e_lfanew 0x60 -> NE; strings FIRSTMOVE/PILLAGE @ dump + "End of
+ * Turn"/"Press Return" for 10d8:00e0; no bytes copied):
+ *   Init_UnitFontTables @ 10e8:2d46 (sibling NewGame_Wizard @ 10e8:0000;
+ *     Util_MemCopyFar 0x2a02 6 B + 0x2a12 64 B + GLOBALLOCK DAT_1420_b388
+ *     palette, then 8x FIRSTMOVE idx 0..7 + 8x PILLAGE idx 2..9 best-match
+ *     over 0x40 entries via Gfx_CalcColorDistSq @ 10e8:2cc1 keeping the
+ *     min, then the same 16 B key-remap as Game_InitGlobalTables @
+ *     11e8:0337 (see boot_key_remap_value), then 16x font-map best-match
+ *     when DAT_1420_17a8 == 0 else fixed 16 B (ff,fb,f9,1,5,4,fc,6,fa,2,3,
+ *     fb,7,f8,f8,0), then 8x28 icon recolor via Gfx_ReplaceIconColor @
+ *     11a8:022f + Sys_Yield @ 1098:0157; fixed/alt byte images LIVE via
+ *     newgame_unit_font_fixed/alt_at, see newgame.h; distance LIVE via
+ *     gfx_calc_color_dist_sq, see video.h).
+ *   Text_DrawShadowedCentered @ 10d8:0495 (DispatchFont @ 11e8:0b40 +
+ *     MeasureWidth @ 10d8:05b8 + x-w/2 + DrawShadowed @ 10d8:02df).
+ *   Text_MeasureWidth @ 10d8:05b8 (Util_StrCopy + PackPascal @ 1100:0000 +
+ *     MeasurePascal @ 1100:00a1 + (w*10)/0x10 scale, see text_measure_scaled
+ *     in dialog.h).
+ *   Text_DrawPascalAtOrigin @ 1100:017b (SETBKMODE(1) + SETTEXTALIGN(1) +
+ *     PascalToCStr + TEXTOUT at 0,0 + restore).
+ * Split (AGENTS.md triage): OS-free counts/branch/best-pick + FNT measure
+ * below are LIVE 1:1 on explicit params (no far, no GLOBALLOCK, no GDI,
+ * no globals, no exit(), read-only except explicit outs); far-ptr +
+ * GLOBALLOCK + SELECTOBJECT/MOVETO/TEXTOUT/SETBKMODE device tails stay
+ * STUB/PARTIAL with TODO Orig (no fake-OK). Names text_draw_shadowed_
+ * centered / text_measure_width / text_draw_pascal_at_origin are free
+ * (dialog owns the sibling text_draw_shadowed/at/clipped/direct/centered/
+ * header_centered + text_measure_scaled/text_resolve_color/text_shadow_pos;
+ * map owns text_draw_status_row/with_font) so no duplicate symbols. */
+
+/* Orig Init_UnitFontTables @ 10e8:2d46 FIRSTMOVE loop count -> boot_unit_font_firstmove_count. 1:1 8. */
+int boot_unit_font_firstmove_count(void);
+/* Orig same PILLAGE loop count -> boot_unit_font_pillage_count. 1:1 8. */
+int boot_unit_font_pillage_count(void);
+/* Orig same PILLAGE first index (idx 2..9) -> boot_unit_font_pillage_first. 1:1 2. */
+int boot_unit_font_pillage_first(void);
+/* Orig same palette scan extent (0x40 entries via GLOBALLOCK b388) -> boot_unit_font_palette_entries. 1:1 0x40. */
+int boot_unit_font_palette_entries(void);
+/* Orig same font-map loop count (16x when 17a8 == 0) -> boot_unit_font_map_count. 1:1 16. */
+int boot_unit_font_map_count(void);
+/* Orig same icon-recolor group count (8x28 via Gfx_ReplaceIconColor @ 11a8:022f) -> boot_unit_font_icon_count. 1:1 8. */
+int boot_unit_font_icon_count(void);
+/* Orig same per-icon recolor length -> boot_unit_font_icon_len. 1:1 28. */
+int boot_unit_font_icon_len(void);
+/* Orig same font-map branch (DAT_1420_17a8 != 0 takes the fixed 16 B) -> boot_unit_font_needs_alt. 1:1 convert_17a8 != 0. */
+int boot_unit_font_needs_alt(int convert_17a8);
+/* Orig same best-match core (Gfx_CalcColorDistSq @ 10e8:2cc1 min over 0x40) -> boot_unit_font_best_pick. 1:1 index of min dist (first wins ties, like orig keeping < only); pal is 64x3 borrowed bytes, target is 3 B. NULL either -> -1; n <= 0 -> -1. No Win16. */
+int boot_unit_font_best_pick(const uint8_t *pal, int n, const uint8_t target[3]);
+
+/* Orig Text_DrawShadowedCentered @ 10d8:0495 dispatcher -> text_draw_shadowed_centered. PARTIAL: OS-free centered_x (x-w/2 via text_centered_x) + shadow_pos (via text_shadow_pos) + measure scale (via text_measure_scaled) probes LIVE; SELECTOBJECT/DispatchFont/TEXTOUT GDI tail STUB -> CIV_ERR_UNSUPPORTED with TODO Orig. NULL text -> NOENT. */
+civ_error_t text_draw_shadowed_centered(const char *text, int x, int y, int color, int shadow);
+/* Orig Text_MeasureWidth @ 10d8:05b8 FNT side -> text_measure_width. OS-free 1:1 on borrowed FNT bytes (same image as font_fnt_char_entry, never writes civfonts.fon): sum of per-char entry widths via font_text_width, then (w*10)/0x10 scale like Text_MeasureWidth. NULL data/info/s -> 0; short/corrupt -> partial prefix (same contract as font_text_width). No SDL, no globals. */
+int text_measure_width(const uint8_t *data, size_t len, const font_fnt_info_t *info, const char *s);
+/* Orig Text_DrawPascalAtOrigin @ 1100:017b -> text_draw_pascal_at_origin. STUB: pascal is buf[0]-is-len Pascal (see text_pack_pascal in dialog.h); SETBKMODE/SETTEXTALIGN/TEXTOUT tail -> CIV_ERR_UNSUPPORTED with TODO Orig. NULL -> NOENT. */
+civ_error_t text_draw_pascal_at_origin(const char *pascal, int color);
+
 #endif /* CIVLIN_BOOT_H */

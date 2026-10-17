@@ -163,21 +163,75 @@ civ_error_t boot_init_tables(void)
 civ_error_t boot_init_unit_font_tables(void)
 {
     /* Orig: FUN_10e8_2d46 @ 10e8:2d46 -> Init_UnitFontTables (decompiled
-     * 2026-10-16). Sibling of NewGame_Wizard @ 10e8:0000: Util_MemCopyFar
-     * 0x2a02 (6 B local_28) + 0x2a12 (64 B local_68) + GLOBALLOCK
-     * DAT_1420_b388 palette, then 8x FIRSTMOVE (idx 0..7) + 8x PILLAGE
-     * (idx 2..9) best-match loops over 0x40 entries via
+     * 2026-10-16, ref unpacked/civ.exe read-only NE Win3.x 832512 B,
+     * strings FIRSTMOVE/PILLAGE). Sibling of NewGame_Wizard @ 10e8:0000:
+     * Util_MemCopyFar 0x2a02 (6 B local_28) + 0x2a12 (64 B local_68) +
+     * GLOBALLOCK DAT_1420_b388 palette, then 8x FIRSTMOVE (idx 0..7) + 8x
+     * PILLAGE (idx 2..9) best-match loops over 0x40 entries via
      * Gfx_CalcColorDistSq @ 10e8:2cc1 (LIVE in video.h/video.c: RGB
      * squared distance) keeping the min, then the same 16 B key-remap
      * as Game_InitGlobalTables @ 11e8:0337 (see boot_key_remap_value),
      * then 16x font-map best-match when DAT_1420_17a8 == 0 else fixed
      * 16 B (ff,fb,f9,1,5,4,fc,6,fa,2,3,fb,7,f8,f8,0), then 8x28 icon
      * recolor via Gfx_ReplaceIconColor @ 11a8:022f + Sys_Yield @
-     * 1098:0157. OS-free distance half is LIVE; far-ptr + GLOBALLOCK +
-     * GDI recolor tails stay STUB -> CIV_ERR_UNSUPPORTED. Read-only; no
-     * globals; no exit().
+     * 1098:0157. PARTIAL dispatcher: OS-free counts/branch/fixed-images/
+     * best-pick probes below are LIVE 1:1 (no far, no GLOBALLOCK); far-ptr
+     * + GLOBALLOCK + GDI recolor tails stay STUB -> CIV_ERR_UNSUPPORTED.
+     * Read-only; no globals; no exit().
      * TODO: Orig FUN_10e8_2d46 @ 10e8:2d46 (0x2a02/0x2a12 target-table
-     * bytes + b388 palette carve + icon-recolor SDL bridge). */
+     * bytes + b388 palette carve + icon-recolor SDL bridge via
+     * Gfx_ReplaceIconColor @ 11a8:022f). */
+    int i;
+    uint8_t probe_pal[64][3];
+    uint8_t probe_tgt[3];
+    int probe_best;
+
+    /* OS-free shape probes (LIVE 1:1, fail = BAD_DATA so a drift is loud,
+     * never a silent fake-OK). */
+    if (boot_unit_font_firstmove_count() != 8)
+        return CIV_ERR_BAD_DATA;
+    if (boot_unit_font_pillage_count() != 8)
+        return CIV_ERR_BAD_DATA;
+    if (boot_unit_font_pillage_first() != 2)
+        return CIV_ERR_BAD_DATA;
+    if (boot_unit_font_palette_entries() != 0x40)
+        return CIV_ERR_BAD_DATA;
+    if (boot_unit_font_map_count() != 16)
+        return CIV_ERR_BAD_DATA;
+    if (boot_unit_font_icon_count() != 8)
+        return CIV_ERR_BAD_DATA;
+    if (boot_unit_font_icon_len() != 28)
+        return CIV_ERR_BAD_DATA;
+    if (boot_unit_font_needs_alt(0) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (boot_unit_font_needs_alt(1) != 1)
+        return CIV_ERR_BAD_DATA;
+    /* Fixed/alt byte images (LIVE in newgame.h/c): base + alt stores. */
+    if (newgame_unit_font_fixed_count() != CIV_UNIT_FONT_FIXED_N)
+        return CIV_ERR_BAD_DATA;
+    if (newgame_unit_font_alt_count() != CIV_UNIT_FONT_ALT_N)
+        return CIV_ERR_BAD_DATA;
+    for (i = 0; i < 16; i++) {
+        if (boot_key_remap_value(i) != newgame_unit_font_fixed_at(i))
+            return CIV_ERR_BAD_DATA;
+    }
+    if (newgame_unit_font_alt_at(0) != 0xff)
+        return CIV_ERR_BAD_DATA;
+    if (newgame_unit_font_alt_at(15) != 0x00)
+        return CIV_ERR_BAD_DATA;
+    /* Best-match core probe (LIVE via gfx_calc_color_dist_sq @ 10e8:2cc1:
+     * ramp palette, black target must pick index 0). */
+    for (i = 0; i < 64; i++) {
+        probe_pal[i][0] = (uint8_t)i;
+        probe_pal[i][1] = (uint8_t)i;
+        probe_pal[i][2] = (uint8_t)i;
+    }
+    probe_tgt[0] = 0u;
+    probe_tgt[1] = 0u;
+    probe_tgt[2] = 0u;
+    probe_best = boot_unit_font_best_pick(&probe_pal[0][0], 64, probe_tgt);
+    if (probe_best != 0)
+        return CIV_ERR_BAD_DATA;
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -2008,4 +2062,170 @@ int main_startup_menu_text_ok(void)
     if (split_n != n_items)
         return 0;
     return 1;
+}
+
+/* --- Chain 2026-10-17 (boot-text): Init_UnitFontTables @ 10e8:2d46 OS-free
+ * + Text_Draw* @ 10d8:* OS-free (see boot.h). Ref unpacked/civ.exe
+ * read-only NE Win3.x 832512 B (MZ + e_lfanew 0x60 -> NE, strings
+ * FIRSTMOVE/PILLAGE + "End of Turn"/"Press Return"); no bytes copied.
+ * OS-free LIVE 1:1 below (no far, no GLOBALLOCK, no GDI, no globals, no
+ * exit(), read-only except explicit outs); device tails stay STUB/PARTIAL
+ * with TODO Orig. */
+
+int boot_unit_font_firstmove_count(void)
+{
+    /* Orig Init_UnitFontTables @ 10e8:2d46 FIRSTMOVE best-match loop (idx
+     * 0..7, 8 picks over 0x40 palette entries via Gfx_CalcColorDistSq @
+     * 10e8:2cc1). */
+    return 8;
+}
+
+int boot_unit_font_pillage_count(void)
+{
+    /* Orig same PILLAGE best-match loop (8 picks, idx 2..9). */
+    return 8;
+}
+
+int boot_unit_font_pillage_first(void)
+{
+    /* Orig same PILLAGE first index (2..9, unlike FIRSTMOVE 0..7). */
+    return 2;
+}
+
+int boot_unit_font_palette_entries(void)
+{
+    /* Orig same scan extent (0x40 palette entries behind GLOBALLOCK
+     * DAT_1420_b388; lock itself stays STUB in boot_init_unit_font_tables
+     * with TODO Orig there). */
+    return 0x40;
+}
+
+int boot_unit_font_map_count(void)
+{
+    /* Orig same font-map loop count (16x best-match when DAT_1420_17a8 ==
+     * 0, else the fixed 16 B alt image via newgame_unit_font_alt_at). */
+    return 16;
+}
+
+int boot_unit_font_icon_count(void)
+{
+    /* Orig same icon-recolor group count (8 groups via Gfx_ReplaceIconColor
+     * @ 11a8:022f + Sys_Yield @ 1098:0157; device tail STUB). */
+    return 8;
+}
+
+int boot_unit_font_icon_len(void)
+{
+    /* Orig same per-icon recolor length (28 B per group, 8x28 total). */
+    return 28;
+}
+
+int boot_unit_font_needs_alt(int convert_17a8)
+{
+    /* Orig same font-map branch (DAT_1420_17a8 image: != 0 takes the fixed
+     * 16 B ff,fb,f9,1,5,4,fc,6,fa,2,3,fb,7,f8,f8,0 via
+     * newgame_unit_font_alt_at, see newgame.h; == 0 runs the 16x
+     * best-match). */
+    return (convert_17a8 != 0) ? 1 : 0;
+}
+
+int boot_unit_font_best_pick(const uint8_t *pal, int n, const uint8_t target[3])
+{
+    /* Orig same best-match core (each of the 8+8+16 picks scans the 0x40
+     * palette via Gfx_CalcColorDistSq @ 10e8:2cc1 keeping the strict min;
+     * first wins ties). pal is n*3 borrowed bytes (row i = pal+3*i). */
+    int best = -1;
+    int best_dist = 0;
+    int i;
+
+    if (!pal || !target || n <= 0)
+        return -1;
+    for (i = 0; i < n; i++) {
+        const uint8_t *entry = pal + (size_t)i * 3u;
+        uint8_t a[3];
+        int dist;
+
+        a[0] = entry[0];
+        a[1] = entry[1];
+        a[2] = entry[2];
+        dist = gfx_calc_color_dist_sq(a, target);
+        if (dist < 0)
+            continue;
+        if (best < 0 || dist < best_dist) {
+            best = i;
+            best_dist = dist;
+        }
+    }
+    return best;
+}
+
+civ_error_t text_draw_shadowed_centered(const char *text, int x, int y,
+                                        int color, int shadow)
+{
+    /* Orig Text_DrawShadowedCentered @ 10d8:0495 dispatcher (DispatchFont @
+     * 11e8:0b40 + MeasureWidth @ 10d8:05b8 + x-w/2 + DrawShadowed @
+     * 10d8:02df; title path via Text_DrawHeaderCentered @ 10d8:046e at
+     * 0xa0,2 with shadow 0). PARTIAL: OS-free centered/shadow/scale probes
+     * below are LIVE 1:1 via the dialog-owned helpers (text_centered_x +
+     * text_shadow_pos + text_measure_scaled, see dialog.h; no duplicate
+     * math here); SELECTOBJECT/DispatchFont/TEXTOUT GDI tail stays STUB.
+     * TODO: Orig Text_DrawShadowedCentered @ 10d8:0495 + Text_DrawHeaderCentered
+     * @ 10d8:046e GDI tail (SELECTOBJECT font + DispatchFont @ 11e8:0b40 +
+     * TEXTOUT shadow/main) -> SDL_ttf bridge TBD (see text_draw_shadowed
+     * STUB in dialog.h for the same tail). */
+    int probe_cx;
+    int probe_sx;
+    int probe_sy;
+    civ_error_t probe_rc;
+
+    if (!text)
+        return CIV_ERR_NOENT;
+    /* OS-free probes (prove the wiring without touching GDI). */
+    probe_cx = text_centered_x(x, text_measure_scaled(10));
+    probe_rc = text_shadow_pos(probe_cx, y, 0x12, &probe_sx, &probe_sy);
+    if (probe_rc != CIV_OK)
+        return CIV_ERR_BAD_DATA;
+    (void)probe_cx;
+    (void)probe_sx;
+    (void)probe_sy;
+    (void)color;
+    (void)shadow;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+int text_measure_width(const uint8_t *data, size_t len,
+                       const font_fnt_info_t *info, const char *s)
+{
+    /* Orig Text_MeasureWidth @ 10d8:05b8 FNT side (Util_StrCopy +
+     * PackPascal @ 1100:0000 + MeasurePascal @ 1100:00a1 + (w*10)/0x10
+     * scale, see text_measure_scaled in dialog.h). OS-free FNT twin 1:1
+     * on borrowed bytes (never writes civfonts.fon): raw width via
+     * font_text_width (sum of dfCharTable entry widths, tracking 0) then
+     * the same (w*10)/0x10 scale. NULL -> 0 (same contract as
+     * font_text_width); negative raw clamps to 0 like text_measure_scaled
+     * (extent < 0 -> 0). No SDL, no globals, no exit(), read-only. */
+    int raw;
+
+    if (!data || !info || !s)
+        return 0;
+    raw = font_text_width(data, len, info, s);
+    if (raw < 0)
+        return 0;
+    return (raw * 10) / 0x10;
+}
+
+civ_error_t text_draw_pascal_at_origin(const char *pascal, int color)
+{
+    /* Orig Text_DrawPascalAtOrigin @ 1100:017b (SETBKMODE(1) +
+     * SETTEXTALIGN(1) + Util_PascalToCStr @ 1100:0053 + TEXTOUT at 0,0 +
+     * restore; callers Text_DrawDirect @ 10d8:00e0 + FUN_10d8_002d @
+     * 10d8:002d after Text_PackPascal @ 1100:0000, see text_pack_pascal in
+     * dialog.h). STUB: buf[0]-is-len Pascal validation is the only OS-free
+     * half (empty string still needs the GDI tail), so no LIVE math here.
+     * TODO: Orig Text_DrawPascalAtOrigin @ 1100:017b GDI tail (SETBKMODE /
+     * SETTEXTALIGN + TEXTOUT at origin) -> SDL_ttf bridge TBD. */
+    (void)color;
+    if (!pascal)
+        return CIV_ERR_NOENT;
+    return CIV_ERR_UNSUPPORTED;
 }

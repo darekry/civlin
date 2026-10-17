@@ -124,7 +124,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `boot_init_palette` | LIVE | 1090:0488 |  |
 | `boot_key_remap_value` | LIVE | 10e8:2d46, 11e8:0337 |  |
 | `boot_init_tables` | LIVE | 1090:0488, 10e8:2d46, 11c8:0000, 11e0:0000, 11e8:0337, 11f8:0080, 1420:b394 |  |
-| `boot_init_unit_font_tables` | STUB | 10e8:0000, 10e8:2cc1, 10e8:2d46 | has TODO |
+| `boot_init_unit_font_tables` | PARTIAL | 10e8:0000, 10e8:2d46 | has TODO |
 | `cursor_set` | NOOP | 1048:0000, 1098:096c |  |
 | `boot_open_windows` | PARTIAL | 1098:114a, 10d0:0000, 1208:0af1, 1210:025b, 1218:0386 | has TODO |
 | `menu_init_mainbar` | LIVE | 1048:0000, 1098:096c, 14b0:0010, 14b0:0092, 14d0:0028 |  |
@@ -208,6 +208,18 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `main_startup_anim_ctx_ok` | LIVE | 1098:124f, 10b0:008a |  |
 | `main_startup_intro_seq_resolve` | LIVE | 10b0:008a |  |
 | `main_startup_menu_text_ok` | LIVE | 1000:36b2, 11e0:0000, 11e0:0221, 1220:0000, 1220:0156, 1420:435b |  |
+| `boot_unit_font_firstmove_count` | LIVE | 10e8:2cc1, 10e8:2d46 |  |
+| `boot_unit_font_pillage_count` | LIVE |  |  |
+| `boot_unit_font_pillage_first` | LIVE |  |  |
+| `boot_unit_font_palette_entries` | LIVE |  |  |
+| `boot_unit_font_map_count` | LIVE |  |  |
+| `boot_unit_font_icon_count` | LIVE | 1098:0157, 11a8:022f |  |
+| `boot_unit_font_icon_len` | LIVE |  |  |
+| `boot_unit_font_needs_alt` | LIVE |  |  |
+| `boot_unit_font_best_pick` | LIVE | 10e8:2cc1 |  |
+| `text_draw_shadowed_centered` | PARTIAL | 10d8:02df, 10d8:046e, 10d8:0495, 10d8:05b8, 11e8:0b40 | has TODO |
+| `text_measure_width` | LIVE | 10d8:05b8, 1100:0000, 1100:00a1 |  |
+| `text_draw_pascal_at_origin` | STUB | 10d8:002d, 10d8:00e0, 1100:0000, 1100:0053, 1100:017b | has TODO |
 
 ### `src/civ_common.c`
 
