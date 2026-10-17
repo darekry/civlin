@@ -1566,4 +1566,53 @@ civ_error_t boot_draw_aligned_list(int handle, int mode);
  * tail STUB -> CIV_ERR_UNSUPPORTED with TODO Orig. */
 civ_error_t boot_draw_aligned_list_free(int handle, int mode);
 
+/* --- Batch 2026-10-17 fala 3 (M+O): res-queue + empty thunks + rect ---
+ * Renamed this pass:
+ *   Main_DequeueResChar @ 1008:09e3, Boot_NoopThunk @ 1008:09f8,
+ *   Boot_NoopThunk2 @ 1008:0a06, Boot_EmptyThunk_0A14 @ 1008:0a14,
+ *   Main_DequeueResString @ 1008:0a22, Main_ReturnZeroStub @ 1008:0acb,
+ *   Win_CopyWindowRect @ 1008:0b13, Boot_EmptyThunk_0D4C @ 1008:0d4c,
+ *   Boot_EmptyThunk_0D5A @ 1008:0d5a, Boot_EmptyThunk_0E02 @ 1008:0e02.
+ * Decompiler string returns on the empties are stale-DS artifacts per
+ * raw bytes (no MOV DX/AX); true bodies are DS save/restore + RETF. */
+
+/* Orig Main_DequeueResChar @ 1008:09e3 (far trampoline PUSH CS + CALL to
+ * Main_DequeueResString @ 1008:0a22; callers Pic_PlayShared @ 1030:58c2 +
+ * Census @ 1018:166b + Civ_ProcessUnitMoves @ 11f0:0939 + MenuZ @
+ * 1220:0ab2, all after Main_DrainMessages @ 11e8:02fb nonzero). LIVE pop
+ * of the module-static res queue image (DAT_12b0_004c count +
+ * DAT_12d8_44e4 10 words, overwritten next enqueue; pair to
+ * Main_EnqueueResString @ 1008:0a8d depth 10). 0 when empty. */
+int main_dequeue_res_char(void);
+
+/* Orig Main_DequeueResString @ 1008:0a22 (word-queue pop core: head =
+ * queue[0], count--, shift left; empty -> 0; pair to Enqueue @ 1008:0a8d;
+ * reset Sys_DrainInput @ 11f0:4f2d). LIVE pure on explicit outs (hidden
+ * ES:12b0/12d8 -> params). NULL either -> NOENT (orig faulted). */
+civ_error_t main_dequeue_res_string(unsigned *count, unsigned queue[10],
+                                    unsigned *head_out);
+
+/* Orig Main_ReturnZeroStub @ 1008:0acb (XOR AX,AX; between Enqueue @
+ * 1008:0a8d and 0add). LIVE trivial const. */
+unsigned main_return_zero_stub(void);
+
+/* Orig Win_CopyWindowRect @ 1008:0b13 (LES handle + GETWINDOWRECT @
+ * 1608:00ac into SS 8-B RECT + Util_MemCopyFar @ 1000:137f CX=8 to far
+ * dst; dispatch-reached, no direct callers). HWND->SDL bridge TBD ->
+ * STUB UNSUPPORTED (copy half would be LIVE). */
+civ_error_t win_copy_window_rect(const void *hwnd_far, void *dst_far);
+
+/* Orig empty DS-thunks (all prologue/epilogue only, no callers/callees;
+ * decompiler string returns are artifacts): Boot_NoopThunk @ 1008:09f8,
+ * Boot_NoopThunk2 @ 1008:0a06 (identical padding pair), Boot_EmptyThunk
+ * @ 1008:0a14 (filler before 0a22), @ 1008:0d4c/@ 1008:0d5a (pair before
+ * TIMERPROC @ 1008:0d68 Ordinal_5), @ 1008:0e02 (+JMP+0 nop, before
+ * Font_EnumFamiliesCallback @ 1008:0e12 Ordinal_2). Void NOOPs. */
+void boot_noop_thunk(void);
+void boot_noop_thunk2(void);
+void boot_empty_thunk_0a14(void);
+void boot_empty_thunk_0d4c(void);
+void boot_empty_thunk_0d5a(void);
+void boot_empty_thunk_0e02(void);
+
 #endif /* CIVLIN_BOOT_H */

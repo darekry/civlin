@@ -3,6 +3,7 @@
 
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 const char *civ_strerror(civ_error_t err)
@@ -402,4 +403,230 @@ uint32_t u32_shl32(uint32_t v, unsigned c)
     if (c >= 32u)
         return 0u;
     return v << c;
+}
+
+civ_error_t util_itoa_dec(char *dst, size_t cap, unsigned value)
+{
+    /* Orig Util_ItoaDec @ 1000:15fc (unsigned base-10 append). */
+    int n;
+
+    if (!dst || cap == 0)
+        return CIV_ERR_NOENT;
+    n = snprintf(dst, cap, "%u", value);
+    (void)n;
+    return CIV_OK;
+}
+
+uint32_t u32_mul32(uint32_t a, uint32_t b)
+{
+    /* Orig U32_Mul32 @ 1000:16fe (near twin of U32_Mul32Far @ 1368). */
+    return a * b;
+}
+
+int util_to_lower_alias(int c)
+{
+    /* Orig Util_ToLowerAlias @ 1000:194a (behavior twin of util_to_lower;
+     * correct tolower Orig site; header misattribution noted above). */
+    return util_to_lower(c);
+}
+
+int util_to_upper(int c)
+{
+    /* Orig Util_ToUpper @ 1000:1978 (ctype bit8 == a-z => -0x20). */
+    int v;
+
+    if (c == 0xFFFF)
+        return 0xFFFF;
+    v = c & 0xFF;
+    if (v >= 'a' && v <= 'z')
+        return v - ('a' - 'A');
+    return v;
+}
+
+char *util_stpcpy(char *dst, const char *src)
+{
+    /* Orig Util_Stpcpy @ 1000:1e9c (strcpy returning the NUL). */
+    size_t n;
+
+    if (!dst || !src)
+        return NULL;
+    n = strlen(src);
+    memcpy(dst, src, n + 1u);
+    return dst + n;
+}
+
+const char *util_get_env(const char *name, const char *const *envp)
+{
+    /* Orig Util_GetEnv @ 1000:28b6 (environ prefix + '=' gate). */
+    size_t len;
+    size_t i;
+
+    if (!name || !envp || name[0] == '\0')
+        return NULL;
+    len = strlen(name);
+    for (i = 0; envp[i] != NULL; i++) {
+        const char *e = envp[i];
+        size_t k;
+
+        for (k = 0; k < len; k++) {
+            if (e[k] != name[k])
+                break;
+        }
+        if (k == len && e[len] == '=')
+            return e + len + 1;
+    }
+    return NULL;
+}
+
+char *util_long_to_dec(char *dst, long val, int base)
+{
+    /* Orig Util_LongToDec @ 1000:2974 (generic radix 2..36 via FormatInt). */
+    static const char digits[] = "0123456789abcdefghijklmnopqrstuvwxyz";
+    unsigned long u;
+    int neg = 0;
+    char tmp[66];
+    size_t n = 0;
+    size_t i;
+
+    if (!dst)
+        return NULL;
+    if (base < 2 || base > 36) {
+        dst[0] = '\0';
+        return dst;
+    }
+    if (base == 10 && val < 0) {
+        neg = 1;
+        u = (unsigned long)(-(val + 1)) + 1u;
+    } else {
+        u = (unsigned long)val;
+    }
+    if (u == 0)
+        tmp[n++] = '0';
+    while (u > 0) {
+        tmp[n++] = digits[u % (unsigned long)base];
+        u /= (unsigned long)base;
+    }
+    if (neg)
+        tmp[n++] = '-';
+    for (i = 0; i < n; i++)
+        dst[i] = tmp[n - 1u - i];
+    dst[n] = '\0';
+    return dst;
+}
+
+/* --- Batch 2026-10-17 fala 3 (M+N): sort + string + far-mem --- */
+
+void sort_swap_elems(void *a, void *b, size_t n)
+{
+    /* Orig Sort_SwapElems @ 1000:30e2 (word loop + odd byte via AL). */
+    uint8_t *pa = (uint8_t *)a;
+    uint8_t *pb = (uint8_t *)b;
+    size_t i;
+
+    if (!pa || !pb)
+        return;
+    for (i = 0; i < n; i++) {
+        uint8_t t = pa[i];
+
+        pa[i] = pb[i];
+        pb[i] = t;
+    }
+}
+
+/* DAT_1420_b4aa/b4ac/b4ae images (elem size + cmp far; overwritten next
+ * Sort_QSort call, same staging semantics as dos_map_error). */
+static int s_sort_elem_size;
+static int (*s_sort_cmp)(const void *, const void *);
+
+void sort_qsort_core(void *base, int n, int elem_size,
+                     int (*cmp)(const void *, const void *))
+{
+    /* Orig Sort_QSortCore @ 1000:3110 (median-of-3 + partition + tail
+     * recursion; effect-identical libc qsort). */
+    if (!base || !cmp || n <= 1 || elem_size <= 0)
+        return;
+    qsort(base, (size_t)n, (size_t)elem_size, cmp);
+}
+
+void sort_qsort(void *base, int n, int elem_size,
+                int (*cmp)(const void *, const void *))
+{
+    /* Orig Sort_QSort @ 1000:3396 (size == 0 returns; stages b4aa/b4ac). */
+    if (elem_size == 0)
+        return;
+    s_sort_elem_size = elem_size;
+    s_sort_cmp = cmp;
+    if (!base || !cmp || n <= 1 || elem_size < 0)
+        return;
+    sort_qsort_core(base, n, elem_size, cmp);
+}
+
+int sort_elem_size_image(void)
+{
+    /* Orig DAT_1420_b4aa image (see sort_qsort). */
+    return s_sort_elem_size;
+}
+
+int sort_has_cmp_image(void)
+{
+    /* Orig DAT_1420_b4ac presence (1 when a cmp was staged). */
+    return (s_sort_cmp != NULL) ? 1 : 0;
+}
+
+int util_str_cmp(const char *s1, const char *s2)
+{
+    /* Orig Util_StrCmp @ 1000:3680 (strlen(s2)+1 + CMPSB, last-byte diff;
+     * case-sensitive unbounded). */
+    size_t i = 0;
+
+    if (!s1)
+        s1 = "";
+    if (!s2)
+        s2 = "";
+    for (;; i++) {
+        unsigned char a = (unsigned char)s1[i];
+        unsigned char b = (unsigned char)s2[i];
+
+        if (a != b)
+            return (int)a - (int)b;
+        if (a == '\0')
+            return 0;
+    }
+}
+
+char *util_str_str(const char *haystack, const char *needle)
+{
+    /* Orig Util_StrStr @ 1000:37fe (empty needle -> hay). */
+    if (!haystack || !needle)
+        return NULL;
+    return (char *)strstr(haystack, needle);
+}
+
+void *util_mem_copy_far_dst_first(void *dst, const void *src, size_t n)
+{
+    /* Orig Util_MemCopyFarDstFirst @ 1000:40aa (dst-first twin of
+     * Util_MemCopyFar @ 1000:137f; same REP MOVSW/MOVSB kernel). */
+    if (!dst)
+        return NULL;
+    if (!src && n > 0)
+        return NULL;
+    if (n == 0)
+        return dst;
+    return memcpy(dst, src, n);
+}
+
+void *util_mem_set_far_core(void *dst, int c, size_t n)
+{
+    /* Orig Util_MemSetFarCore @ 1000:40d0 (twin of Util_MemSetCore). */
+    if (!dst)
+        return NULL;
+    if (n == 0)
+        return dst;
+    return memset(dst, c, n);
+}
+
+void *util_mem_set_far(void *dst, int c, size_t n)
+{
+    /* Orig Util_MemSetFar @ 1000:40f6 (wrapper reordering to core). */
+    return util_mem_set_far_core(dst, c, n);
 }

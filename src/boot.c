@@ -2630,3 +2630,92 @@ civ_error_t boot_draw_aligned_list_free(int handle, int mode)
         return CIV_ERR_BAD_DATA;
     return CIV_ERR_UNSUPPORTED;
 }
+
+/* --- Batch 2026-10-17 fala 3 (M+O): res-queue + empty thunks + rect --- */
+
+/* DAT_12b0_004c / DAT_12d8_44e4 images (res-char FIFO, depth 10;
+ * overwritten next enqueue; pair to Main_EnqueueResString @ 1008:0a8d). */
+static unsigned s_res_queue[10];
+static unsigned s_res_count;
+
+int main_dequeue_res_char(void)
+{
+    /* Orig Main_DequeueResChar @ 1008:09e3 (trampoline to 0a22 core). */
+    unsigned head = 0;
+    unsigned i;
+
+    if (s_res_count == 0)
+        return 0;
+    head = s_res_queue[0];
+    s_res_count--;
+    for (i = 0; i < s_res_count; i++)
+        s_res_queue[i] = s_res_queue[i + 1];
+    return (int)head;
+}
+
+civ_error_t main_dequeue_res_string(unsigned *count, unsigned queue[10],
+                                    unsigned *head_out)
+{
+    /* Orig Main_DequeueResString @ 1008:0a22 (same pop on explicit outs;
+     * hidden ES:12b0/12d8 -> params). */
+    unsigned i;
+
+    if (!count || !queue || !head_out)
+        return CIV_ERR_NOENT;
+    if (*count == 0) {
+        *head_out = 0;
+        return CIV_OK;
+    }
+    *head_out = queue[0];
+    *count = *count - 1u;
+    for (i = 0; i < *count; i++)
+        queue[i] = queue[i + 1];
+    return CIV_OK;
+}
+
+unsigned main_return_zero_stub(void)
+{
+    /* Orig Main_ReturnZeroStub @ 1008:0acb (XOR AX,AX). */
+    return 0u;
+}
+
+civ_error_t win_copy_window_rect(const void *hwnd_far, void *dst_far)
+{
+    /* Orig Win_CopyWindowRect @ 1008:0b13 (GETWINDOWRECT + CX=8 MemCopyFar;
+     * see boot.h).
+     * TODO: Orig GETWINDOWRECT @ 1608:00ac -> win16_get_window_rect
+     * (SDL_GetWindowPosition/Size bridge TBD). */
+    (void)hwnd_far;
+    (void)dst_far;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+void boot_noop_thunk(void)
+{
+    /* Orig Boot_NoopThunk @ 1008:09f8 (empty DS-thunk). */
+}
+
+void boot_noop_thunk2(void)
+{
+    /* Orig Boot_NoopThunk2 @ 1008:0a06 (identical padding twin). */
+}
+
+void boot_empty_thunk_0a14(void)
+{
+    /* Orig Boot_EmptyThunk_0A14 @ 1008:0a14 (filler before 0a22). */
+}
+
+void boot_empty_thunk_0d4c(void)
+{
+    /* Orig Boot_EmptyThunk_0D4C @ 1008:0d4c (filler before TIMERPROC). */
+}
+
+void boot_empty_thunk_0d5a(void)
+{
+    /* Orig Boot_EmptyThunk_0D5A @ 1008:0d5a (pair filler). */
+}
+
+void boot_empty_thunk_0e02(void)
+{
+    /* Orig Boot_EmptyThunk_0E02 @ 1008:0e02 (+JMP+0 nop, before 0e12). */
+}

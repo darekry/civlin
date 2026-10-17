@@ -5576,3 +5576,98 @@ civ_error_t pedia_modal_subclass_proc(int msg, int wparam)
     (void)wparam;
     return CIV_ERR_UNSUPPORTED;
 }
+
+civ_error_t text_noop_after_bkcolor(void)
+{
+    /* Orig Text_NoopAfterBkColor @ 1098:217f (empty; WONTFIX-Win16). */
+    return CIV_OK;
+}
+
+/* --- Batch 2026-10-17 fala 3 (L+M): dlg templates + item/message --- */
+
+civ_error_t dlg_copy_item_text_to_far(int hdlg, int item)
+{
+    /* Orig Dlg_CopyItemTextToFar @ 1098:2735 (see dialog.h).
+     * TODO: Orig Dialog_GetItemRect @ 1100:03ff + FUN_1100_0970 +
+     * Util_StrCopy @ 1000:36b2 -> dialog/win16 item-text facade TBD. */
+    (void)hdlg;
+    (void)item;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t dlg_update_item_enable_show(int hdlg, int item, int flags)
+{
+    /* Orig Dlg_UpdateItemEnableShow @ 1098:2829 (see dialog.h).
+     * TODO: Orig ENABLEWINDOW/SHOWWINDOW @ 1608:00b4/00d0 + FUN_1100_0900
+     * select -> win16/dialog facade TBD. */
+    (void)hdlg;
+    (void)item;
+    (void)flags;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+int dlg_message_box_prefix_kind(char c)
+{
+    /* Orig Dlg_MessageBoxPrefixed @ 1098:28e4 prefix half ('!' -> 0x30,
+     * '*' -> 0x10, '?' -> 0x20, else 0). LIVE pure. */
+    if (c == '!')
+        return 0x30;
+    if (c == '*')
+        return 0x10;
+    if (c == '?')
+        return 0x20;
+    return 0;
+}
+
+civ_error_t dlg_message_box_prefixed(const char *msg)
+{
+    /* Orig Dlg_MessageBoxPrefixed @ 1098:28e4 (prefix + dual StrCopy +
+     * MESSAGEBOX; 18 callers).
+     * TODO: Orig MESSAGEBOX @ 1608:0080 -> SDL_ShowSimpleMessageBox TBD
+     * (prefix kernel above LIVE; *out untouched). */
+    (void)msg;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t dlg_create_dlg_template(int *out_handle)
+{
+    /* Orig Dlg_CreateDlgTemplate @ 1098:2a85 (gr.c CreateDlgTemplate; see
+     * dialog.h).
+     * TODO: Orig LSTRLEN + GLOBALALLOC 0x42/LOCK + memcpy @ 1000:40aa +
+     * UNLOCK -> win16 DLGTEMPLATE facade TBD. */
+    if (!out_handle)
+        return CIV_ERR_NOENT;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t dlg_append_template_item(int hold, int *out_ok)
+{
+    /* Orig Dlg_AppendTemplateItem @ 1098:2c36 (see dialog.h).
+     * TODO: Orig GLOBALLOCK/REALLOC/LOCK + style|0x40000000 + memcpy ->
+     * win16 DLGITEMTEMPLATE facade TBD. */
+    (void)hold;
+    if (!out_ok)
+        return CIV_ERR_NOENT;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t dlg_compact_template(int hmem)
+{
+    /* Orig Dlg_CompactTemplate @ 1098:2def (LOCK + move(ptr,ptr+2,*ptr-2)
+     * + UNLOCK).
+     * TODO: Orig win16_global_lock/unlock + util_mem_move TBD. */
+    (void)hmem;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t dlg_open_indirect(int tmpl_handle, unsigned flags)
+{
+    /* Orig Dlg_OpenIndirect @ 1098:2e41 (INDIRECT twin of CreateTracked;
+     * see dialog.h).
+     * TODO: Orig MAKEPROCINSTANCE + CREATEDIALOGINDIRECT + GETDC/StoreDC
+     * + CenterTrackedWindow + SHOWWINDOW + GETWINDOWRECT + InitPaletteWord
+     * + SELECTPALETTE -> win16/video/dialog facades TBD. */
+    (void)tmpl_handle;
+    (void)flags;
+    return CIV_ERR_UNSUPPORTED;
+}

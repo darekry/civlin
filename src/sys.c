@@ -2814,3 +2814,297 @@ civ_error_t dos_get_time(uint16_t *hm_out, uint16_t *sh_out)
         return CIV_ERR_NOENT;
     return CIV_ERR_UNSUPPORTED;
 }
+
+/* --- Batch 2026-10-17 fala 2 (H+I): 1000 core/file layer --- */
+
+civ_error_t sys_stack_push_copy(void *dst, const void *src, size_t n)
+{
+    /* Orig Sys_StackPushCopy @ 1000:14f8 (see sys.h). Hidden SS:SP+8 ->
+     * explicit dst (allowed in-func refactor). */
+    if (!dst || (!src && n > 0))
+        return CIV_ERR_NOENT;
+    if (n == 0)
+        return CIV_OK;
+    memcpy(dst, src, n);
+    /* Caller-stack growth under the return address not reproduced. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+int dos_propagate_error(int dos_code)
+{
+    /* Orig Dos_PropagateError @ 1000:1553 (stages via Dos_MapError, keeps
+     * the orig code for Dos_GetFileAttr @ 1000:1210). */
+    (void)dos_map_error(dos_code);
+    return dos_code;
+}
+
+civ_error_t dos_tell(int fd, long *out_pos)
+{
+    /* Orig Dos_Tell @ 1000:192e (Dos_Seek CUR 0; see sys.h).
+     * TODO: Orig SDL_TellIO on the dos-fd table (idx 5+, never POSIX-fd)
+     * + DAT_1420_0010/4e7a staging TBD. */
+    (void)fd;
+    if (!out_pos)
+        return CIV_ERR_NOENT;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t file_flush_all_entries(int *out_flushed)
+{
+    /* Orig File_FlushAllEntries @ 1000:2222 (DGROUP 0x4cbc/0x14/flags&3/
+     * DAT_1420_4e4c; see sys.h).
+     * TODO: Orig File_Flush @ 1000:2152 tails + SDL_IO flush TBD. */
+    if (!out_flushed)
+        return CIV_ERR_NOENT;
+    *out_flushed = 0;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t file_parse_mode(const char *mode, unsigned def_mode,
+                            unsigned *out_flags, unsigned *out_extra,
+                            int *out_ret)
+{
+    /* Orig File_ParseMode @ 1000:2266 (see sys.h for the r/w/a/+t/b
+     * table; def_mode image is DAT_1420_4e76 == 0x4000). */
+    unsigned f = 0u;
+    unsigned e = 0u;
+    int r = 0;
+    size_t i = 0;
+    char c1;
+    char c2;
+
+    if (!mode || !out_flags || !out_extra || !out_ret)
+        return CIV_ERR_NOENT;
+    c1 = mode[i++];
+    if (c1 == 'r') {
+        f = 1u;
+        r = 1;
+    } else if (c1 == 'w') {
+        f = 0x302u;
+        e = 0x80u;
+        r = 2;
+    } else if (c1 == 'a') {
+        f = 0x902u;
+        e = 0x80u;
+        r = 2;
+    } else {
+        return CIV_ERR_NOENT;
+    }
+    c2 = mode[i++];
+    if (c2 == '+' || (mode[i] == '+' && (c2 == 't' || c2 == 'b'))) {
+        if (c2 == '+')
+            c2 = mode[i++];
+        f = (f & ~3u) | 4u;
+        e = 0x180u;
+        r = 3;
+    }
+    if (c2 == 't') {
+        f |= 0x4000u;
+    } else if (c2 == 'b') {
+        f |= 0x8000u;
+        r |= 0x40;
+    } else {
+        f |= def_mode & 0xC000u;
+        if ((def_mode & 0x8000u) != 0u)
+            r |= 0x40;
+    }
+    *out_flags = f;
+    *out_extra = e;
+    *out_ret = r;
+    /* TODO: Orig DAT_1420_4cb6=0x1000/DAT_1420_4cb4=0x4030 (far 1000:4030
+     * File_CloseAll-on-exit) -> atexit bridge TBD. */
+    return CIV_OK;
+}
+
+civ_error_t file_open_entry(void *entry, const char *path, const char *mode)
+{
+    /* Orig File_OpenEntry @ 1000:2322 (2266 + File_Open @ 2ad9 +
+     * Dos_IsCharDevice @ 1566 + File_SetBuffer @ 3496; see sys.h).
+     * TODO: Orig win16_lopen DOS-fd + arena + isatty facade TBD
+     * (dos-fd idx>=5, DAT_1420_0010/4e7a via dos_error_from_errno). */
+    (void)entry;
+    (void)path;
+    (void)mode;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+int file_alloc_entry(const int8_t *fds, unsigned n)
+{
+    /* Orig File_AllocEntry @ 1000:23f3 (first fd < 0 over the 0x14-stride
+     * table; hidden DGROUP -> explicit fds). */
+    unsigned i;
+
+    if (!fds)
+        return -1;
+    for (i = 0; i < n; i++) {
+        if (fds[i] < 0)
+            return (int)i;
+    }
+    return -1;
+}
+
+civ_error_t file_fopen(const char *path, const char *mode, void **out_entry)
+{
+    /* Orig File_Fopen @ 1000:243d (AllocEntry + OpenEntry; "rb" via
+     * ResMgr_LoadRscDisk @ 1190:0501).
+     * TODO: Orig File_OpenEntry @ 1000:2322 bridge TBD (*out untouched). */
+    (void)path;
+    (void)mode;
+    if (!out_entry)
+        return CIV_ERR_NOENT;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+long file_text_newline_adjust(const uint8_t *buf, long len, int is_binary)
+{
+    /* Orig File_TextNewlineAdjust @ 1000:2474 (flags&0x40 binary gate;
+     * hidden far cursor -> explicit buf). */
+    long n = 0;
+    long i;
+
+    if (!buf || len <= 0)
+        return 0;
+    if (is_binary)
+        return len;
+    for (i = 0; i < len; i++) {
+        if (buf[i] == 0x0Au)
+            n++;
+    }
+    return len + n;
+}
+
+civ_error_t file_seek(void *entry, long off, int origin)
+{
+    /* Orig File_Seek @ 1000:24f6 (File_Flush + text-adjust + Dos_Seek
+     * INT21 AH42; see sys.h).
+     * TODO: Orig dos_seek (SDL_SeekIO, dos-fd idx>=5) + DAT_1420_0010/4e7a
+     * staging TBD. */
+    (void)entry;
+    (void)off;
+    (void)origin;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t file_tell(void *entry, long *out_pos)
+{
+    /* Orig File_Tell @ 1000:2578 (Dos_Seek CUR/END/SET triple +
+     * text-adjust; see sys.h).
+     * TODO: Orig SDL_TellIO/SeekIO TBD (*out untouched). */
+    (void)entry;
+    if (!out_pos)
+        return CIV_ERR_NOENT;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t file_flush_buffered_outputs(void)
+{
+    /* Orig File_FlushBufferedOutputs @ 1000:265a ((flags&0x300)==0x300
+     * loop; see sys.h).
+     * TODO: Orig File_Flush @ 1000:2152 + SDL flush TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t file_fill_buffer(void *entry)
+{
+    /* Orig File_FillBuffer @ 1000:2698 (265a gate + File_ReadBuffered @
+     * 1000:33c0; sole caller File_ReadChunk @ 1000:272a).
+     * TODO: Orig SDL_ReadIO 0x8000 chunks + 0x4000 text gate TBD. */
+    (void)entry;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+/* --- Batch 2026-10-17 fala 3 (N+O): far-heap + mem wrappers --- */
+
+civ_error_t heap_free_current_hook(void *p)
+{
+    /* Orig Heap_FreeCurrentHook @ 1000:4239 (DAT_1420_0027 + Mem_FreeWith
+     * Mode @ 1000:4a52).
+     * TODO: Orig hook save/restore + Heap_FreeFar coalesce -> arena TBD. */
+    (void)p;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+uint16_t heap_get_anchor_off(void)
+{
+    /* Orig Heap_GetAnchor @ 1000:441e (DS:0xb4b8). */
+    return 0xB4B8u;
+}
+
+void heap_load_anchor(uint16_t *anchor_out)
+{
+    /* Orig Heap_LoadAnchor @ 1000:468c (ES:DI = DS:b4b8 hidden -> out). */
+    if (!anchor_out)
+        return;
+    *anchor_out = heap_get_anchor_off();
+}
+
+civ_error_t heap_alloc_far(size_t n, void **out)
+{
+    /* Orig Heap_AllocFar @ 1000:46f1 (round + walk + carve/grow + link;
+     * gate (DAT_1420_0027&~0x40)==0).
+     * TODO: Orig block-split/chunk-growth + win16_arena_alloc TBD. */
+    (void)n;
+    if (!out)
+        return CIV_ERR_NOENT;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t heap_try_alloc_block(void *heap, size_t n, void **out)
+{
+    /* Orig Heap_TryAllocBlock @ 1000:47f2 (STC/CLC -> bool + arena TBD).
+     * TODO: Orig split/coalesce exact semantics TBD. */
+    (void)heap;
+    (void)n;
+    if (!out)
+        return CIV_ERR_NOENT;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t heap_free_far(void *p)
+{
+    /* Orig Heap_FreeFar @ 1000:4870 (coalesce + chunk-release + hook).
+     * TODO: Orig win16_global_free/arena TBD. */
+    (void)p;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t heap_grow_chunk(size_t n, void **out)
+{
+    /* Orig Heap_GrowChunk @ 1000:4931 (GLOBALALLOC(DAT|2) + LOCK).
+     * TODO: Orig win16_global_alloc bridge TBD. */
+    (void)n;
+    if (!out)
+        return CIV_ERR_NOENT;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t mem_release_handle(void *h)
+{
+    /* Orig Mem_ReleaseHandle @ 1000:4961 (HANDLE != 0 then UNLOCK + FREE;
+     * decompiler string arg is a DGROUP-anchor artifact, kept opaque).
+     * TODO: Orig win16_global_handle/unlock/free TBD. */
+    (void)h;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t mem_alloc_with_mode(unsigned mode, size_t n, void **out)
+{
+    /* Orig Mem_AllocWithMode @ 1000:498c (DAT_1420_0027 = mode around
+     * Heap_AllocFar; caller Mem_AllocWithHook @ 1000:41e4).
+     * TODO: Orig mode-word (0x40 gate) + mem_heap_alloc TBD. */
+    (void)mode;
+    (void)n;
+    if (!out)
+        return CIV_ERR_NOENT;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t mem_free_with_mode(void *p, unsigned mode)
+{
+    /* Orig Mem_FreeWithMode @ 1000:4a52 (DAT_1420_0027 = mode around
+     * Heap_FreeFar; caller Heap_FreeCurrentHook @ 1000:4239).
+     * TODO: Orig mem_heap_free TBD. */
+    (void)p;
+    (void)mode;
+    return CIV_ERR_UNSUPPORTED;
+}

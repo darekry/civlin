@@ -240,4 +240,115 @@ int32_t s32_div32(int32_t a, int32_t b);
  * OS-free 1:1: v << c, 0 when c >= 32. No globals. */
 uint32_t u32_shl32(uint32_t v, unsigned c);
 
+/* --- Batch 2026-10-17 fala 2 (H+I): 1000 core/file pure kernels ---
+ * Renamed this pass:
+ *   Util_ItoaDec @ 1000:15fc, U32_Mul32 @ 1000:16fe,
+ *   Util_ToLowerAlias @ 1000:194a (twin/dupe of util_to_lower: same
+ *     ctype-table +0x20 shape as 194a; header previously misattributed
+ *     Orig 1978 -> util_to_lower, correct tolower Orig is 194a),
+ *   Util_ToUpper @ 1000:1978, Util_Stpcpy @ 1000:1e9c,
+ *   Util_GetEnv @ 1000:28b6, Util_LongToDec @ 1000:2974.
+ * All LIVE OS-free 1:1 (no Win16, no globals, no exit()). */
+
+/* Orig Util_ItoaDec @ 1000:15fc (Util_FormatInt @ 1000:157a wrapper with
+ * 0x61/signed=0/base=10; caller File_BuildTempPath @ 1000:1648
+ * "<prefix><num>.$$$" step). Appends unsigned decimal to dst. NULL dst
+ * or cap == 0 -> NOENT (orig faulted). */
+civ_error_t util_itoa_dec(char *dst, size_t cap, unsigned value);
+
+/* Orig U32_Mul32 @ 1000:16fe (near twin of U32_Mul32Far @ 1000:1368 far;
+ * same MUL/JCXZ chain, RET vs RETF; low-32 DX:AX*CX:BX; callers
+ * Rng_NextRaw @ 1000:1729 + Date_Convert @ 1000:386e +
+ * Float_ParseFormat @ 1000:3ba0). */
+uint32_t u32_mul32(uint32_t a, uint32_t b);
+
+/* Orig Util_ToLowerAlias @ 1000:194a (ctype @ 1420:4baf bit4==A-Z =>
+ * +0x20; callers FUN_1158_0000 menu map + Pic_PlayShared @ 1030:0000).
+ * Behavior-identical twin of util_to_lower (correct tolower Orig is
+ * 194a, not 1978); thin delegate kept so the RE map records both sites. */
+int util_to_lower_alias(int c);
+
+/* Orig Util_ToUpper @ 1000:1978 (twin of 194a with bit8==a-z => -0x20;
+ * callers ResMgr_CmpName @ 1190:0e72 + strupr loops @ 1100:0b9d /
+ * 11e8:09f7). 0xFFFF passthrough preserved. */
+int util_to_upper(int c);
+
+/* Orig Util_Stpcpy @ 1000:1e9c (Util_StrLen @ 1000:3722 + Util_MemCopy @
+ * 1000:299e, returns NUL position for File_BuildTempPath @ 1000:1648
+ * chaining). NULL either -> NULL (orig faulted). */
+char *util_stpcpy(char *dst, const char *src);
+
+/* Orig Util_GetEnv @ 1000:28b6 (SCASB strlen + CMPSB environ scan of
+ * DAT_1420_4fc0 for "name="; caller Float_ParseFormat @ 1000:3ba0 with
+ * "TZ"). NULL either / empty name -> NULL. */
+const char *util_get_env(const char *name, const char *const *envp);
+
+/* Orig Util_LongToDec @ 1000:2974 (Util_FormatInt @ 1000:157a long twin
+ * of Util_IntToDec @ 1000:2928; generic radix 2..36, '-' iff base == 10
+ * && val < 0; caller FUN_11e8:012a MESSAGEBOX builder). Bad base empties
+ * dst. NULL dst -> NULL. */
+char *util_long_to_dec(char *dst, long val, int base);
+
+/* --- Batch 2026-10-17 fala 3 (M+N): sort + string + far-mem kernels ---
+ * Renamed this pass:
+ *   Sort_SwapElems @ 1000:30e2, Sort_QSortCore @ 1000:3110, Sort_QSort @
+ *   1000:3396, Util_StrCmp @ 1000:3680, Util_StrStr @ 1000:37fe,
+ *   Util_MemCopyFarDstFirst @ 1000:40aa, Util_MemSetFarCore @ 1000:40d0,
+ *   Util_MemSetFar @ 1000:40f6. All LIVE OS-free 1:1. */
+
+/* Orig Sort_SwapElems @ 1000:30e2 (swap *a<->*b, n bytes via SHR CX,1
+ * word loop + odd MOVSB; n = DAT_1420_b4aa image; 6 callers in
+ * Sort_QSortCore @ 1000:3110). Hidden size global -> explicit n. */
+void sort_swap_elems(void *a, void *b, size_t n);
+
+/* Orig Sort_QSortCore @ 1000:3110 (recursive quicksort core: n==2/3 fast
+ * paths, median-of-3, partition, S32_Div32 @ 1000:1423 index math, tail
+ * recursion on the smaller side; callers self x2 + Sort_QSort @
+ * 1000:3396). Effect-identical port via libc qsort on explicit
+ * base/n/size/cmp (hidden b4aa/b4ac/b4ae -> params + module-static
+ * images kept for RE fidelity, overwritten next call). */
+void sort_qsort_core(void *base, int n, int elem_size,
+                     int (*cmp)(const void *, const void *));
+
+/* Orig Sort_QSort @ 1000:3396 (entry: b4aa = size, b4ae/b4ac = cmp far;
+ * size == 0 returns; callers Pal_KdBuild @ 10c0:023e size 2 +
+ * City_ShowFindAndCenterDialog @ 1068:004c). Same libc-qsort effect on
+ * explicit params. */
+void sort_qsort(void *base, int n, int elem_size,
+                int (*cmp)(const void *, const void *));
+
+/* DAT_1420_b4aa/b4ac images: last Sort_QSort staging, valid until the
+ * next call (same pattern as dos_errno_e0010/4e7a in sys.h). */
+int sort_elem_size_image(void);
+int sort_has_cmp_image(void);
+
+/* Orig Util_StrCmp @ 1000:3680 (SCASB strlen(s2)+1 incl NUL + CMPSB REPE,
+ * returns last-byte diff; callers City_ShowFind @ 1068:004c rescan +
+ * Quiz @ 1178:0022 ordering; distinct from CompareBounded @ 1000:3744
+ * bound/mode-3 and StrCaseCmp @ 1000:36de folding). NULL either -> "".
+ */
+int util_str_cmp(const char *s1, const char *s2);
+
+/* Orig Util_StrStr @ 1000:37fe (empty needle -> hay; SCASB search +
+ * CMPSB verify; sole caller FUN_11d0_022d launch-confirm loop). NULL
+ * either -> NULL (orig faulted). */
+char *util_str_str(const char *haystack, const char *needle);
+
+/* Orig Util_MemCopyFarDstFirst @ 1000:40aa (far memcpy, dst-first:
+ * LES DI,[BP+6] dst, LDS SI,[BP+0xa] src, REP MOVSW/MOVSB; twin of
+ * Util_MemCopyFar @ 1000:137f src-first; 9 callers incl. Dlg templates
+ * @ 1098:2a85/2c36/2def + Pal_FindNearest @ 10c0:0413). Same contract
+ * as util_mem_copy_far. */
+void *util_mem_copy_far_dst_first(void *dst, const void *src, size_t n);
+
+/* Orig Util_MemSetFarCore @ 1000:40d0 (odd-head + CONCAT11 word loop;
+ * twin of Util_MemSetCore @ 1000:29c4; sole caller 40f6). Same contract
+ * as util_mem_set_core. */
+void *util_mem_set_far_core(void *dst, int c, size_t n);
+
+/* Orig Util_MemSetFar @ 1000:40f6 (far wrapper reordering (dst,fill,len)
+ * -> core (dst,len,fill); callers Pal_QuantInit @ 10c0:013d x3). Thin
+ * delegate, same contract. */
+void *util_mem_set_far(void *dst, int c, size_t n);
+
 #endif /* CIVLIN_COMMON_H */

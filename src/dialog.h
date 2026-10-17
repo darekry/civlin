@@ -3177,4 +3177,59 @@ civ_error_t pedia_modal_pump_ok_cancel(int *out_code);
  * DEFDLGPROC). Win16 DLGPROC body -> dialog facade TBD. STUB. */
 civ_error_t pedia_modal_subclass_proc(int msg, int wparam);
 
+/* Orig Text_NoopAfterBkColor @ 1098:217f (prologue/epilogue only; gap
+ * between Text_SetBkColor @ 2144 and FUN_1098_218d; decompiler string
+ * return is a stale-DS artifact per disasm). WONTFIX-Win16 NOOP CIV_OK. */
+civ_error_t text_noop_after_bkcolor(void);
+
+/* --- Batch 2026-10-17 fala 3 (L+M): dlg templates + item/message ---
+ * Renamed this pass:
+ *   Dlg_CopyItemTextToFar @ 1098:2735, Dlg_UpdateItemEnableShow @
+ *   1098:2829, Dlg_MessageBoxPrefixed @ 1098:28e4, Dlg_CreateDlgTemplate @
+ *   1098:2a85, Dlg_AppendTemplateItem @ 1098:2c36, Dlg_CompactTemplate @
+ *   1098:2def, Dlg_OpenIndirect @ 1098:2e41. Fala H: full STUBs (Win16
+ *   heap/dialog/message bridges TBD); no fake-OK. */
+
+/* Orig Dlg_CopyItemTextToFar @ 1098:2735 (SUB SP,0x10c buf256 +
+ * Dialog_GetItemRect @ 1100:03ff + FUN_1100_0970 + Util_StrCopy @
+ * 1000:36b2 to far dst; sole caller FUN_10f0_0066 city/name prompt).
+ * STUB UNSUPPORTED. */
+civ_error_t dlg_copy_item_text_to_far(int hdlg, int item);
+
+/* Orig Dlg_UpdateItemEnableShow @ 1098:2829 (GetItemRect + ENABLEWINDOW /
+ * SHOWWINDOW bits 0x2/0x1 + FUN_1100_0900 select bits 0x8/0x4/0x10;
+ * orphan; decompiler string literals are stale-DS handle artifacts).
+ * STUB UNSUPPORTED. */
+civ_error_t dlg_update_item_enable_show(int hdlg, int item, int flags);
+
+/* Orig Dlg_MessageBoxPrefixed @ 1098:28e4 ('!'->0x30 | '*'->0x10 |
+ * '?'->0x20 + consume + dual StrCopy + MESSAGEBOX @ 1608:0080; 18
+ * callers incl. Pic/Art/GfxPort/ResMgr/MenuZ). Prefix parse portable;
+ * MESSAGEBOX needs SDL_ShowSimpleMessageBox facade -> STUB. */
+civ_error_t dlg_message_box_prefixed(const char *msg);
+int dlg_message_box_prefix_kind(char c);
+
+/* Orig Dlg_CreateDlgTemplate @ 1098:2a85 (gr.c CreateDlgTemplate:
+ * LogTrace 1420:1f02 + LSTRLEN x3(+1 if style&0x40) + GLOBALALLOC 0x42 /
+ * LOCK + memcpy 40aa x3-4 + UNLOCK). DLGTEMPLATE layout + heap TBD ->
+ * STUB UNSUPPORTED. */
+civ_error_t dlg_create_dlg_template(int *out_handle);
+
+/* Orig Dlg_AppendTemplateItem @ 1098:2c36 (LSTRLEN x2 + GLOBALLOCK size +
+ * GLOBALREALLOC 0x42 + count++ + style|0x40000000 + memcpy x3 + UNLOCK ->
+ * 1/0). Same facade TBD -> STUB UNSUPPORTED. */
+civ_error_t dlg_append_template_item(int hold, int *out_ok);
+
+/* Orig Dlg_CompactTemplate @ 1098:2def (GLOBALLOCK + memmove(ptr,ptr+2,
+ * *ptr-2) via FUN_1000_40aa + UNLOCK; orphan tail). Win16 heap TBD ->
+ * STUB UNSUPPORTED. */
+civ_error_t dlg_compact_template(int hmem);
+
+/* Orig Dlg_OpenIndirect @ 1098:2e41 (GR_DialogOpenIndirect gr.c: INDIRECT
+ * twin of Dlg_CreateTracked @ 1098:124f with CREATEDIALOGINDIRECT @
+ * 1608:0184 + MAKEPROCINSTANCE + GETDC/StoreDC + CenterTrackedWindow +
+ * SHOWWINDOW + GETWINDOWRECT + InitPaletteWord + SELECTPALETTE; orphan).
+ * STUB UNSUPPORTED. */
+civ_error_t dlg_open_indirect(int tmpl_handle, unsigned flags);
+
 #endif /* CIVLIN_DIALOG_H */

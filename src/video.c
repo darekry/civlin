@@ -2441,3 +2441,182 @@ int pal_cmp_b(const uint8_t *pal, uint16_t a, uint16_t b)
     /* Orig Pal_CmpB @ 10c0:0b45 (ch 2). */
     return pal_cmp_channel(pal, a, b, 2);
 }
+
+/* --- Batch 2026-10-17 fala 2 (J): 1098 gap stubs + dialog frame --- */
+
+int gfx_return_one(void)
+{
+    /* Orig Gfx_ReturnOne @ 1098:200a (MOV AX,1 / RETF). */
+    return 1;
+}
+
+civ_error_t palette_noop_after_copy(void)
+{
+    /* Orig Palette_NoopAfterCopy @ 1098:20e6 (empty; WONTFIX-Win16). */
+    return CIV_OK;
+}
+
+civ_error_t gfx_store_word_triple(uint16_t *dst, uint16_t a, uint16_t b,
+                                  uint16_t c)
+{
+    /* Orig Gfx_StoreWordTriple @ 1098:218d (LES far 3-word store). */
+    if (!dst)
+        return CIV_ERR_NOENT;
+    dst[0] = a;
+    dst[1] = b;
+    dst[2] = c;
+    return CIV_OK;
+}
+
+civ_error_t gfx_draw_dialog_frame(void *dlg_far)
+{
+    /* Orig Gfx_DrawDialogFrame @ 1098:21b8 (see video.h).
+     * TODO: Orig GETCLIENTRECT HWND + Gfx_GetStoredDcOrMainPort @ 2687
+     * stored-HDC tail + GfxPort_Create @ 10d0:0000 / SetActive @ 10d0:0956
+     * + FUN_1000_14f8 / FUN_1100_0876 + Gfx_DrawBorderTiles @ 1098:2260 +
+     * ClearActive @ 10d0:09a2 / Close @ 10d0:0172 + StoreDC @ 1098:1104. */
+    (void)dlg_far;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t gfx_draw_border_tiles(void *frame_far)
+{
+    /* Orig Gfx_DrawBorderTiles @ 1098:2260 (see video.h; kernels below
+     * LIVE).
+     * TODO: Orig GETCLIENTRECT + MemCopyFar @ 1000:137f + OFFSETRECT @
+     * 1608:0108 + edge/corner Gfx_DrawTechIcon @ 11a8:0cb1 (STUB
+     * gfx_draw_tech_icon) + SETRECT @ 1608:0100 / PresentRect @ 10d0:0854
+     * strips (gfx_port_present_rect). */
+    (void)frame_far;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+int gfx_border_tile_count(int span_px)
+{
+    /* Orig same (span)/0x10 IDIV. */
+    return span_px / 16;
+}
+
+int gfx_border_tile_pos(int i)
+{
+    /* Orig same i<<4 SHL. */
+    return i << 4;
+}
+
+civ_error_t gfx_noop_border_gap_a(void)
+{
+    /* Orig Gfx_NoopBorderGapA @ 1098:258f (empty; WONTFIX-Win16). */
+    return CIV_OK;
+}
+
+civ_error_t gfx_noop_border_gap_b(void)
+{
+    /* Orig Gfx_NoopBorderGapB @ 1098:259d (empty; WONTFIX-Win16). */
+    return CIV_OK;
+}
+
+civ_error_t palette_noop_before_snapshot(void)
+{
+    /* Orig Palette_NoopBeforeSnapshot @ 1098:25ab (empty before 25b9). */
+    return CIV_OK;
+}
+
+civ_error_t gfx_noop_after_stored_dc(void)
+{
+    /* Orig Gfx_NoopAfterStoredDc @ 1098:26b3 (empty gap 2687..26c1). */
+    return CIV_OK;
+}
+
+/* --- Batch 2026-10-17 fala 3 (K+L): pal scale/dither + gap stubs --- */
+
+civ_error_t pal_convert_frame(void)
+{
+    /* Orig Pal_ConvertFrame @ 10c8:0000 (see video.h; caller
+     * Art_LoadFrameData @ 10b8:079d).
+     * TODO: Orig 6-arg prototype (from Art call-site) + 12f8:0056/0058
+     * ctx + DAT_1420_9980 flag + transparent ladder + pal_quant tables
+     * -> mem/arena + SDL bridge TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t pal_dither_convert(void)
+{
+    /* Orig Pal_DitherConvert @ 10c8:01c2 (1924 B core; see video.h).
+     * TODO: Orig Sys_StackPushCopy staging + Pal_FindNearest math +
+     * 12f8 queue/weight tables + Art_PumpConvertCancel PEEKMESSAGE ->
+     * Sys_PumpEvents TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t pal_shift_queue(uint32_t *q, int n)
+{
+    /* Orig Pal_ShiftQueue @ 10c8:0947 (Util_MemCopy @ 1000:299e rotate). */
+    int i;
+    uint32_t head;
+
+    if (!q || n <= 0)
+        return CIV_ERR_NOENT;
+    head = q[0];
+    for (i = 0; i < n - 1; i++)
+        q[i] = q[i + 1];
+    q[n - 1] = head;
+    return CIV_OK;
+}
+
+civ_error_t pal_alloc_scale_tables(int ctx)
+{
+    /* Orig Pal_AllocScaleTables @ 10c8:09a1 (see video.h).
+     * TODO: Orig GLOBALALLOC(0x40,0x400)+LOCK -> mem_arena_alloc_locked
+     * + 12f8:0068/99BA tables + div/weight ctx TBD. */
+    (void)ctx;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t pal_free_scale_tables(void)
+{
+    /* Orig Pal_FreeScaleTables @ 10c8:0aa1 (UNLOCK/FREE 0x41).
+     * TODO: Orig mem_unlock/free TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+int16_t pal_cmp_int(const int16_t *a, const int16_t *b)
+{
+    /* Orig Pal_CmpInt @ 10c0:0bb1 (generic, no 99b6 base). */
+    if (!a || !b)
+        return 0;
+    if (*b < *a)
+        return 1;
+    if (*a < *b)
+        return -1;
+    return 0;
+}
+
+int16_t pal_cmp_byte(const uint8_t *a, const uint8_t *b)
+{
+    /* Orig Pal_CmpByte @ 10c0:0be9 (unsigned twin). */
+    if (!a || !b)
+        return 0;
+    if (*b < *a)
+        return 1;
+    if (*a < *b)
+        return -1;
+    return 0;
+}
+
+int gfx_return_one_alt(void)
+{
+    /* Orig Gfx_ReturnOneAlt @ 1098:26c1 (twin of 200a). */
+    return 1;
+}
+
+int gfx_return_true_byte(void)
+{
+    /* Orig Gfx_ReturnTrueByte @ 1098:2715 (AL=1; AH residue ignored). */
+    return 1;
+}
+
+civ_error_t gfx_noop_gap_2727(void)
+{
+    /* Orig Gfx_NoopGap2727 @ 1098:2727 (empty; WONTFIX-Win16). */
+    return CIV_OK;
+}

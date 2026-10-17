@@ -1268,4 +1268,21 @@ int map_tile_is_seen(int seen);
  * Widths from font_text_width + rect spans (explicit, no font access). */
 int text_status_row_needs_clip(int total_w, int rect_w);
 
+/* --- Batch 2026-10-17 fala 3 (L): 1098 view-scale twins ---
+ * Renamed this pass:
+ *   Map_SetViewScaleAndOrigin @ 1098:296f, Map_ScaleRectInPlace @
+ *   1098:29e1. Both LIVE pure (IMUL/IDIV on seg 12d8 with 4502/4500
+ *   divisors; hidden globals -> explicit params/divisors). */
+
+/* Orig Map_SetViewScaleAndOrigin @ 1098:296f (DAT_12d8_0034 = x,
+ * 0032 = y, 0038 = x*4/4502, 0036 = y*8/4500). NULL out -> NOENT. */
+civ_error_t map_set_view_scale_and_origin(int16_t x, int16_t y,
+                                          int16_t div_w, int16_t div_h,
+                                          int16_t out[4]);
+
+/* Orig Map_ScaleRectInPlace @ 1098:29e1 (rect[0,2]*4/4502,
+ * rect[1,3]*8/4500 in place). NULL -> NOENT, zero divisors -> RANGE. */
+civ_error_t map_scale_rect_in_place(int16_t rect[4], int16_t div_w,
+                                    int16_t div_h);
+
 #endif /* CIVLIN_MAP_H */

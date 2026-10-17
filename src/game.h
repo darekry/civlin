@@ -3724,4 +3724,172 @@ civ_error_t city_show_find_and_center_dialog(void);
 void ship_update_connection_bits(uint8_t *tiles, int s1, int s2, int p1,
                                  int p2, int p3);
 
+/* --- Batch 2026-10-17 fala 2 (F+G): 1030 ogon + 1050 + 1018 ---
+ * Renamed this pass:
+ *   Pic_DrawSunkenPanel @ 1030:8a60, Pic_DrawLabeledBar @ 1030:8c11,
+ *   Tech_BuildDiscoveryList @ 1030:8d33, Tech_FindDiscoveryPair @
+ *   1030:9061, City_BlitTileSlot @ 1030:90a8, Pic_PresentProductionView @
+ *   1030:9203, Pic_BlitMaskedIcon @ 1030:925b, Pic_CreateInfoWindow @
+ *   1030:944c, Pic_DestroyInfoWindow @ 1030:94ba, Pic_GetSharedTextBuf @
+ *   1030:9588, Pic_NoopTail @ 1030:9598, Pic_ShowWindowRestored @
+ *   1030:95a8, Pic_SetArrowEnable @ 1030:9915, Pic_DrawBevelEdge @
+ *   1030:994b, Unit_UnlinkStack @ 1050:11ad, Combat_BlastReveal @
+ *   1050:158a, Census_ShowForeignAffairs @ 1018:1221, Census_ShowCivDetail
+ *   @ 1018:1739, Census_ShowCivDetailOverlay @ 1018:176c,
+ *   Census_DrawCivDetail @ 1018:17db. Fala H triage in game.c. */
+
+/* Orig Pic_DrawSunkenPanel @ 1030:8a60 (inset twin of Pic_DrawFramedPanel
+ * @ 1030:895c: SetActive + SETRECT + MakeBrush + FILLRECT + raw fill +
+ * FRAMERECT + INFLATERECT + GETSTOCKOBJECT frame; callers Pic_PlayShared
+ * x2). Needs render-target + brush facade -> STUB UNSUPPORTED. */
+civ_error_t pic_draw_sunken_panel(int x0, int y0, int x1, int y1);
+
+/* Orig Pic_DrawLabeledBar @ 1030:8c11 (3-D bar via Gfx_FillBarRect @
+ * 11e8:0504 + 4 edges via FUN_10d8_0000 + centered label via
+ * Text_DrawCentered @ 10d8:0528; caller Census path FUN_1018_1221).
+ * Needs bar/line/font facade -> STUB UNSUPPORTED. */
+civ_error_t pic_draw_labeled_bar(int x0, int y0, int x1, int y1,
+                                 const char *text, int color);
+
+/* Orig Tech_BuildDiscoveryList @ 1030:8d33 (paged discover 0x15 + tech
+ * 0x18 list fill via FramedPanel + SetIconScale + Res 0x83 + fit/draw +
+ * DiscoveryIcon/TechIcon; callers Pic_PlayShared x2). Needs dialog font /
+ * icon / panel facade -> STUB UNSUPPORTED. */
+civ_error_t tech_build_discovery_list(int civ, int *top_io, int *count_io);
+
+/* Orig Tech_FindDiscoveryPair @ 1030:9061 (21-entry DAT_1258_0000 /
+ * DAT_1260_0000 scan for (p1,p2), -1 when absent; caller Pic_PlayShared).
+ * LIVE pure on explicit tables (hidden SEG -> params). */
+int tech_find_discovery_pair(const int16_t a[21], const int16_t b[21],
+                             int p1, int p2);
+
+/* Orig City_BlitTileSlot @ 1030:90a8 (worked-tile mini-view: 0x18 box +
+ * ScrollPortCopy @ 10d0:03fa + Refresh @ 1110:0448 / Reveal @ 1110:1461 +
+ * SetColor/FILLRECT fallback; callers City_RenderWorkedTile @ 1030:79ce +
+ * Pic_PlayShared x3). Needs port/DC/scale facade -> STUB. */
+civ_error_t city_blit_tile_slot(int tx, int ty, int mode);
+
+/* Orig Pic_PresentProductionView @ 1030:9203 (SETRECT 0x140x0x200 +
+ * PresentRect @ 10d0:0854 + Pic_FinishPaint @ 1030:94d2; caller
+ * City_ChooseProduction @ 1170:05ca). Needs present facade -> STUB. */
+civ_error_t pic_present_production_view(void);
+
+/* Orig Pic_BlitMaskedIcon @ 1030:925b (PIC-path color masked blit triptych
+ * 0x46/0x66 + 0xc6/0x88 + 0x46/0x66 via BuildIconMask @ 11a8:0d6e mask
+ * 0xf5; caller Pic_PlayShared). Needs DC/bitmap/mask/BITBLT facade ->
+ * STUB UNSUPPORTED (no guessed RLE). */
+civ_error_t pic_blit_masked_icon(void);
+
+/* Orig Pic_CreateInfoWindow @ 1030:944c (CREATEWINDOW style 0x5000000b
+ * id 0x6dd w/h from rect; callers Pic_PlayShared x3). Win16 window, no
+ * SDL twin in-func -> STUB UNSUPPORTED (call shape kept as win16.*). */
+civ_error_t pic_create_info_window(int *hwnd_out);
+
+/* Orig Pic_DestroyInfoWindow @ 1030:94ba (DESTROYWINDOW; callers
+ * Pic_PlayShared x3 + Ship_ShowView @ 1070:0327). Real Win16 effect ->
+ * STUB UNSUPPORTED (never WONTFIX, no fake-OK). */
+civ_error_t pic_destroy_info_window(void);
+
+/* Orig Pic_GetSharedTextBuf @ 1030:9588 (16 B, no callers/callees; twin
+ * of Pic_NoopTail @ 1030:9598; decompiler string return is a stale-DS
+ * artifact per disasm). Provably empty -> WONTFIX-Win16 NOOP CIV_OK. */
+civ_error_t pic_get_shared_text_buf(void);
+
+/* Orig Pic_NoopTail @ 1030:9598 (same 16 B empty shape as 9588).
+ * WONTFIX-Win16 NOOP CIV_OK. */
+civ_error_t pic_noop_tail(void);
+
+/* Orig Pic_ShowWindowRestored @ 1030:95a8 (SHOWWINDOW @ 1608:00d0 with 9
+ * == SW_RESTORE shape; orphan helper). USER window effect, no SDL facade
+ * in-func -> STUB UNSUPPORTED. */
+civ_error_t pic_show_window_restored(int hwnd);
+
+/* Orig Pic_SetArrowEnable @ 1030:9915 (mode 0x97 -> DAT_1260_0030 = val;
+ * mode 0x98 -> DAT_1260_002e = val; callers Pic_PlayShared x4; feeds the
+ * pic_arrow_is_greyed gate). LIVE 1:1 on explicit outs (hidden ES:0x1260
+ * -> params). */
+int pic_arrow_enable_slot(int mode);
+civ_error_t pic_set_arrow_enable(int mode, int val, int *f002e, int *f0030);
+
+/* Orig Pic_DrawBevelEdge @ 1030:994b (GDI bevel: CREATEPEN white
+ * 0xffffff / grey 0x808080 + SELECTOBJECT + MOVETO/LINETO + DELETEOBJECT;
+ * callers DrawFrameArrow @ 1030:96ad x2 + DrawFrameCaption @ 1030:982f
+ * x2). Pen/DC bridge TBD -> STUB; geometry LIVE below. */
+civ_error_t pic_draw_bevel_edge(int y0, int x0, int y1, int x1, int style);
+int pic_bevel_inner_h(int y1, int y0);
+int pic_bevel_is_raised(int style);
+
+/* Orig Unit_UnlinkStack @ 1050:11ad (singly-linked 0x6306 next-chain
+ * detach, 0xff none, 0x20-step cap; stride civ*0x600+idx*0xc; sole caller
+ * FUN_1110_17bc tile-clear gate; sibling of Unit_LinkStack @ 1050:1105).
+ * LIVE 1:1 on explicit next[] (hidden segment -> param). */
+int unit_unlink_stack(uint8_t *next, int n, int start, int victim);
+
+/* Orig Combat_BlastReveal @ 1050:158a (9-tile burst: WrapX + occupancy&1
+ * gate; land Rng_Range(3)!=0 && TileClass!=10 -> SetIrrigationFlag; city
+ * pop -= pop/2; always RevealCenter; port select first; callers
+ * Combat_ScoreAdjacent @ 1050:13af tail + Pic_PlayShared @ 1030:74d5).
+ * Port/reveal bridge TBD -> STUB; kernels LIVE below. */
+civ_error_t combat_blast_reveal(int x, int y);
+int combat_blast_count(void);
+int combat_should_irrigate(unsigned rng3, int tile_class);
+int combat_halve_pop(int pop);
+
+/* Orig Census_ShowForeignAffairs @ 1018:1221 (foreign roster: civs 1..7,
+ * alive mask, embassy 0x40 gate, 0x80-city capital scan, treaty bits,
+ * 0x119 buttons, drill to 176c, keys 1..7, click (y-0x1c)/0x18; caller
+ * Tech_GrantTech @ 1170:2aaa). Dialog/GDI/modal bridge TBD -> STUB;
+ * index kernels LIVE below. */
+civ_error_t census_show_foreign_affairs(void);
+int census_foreign_is_known(int player, int civ, int peace_flags);
+int census_foreign_key_to_idx(int key);
+int census_foreign_y_to_idx(int y);
+
+/* Orig Census_ShowCivDetail @ 1018:1739 (Res 0x8a/2 + Open + 17db body +
+ * Close; callers Diplo_PromptContact @ 1160:20c0 + Diplomat_CityAction @
+ * 11b8:0000). Dialog bridge TBD -> STUB UNSUPPORTED. */
+civ_error_t census_show_civ_detail(int civ);
+
+/* Orig Census_ShowCivDetailOverlay @ 1018:176c (like 1739 but preserves
+ * DAT_1420_5156 + 62 B screen stash via Util_MemCopyFar @ 1000:137f;
+ * sole caller 1221 drill). Mem part facade-ready (util_mem_copy_far
+ * LIVE), dialog tails TBD -> STUB UNSUPPORTED. */
+civ_error_t census_show_civ_detail_overlay(int civ);
+
+/* Orig Census_DrawCivDetail @ 1018:17db (single-civ intel body: gov /
+ * wonders / capital / treasury / relations / techs 0x47..0 y+=8 stop at
+ * 0xbf; callers 1739 + 176c). Render bridge TBD -> STUB; scan kernels
+ * LIVE below. */
+civ_error_t census_draw_civ_detail(int civ);
+int census_detail_find_capital(const int *owners, const int *valids, int n,
+                               int civ);
+int census_detail_tech_y(int row);
+
+/* --- Batch 2026-10-17 fala 3 (K): ship place + launch poll ---
+ * Renamed this pass:
+ *   Ship_ValidatePlacement @ 1070:1dfb, Ship_CanPlaceAt @ 1070:1e77,
+ *   Ship_PollLaunchConfirm @ 1010:00d6. */
+
+/* Orig Ship_CanPlaceAt @ 1070:1e77 (cell conn + 3 neighbour dim gates
+ * < 0x11; sole caller ValidatePlacement; distinct from IsPartConnected
+ * @ 1070:11f2). LIVE pure kernel on pre-resolved small-flags (hidden
+ * 1290 grid + 1420:12b0/12b2 tables -> params; table images stay
+ * caller-side with TODO). conn/flags: 1 = placeable-side. */
+int ship_can_place_at(int conn_is_free, int na_small, int nb_small,
+                      int nc_small);
+
+/* Orig Ship_ValidatePlacement @ 1070:1dfb (part w/h /0x10 cell loop over
+ * CanPlaceAt + 0x0E/0x0B bounds; orphan; same class as
+ * Ship_UpdateConnectionBits @ 1070:1cfa LIVE). Bounds half LIVE pure on
+ * explicit cell counts (hidden 12b0/12b2 dims -> params); per-cell grid
+ * loop stays caller-side TODO. 1 fits, 0 not. */
+int ship_validate_placement(int w_cells, int h_cells, int x0, int y0);
+
+/* Orig Ship_PollLaunchConfirm @ 1010:00d6 (tick % 0x1E gate + PEEKMESSAGE
+ * pump via FUN_11e0_095f + Cursor_Set 0x84 + DAT_13E0_001E = 1 + string
+ * 1420:13D2+0x0E; orphan; prototype/return conflated in decompiler).
+ * Pump + cursor + semantics unconfirmed -> STUB UNSUPPORTED (*out
+ * untouched). */
+civ_error_t ship_poll_launch_confirm(long tick, const char **out);
+
 #endif /* CIVLIN_GAME_H */

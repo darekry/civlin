@@ -1839,3 +1839,37 @@ int text_status_row_needs_clip(int total_w, int rect_w)
      * right-left span; live loop in text_draw_with_font). */
     return (total_w > rect_w) ? 1 : 0;
 }
+
+/* --- Batch 2026-10-17 fala 3 (L): 1098 view-scale twins --- */
+
+civ_error_t map_set_view_scale_and_origin(int16_t x, int16_t y,
+                                          int16_t div_w, int16_t div_h,
+                                          int16_t out[4])
+{
+    /* Orig Map_SetViewScaleAndOrigin @ 1098:296f (hidden DAT_12d8_0032 /
+     * 34/36/38 + 4502/4500 divisors -> explicit out/divisors). */
+    if (!out)
+        return CIV_ERR_NOENT;
+    if (div_w == 0 || div_h == 0)
+        return CIV_ERR_RANGE;
+    out[0] = x;
+    out[1] = y;
+    out[2] = (int16_t)((int32_t)x * 4 / div_w);
+    out[3] = (int16_t)((int32_t)y * 8 / div_h);
+    return CIV_OK;
+}
+
+civ_error_t map_scale_rect_in_place(int16_t rect[4], int16_t div_w,
+                                    int16_t div_h)
+{
+    /* Orig Map_ScaleRectInPlace @ 1098:29e1 (4x IMUL/IDIV in place). */
+    if (!rect)
+        return CIV_ERR_NOENT;
+    if (div_w == 0 || div_h == 0)
+        return CIV_ERR_RANGE;
+    rect[0] = (int16_t)((int32_t)rect[0] * 4 / div_w);
+    rect[1] = (int16_t)((int32_t)rect[1] * 8 / div_h);
+    rect[2] = (int16_t)((int32_t)rect[2] * 4 / div_w);
+    rect[3] = (int16_t)((int32_t)rect[3] * 8 / div_h);
+    return CIV_OK;
+}

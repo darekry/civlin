@@ -5506,3 +5506,360 @@ void ship_update_connection_bits(uint8_t *tiles, int s1, int s2, int p1,
     else
         tiles[base] = (m == 1u) ? 0u : 1u;
 }
+
+/* --- Batch 2026-10-17 fala 2 (F+G): 1030 ogon + 1050 + 1018 --- */
+
+civ_error_t pic_draw_sunken_panel(int x0, int y0, int x1, int y1)
+{
+    /* Orig Pic_DrawSunkenPanel @ 1030:8a60 (see game.h).
+     * TODO: Orig GfxPort_SetActive @ 10d0:0956 + SETRECT/FILLRECT/
+     * FRAMERECT/INFLATERECT/GETSTOCKOBJECT/DELETEOBJECT -> SDL
+     * render-target + brush facade TBD. */
+    (void)x0;
+    (void)y0;
+    (void)x1;
+    (void)y1;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t pic_draw_labeled_bar(int x0, int y0, int x1, int y1,
+                                 const char *text, int color)
+{
+    /* Orig Pic_DrawLabeledBar @ 1030:8c11 (see game.h).
+     * TODO: Orig Gfx_FillBarRect @ 11e8:0504 + FUN_10d8_0000 edges +
+     * Text_DrawCentered @ 10d8:0528 -> SDL facade TBD. */
+    (void)x0;
+    (void)y0;
+    (void)x1;
+    (void)y1;
+    (void)text;
+    (void)color;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t tech_build_discovery_list(int civ, int *top_io, int *count_io)
+{
+    /* Orig Tech_BuildDiscoveryList @ 1030:8d33 (see game.h).
+     * TODO: Orig FramedPanel/SetIconScale/Res/fit/draw/icon -> SDL
+     * text/icon facade TBD. */
+    (void)civ;
+    (void)top_io;
+    (void)count_io;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+int tech_find_discovery_pair(const int16_t a[21], const int16_t b[21],
+                             int p1, int p2)
+{
+    /* Orig Tech_FindDiscoveryPair @ 1030:9061 (DAT_1258_0000/1260_0000
+     * 21-entry scan; hidden SEG -> explicit params). */
+    int i;
+
+    if (!a || !b)
+        return -1;
+    for (i = 0; i <= 0x14; i++) {
+        if (a[i] == p1 && b[i] == p2)
+            return i;
+    }
+    return -1;
+}
+
+civ_error_t city_blit_tile_slot(int tx, int ty, int mode)
+{
+    /* Orig City_BlitTileSlot @ 1030:90a8 (see game.h).
+     * TODO: Orig SetActive/SETRECT/OFFSETRECT/ScrollPortCopy @ 10d0:03fa
+     * + Refresh @ 1110:0448 / Reveal @ 1110:1461 + SetColor/FILLRECT ->
+     * SDL render-target facade TBD. */
+    (void)tx;
+    (void)ty;
+    (void)mode;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t pic_present_production_view(void)
+{
+    /* Orig Pic_PresentProductionView @ 1030:9203 (SETRECT + PresentRect @
+     * 10d0:0854 + FinishPaint @ 1030:94d2).
+     * TODO: Orig SDL present facade TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t pic_blit_masked_icon(void)
+{
+    /* Orig Pic_BlitMaskedIcon @ 1030:925b (BITBLT triptych + BuildIconMask
+     * @ 11a8:0d6e mask 0xf5; even-width ((w+1)/2*2) bitmap).
+     * TODO: Orig DC/bitmap/mask/BITBLT -> SDL texture/mask facade TBD (no
+     * guessed RLE). */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t pic_create_info_window(int *hwnd_out)
+{
+    /* Orig Pic_CreateInfoWindow @ 1030:944c (CREATEWINDOW @ 1608:00cc).
+     * TODO: Orig CREATEWINDOW -> win16_create_window (SDL bridge TBD). */
+    (void)hwnd_out;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t pic_destroy_info_window(void)
+{
+    /* Orig Pic_DestroyInfoWindow @ 1030:94ba (DESTROYWINDOW @ 1608:00dc). */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t pic_get_shared_text_buf(void)
+{
+    /* Orig Pic_GetSharedTextBuf @ 1030:9588 (16 B empty, no callers; twin
+     * of Pic_NoopTail @ 9598; decompiler string return is a stale-DS
+     * artifact per disasm; WONTFIX-Win16). */
+    return CIV_OK;
+}
+
+civ_error_t pic_noop_tail(void)
+{
+    /* Orig Pic_NoopTail @ 1030:9598 (same 16 B empty shape). */
+    return CIV_OK;
+}
+
+civ_error_t pic_show_window_restored(int hwnd)
+{
+    /* Orig Pic_ShowWindowRestored @ 1030:95a8 (SHOWWINDOW @ 1608:00d0, 9).
+     * TODO: Orig SHOWWINDOW -> win16_show_window facade TBD. */
+    (void)hwnd;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+int pic_arrow_enable_slot(int mode)
+{
+    /* Orig Pic_SetArrowEnable @ 1030:9915 slot half (0x97 -> 0x30, 0x98 ->
+     * 0x2e). */
+    if (mode == 0x97)
+        return 0x30;
+    if (mode == 0x98)
+        return 0x2E;
+    return -1;
+}
+
+civ_error_t pic_set_arrow_enable(int mode, int val, int *f002e, int *f0030)
+{
+    /* Orig Pic_SetArrowEnable @ 1030:9915 (ES:0x1260 [0x2e/0x30] writes ->
+     * explicit outs; feeds pic_arrow_is_greyed). */
+    if (!f002e || !f0030)
+        return CIV_ERR_NOENT;
+    if (mode == 0x97) {
+        *f0030 = val;
+        return CIV_OK;
+    }
+    if (mode == 0x98) {
+        *f002e = val;
+        return CIV_OK;
+    }
+    return CIV_OK;
+}
+
+civ_error_t pic_draw_bevel_edge(int y0, int x0, int y1, int x1, int style)
+{
+    /* Orig Pic_DrawBevelEdge @ 1030:994b (see game.h; geometry LIVE in
+     * pic_bevel_* below).
+     * TODO: Orig CREATEPEN/SELECTOBJECT/MOVETO/LINETO/DELETEOBJECT ->
+     * win16 pen/DC bridge TBD. */
+    (void)y0;
+    (void)x0;
+    (void)y1;
+    (void)x1;
+    (void)style;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+int pic_bevel_inner_h(int y1, int y0)
+{
+    /* Orig Pic_DrawBevelEdge @ 1030:994b geometry: h_in = (y1-y0)-3. */
+    return (y1 - y0) - 3;
+}
+
+int pic_bevel_is_raised(int style)
+{
+    /* Orig same style gate: style == 0 -> raised (white then grey). */
+    return (style == 0) ? 1 : 0;
+}
+
+int unit_unlink_stack(uint8_t *next, int n, int start, int victim)
+{
+    /* Orig Unit_UnlinkStack @ 1050:11ad (0x6306 next-chain, 0xff none,
+     * 0x20-step cap; stride civ*0x600+idx*0xc -> next[] index). */
+    int cur;
+    int guard;
+
+    if (!next || n <= 0 || start < 0 || start >= n || victim < 0
+        || victim >= n)
+        return -1;
+    if (next[start] == 0xFFu)
+        return 0;
+    if (next[next[start]] == (uint8_t)victim) {
+        next[next[start]] = 0xFFu;
+    } else {
+        cur = next[start];
+        guard = 0;
+        while (guard < 0x20 && cur != 0xFF) {
+            if (next[cur] == (uint8_t)victim) {
+                next[cur] = next[victim];
+                break;
+            }
+            cur = next[cur];
+            guard++;
+        }
+    }
+    next[victim] = 0xFFu;
+    return 1;
+}
+
+civ_error_t combat_blast_reveal(int x, int y)
+{
+    /* Orig Combat_BlastReveal @ 1050:158a (9-tile burst; see game.h).
+     * TODO: Orig GfxPort_SetActive @ 10d0:0956 + WrapX/occupancy/Rng/
+     * TileClass/SetIrrigationFlag/City_FindByTile/RevealCenter bridge TBD
+     * (kernels below are LIVE). */
+    (void)x;
+    (void)y;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+int combat_blast_count(void)
+{
+    /* Orig Combat_BlastReveal @ 1050:158a neighbor count (center+8). */
+    return 9;
+}
+
+int combat_should_irrigate(unsigned rng3, int tile_class)
+{
+    /* Orig same land gate: Rng_Range(3) != 0 && TileClass != 10. */
+    return (rng3 != 0u && tile_class != 10) ? 1 : 0;
+}
+
+int combat_halve_pop(int pop)
+{
+    /* Orig same city tail: pop -= pop/2 (SAR 1). */
+    return pop - pop / 2;
+}
+
+civ_error_t census_show_foreign_affairs(void)
+{
+    /* Orig Census_ShowForeignAffairs @ 1018:1221 (see game.h).
+     * TODO: Orig City_Open/CloseCensusView @ 1018:0000/0380 + Text_Draw* @
+     * 10d8:01fa/01b0 + Res @ 11f8:0080 + PresentRect @ 10d0:0854 + pump/
+     * drain + FUN_1030_8c11 buttons -> dialog/video SDL bridges TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+int census_foreign_is_known(int player, int civ, int peace_flags)
+{
+    /* Orig same embassy gate: player == civ || (flags & 0x40). */
+    if (player == civ)
+        return 1;
+    return ((peace_flags & 0x40) != 0) ? 1 : 0;
+}
+
+int census_foreign_key_to_idx(int key)
+{
+    /* Orig same keys 0x31..0x37 -> 0..6. */
+    if (key < 0x31 || key > 0x37)
+        return -1;
+    return key - 0x31;
+}
+
+int census_foreign_y_to_idx(int y)
+{
+    /* Orig same click row (y-0x1c)/0x18. */
+    return (y - 0x1C) / 0x18;
+}
+
+civ_error_t census_show_civ_detail(int civ)
+{
+    /* Orig Census_ShowCivDetail @ 1018:1739 (Res 0x8a/2 + Open + 17db +
+     * Close; callers Diplo_PromptContact + Diplomat_CityAction).
+     * TODO: Orig dialog bridge TBD. */
+    (void)civ;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t census_show_civ_detail_overlay(int civ)
+{
+    /* Orig Census_ShowCivDetailOverlay @ 1018:176c (5156 + 62 B stash via
+     * util_mem_copy_far LIVE + Open/17db/Close; caller 1221 drill).
+     * TODO: Orig dialog bridge TBD (mem part facade-ready). */
+    (void)civ;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t census_draw_civ_detail(int civ)
+{
+    /* Orig Census_DrawCivDetail @ 1018:17db (gov/wonders/capital/treasury/
+     * relations/techs 0x47..0 y+=8 stop 0xbf; callers 1739 + 176c).
+     * TODO: Orig Text_Draw*/ /* 10d8 line-out + Res + City_AppendName @
+     * 1038:0bba render bridge TBD (helpers below LIVE). */
+    (void)civ;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+int census_detail_find_capital(const int *owners, const int *valids, int n,
+                               int civ)
+{
+    /* Orig same 0x80-city scan: owner == civ && valid != -1 (palace test
+     * stays caller-side with DAT_1420_54fc). */
+    int i;
+
+    if (!owners || !valids || n <= 0)
+        return -1;
+    for (i = 0; i < n; i++) {
+        if (owners[i] == civ && valids[i] != -1)
+            return i;
+    }
+    return -1;
+}
+
+int census_detail_tech_y(int row)
+{
+    /* Orig same tech-grid stepping y += 8 (base stays caller-side; break
+     * at 0xbf caller-side). */
+    return row * 8;
+}
+
+/* --- Batch 2026-10-17 fala 3 (K): ship place + launch poll --- */
+
+int ship_can_place_at(int conn_is_free, int na_small, int nb_small,
+                      int nc_small)
+{
+    /* Orig Ship_CanPlaceAt @ 1070:1e77 boolean skeleton (hidden grid/dim
+     * tables -> pre-resolved flags; images stay caller-side).
+     * TODO: Orig 1290 grid +0x1B2/+0x1A6/+0x1B1/+0x1A5 + DAT_1420_12b0 /
+     * 12b2 0x10/0x11 thresholds -> table images TBD. */
+    if (!conn_is_free)
+        return 0;
+    if (!na_small || !nb_small || !nc_small)
+        return 0;
+    return 1;
+}
+
+int ship_validate_placement(int w_cells, int h_cells, int x0, int y0)
+{
+    /* Orig Ship_ValidatePlacement @ 1070:1dfb bounds half (hidden part
+     * dims /0x10 -> cell counts; per-cell CanPlaceAt loop caller-side).
+     * TODO: Orig grid loop via Ship_CanPlaceAt TBD. */
+    if (w_cells <= 0 || h_cells <= 0 || x0 < 0 || y0 < 0)
+        return 0;
+    if (x0 + w_cells - 1 > 0x0E || y0 + h_cells - 1 > 0x0B)
+        return 0;
+    return 1;
+}
+
+civ_error_t ship_poll_launch_confirm(long tick, const char **out)
+{
+    /* Orig Ship_PollLaunchConfirm @ 1010:00d6 (see game.h; prototype
+     * conflated long-tick vs char* in decompiler).
+     * TODO: Orig tick prototype + caller + FUN_11e0_095f PEEKMESSAGE ->
+     * Sys_PumpEvents + Cursor_Set 0x84 facade + DAT_13E0_001E wiring TBD
+     * (*out untouched). */
+    (void)tick;
+    (void)out;
+    return CIV_ERR_UNSUPPORTED;
+}

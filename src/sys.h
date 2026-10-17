@@ -1413,4 +1413,151 @@ civ_error_t dos_get_date(uint16_t *year_out, uint16_t *md_out);
  * Sole caller Sys_GetDate @ 1000:18d4. STUB UNSUPPORTED. */
 civ_error_t dos_get_time(uint16_t *hm_out, uint16_t *sh_out);
 
+/* --- Batch 2026-10-17 fala 2 (H+I): 1000 core/file layer ---
+ * Renamed this pass:
+ *   Sys_StackPushCopy @ 1000:14f8, Dos_PropagateError @ 1000:1553,
+ *   Dos_Tell @ 1000:192e, File_FlushAllEntries @ 1000:2222,
+ *   File_ParseMode @ 1000:2266, File_OpenEntry @ 1000:2322,
+ *   File_AllocEntry @ 1000:23f3, File_Fopen @ 1000:243d,
+ *   File_TextNewlineAdjust @ 1000:2474, File_Seek @ 1000:24f6,
+ *   File_Tell @ 1000:2578, File_FlushBufferedOutputs @ 1000:265a,
+ *   File_FillBuffer @ 1000:2698.
+ * File/mem/timer rules: two int-fd -> SDL_IOStream* tables (win16_l* +
+ * dos-*, fd from 5, never unified; dos-fd never POSIX-fd); POSIX-FALLBACK
+ * marker where no SDL twin; errors via DAT_1420_0010/4e7a staging +
+ * dos_error_from_errno, SDL_GetError log-only; timers store+poll. */
+
+/* Orig Sys_StackPushCopy @ 1000:14f8 (Borland struct-push: REP MOVSW/SB
+ * CX bytes DX:AX -> SS:SP+8 under the return address for the next CALLF;
+ * 21 callers incl. Anim_OpenSequence @ 10b0:008a). SUB-SP-under-RET has
+ * no C twin: Linux callers pass structs directly. Copy kernel ported,
+ * effect not reproduced -> UNSUPPORTED (never fake-OK). */
+civ_error_t sys_stack_push_copy(void *dst, const void *src, size_t n);
+
+/* Orig Dos_PropagateError @ 1000:1553 (PUSH SI / CALL Dos_MapError @
+ * 1000:151a / MOV AX,SI: stages DAT_1420_0010/4e7a but returns the orig
+ * code; sole caller Dos_GetFileAttr @ 1000:1210 JC path). LIVE. */
+int dos_propagate_error(int dos_code);
+
+/* Orig Dos_Tell @ 1000:192e (Dos_Seek @ 1000:161c thin with AL=1 CUR,
+ * CX:DX=0:0; sole caller FUN_1140_034A nonzero-pos check). SDL_TellIO on
+ * the dos-fd table TBD -> STUB UNSUPPORTED (outs untouched). */
+civ_error_t dos_tell(int fd, long *out_pos);
+
+/* Orig File_FlushAllEntries @ 1000:2222 (flush-all behind File_Flush @
+ * 1000:2152 null case: DGROUP 0x4cbc stride 0x14, flags *(p+2)&3,
+ * high-water DAT_1420_4e4c). SDL flush bridge TBD -> STUB. */
+civ_error_t file_flush_all_entries(int *out_flushed);
+
+/* Orig File_ParseMode @ 1000:2266 (Borland fopen-mode parse behind
+ * File_OpenEntry @ 1000:2322: r/w/a + '+' + t/b/default DAT_1420_4e76).
+ * Parse kernel LIVE on explicit def_mode (image 0x4000); exit-vector
+ * store DAT_1420_4cb6/4cb4 (far 1000:4030 close-all) stays module-static
+ * TODO (atexit TBD). */
+civ_error_t file_parse_mode(const char *mode, unsigned def_mode,
+                            unsigned *out_flags, unsigned *out_extra,
+                            int *out_ret);
+
+/* Orig File_OpenEntry @ 1000:2322 (fopen core on supplied entry: 2266
+ * parse + File_Open @ 1000:2ad9 INT21 + Dos_IsCharDevice @ 1000:1566 +
+ * File_SetBuffer @ 1000:3496; sole caller File_Fopen @ 1000:243d).
+ * Needs dos-fd/arena/char-device facade -> STUB UNSUPPORTED. */
+civ_error_t file_open_entry(void *entry, const char *path, const char *mode);
+
+/* Orig File_AllocEntry @ 1000:23f3 (free FILE[0x14] slot scan: first
+ * fd < 0, NULL when full; sole caller File_Fopen). LIVE pure kernel on
+ * explicit fd array (hidden DGROUP stride -> param). */
+int file_alloc_entry(const int8_t *fds, unsigned n);
+
+/* Orig File_Fopen @ 1000:243d (AllocEntry + OpenEntry(0,...); caller
+ * ResMgr_LoadRscDisk @ 1190:0501 with "rb"). Depends on OpenEntry facade
+ * -> STUB UNSUPPORTED (*out untouched). */
+civ_error_t file_fopen(const char *path, const char *mode, void **out_entry);
+
+/* Orig File_TextNewlineAdjust @ 1000:2474 (tell/seek text-adjust core:
+ * CRLF->LF '\n' compensation gated on flags&0x40; callers File_Seek @
+ * 1000:24f6 + File_Tell @ 1000:2578 x2). LIVE pure on explicit buf. */
+long file_text_newline_adjust(const uint8_t *buf, long len, int is_binary);
+
+/* Orig File_Seek @ 1000:24f6 (buffered lseek: File_Flush + text-adjust +
+ * Dos_Seek @ 1000:161c INT21 AH42; 6 callers incl. File_SetPosition @
+ * 1000:1346 + ResMgr_*). SDL_SeekIO TBD -> STUB UNSUPPORTED. */
+civ_error_t file_seek(void *entry, long off, int origin);
+
+/* Orig File_Tell @ 1000:2578 (buffered ftell: Dos_Seek CUR/END/SET triple
+ * + text-adjust; sole caller File_GetPosition @ 1000:1316). SDL_TellIO /
+ * SeekIO TBD -> STUB UNSUPPORTED (*out untouched). */
+civ_error_t file_tell(void *entry, long *out_pos);
+
+/* Orig File_FlushBufferedOutputs @ 1000:265a (flush loop over 0x4cbc
+ * entries with (flags&0x300)==0x300; callers File_FillBuffer @ 1000:2698
+ * + File_ReadChunk @ 1000:272a). Transitive Dos_Write -> STUB. */
+civ_error_t file_flush_buffered_outputs(void);
+
+/* Orig File_FillBuffer @ 1000:2698 (buffer refill: FlushAll? no — 265a
+ * gate when flags&0x200 + File_ReadBuffered @ 1000:33c0; sole caller
+ * File_ReadChunk @ 1000:272a). SDL_ReadIO + 0x4000 text gate TBD ->
+ * STUB UNSUPPORTED. */
+civ_error_t file_fill_buffer(void *entry);
+
+/* --- Batch 2026-10-17 fala 3 (N+O): far-heap + mem wrappers ---
+ * Renamed this pass:
+ *   Heap_FreeCurrentHook @ 1000:4239, Heap_GetAnchor @ 1000:441e,
+ *   Heap_LoadAnchor @ 1000:468c, Heap_AllocFar @ 1000:46f1,
+ *   Heap_TryAllocBlock @ 1000:47f2, Heap_FreeFar @ 1000:4870,
+ *   Heap_GrowChunk @ 1000:4931, Mem_ReleaseHandle @ 1000:4961,
+ *   Mem_AllocWithMode @ 1000:498c, Mem_FreeWithMode @ 1000:4a52.
+ * Borland far-RTL (DS:0xb4b8 anchor, DAT_1420_0027 flags/hook,
+ * GLOBALALLOC/LOCK/HANDLE/UNLOCK/FREE chunks). Arena bridge
+ * (win16_mem_init 16 MB) TBD -> STUBs below; pure kernels LIVE. */
+
+/* Orig Heap_FreeCurrentHook @ 1000:4239 (PUSH DAT_1420_0027 + far ptr ->
+ * Mem_FreeWithMode @ 1000:4a52; callers File_CloseEntry @ 1000:2098 +
+ * File_SetBuffer @ 1000:3496). Hook + segmented coalesce TBD -> STUB. */
+civ_error_t heap_free_current_hook(void *p);
+
+/* Orig Heap_GetAnchor @ 1000:441e (MOV DX,DS / AX,0xb4b8; sole caller
+ * Heap_LoadAnchor @ 1000:468c). LIVE const. */
+uint16_t heap_get_anchor_off(void);
+
+/* Orig Heap_LoadAnchor @ 1000:468c (ES:DI = DS:b4b8, preserves DX:AX;
+ * callers Heap_AllocFar @ 1000:46f1 + Heap_FreeFar @ 1000:4870). Hidden
+ * ES:DI -> explicit out (allowed refactor). LIVE. NULL -> NOENT. */
+void heap_load_anchor(uint16_t *anchor_out);
+
+/* Orig Heap_AllocFar @ 1000:46f1 (farmalloc core: size round + heap-list
+ * walk via LoadAnchor + TryAllocBlock carve else GrowChunk chunks +
+ * header link; gate (flags&~0x40)==0; sole caller Mem_AllocWithMode @
+ * 1000:498c). Rounding/split/growth need arena bridge -> STUB. */
+civ_error_t heap_alloc_far(size_t n, void **out);
+
+/* Orig Heap_TryAllocBlock @ 1000:47f2 (freelist try-alloc/split with
+ * STC/CLC carry protocol; sole caller Heap_AllocFar). Segmented arith
+ * -> explicit bool + arena TBD -> STUB. */
+civ_error_t heap_try_alloc_block(void *heap, size_t n, void **out);
+
+/* Orig Heap_FreeFar @ 1000:4870 (farfree core: header coalesce + chunk
+ * release + hook; sole caller Mem_FreeWithMode @ 1000:4a52). STUB. */
+civ_error_t heap_free_far(void *p);
+
+/* Orig Heap_GrowChunk @ 1000:4931 (GLOBALALLOC(DAT_1420_0027|2) +
+ * GLOBALLOCK; callers Heap_AllocFar x2). Direct win16_global_alloc
+ * bridge TBD -> STUB. */
+civ_error_t heap_grow_chunk(size_t n, void **out);
+
+/* Orig Mem_ReleaseHandle @ 1000:4961 (GLOBALHANDLE != 0 then UNLOCK +
+ * FREE; callers Heap_AllocFar tail + Heap_FreeFar x2). STUB (frees
+ * matter, never WONTFIX). */
+civ_error_t mem_release_handle(void *h);
+
+/* Orig Mem_AllocWithMode @ 1000:498c (null far ptr skips else
+ * DAT_1420_0027 = mode around Heap_AllocFar @ 1000:46f1; sole caller
+ * Mem_AllocWithHook @ 1000:41e4). Mode-word + heap TBD -> STUB. */
+civ_error_t mem_alloc_with_mode(unsigned mode, size_t n, void **out);
+
+/* Orig Mem_FreeWithMode @ 1000:4a52 (null skips else DAT_1420_0027 =
+ * mode around Heap_FreeFar @ 1000:4870; sole caller Heap_FreeCurrentHook
+ * @ 1000:4239). STUB. */
+civ_error_t mem_free_with_mode(void *p, unsigned mode);
+
 #endif /* CIVLIN_SYS_H */

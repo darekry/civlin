@@ -1760,4 +1760,115 @@ int pal_cmp_r(const uint8_t *pal, uint16_t a, uint16_t b);
 int pal_cmp_g(const uint8_t *pal, uint16_t a, uint16_t b);
 int pal_cmp_b(const uint8_t *pal, uint16_t a, uint16_t b);
 
+/* --- Batch 2026-10-17 fala 2 (J): 1098 gap stubs + dialog frame ---
+ * Renamed this pass:
+ *   Gfx_ReturnOne @ 1098:200a, Palette_NoopAfterCopy @ 1098:20e6,
+ *   Gfx_StoreWordTriple @ 1098:218d, Gfx_DrawDialogFrame @ 1098:21b8,
+ *   Gfx_DrawBorderTiles @ 1098:2260, Gfx_NoopBorderGapA @ 1098:258f,
+ *   Gfx_NoopBorderGapB @ 1098:259d, Palette_NoopBeforeSnapshot @
+ *   1098:25ab, Gfx_NoopAfterStoredDc @ 1098:26b3.
+ * (Text_NoopAfterBkColor @ 1098:217f lives in dialog.h.) Decompiler
+ * string returns on the empties are stale-DS artifacts per disasm. */
+
+/* Orig Gfx_ReturnOne @ 1098:200a (MOV AX,1; orphan, same shape as
+ * FUN_1098_26c1). LIVE const. */
+int gfx_return_one(void);
+
+/* Orig Palette_NoopAfterCopy @ 1098:20e6 (prologue/epilogue only; gap
+ * between Palette_CopyRange @ 201d and Text_DrawResString @ 20f4).
+ * WONTFIX-Win16 NOOP CIV_OK. */
+civ_error_t palette_noop_after_copy(void);
+
+/* Orig Gfx_StoreWordTriple @ 1098:218d (far 3-word store ES:[BX+0/2/4] =
+ * [BP+0xa/0xc/0xe]; orphan, not SETRECT). LIVE on explicit dst (far LES
+ * -> param). NULL -> NOENT (orig faulted). */
+civ_error_t gfx_store_word_triple(uint16_t *dst, uint16_t a, uint16_t b,
+                                  uint16_t c);
+
+/* Orig Gfx_DrawDialogFrame @ 1098:21b8 (GETCLIENTRECT + stored-DC-or-
+ * main-port + GfxPort_Create/SetActive + FUN_1000_14f8/FUN_1100_0876 +
+ * Gfx_DrawBorderTiles @ 2260 + ClearActive/Close + StoreDC; callers
+ * FUN_1098_1909 + HoF_VictoryCeremony @ 1080:06ff + Pedia_ShowByCategory
+ * @ 1020:0000). Full STUB UNSUPPORTED. */
+civ_error_t gfx_draw_dialog_frame(void *dlg_far);
+
+/* Orig Gfx_DrawBorderTiles @ 1098:2260 (16px tech-icon edge tiles +
+ * corners DAT_1420_98c4..98d2 + 4 strip presents; sole caller 21b8).
+ * Full STUB UNSUPPORTED; tile kernels LIVE below. */
+civ_error_t gfx_draw_border_tiles(void *frame_far);
+int gfx_border_tile_count(int span_px);
+int gfx_border_tile_pos(int i);
+
+/* Orig gap trio between 2260 border and SnapshotAndAnimate @ 25b9 (all
+ * prologue/epilogue only). WONTFIX-Win16 NOOPs. */
+civ_error_t gfx_noop_border_gap_a(void);
+civ_error_t gfx_noop_border_gap_b(void);
+
+/* Orig Palette_NoopBeforeSnapshot @ 1098:25ab (empty stub directly
+ * before SnapshotAndAnimate @ 25b9). WONTFIX-Win16 NOOP. */
+civ_error_t palette_noop_before_snapshot(void);
+
+/* Orig Gfx_NoopAfterStoredDc @ 1098:26b3 (empty gap between
+ * Gfx_GetStoredDcOrMainPort @ 2687 and FUN_1098_26c1). WONTFIX NOOP. */
+civ_error_t gfx_noop_after_stored_dc(void);
+
+/* --- Batch 2026-10-17 fala 3 (K+L): pal scale/dither + gap stubs ---
+ * Renamed this pass:
+ *   Pal_ConvertFrame @ 10c8:0000, Pal_DitherConvert @ 10c8:01c2,
+ *   Pal_ShiftQueue @ 10c8:0947, Pal_AllocScaleTables @ 10c8:09a1,
+ *   Pal_FreeScaleTables @ 10c8:0aa1, Pal_CmpInt @ 10c0:0bb1, Pal_CmpByte @
+ *   10c0:0be9, Gfx_ReturnOneAlt @ 1098:26c1, Gfx_ReturnTrueByte @
+ *   1098:2715, Gfx_NoopGap2727 @ 1098:2727. */
+
+/* Orig Pal_ConvertFrame @ 10c8:0000 (orchestrator: InitQuantTables +
+ * 09a1 scale alloc + QuantInit + ExpandPalette + transparent ladder +
+ * DitherConvert + 200-fill + FreeQuantTables + 0aa1 free; sole caller
+ * Art_LoadFrameData @ 10b8:079d gated on DAT_1420_17a8==1). Prototype +
+ * 12f8 tables unconfirmed -> STUB UNSUPPORTED (never fake-OK). */
+civ_error_t pal_convert_frame(void);
+
+/* Orig Pal_DitherConvert @ 10c8:01c2 (1924 B row/dither core: row copy +
+ * fwd/bwd scan + transparent cache + palette fetch + error add/clamp +
+ * artId branches + StackPushCopy + FindNearest + error-diffusion via
+ * locked weights + cancel-pump via Art_PumpConvertCancel @ 10b8:06a0 +
+ * ShiftQueue + MemSet; sole caller ConvertFrame). Tables + staging
+ * unconfirmed -> STUB UNSUPPORTED. */
+civ_error_t pal_dither_convert(void);
+
+/* Orig Pal_ShiftQueue @ 10c8:0947 (dword queue rotate: head = q[0],
+ * Util_MemCopy @ 1000:299e (n-1)*4, q[n-1] = head; sole caller
+ * DitherConvert). LIVE pure on explicit q (hidden far -> param). NULL
+ * or n <= 0 -> NOENT (orig faulted). */
+civ_error_t pal_shift_queue(uint32_t *q, int n);
+
+/* Orig Pal_AllocScaleTables @ 10c8:09a1 (clear 0x41 handles @ 12f8:0068
+ * + per-count GLOBALALLOC 0x40,0x400 + LOCK + (d*w+(div>>1))/div fill;
+ * sole caller ConvertFrame). Locked-handle facade TBD -> STUB. */
+civ_error_t pal_alloc_scale_tables(int ctx);
+
+/* Orig Pal_FreeScaleTables @ 10c8:0aa1 (UNLOCK/FREE 0x41 handles; sole
+ * caller ConvertFrame). STUB (frees matter). */
+civ_error_t pal_free_scale_tables(void);
+
+/* Orig Pal_CmpInt @ 10c0:0bb1 (generic int16 3-way compare, no 99b6 base;
+ * orphan, qsort/func-ptr shape like CmpR/G/B). LIVE pure. */
+int16_t pal_cmp_int(const int16_t *a, const int16_t *b);
+
+/* Orig Pal_CmpByte @ 10c0:0be9 (unsigned byte 3-way twin; segment tail).
+ * LIVE pure. */
+int16_t pal_cmp_byte(const uint8_t *a, const uint8_t *b);
+
+/* Orig Gfx_ReturnOneAlt @ 1098:26c1 (MOV AX,1; twin of Gfx_ReturnOne @
+ * 1098:200a; no callers). LIVE const. */
+int gfx_return_one_alt(void);
+
+/* Orig Gfx_ReturnTrueByte @ 1098:2715 (MOV AL,1, AH keeps DS-high; byte
+ * return; decompiler string is a stale-DS artifact). LIVE (callers test
+ * nonzero). */
+int gfx_return_true_byte(void);
+
+/* Orig Gfx_NoopGap2727 @ 1098:2727 (prologue/epilogue only, same shape
+ * as 26b3; decompiler string is stale-DS). WONTFIX-Win16 NOOP. */
+civ_error_t gfx_noop_gap_2727(void);
+
 #endif /* CIVLIN_VIDEO_H */
