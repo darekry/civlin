@@ -77,8 +77,15 @@ civ_error_t mainmenu_run(civ_mainmenu_choice_t *out)
     int mz_idx;
     int pump_break;
     int pump_done;
+    int art_plain;
+    int art_small;
+    int art_badge;
+    dlg_rect_t center_parent;
+    dlg_rect_t center_dlg;
+    dlg_rect_t center_out;
     civ_error_t mz_rc;
     civ_error_t pump_rc;
+    civ_error_t center_rc;
 
     if (!out)
         return CIV_ERR_NOENT;
@@ -125,7 +132,42 @@ civ_error_t mainmenu_run(civ_mainmenu_choice_t *out)
         return CIV_ERR_BAD_DATA;
     if (dialog_menuz_should_loop(CIV_MENU_NONE) != loop_none)
         return CIV_ERR_BAD_DATA;
-    if (dialog_menuz_is_cancel(0, -1) != 0)
+    /* OS-free 1:1 MenuZ tail gates @ 1220:0156 (fala 23: DAT_1418_0006 art
+     * branch via dialog_menuz_art_mode + DAT_1418_0008/DAT_12b0_00a0 exit
+     * via dialog_menuz_is_cancel; same triple as the dialog_menuz @
+     * 1220:0156 body probe in dialog.c: -1 = plain menu (MainMenu_WndProc
+     * @ 11e0:0221 path), 0..2 = small pic, >= 3 = tech badge; exit
+     * flag_0008 >= 1 && done_00a0 == -1 = cancel/back. Read-only. */
+    art_plain = dialog_menuz_art_mode(-1);
+    art_small = dialog_menuz_art_mode(0);
+    art_badge = dialog_menuz_art_mode(3);
+    if (art_plain != 0 || art_small != 1 || art_badge != 2)
+        return CIV_ERR_BAD_DATA;
+    if (dialog_menuz_is_cancel(0, -1) != 0 ||
+        dialog_menuz_is_cancel(1, -1) != 1 ||
+        dialog_menuz_is_cancel(1, 0) != 0)
+        return CIV_ERR_BAD_DATA;
+    /* OS-free 1:1 tracked-center gate @ 1098:0b33 (flags&1 path of
+     * Dlg_CreateTracked @ 1098:124f via Dlg_CenterRect @ 11f8:0000; fala
+     * 23 LIVE via dlg_center_tracked_window on explicit rects, no Win16
+     * HWND/MOVEWINDOW, no globals): centered 0x200x0x140 host over a
+     * 640x480 parent keeps size and lands at (64,80). Read-only. */
+    center_parent.left = 0;
+    center_parent.top = 0;
+    center_parent.right = 640;
+    center_parent.bottom = 480;
+    center_dlg.left = 0;
+    center_dlg.top = 0;
+    center_dlg.right = CIV_DLG_PRESET_W;
+    center_dlg.bottom = CIV_DLG_PRESET_H;
+    center_rc = dlg_center_tracked_window(&center_parent, &center_dlg,
+                                          &center_out);
+    if (center_rc != CIV_OK)
+        return CIV_ERR_BAD_DATA;
+    if (center_out.right - center_out.left != CIV_DLG_PRESET_W ||
+        center_out.bottom - center_out.top != CIV_DLG_PRESET_H)
+        return CIV_ERR_BAD_DATA;
+    if (center_out.left != 64 || center_out.top != 80)
         return CIV_ERR_BAD_DATA;
     /* OS-free 1:1 tracked-host gates @ 1098:124f for the modal host
      * (intro dialog 0x94/0x41 via main_startup_intro_dialog_id/flags in

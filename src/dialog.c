@@ -2152,20 +2152,72 @@ civ_error_t dlg_center_rect(const dlg_rect_t *outer, const dlg_rect_t *inner,
 civ_error_t text_draw_aligned(const char *text, const dlg_rect_t *rect,
                               int format, int color)
 {
-    (void)text;
-    (void)rect;
-    (void)format;
-    (void)color;
-    /* TODO: Orig FUN_1098_0ed1 @ 1098:0ed1 (Text_DrawAligned: SELECTOBJECT
-     * font via DAT_1420_5484/DAT_12d8_0024 + GETTEXTMETRICS/GETTEXTEXTENT
-     * measure + text_align_x/text_center_y above + SETBKMODE(1)/
-     * SETTEXTALIGN(0) + shadow TEXTOUT x3 when DAT_12d8_28fc == 0 and
-     * format & 0x30 via Text_SetColor @ 1098:0e0b + final TEXTOUT) and
-     * FUN_1098_20f4 @ 1098:20f4 (Text_DrawResString: ResMgr_GetString +
-     * Util_PascalToCStr @ 1100:0053 + DrawAligned; callers 1068:06af +
-     * WorldGen_LoadEarth @ 1108:0243) -> SDL_ttf bridge TBD. */
+    /* Orig FUN_1098_0ed1 @ 1098:0ed1 -> Text_DrawAligned dispatcher
+     * (callers HoF_Show @ 1080:0119 + Anim_AdvanceFrames @ 10b0:0461 case 7
+     * + Text_DrawResString @ 1098:20f4; callees Text_SetColor @ 1098:0e0b +
+     * GETTEXTMETRICS/GETTEXTEXTENT + SETBKMODE/SETTEXTALIGN + TEXTOUT).
+     * PARTIAL: OS-free align/slot/shadow/center gates below are LIVE 1:1
+     * (no Win16, no globals, read-only; width sample 0 keeps the
+     * GETTEXTEXTENT measure GDI-side, 10d8 clipped/centered linkage via
+     * text_centered_x/text_shadow_pos/text_measure_scaled below); the
+     * SELECTOBJECT + SETBKMODE(1)/SETTEXTALIGN(0) + shadow TEXTOUT x3 +
+     * final TEXTOUT tail stays STUB.
+     * Refs verified read-only 1:1 vs unpacked/civ.exe (NE LE, no copy):
+     * decompiler uVar1 = param_4 & 0xf (1 center / 2 left / 3 right via
+     * text_align_x; 0x30 shadow via text_needs_shadow) + centered line
+     * rect[1] + ((rect[3]-rect[1]) - tmHeight) / 2 via text_center_y. */
+    int slot;
+    int ax;
+    int cy;
+    int need;
+    int passes;
+    int cx;
+    int sx;
+    int sy;
+    civ_error_t rcp;
+    int cres;
+    int cmono;
+
     if (!text || !rect)
         return CIV_ERR_NOENT;
+    slot = text_align_slot(format);
+    if (slot != (format & 0x0f))
+        return CIV_ERR_BAD_DATA;
+    ax = text_align_x(rect->left, rect->right, 0, format);
+    if ((slot < 1 || slot > 3) && ax != -1)
+        return CIV_ERR_BAD_DATA;
+    cy = text_center_y(rect->top, rect->bottom, 0);
+    if (cy != rect->top + ((rect->bottom - rect->top) - 0) / 2)
+        return CIV_ERR_BAD_DATA;
+    need = text_needs_shadow(0, format);
+    if (need != (((format & 0x30) != 0) ? 1 : 0))
+        return CIV_ERR_BAD_DATA;
+    passes = text_shadow_passes();
+    if (passes != 3)
+        return CIV_ERR_BAD_DATA;
+    cx = text_centered_x(rect->left, 0);
+    if (cx != rect->left)
+        return CIV_ERR_BAD_DATA;
+    if (text_shadow_offset(0x11) != 0 || text_shadow_offset(0x12) != 1)
+        return CIV_ERR_BAD_DATA;
+    rcp = text_shadow_pos(rect->left, rect->top, 0x12, &sx, &sy);
+    if (rcp != CIV_OK || sx != rect->left + 1 || sy != rect->top + 1)
+        return CIV_ERR_BAD_DATA;
+    if (text_measure_scaled(16) != 10)
+        return CIV_ERR_BAD_DATA;
+    cres = text_resolve_color(0, color, 7);
+    cmono = text_resolve_color(1, color, 7);
+    if (cres != color || cmono != 7)
+        return CIV_ERR_BAD_DATA;
+    /* TODO: Orig FUN_1098_0ed1 @ 1098:0ed1 GDI tail (SELECTOBJECT font via
+     * DAT_1420_5484/DAT_12d8_0024 + GETTEXTMETRICS/GETTEXTEXTENT measure +
+     * SETBKMODE(1)/SETTEXTALIGN(0) + shadow TEXTOUT x3 when DAT_12d8_28fc
+     * == 0 and format & 0x30 via Text_SetColor @ 1098:0e0b + final TEXTOUT)
+     * and FUN_1098_20f4 @ 1098:20f4 (Text_DrawResString: ResMgr_GetString
+     * @ 1100:078a + Util_PascalToCStr @ 1100:0053 + DrawAligned; callers
+     * 1068:06af + WorldGen_LoadEarth @ 1108:0243) -> SDL_ttf bridge TBD
+     * (measure lives in text_align_x/text_center_y/text_measure_scaled
+     * above with a zero-width sample; real width stays GDI-side). */
     return CIV_ERR_UNSUPPORTED;
 }
 

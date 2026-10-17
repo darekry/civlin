@@ -132,9 +132,11 @@ int menu_toggle_view_window(int cmd);
  * raw choice. Partial dispatcher: OS-free split (mainmenu_item_count/at 1:1
  * over CIV_MAINMENU_TEXT @ 1420:435b, ref unpacked/civ.exe file offset
  * 0xbb35b) + y-offset (mainmenu_dialog_y_offset) + MenuZ id/gates
- * (dialog_menuz_* @ 1220:0156, timer 100, cancel -1) + tracked host gates
- * (dlg_create_* @ 1098:124f for the 0x94/0x41 intro host: preset
- * 0x200x0x140 + 0x18 ctx + ctl 0x65-0x6e, ref unpacked/civ.exe
+ * (dialog_menuz_* @ 1220:0156, timer 100, cancel -1; fala 23 tail:
+ * dialog_menuz_art_mode(-1/0/3) = 0/1/2 + dialog_menuz_is_cancel triple +
+ * dlg_center_tracked_window @ 1098:0b33 centered 0x200x0x140 at (64,80))
+ * + tracked host gates (dlg_create_* @ 1098:124f for the 0x94/0x41 intro
+ * host: preset 0x200x0x140 + 0x18 ctx + ctl 0x65-0x6e, ref unpacked/civ.exe
  * "RanDoMRadio" @ 0xb7ac6 / "RanDoMStatic" @ 0xb7ad2; close pop(1) = 0 via
  * dlg_tracked_pop_count @ 1098:1612 + rebase 1100 - 1000 = 100 via
  * anim_rebase_clock @ 10b0:005b) + dispatch-row

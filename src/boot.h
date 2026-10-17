@@ -749,7 +749,10 @@ civ_error_t art_maybe_convert_artwork(void);
  * ID/count/tick halves are LIVE 1:1 (ref unpacked/civ.exe @ 11e0:0000:
  * tracked preset 0x200x0x140 + 0x18 ctx + ctl 0x65-0x6e via dlg_create_*
  * @ 1098:124f, close pop(1) = 0 via dlg_tracked_pop_count @ 1098:1612,
- * rebase 1100 - 1000 = 100 via anim_rebase_clock @ 10b0:005b).
+ * rebase 1100 - 1000 = 100 via anim_rebase_clock @ 10b0:005b; fala 23
+ * MenuZ tail: dialog_menuz_art_mode(-1/0/3) = 0/1/2 +
+ * dialog_menuz_is_cancel triple + dlg_center_tracked_window @ 1098:0b33
+ * centered 0x200x0x140 at (64,80)).
  * Startup bridge (see boot.c): Dlg_CreateTracked @ 1098:124f (0x94,0x41) /
  * Dlg_DestroyTracked @ 1098:1612 host + GfxPort_Create @ 10d0:0000 x2 pair
  * geometry (main_startup_port_pair_ok: anim_seq_port_count/off +

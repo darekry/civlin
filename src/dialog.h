@@ -895,8 +895,13 @@ civ_error_t dlg_center_rect(const dlg_rect_t *outer, const dlg_rect_t *inner,
                             dlg_rect_t *out);
 
 /* Orig: Text_DrawAligned @ 1098:0ed1 + Text_DrawResString @ 1098:20f4 —
- * GDI text-out tail (SELECTOBJECT font + SETBKMODE/SETTEXTALIGN +
- * TEXTOUT + shadow via Text_SetColor). SDL_ttf bridge TBD.
+ * PARTIAL dispatcher (OS-free align/slot/shadow/center probes LIVE in
+ * text_draw_aligned: text_align_slot/x, text_center_y/centered_x,
+ * text_needs_shadow/shadow_passes/shadow_pos/offset, text_measure_scaled,
+ * text_resolve_color; zero-width sample, real GETTEXTEXTENT width stays
+ * GDI-side). GDI text-out tail (SELECTOBJECT font + SETBKMODE/
+ * SETTEXTALIGN + TEXTOUT + shadow via Text_SetColor) stays STUB.
+ * SDL_ttf bridge TBD.
  * Text_SetColor @ 1098:0e0b callers (who sets text colors, 50+ xrefs):
  * Game_UpdateStatusPanel @ 1088:1554 (DAT_12d8_45be before the pop
  * line), Text_DrawAligned @ 1098:103f/10c3 (aligned-text shadow pass),

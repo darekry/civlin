@@ -159,7 +159,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `boot_run` | LIVE | 1008:0000, 1008:0e99, 1088:0000, 1098:06f8, 11e8:0000 |  |
 | `boot_shutdown` | LIVE | 1008:0329, 1008:0d68, 12d8:28fa, 12d8:460e |  |
 | `art_maybe_convert_artwork` | LIVE | 1090:0488, 10b8:0000, 10b8:04df, 10b8:062d, 10b8:06a0, 10b8:076a, 10b8:079d, 10b8:0aa8, 10b8:0c1c, 10b8:0ded, 10b8:0e36, 10b8:11bc, 10b8:158c, 10d0:0cfa, 1420:20a9 |  |
-| `main_run_startup_sequence` | PARTIAL | 1008:0329, 1098:124f, 1098:1612, 10b0:005b, 10b0:008a, 10b0:0461, 10b8:079d, 10d0:0000, 10e8:0000, 1108:0243, 1130:000e, 11e0:0000, 11e0:0221, 1220:0156, 1420:435b | has TODO |
+| `main_run_startup_sequence` | PARTIAL | 1008:0329, 1098:0b33, 1098:124f, 1098:1612, 10b0:005b, 10b0:008a, 10b0:0461, 10b8:079d, 10d0:0000, 10e8:0000, 1108:0243, 1130:000e, 11e0:0000, 11e0:0221, 1220:0156, 1420:435b | has TODO |
 | `config_prefs_defaults` | LIVE | 1008:0b4a, 1008:0bbf, 1150:00c9, 12d0:0064 |  |
 | `config_prefs_sounds_on` | LIVE |  |  |
 | `boot_video_caps_count` | LIVE | 1008:059a, 1420:0af4 |  |
@@ -302,7 +302,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `dialog_dlgunits_to_pixels` | LIVE | 1098:0d43, 1100:03ff |  |
 | `dialog_client_rect` | LIVE | 1100:03ff |  |
 | `dlg_center_rect` | LIVE | 1068:0958, 1098:0a5b, 1098:0ae0, 1098:0b67, 1170:2623, 11f8:0000, 1210:0e29 |  |
-| `text_draw_aligned` | STUB | 1080:08e9, 1088:1554, 1098:00b5, 1098:01b0, 1098:0e0b, 1098:0ed1, 1098:103f, 1098:20f4, 10b0:137a, 10e8:0667, 1110:07c3, 1180:02d3, 1220:0889 | has TODO |
+| `text_draw_aligned` | PARTIAL | 1080:0119, 1080:08e9, 1088:1554, 1098:00b5, 1098:01b0, 1098:0e0b, 1098:0ed1, 1098:103f, 1098:20f4, 10b0:0461, 10b0:137a, 10e8:0667, 1110:07c3, 1180:02d3, 1220:0889 | has TODO |
 | `dialog_get_item_rect` | PARTIAL | 1098:0d43, 1098:124f, 10e8:0000, 1100:03ff, 1220:0156 | has TODO |
 | `dialog_show_message` | STUB | 1040:068e, 1098:124f, 1098:1612, 1220:00d2, 1220:0156, 1220:0eb8, 12b0:0004 | has TODO |
 | `text_res_list_advance` | LIVE | 1098:1f4f, 1100:0053, 1100:078a |  |
@@ -861,12 +861,20 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `game_turn_fix_year` | LIVE | 1088:0000, 12d8:42fa |  |
 | `game_turn_quiz_due` | LIVE | 1110:03e9, 1178:0000 |  |
 | `game_turn_save_due` | LIVE | 1198:00a3, 11c0:3beb |  |
+| `game_turn_retirement_due` | LIVE | 1000:363e, 1000:36b2, 1088:0000, 1088:08e2, 1138:0000 |  |
+| `game_turn_chronicle_due` | LIVE | 1088:0000, 1088:0994, 1088:0b6d, 1138:0000, 1150:00c9 |  |
 | `combat_attacker_wins` | LIVE | 1050:0000, 11c0:1bc3, 11c8:003d |  |
 | `diplomat_revolt_half_due` | LIVE | 11b8:0000, 1420:5502 |  |
 | `diplomat_bribe_half_due` | LIVE | 11b8:07c2 |  |
 | `unit_popup_moves_needs_frac` | LIVE | 11f0:468c |  |
 | `unit_popup_build_tail_due` | LIVE | 1420:1a3c |  |
 | `city_revolt_best_foreign` | LIVE | 11b8:0f26 |  |
+| `city_tile_yield_combine` | LIVE | 1030:7c28, 1110:168f, 1110:16c0, 1110:199b, 1110:1c72, 1420:17d6 |  |
+| `city_choose_production_pick` | LIVE | 1170:05ca, 1170:1f84, 1170:3181 |  |
+| `game_spawn_uprisings_core` | PARTIAL | 1088:0be9, 1110:16c0, 1110:18ce, 1110:1dbd, 11c0:12c8, 11c8:003d, 1220:00d2 |  |
+| `city_disaster_pick` | PARTIAL | 1030:0000, 1040:068e, 1088:0000, 1110:03ae, 11c8:003d, 1220:00d2, 1420:07f0, 1420:3efe, 1420:54fc, 1420:5502, 1420:5503 |  |
+| `trade_apply_bonus` | LIVE | 1038:0d09, 1088:13d5, 1110:1d99, 11c0:16a4, 1220:00d2, 1420:5513 |  |
+| `diplomat_affords_cost` | LIVE | 1110:03ae, 1168:12c1, 11b8:0000, 11b8:07c2, 1420:5502 |  |
 
 ### `src/gfx_indexed.c`
 
@@ -964,7 +972,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 
 | Function | State | Orig addr | Note |
 |---|---|---|---|
-| `mainmenu_run` | PARTIAL | 1000:36b2, 1048:01cd, 1098:124f, 1098:1612, 10b0:005b, 11e0:0221, 1220:0156, 1420:435b | has TODO |
+| `mainmenu_run` | PARTIAL | 1000:36b2, 1048:01cd, 1098:0b33, 1098:124f, 1098:1612, 10b0:005b, 11e0:0221, 1220:0156, 1420:435b | has TODO |
 | `mainmenu_choice_is_valid` | LIVE | 1008:0329, 1130:000e, 11e0:0221, 1220:0000, 1420:435b |  |
 | `mainmenu_item_count` | LIVE | 1000:36b2, 11e0:0221, 1220:0000, 1220:0156, 1420:435b |  |
 | `mainmenu_item_at` | LIVE | 1000:36b2, 1220:0156, 1420:435b |  |
@@ -1282,7 +1290,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `save_init_filespec` | LIVE | 1000:36b2, 1000:3722, 1080:0023, 1080:0092, 1140:0095, 1420:14e8, 1420:14f5 |  |
 | `save_load_dialog` | STUB | 10b0:0000, 10f8:0000, 1130:000e, 1130:0075, 11e0:0221 | has TODO |
 | `save_save_dialog` | STUB | 1098:26d4, 1130:0194, 1180:0000, 1198:00a3 | has TODO |
-| `save_save_game` | STUB | 1000:2928, 1000:363e, 1098:26d4, 10f8:02bd, 1198:00a3 | has TODO |
+| `save_save_game` | LIVE | 1000:2928, 1000:363e, 1098:26d4, 10f8:02bd, 1130:0194, 1198:00a3 |  |
 | `save_sanitize_filename` | LIVE | 1000:36b2, 1180:0000, 1198:0000, 1198:00a3 |  |
 | `save_file_open` | LIVE | 1000:2ad9, 10f8:0000, 10f8:02bd, 1140:0139 |  |
 | `save_file_size` | LIVE | 10f8:0000, 1140:0295 |  |
@@ -1294,8 +1302,8 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `file_seek_wrapper` | LIVE | 1000:1f7c, 1000:272a, 1000:2ad9, 1140:0295, 1190:0fda |  |
 | `save_serialize` | LIVE | 10f8:02bd, 10f8:090c, 1420:2cac |  |
 | `save_deserialize` | LIVE | 1028:162c, 10f8:0000, 1140:0139, 1140:019d, 1140:0295 |  |
-| `save_pack` | STUB | 10f8:02bd, 10f8:05da | has TODO |
-| `save_unpack` | STUB | 10f8:0000, 10f8:040a | has TODO |
+| `save_pack` | LIVE | 10f8:02bd, 10f8:05da, 10f8:090c |  |
+| `save_unpack` | LIVE | 10f8:0000, 10f8:040a, 1140:019d |  |
 | `save_pack_buffer` | LIVE | 10f8:0000, 10f8:02bd, 10f8:040a, 10f8:05da |  |
 | `save_unpack_buffer` | LIVE | 10f8:0000, 10f8:02bd, 10f8:040a, 10f8:05da |  |
 | `save_build_filename` | LIVE | 1000:2928, 1000:363e, 1000:36b2, 1080:0119, 1198:0000, 1198:00a3, 1420:173c |  |
@@ -1348,7 +1356,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `debug_print_line` | LIVE | 1000:2cd8, 1000:2e85, 1000:3088, 1000:3722, 1190:17d0, 1420:4cd0 |  |
 | `file_write_buffered` | STUB | 1000:2c9c, 1000:2cba, 1000:2e85, 1000:3fc4, 1420:4cd0 | has TODO |
 | `file_put_char_buffered` | STUB | 1000:2152, 1000:2cd8, 1000:3fc4, 1420:4cd0 | has TODO |
-| `file_emit_char` | STUB | 1000:2cba, 1000:2cd8, 1000:2e85 | has TODO |
+| `file_emit_char` | LIVE | 1000:2cba, 1000:2cd8, 1000:2e85 |  |
 | `file_buffered_is_direct` | LIVE | 1000:2152, 1000:2cd8, 1000:2e85, 1420:4cd0 |  |
 | `file_is_text_mode` | LIVE | 1000:1750, 1000:33c0, 1000:3e70, 1000:3fc4 |  |
 | `dos_errno_e0010` | LIVE |  |  |
@@ -1357,24 +1365,25 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `dos_map_error_lookup` | LIVE | 1000:151a, 1420:4e7c |  |
 | `dos_is_char_device` | STUB | 1000:1566, 1000:1750, 1000:3fc4, 1420:4fc4, 1420:4fc8 | has TODO |
 | `dos_is_char_device_bit` | LIVE | 1000:1566, 1000:1750, 1000:3fc4, 1420:4fc4 |  |
-| `dos_seek` | STUB | 1000:161c | has TODO |
+| `dos_error_from_errno` | LIVE |  |  |
+| `dos_seek` | LIVE | 1000:151a, 1000:161c |  |
 | `dos_seek_origin_ok` | LIVE | 1000:151a, 1000:161c |  |
-| `dos_read` | STUB | 1000:1750, 1000:33c0, 1140:019d, 1420:4fc4 | has TODO |
+| `dos_read` | LIVE | 1000:151a, 1000:1566, 1000:1750, 1000:33c0, 1140:019d, 1420:4fc4 |  |
 | `dos_read_is_blocked` | LIVE | 1000:151a, 1000:1566, 1000:1750, 1420:4fc4 |  |
-| `dos_unlink` | STUB | 1000:19a6 | has TODO |
-| `dos_file_attr` | STUB | 1000:1f5c, 1000:2ad9 | has TODO |
+| `dos_unlink` | STUB | 1000:151a, 1000:19a6 | has TODO |
+| `dos_file_attr` | LIVE | 1000:151a, 1000:1f5c, 1000:2ad9 |  |
 | `dos_file_attr_func_ok` | LIVE | 1000:1f5c, 1000:2ad9 |  |
-| `dos_close` | STUB | 1000:1f7c, 1000:1fa6 | has TODO |
-| `dos_is_eof` | STUB | 1000:201e | has TODO |
+| `dos_close` | LIVE | 1000:151a, 1000:1f7c, 1000:1fa6 |  |
+| `dos_is_eof` | LIVE | 1000:151a, 1000:201e |  |
 | `dos_eof_at_end` | LIVE | 1000:201e |  |
 | `dos_create` | STUB | 1000:2aac, 1000:2ad9 | has TODO |
 | `dos_truncate` | STUB | 1000:2ac7, 1000:2ad9 | has TODO |
-| `dos_open` | STUB | 1000:2ad9, 1000:2c4a | has TODO |
+| `dos_open` | LIVE | 1000:151a, 1000:2ad9, 1000:2c4a |  |
 | `dos_open_mode_map` | LIVE | 1000:2c4a |  |
 | `dos_open_table_word` | LIVE | 1000:2c4a |  |
-| `dos_write` | STUB | 1000:3e70, 1000:3fc4, 1140:0245, 1420:4fc8 | has TODO |
+| `dos_write` | LIVE | 1000:151a, 1000:1566, 1000:3e70, 1000:3fc4, 1140:0245, 1420:4fc8 |  |
 | `dos_write_is_blocked` | LIVE | 1000:151a, 1000:1566, 1000:3fc4, 1420:4fc8 |  |
-| `dos_ioctl` | STUB | 1000:4252 | has TODO |
+| `dos_ioctl` | PARTIAL | 1000:151a, 1000:4252 |  |
 | `dos_ioctl_is_direct` | LIVE | 1000:151a, 1000:4252 |  |
 | `dos_get_current_drive` | LIVE | 1000:1252 |  |
 | `dos_get_current_drive_index` | LIVE | 1000:13e6 |  |
@@ -1664,7 +1673,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 |---|---|---|---|
 | `worldgen_dir_dx_at` | LIVE |  |  |
 | `worldgen_dir_dy_at` | LIVE |  |  |
-| `worldgen_generate_random` | STUB | 1028:0000, 1028:066a, 1028:0a93, 1028:0fb4, 1028:12c6, 11c8:003d | has TODO |
+| `worldgen_generate_random` | LIVE | 1028:0000 |  |
 | `worldgen_load_preset` | STUB | 1028:0a93, 1028:1d15, 10b8:079d | has TODO |
 | `worldgen_load_earth` | STUB | 1028:0a93, 1028:1d15, 10b8:079d, 10b8:0e00, 10e0:0000, 1100:03ff, 1108:0243, 11e0:0221, 1420:2e28, 1420:2e34 | has TODO |
 | `worldgen_dialog_id_to_cell` | LIVE | 10e0:0000, 1108:0243, 1420:2e28, 1420:2e34 |  |
@@ -1679,14 +1688,14 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `worldgen_customize_dialog` | STUB | 1058:06ab, 1058:081a, 1058:0921, 1058:09f6, 1058:0b4d, 1098:124f, 1098:1612 | has TODO |
 | `worldgen_seed_one_island` | LIVE | 1028:0945 |  |
 | `worldgen_paint_blob` | LIVE | 1028:09ef |  |
-| `worldgen_label_continents` | STUB | 1028:0a93, 1028:12c6, 1028:1ca7, 1028:1d15 | has TODO |
-| `worldgen_gen_rivers` | STUB | 1028:066a, 1028:06c1 | has TODO |
-| `worldgen_spread_pollution` | STUB | 1028:1afd, 1110:1b36 | has TODO |
-| `worldgen_score_city_sites` | STUB | 1028:0f0c, 1028:0fb4, 1420:17d6 | has TODO |
-| `worldgen_build_continent_links` | STUB | 1000:29ea, 1028:12c6, 1098:0157, 10b0:0000, 1128:16d0 | has TODO |
-| `worldgen_build_ocean_links` | STUB | 1000:29ea, 1028:0f01, 1028:162c, 10f8:01e9 | has TODO |
+| `worldgen_label_continents` | LIVE | 1028:0a93, 1028:12c6, 1028:1ca7, 1028:1d15 |  |
+| `worldgen_gen_rivers` | LIVE | 1028:066a, 1028:06c1, 1028:1dfb, 11c8:003d |  |
+| `worldgen_spread_pollution` | LIVE | 1028:1afd, 1110:1b36, 11c8:003d, 11e8:0e19 |  |
+| `worldgen_score_city_sites` | LIVE | 1028:0f0c, 1028:0fb4, 1420:17d6 |  |
+| `worldgen_build_continent_links` | LIVE | 1000:29ea, 1028:12c6, 1098:0157, 10b0:0000, 1128:16d0 |  |
+| `worldgen_build_ocean_links` | LIVE | 1000:29ea, 1028:0f01, 1028:162c, 10f8:01e9 |  |
 | `worldgen_copy_rect` | LIVE | 1028:06c1, 1028:1d15, 1028:1dbd, 1028:1dfb |  |
-| `path_check_continent_link` | LIVE | 1028:12c6, 1128:16d0 |  |
+| `path_check_continent_link` | LIVE | 1028:12c6, 1128:10de, 1128:16d0 |  |
 | `worldgen_island_target` | LIVE | 1028:0000 |  |
 | `worldgen_island_done` | LIVE | 1028:0945 |  |
 | `worldgen_blob_in_bounds` | LIVE | 1028:09ef |  |
