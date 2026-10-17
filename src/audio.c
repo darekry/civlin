@@ -348,3 +348,11 @@ void audio_shutdown(void)
     /* WinMain shutdown step -> Sound_MciClose @ 1150:0066. */
     sound_mci_close();
 }
+
+/* --- Batch 2026-10-17 fala 6 (Z): padding --- */
+
+civ_error_t snd_nop000e(void)
+{
+    /* Orig Snd_Nop000e @ 1150:000e (empty; WONTFIX-Win16). */
+    return CIV_OK;
+}

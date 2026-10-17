@@ -2621,6 +2621,85 @@ civ_error_t gfx_noop_gap_2727(void)
     return CIV_OK;
 }
 
+/* --- Batch 2026-10-17 fala 5 (W): port fill/copy/tile --- */
+
+const uint8_t *gfxport_dc_slot(const uint8_t *port_base, int headless_28fc)
+{
+    /* Orig GfxPort_GetDcSlot @ 10d0:028c (headless gate + far +0x16). */
+    if (headless_28fc != 0)
+        return NULL;
+    if (!port_base)
+        return NULL;
+    return port_base + 0x16;
+}
+
+civ_error_t gfxport_fill_color(int x, int y, int w, int h, int color)
+{
+    /* Orig GfxPort_FillColor @ 10d0:02ba (see video.h; clip halves LIVE
+     * in gfxport_fill_clip_*).
+     * TODO: Orig GLOBALLOCK bitmap + Util_MemSet rows + UNLOCK -> locked
+     * INDEX8 TARGET fill (see gfx_port_alloc_bitmap @ 10d0:0cfa) TBD. */
+    (void)x;
+    (void)y;
+    (void)w;
+    (void)h;
+    (void)color;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+int gfxport_fill_clip_w(int rect_r, int port_w)
+{
+    /* Orig same clamp min(rect_r, port_w). */
+    return (rect_r < port_w) ? rect_r : port_w;
+}
+
+int gfxport_fill_clip_h(int rect_b, int port_h)
+{
+    /* Orig same clamp min(rect_b, port_h). */
+    return (rect_b < port_h) ? rect_b : port_h;
+}
+
+civ_error_t gfxport_copy_port_to_port(int src, int dst, int w, int rows)
+{
+    /* Orig GfxPort_CopyPortToPort @ 10d0:06c0 (see video.h).
+     * TODO: Orig GetCurrentDC/LOCK/HMEMCPY/UNLOCK/SetCurrentDC -> SDL
+     * save-target + SetRenderTarget(dst) + RenderTexture(src) + restore
+     * (see gfx_port_blit @ 10d0:08f1) TBD. */
+    (void)src;
+    (void)dst;
+    (void)w;
+    (void)rows;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t gfxport_fill_tiled_icon(int icon, int w, int h)
+{
+    /* Orig GfxPort_FillTiledIcon @ 10d0:0bee (see video.h; counts LIVE in
+     * gfxport_tile_*).
+     * TODO: Orig LOCK(icon) cell + DrawTechIconDefault tiling -> icon-cell
+     * blit TBD. */
+    (void)icon;
+    (void)w;
+    (void)h;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+int gfxport_tile_cols(int port_w, int cell_w)
+{
+    /* Orig same cols = port_w/cell_w+1 (IDIV+INC). */
+    if (cell_w <= 0)
+        return -1;
+    return port_w / cell_w + 1;
+}
+
+int gfxport_tile_rows(int port_h, int cell_h)
+{
+    /* Orig same rows = port_h/cell_h+1. */
+    if (cell_h <= 0)
+        return -1;
+    return port_h / cell_h + 1;
+}
+
 /* --- Batch 2026-10-17 fala 4 (Q+R+S): fill/stroke/hooks + godpal --- */
 
 civ_error_t gfx_fill_stack_rect(const int16_t rect[4])

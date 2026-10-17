@@ -712,4 +712,10 @@ civ_error_t worldgen_show_video_caps_dialog(void);
  * LIVE pure. */
 int map_is_link_grid_in_bounds(int x, int y);
 
+/* Orig WorldGen_ReturnSecond @ 1108:01a9 (MOV AX,[BP+8]; callers
+ * Pic_PlayShared @ 1030:0000 x2 + Unit_DoMove @ 1038:0000 x2 with
+ * (0,1)/(1,1) bracketing 11b0:* city-popup calls; predecessor of
+ * PrepareEarth @ 1108:01bc; return ignored). LIVE pure. */
+uint16_t worldgen_return_second(uint16_t a, uint16_t b);
+
 #endif /* CIVLIN_WORLDGEN_H */

@@ -826,3 +826,109 @@ civ_error_t menu_show_help_contents(void)
      * @ 1608:016c -> win16_winhelp (no SDL twin) TBD. */
     return CIV_ERR_UNSUPPORTED;
 }
+
+/* --- Batch 2026-10-17 fala 5 (U): menu dispatch --- */
+
+civ_error_t menu_dispatch_or_enable_range(int cmd_id, int enable)
+{
+    /* Orig Menu_DispatchOrEnableRange @ 1098:0bdd (see mainmenu.h).
+     * TODO: Orig GETMENU/ENABLEMENUITEM -> win16_get/enable_menu (SDL menu
+     * bridge TBD) + explicit menu_cmd_range_t[8] @ 1098:0c97 + full 8x
+     * (SI,DI) dump via disassemble_bytes TBD. */
+    (void)cmd_id;
+    (void)enable;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+/* --- Batch 2026-10-17 fala 6 (Z): palace improve modal --- */
+
+civ_error_t menu_palace_improve(void)
+{
+    /* Orig Menu_PalaceImprove @ 1158:0000 (see mainmenu.h; strings PALACE
+     * @ 1420:3176 + prompts).
+     * TODO: Orig dialog MenuZ + GfxPort SDL_RenderTexture bridge +
+     * Sys_WaitForInput SDL_PumpEvents + Sound_PlayId audio + 1350 ctx TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t menu_palace_rebuild(int variant)
+{
+    /* Orig Menu_PalaceRebuild @ 1158:08e7 (see mainmenu.h).
+     * TODO: Orig Art_LoadFrameData + GfxPort_* + Palette_CopyRange +
+     * Dlg_CreateTracked + SHOWWINDOW TBD (no guessed decoder). */
+    (void)variant;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t menu_palace_close(void)
+{
+    /* Orig Menu_PalaceClose @ 1158:123b (see mainmenu.h).
+     * TODO: Orig GfxPort_Close -> SDL_DestroyTexture + Dlg_DestroyTracked
+     * -> dialog pop TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+void menu_palace_calc_icon(int sec, int preview, int lvl, int da, int de,
+                           int d8, unsigned char *out94,
+                           unsigned char *out95)
+{
+    /* Orig Menu_PalaceCalcIcon @ 1158:1277 (0 calls; hidden ES:1350 byte
+     * stores -> explicit outs). */
+    unsigned char r94 = 0;
+    unsigned char r95 = 0;
+    int kind = 2;
+
+    (void)d8;
+    if (sec < 4 && (da == -1 || sec == 1))
+        kind = 0;
+    if (sec > 4 && (de == -1 || sec == 7))
+        kind = 3;
+    switch (kind) {
+    case 0:
+        r94 = 3;
+        if (sec == 3 || preview == 0)
+            r95 = (lvl == 0) ? 2 : 1;
+        break;
+    case 1:
+        r94 = (lvl < da || sec == 5 || d8 == -1) ? 1 : 2;
+        r95 = 2;
+        break;
+    case 2:
+        r94 = 0;
+        break;
+    default:
+        if (sec == 5 || preview == 0)
+            r94 = (lvl < da || sec == 5) ? 1 : 2;
+        r95 = 4;
+        break;
+    }
+    if (out94)
+        *out94 = r94;
+    if (out95)
+        *out95 = r95;
+}
+
+civ_error_t menu_palace_draw_icon(int lvl, int sec, int x, int y, int flag)
+{
+    /* Orig Menu_PalaceDrawIcon @ 1158:140c (see mainmenu.h; coords LIVE in
+     * menu_palace_icon_*).
+     * TODO: Orig FUN_11a8_15ce transparent blit -> SDL_RenderTexture TBD. */
+    (void)lvl;
+    (void)sec;
+    (void)x;
+    (void)y;
+    (void)flag;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+int menu_palace_icon_px(int x)
+{
+    /* Orig same fixed-point px = (x<<4)/10 (SDL *1.6 scale). */
+    return (x << 4) / 10;
+}
+
+int menu_palace_icon_py(int y, int lvl, int extra)
+{
+    /* Orig same py = ((y+lvl+extra)*0x10)/10. */
+    return ((y + lvl + extra) * 0x10) / 10;
+}

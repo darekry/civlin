@@ -3161,3 +3161,55 @@ civ_error_t sys_wait_date_delay(int delay)
     (void)delay;
     return CIV_ERR_UNSUPPORTED;
 }
+
+/* --- Batch 2026-10-17 fala 5 (U): trace + mouse pump --- */
+
+void sys_trace_begin(void)
+{
+    /* Orig Sys_TraceBegin @ 1098:016a (empty; WONTFIX-Win16). */
+}
+
+void sys_trace_end(const char *name_far, int flag)
+{
+    /* Orig Sys_TraceEnd @ 1098:0178 (empty; args ignored like orig). */
+    (void)name_far;
+    (void)flag;
+}
+
+void sys_trace_mark(const char *msg_far)
+{
+    /* Orig Sys_TraceMark @ 1098:01a2 (empty; WONTFIX-Win16). */
+    (void)msg_far;
+}
+
+civ_error_t sys_pump_mouse(void)
+{
+    /* Orig Sys_PumpMouse @ 1098:03e3 (see sys.h; 0x200 MOUSEMOVE peek
+     * filter, 0x209 hi, 0x203/0x206 dblclk fall to default dispatch).
+     * TODO: Orig PEEKMESSAGE/TRANSLATE/DISPATCH -> win16_pump_mouse /
+     * SDL_PumpEvents+PollEvent mouse twin + DAT_1420_1d44..1d50 images
+     * (module-static, overwritten next call) TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+/* --- Batch 2026-10-17 fala 6 (Z): zeroed-alloc pair --- */
+
+int mem_alloc_zeroed(unsigned long size32, int *out_handle)
+{
+    /* Orig Mem_AllocZeroed @ 1140:03ae (see sys.h; 1 = fail like orig).
+     * TODO: Orig GLOBALALLOC 0x42 -> win16_global_alloc zeroed-handle
+     * mapping TBD. */
+    (void)size32;
+    if (!out_handle)
+        return 1;
+    *out_handle = 0;
+    return 1;
+}
+
+int mem_free_handle(int h)
+{
+    /* Orig Mem_FreeHandle @ 1140:03e0 (pairs with AllocZeroed above).
+     * TODO: Orig GLOBALFREE -> win16_global_free TBD. */
+    (void)h;
+    return 1;
+}

@@ -579,3 +579,77 @@ const char *newgame_civ_note_title(void)
     /* Orig tytuly @ 1420:29cd/1420:29e9 (oba "** Civilization Note **"). */
     return "** Civilization Note **";
 }
+
+/* --- Batch 2026-10-17 fala 5 (V+W): settler hint + icon tables --- */
+
+civ_error_t newgame_maybe_show_settler_hint(int civ, int unit)
+{
+    /* Orig NewGame_MaybeShowSettlerHint @ 10e0:005b (see newgame.h;
+     * strings BUILDCITY/MINING/IRRIGATE/Command- @ 1420:2998..29b7).
+     * TODO: Orig Map_GetTileClass/Tile/CenterOnTile + City_FindNearest/
+     * AppendName + ShowCivNoteEarly dialog bridge TBD. */
+    (void)civ;
+    (void)unit;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t newgame_patch_command_to_control(char *buf)
+{
+    /* Orig NewGame_PatchCommandToControl @ 10e0:06fd (hidden DAT_12d8_24fa
+     * -> explicit buf). */
+    static const char from[] = "Command-";
+    static const char to[] = "Control-";
+    int si;
+
+    if (!buf)
+        return CIV_ERR_NOENT;
+    for (si = 0; buf[si] != '\0'; ++si) {
+        int cx = 0;
+
+        for (; cx < 8 && buf[si] != '\0' && buf[si] == from[cx]; ++cx)
+            ++si;
+        if (cx == 8) {
+            int k;
+
+            for (k = 0; k < 8; ++k)
+                buf[si - 8 + k] = to[k];
+        }
+        if (cx != 0)
+            --si;
+    }
+    return CIV_OK;
+}
+
+civ_error_t newgame_build_icon_tables(void)
+{
+    /* Orig NewGame_BuildIconTables @ 10e8:231f (see newgame.h; globals
+     * DAT_1420_93xx..98xx + DAT_12d8_44xx kept 1:1 in place, no invented
+     * layouts).
+     * TODO: Orig Art_LoadFrame + port activate + font-config + clipped-icon
+     * slicers -> INDEX8-texture + palette + present bridge TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t newgame_refresh_civ_icons(void)
+{
+    /* Orig NewGame_RefreshCivIcons @ 10e8:31aa (see newgame.h).
+     * TODO: Orig Art_LoadFrameData + GetPalette/ExtractClippedIcon/
+     * FreeIconBuffer/Close + SETRECT/OFFSETRECT + Mem_ReallocHandle +
+     * GLOBALFREE TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t newgame_extract_icon_at(int x, int y, int w, int h,
+                                    int *out_handle)
+{
+    /* Orig NewGame_ExtractIconAt @ 10e8:33b9 (see newgame.h).
+     * TODO: Orig SETRECT + Gfx_ExtractClippedIcon -> video_extract_icon_at
+     * TBD (*out untouched). */
+    (void)x;
+    (void)y;
+    (void)w;
+    (void)h;
+    if (!out_handle)
+        return CIV_ERR_NOENT;
+    return CIV_ERR_UNSUPPORTED;
+}

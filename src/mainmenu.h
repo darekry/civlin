@@ -429,4 +429,55 @@ civ_error_t menu_dispatch_command(int cmd);
  * jumptable). DOS + WinHelp, no SDL help twin -> STUB UNSUPPORTED. */
 civ_error_t menu_show_help_contents(void);
 
+/* --- Batch 2026-10-17 fala 5 (U): menu dispatch ---
+ *   Menu_DispatchOrEnableRange @ 1098:0bdd. */
+
+/* Orig Menu_DispatchOrEnableRange @ 1098:0bdd (hMenu = GETMENU @ 1608:0164
+ * on DAT_12b0_0004; linear scan 8-entry CS table @ 1098:0c97 ids
+ * 101/201/301/401/501/601/701/801 for cmd; hit -> indirect handler at
+ * table+0x10 (targets 0c1d..0c55, proven 0c25: 201-208); miss/after ->
+ * ENABLEMENUITEM @ 1608:0160 range loop; 19 callers Pic_PlayShared x18 +
+ * WdwMap_Open). win16 menu facade + full (SI,DI) dump TBD -> STUB. */
+civ_error_t menu_dispatch_or_enable_range(int cmd_id, int enable);
+
+/* --- Batch 2026-10-17 fala 6 (Z): palace improve modal ---
+ *   Menu_PalaceImprove @ 1158:0000, Menu_PalaceRebuild @ 1158:08e7,
+ *   Menu_PalaceClose @ 1158:123b, Menu_PalaceCalcIcon @ 1158:1277,
+ *   Menu_PalaceDrawIcon @ 1158:140c. */
+
+/* Orig Menu_PalaceImprove @ 1158:0000 (~1817 B modal: PALACE header +
+ * PalaceRebuild(0) + leader wav + section list + PresentRect + key/mouse
+ * input loop + validity gate + CalcIcon/CacheAlloc + "Select new section."
+ * + commit + close + wait; sole caller Game_TurnLoopTick @ 1088:087f).
+ * Dialog/GfxPort/input/audio + 1350/1420/12d8 ctx TBD -> STUB. */
+civ_error_t menu_palace_improve(void);
+
+/* Orig Menu_PalaceRebuild @ 1158:08e7 (palace port rebuild: rect save +
+ * CalcIcon per section + CacheAlloc(mask,1) + CreateTracked(0x94) +
+ * Art frames Allows(+1) + per-section DrawIcon + wonder overlays +
+ * SHOWWINDOW + PresentRect; callers 1158:0000 x2 + FUN_11d8_0000
+ * spaceship path). Art 1198 RLE/tagged-frame decoder NOT guessed ->
+ * STUB. */
+civ_error_t menu_palace_rebuild(int variant);
+
+/* Orig Menu_PalaceClose @ 1158:123b (GfxPort_Close 0x56 + DestroyTracked
+ * b12a + *(2990+0x10) = 0; callers 0000 x3 + 11d8:0000). SDL port
+ * teardown + dialog pop TBD -> STUB. */
+civ_error_t menu_palace_close(void);
+
+/* Orig Menu_PalaceCalcIcon @ 1158:1277 (pure icon-index kernel on
+ * ES:1350: lvl = [sec*2+0xdc]; 0..3 kind switch with -1 sentinel + sec
+ * 1/5/7 edges; 0094/0095 outs; callers 0000 + 08e7). LIVE pure on
+ * explicit params (hidden ES -> outs). */
+void menu_palace_calc_icon(int sec, int preview, int lvl, int da, int de,
+                           int d8, unsigned char *out94,
+                           unsigned char *out95);
+
+/* Orig Menu_PalaceDrawIcon @ 1158:140c (coord/icon-select wrapper over
+ * FUN_11a8_15ce blitter: px = (x<<4)/10, py scaled, icon from 0094/0095
+ * indices; 10 callers in 08e7). Math LIVE, blit tail STUB. */
+civ_error_t menu_palace_draw_icon(int lvl, int sec, int x, int y, int flag);
+int menu_palace_icon_px(int x);
+int menu_palace_icon_py(int y, int lvl, int extra);
+
 #endif /* CIVLIN_MAINMENU_H */

@@ -1934,4 +1934,40 @@ civ_error_t palette_zero_god_palette(void);
 civ_error_t palette_clear_range_flags(int first, int count);
 civ_error_t palette_set_range_flags(int first, int count);
 
+/* --- Batch 2026-10-17 fala 5 (W): port fill/copy/tile ---
+ *   GfxPort_GetDcSlot @ 10d0:028c, GfxPort_FillColor @ 10d0:02ba,
+ *   GfxPort_CopyPortToPort @ 10d0:06c0, GfxPort_FillTiledIcon @ 10d0:0bee.
+ * Port field map (byte offsets, from Create @ 10d0:0000 + users): +0x0c w,
+ * +0x0e h, +0x10 stride, +0x12 bitmap/global handle, +0x14 palette, +0x16
+ * DC-slot, +0x18 DC. */
+
+/* Orig GfxPort_GetDcSlot @ 10d0:028c (far port+0x16 DC-slot that SetActive
+ * @ 10d0:0956 passes to SetCurrentDC @ 1100:09a9 -> DAT_1420_9960, or NULL
+ * when headless DAT_12d8_28fc != 0; companion of GetPalette @ 10d0:0262
+ * *(port+0x14)). LIVE pure on explicit base+flag (far -> offset). */
+const uint8_t *gfxport_dc_slot(const uint8_t *port_base, int headless_28fc);
+
+/* Orig GfxPort_FillColor @ 10d0:02ba (rawPortFillColor: handle == 0 ->
+ * MessageBox "No raw data in rawPortFillColor." @ 1420:28dc; else clamp +
+ * GLOBALLOCK + Util_MemSet rows by stride +0x10 + UNLOCK; 4 callers
+ * minimap/framed/play/sunken). Bitmap-lock facade TBD -> STUB, clip LIVE. */
+civ_error_t gfxport_fill_color(int x, int y, int w, int h, int color);
+int gfxport_fill_clip_w(int rect_r, int port_w);
+int gfxport_fill_clip_h(int rect_b, int port_h);
+
+/* Orig GfxPort_CopyPortToPort @ 10d0:06c0 (rawPortToPort: src/dst +0x12
+ * validity -> MessageBox Source/Dest invalid @ 1420:28fd/291b; else
+ * GetCurrentDC + LOCK x2 + HMEMCPY rows + UNLOCK x2 + SetCurrentDC restore;
+ * 5 diplo/unit callers). SDL round-trip delegate to gfx_port_blit TBD ->
+ * STUB. */
+civ_error_t gfxport_copy_port_to_port(int src, int dst, int w, int rows);
+
+/* Orig GfxPort_FillTiledIcon @ 10d0:0bee (LOCK icon -> cell w/h + clamp to
+ * port +0x0c/+0x0e + DrawTechIconDefault tiling + UNLOCK; sole caller
+ * WdwStatus_Refresh @ 1218:0891). Icon-cell blit TBD -> STUB, counts LIVE
+ * (cols = port_w/cell_w+1 via IDIV+INC). */
+civ_error_t gfxport_fill_tiled_icon(int icon, int w, int h);
+int gfxport_tile_cols(int port_w, int cell_w);
+int gfxport_tile_rows(int port_h, int cell_h);
+
 #endif /* CIVLIN_VIDEO_H */

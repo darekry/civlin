@@ -656,3 +656,33 @@ char *util_str_upper(char *s)
         s[i] = (char)util_to_upper(s[i] & 0xFF);
     return s;
 }
+
+/* --- Batch 2026-10-17 fala 5 (Y): far-ptr + zero consts --- */
+
+int util_store_far_pointer(int off, int seg, int *out_off, int *out_seg)
+{
+    /* Orig Util_StoreFarPointer @ 1140:003b. */
+    if (!out_off || !out_seg)
+        return 0;
+    *out_off = off;
+    *out_seg = seg;
+    return (seg == 0) ? 0 : off;
+}
+
+int util_return_zero_0071(void)
+{
+    /* Orig Util_ReturnZero_0071 @ 1140:0071. */
+    return 0;
+}
+
+int util_return_zero_0083(void)
+{
+    /* Orig Util_ReturnZero_0083 @ 1140:0083. */
+    return 0;
+}
+
+int util_return_zero_00d4(void)
+{
+    /* Orig Util_ReturnZero_00d4 @ 1140:00d4. */
+    return 0;
+}

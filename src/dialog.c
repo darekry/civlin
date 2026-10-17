@@ -5732,3 +5732,156 @@ int text_next_char_inc(const uint8_t *s)
         return 0;
     return (int)(int8_t)*s;
 }
+
+/* --- Batch 2026-10-17 fala 5 (U+V+W): center/move + modal + bars --- */
+
+civ_error_t dlg_center_move_window(void *wnd_far, int x, int y)
+{
+    /* Orig Dlg_CenterMoveWindow @ 1098:0a0d (see dialog.h; exact halves
+     * LIVE via dlg_move_extent/dlg_move_should_use_default).
+     * TODO: Orig GETWINDOWRECT/MOVEWINDOW @ 1608:00ac/00e0 ->
+     * win16_get/move_window (SDL_SetWindowPosition/Size) TBD. */
+    (void)wnd_far;
+    (void)x;
+    (void)y;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t dlg_center_move_window_padded(void *wnd_far, int x, int y)
+{
+    /* Orig Dlg_CenterMoveWindowPadded @ 1098:0aa4 (padded twin, orphan). */
+    (void)wnd_far;
+    (void)x;
+    (void)y;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t dlg_get_desktop_rect(int16_t rect[4])
+{
+    /* Orig Dlg_GetDesktopRect @ 1098:0bac (see dialog.h).
+     * TODO: Orig GETDESKTOPWINDOW/GETWINDOWRECT -> win16_get_desktop_rect
+     * (SDL_GetDisplayBounds candidate) TBD (*out untouched). */
+    (void)rect;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+int dlg_return_zero_stub(void)
+{
+    /* Orig Dlg_ReturnZeroStub @ 1098:0bcb (MOV AL,0). */
+    return 0;
+}
+
+int dlg_return_false(void)
+{
+    /* Orig Dlg_ReturnFalse @ 1098:18f7 (XOR AX,AX; 7 args ignored). */
+    return 0;
+}
+
+civ_error_t dlg_show_modal_listbox(int tmpl, int frame)
+{
+    /* Orig Dlg_ShowModalListBox @ 1098:1909 (see dialog.h; templates
+     * 0x80/0x81 via 18f7, City-Find 0x83, ResTables 0x82).
+     * TODO: Orig tracked-DC + subclass + LB_* pump -> SDL dialog/listbox
+     * bridge TBD. */
+    (void)tmpl;
+    (void)frame;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t dlg_dispatch_def_dlg_proc(int hdlg, int msg, int wparam)
+{
+    /* Orig Dlg_DispatchDefDlgProc @ 1098:1d56 (see dialog.h; TRUE slots
+     * gfx_return_one/alt).
+     * TODO: Orig JMP CS:[BX+0xa] handlers + DEFDLGPROC -> win16_defdlgproc
+     * bridge TBD. */
+    (void)hdlg;
+    (void)msg;
+    (void)wparam;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+int dlg_return_zero_byte(void)
+{
+    /* Orig Dlg_ReturnZeroByte @ 1098:1f3d (MOV AL,0). */
+    return 0;
+}
+
+void dlg_noop_slot_a(void)
+{
+    /* Orig Dlg_NoopSlotA @ 1098:1fe0 (empty padding). */
+}
+
+void dlg_noop_slot_b(void)
+{
+    /* Orig Dlg_NoopSlotB @ 1098:1fee (empty padding). */
+}
+
+void dlg_noop_slot_c(void)
+{
+    /* Orig Dlg_NoopSlotC @ 1098:1ffc (empty padding). */
+}
+
+void text_forward_enum_tail(void)
+{
+    /* Orig Text_ForwardEnumTail @ 1098:0dc7 (forwarder to empty 09d3). */
+}
+
+civ_error_t text_fill_bar_range(int x1, int y1, int x2, int y2, int color)
+{
+    /* Orig Text_FillBarRange @ 10d8:0000 (see dialog.h; 9 callers).
+     * TODO: Orig Gfx_FillBarRectRange @ 11e8:0912 -> Gfx_FillBarRect @
+     * 11e8:0504 (land first) + SDL RenderFillRect TBD. */
+    (void)x1;
+    (void)y1;
+    (void)x2;
+    (void)y2;
+    (void)color;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t text_draw_colored_at_origin(const char *text, int color)
+{
+    /* Orig Text_DrawColoredAtOrigin @ 10d8:002d (see dialog.h).
+     * TODO: Orig SELECTOBJECT font + TEXTOUT via font_blit_glyph/SDL_ttf
+     * TBD. */
+    (void)text;
+    (void)color;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t text_fill_text_background(const char *text, int dx, int dy)
+{
+    /* Orig Text_FillTextBackground @ 10d8:0221 (see dialog.h).
+     * TODO: Orig GETTEXTMETRICS/MeasurePascal/SETRECT/OFFSETRECT +
+     * Gfx_FillStackRect TBD. */
+    (void)text;
+    (void)dx;
+    (void)dy;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t text_noop0604(void)
+{
+    /* Orig Text_Noop0604 @ 10d8:0604 (working name; see dialog.h).
+     * TODO: Orig re-probe prototype + padding/alias check. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t text_fill_bar_corners(int x1, int y1, int x2, int y2, int color)
+{
+    /* Orig Text_FillBarCorners @ 10d8:0612 (see dialog.h; extent LIVE in
+     * text_bar_extent).
+     * TODO: Orig Gfx_FillBarRect @ 11e8:0504 TBD. */
+    (void)x1;
+    (void)y1;
+    (void)x2;
+    (void)y2;
+    (void)color;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+int text_bar_extent(int a, int b)
+{
+    /* Orig same corners->extent (b-a)+1 (cf. dlg_move_extent padded). */
+    return (b - a) + 1;
+}

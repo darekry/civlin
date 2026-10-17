@@ -1626,3 +1626,45 @@ int save_needs_ocean_rebuild(void)
      * linkow; continent-linki nie odbudowane w tej sciezce). */
     return 1;
 }
+
+/* --- Batch 2026-10-17 fala 5 (Y): replay-save probe --- */
+
+int save_try_open_file(void *spec, int flag)
+{
+    /* Orig Save_TryOpenFile @ 1140:00e6 (see save.h; 1 = fail like orig).
+     * TODO: Orig File_Open @ 1000:2ad9 (OF: Dos_Open/Create/Attr/Ioctl +
+     * DAT_1420_4e76/4e78/4e7a) -> SDL_IO twin + spec layout (+0 handle,
+     * +8 filename far) TBD. */
+    (void)spec;
+    (void)flag;
+    return 1;
+}
+
+int save_allow_file_op(const void *spec)
+{
+    /* Orig Save_AllowFileOp @ 1140:0126 (spec passed for layout-compat). */
+    (void)spec;
+    return 1;
+}
+
+/* --- Batch 2026-10-17 fala 6 (Z): dos-fd seek/tell --- */
+
+int save_file_seek(int dos_fd, long off, int origin)
+{
+    /* Orig Save_SeekFile @ 1140:030f (see save.h; 1 = fail like orig).
+     * TODO: Orig Dos_Seek @ 1000:161c -> win16_llseek SDL_SeekIO +
+     * dos_error_from_errno staging TBD. */
+    (void)dos_fd;
+    (void)off;
+    (void)origin;
+    return 1;
+}
+
+int save_file_tell_nonzero(int dos_fd)
+{
+    /* Orig Save_IsPosNonzero @ 1140:034a (low-word test kept 1:1 when
+     * bridged).
+     * TODO: Orig Dos_Tell @ 1000:192e -> SDL_TellIO TBD. */
+    (void)dos_fd;
+    return 0;
+}

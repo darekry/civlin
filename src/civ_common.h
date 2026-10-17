@@ -369,4 +369,22 @@ uint32_t util_swap_bytes32(uint16_t lo, uint16_t hi);
  * NULL -> NULL (orig faulted). */
 char *util_str_upper(char *s);
 
+/* --- Batch 2026-10-17 fala 5 (Y): far-ptr + zero consts ---
+ *   Util_StoreFarPointer @ 1140:003b, Util_ReturnZero_0071 @ 1140:0071,
+ *   Util_ReturnZero_0083 @ 1140:0083, Util_ReturnZero_00d4 @ 1140:00d4.
+ * All LIVE OS-free 1:1. */
+
+/* Orig Util_StoreFarPointer @ 1140:003b (ES = 0x1348 stash off/seg at
+ * [0]/[2]; seg == 0 -> 0 else off; sole 1348:0000 writer). Hidden far
+ * store -> explicit outs (overwrite-on-next-call like other stagings).
+ * NULL outs -> 0. */
+int util_store_far_pointer(int off, int seg, int *out_off, int *out_seg);
+
+/* Orig Util_ReturnZero_0071/0083/00d4 @ 1140:0071/0083/00d4 (XOR AX,AX;
+ * orphans; likely Win16 enum/dialog-hook FALSE slots; kept distinct
+ * until a data-xref proves identity). Honest const-0. */
+int util_return_zero_0071(void);
+int util_return_zero_0083(void);
+int util_return_zero_00d4(void);
+
 #endif /* CIVLIN_COMMON_H */

@@ -1873,3 +1873,182 @@ civ_error_t map_scale_rect_in_place(int16_t rect[4], int16_t div_w,
     rect[3] = (int16_t)((int32_t)rect[3] * 8 / div_h);
     return CIV_OK;
 }
+
+/* --- Batch 2026-10-17 fala 5 (X): 1110 occupancy/owner/site --- */
+
+civ_error_t map_remove_unit_from_tile(int civ, int x, int y, int next)
+{
+    /* Orig Map_RemoveUnitFromTile @ 1110:17bc (decompiler CONCAT11(0x14,…)
+     * is stale AX = 0x1420; disasm pushes civ only; inverse of PlaceUnitAt
+     * @ 1110:1767).
+     * TODO: Orig Unit_UnlinkStack @ 1050:11ad 0x6306 chain (game.h
+     * unit_stack_*) TBD. */
+    if (civ < 0 || civ > 7)
+        return CIV_ERR_RANGE;
+    if (next == -1) {
+        map_set_tile(x + 0xA0, y, (uint8_t)civ);
+        return CIV_OK;
+    }
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t map_set_unit_present_flag(int x, int y)
+{
+    /* Orig Map_SetUnitPresentFlag @ 1110:1906 (AND AL,7 + ADD 8). */
+    int old = map_get_tile(x + 0xA0, y);
+
+    if (old < 0)
+        return CIV_OK;
+    map_set_tile(x + 0xA0, y, (uint8_t)((old & 7) | 8));
+    return CIV_OK;
+}
+
+civ_error_t map_clear_unit_present_flag(int x, int y)
+{
+    /* Orig Map_ClearUnitPresentFlag @ 1110:1941 (AND AL,7). */
+    int old = map_get_tile(x + 0xA0, y);
+
+    if (old < 0)
+        return CIV_OK;
+    map_set_tile(x + 0xA0, y, (uint8_t)(old & 7));
+    return CIV_OK;
+}
+
+int map_has_road(int x, int y)
+{
+    /* Orig Map_HasRoad @ 1110:197a. */
+    return (map_get_occupancy_flags(x, y) & 8) != 0 ? 1 : 0;
+}
+
+int map_get_mirrored_occupancy_flags(int x, int y)
+{
+    /* Orig Map_GetMirroredOccupancyFlags @ 1110:19e0 (OOB folds to 0 like
+     * map_get_occupancy_flags). */
+    int lo = map_get_tile(x + 0x50, y + 100);
+    int hi = map_get_tile(x + 0x50, y + 0x96);
+
+    if (lo < 0)
+        lo = 0;
+    if (hi < 0)
+        hi = 0;
+    return (lo & 0xFF) + (hi & 0xFF) * 0x10;
+}
+
+civ_error_t map_set_occupancy_bits(int mask, int x, int y, int view_civ,
+                                   int player_civ)
+{
+    /* Orig Map_SetOccupancyBits @ 1110:1a8f (hidden DAT_13f0_000c /
+     * g_nPlayerCiv compare -> explicit view/player). */
+    if (mask == 0) {
+        map_set_tile(x, y + 100, 0);
+        map_set_tile(x, y + 0x96, 0);
+    } else if (mask < 0x10) {
+        int old = map_get_tile(x, y + 100);
+
+        if (old >= 0)
+            map_set_tile(x, y + 100, (uint8_t)(old | mask));
+    } else {
+        int old = map_get_tile(x, y + 0x96);
+
+        if (old >= 0)
+            map_set_tile(x, y + 0x96,
+                         (uint8_t)(old | ((mask >> 4) & 0xF)));
+    }
+    if (view_civ == player_civ)
+        return map_mirror_occupancy(x, y);
+    return CIV_OK;
+}
+
+int map_is_city_site_valid(int tile_class, int x, int y, int seen_byte,
+                           int seed, int occupancy)
+{
+    /* Orig Map_IsCitySiteValid @ 1110:1cd9 (hidden 13c0 seed / 13e8 seen /
+     * occupancy call -> params; proven (class,x,y) shape at 10e8:1814). */
+    int want;
+    int have;
+
+    if (tile_class == 10)
+        return 0;
+    if ((seen_byte & 1) != 0)
+        return 0;
+    if (y < 2 || y > 0x2F)
+        return 0;
+    want = (x & 3) * 4 + (y & 3);
+    have = (seed + (x >> 2) * 0xD + (y >> 2) * 0xB + 8) & 0x1F;
+    if (want != have)
+        return 0;
+    if ((occupancy & 1) != 0)
+        return 0;
+    return 1;
+}
+
+int map_get_mirrored_continent_id(int x, int y)
+{
+    /* Orig Map_GetMirroredContinentId @ 1110:1d71 (twin of 1d99). */
+    return map_get_tile(x + 0x50, y + 0x32);
+}
+
+civ_error_t map_build_shade_pattern(void)
+{
+    /* Orig Map_BuildShadePattern @ 1110:1e17 (see map.h; 1330:0008 owner +
+     * DC lifetime + SRCCOPY TBD, *out untouched). */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t map_compose_tile_icon(int dst_handle, unsigned long key, int tx,
+                                  int ty)
+{
+    /* Orig Map_ComposeTileIcon @ 1118:0000 (see map.h; key from
+     * Map_GetTileCacheKey @ 1118:04b4 via City_DrawTileView).
+     * TODO: Orig Gfx_CopyIconBuffer/Clipped/FillIconRect -> video icon-buffer
+     * bridge TBD. */
+    (void)dst_handle;
+    (void)key;
+    (void)tx;
+    (void)ty;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t map_get_tile_cache_key(int tx, int ty, int *out_key)
+{
+    /* Orig Map_GetTileCacheKey @ 1118:04b4 (see map.h).
+     * TODO: Orig live-map ctx (GetTileClass/WrapX/CheckBounds/Improved/
+     * GetTile/19e0/1cd9 + COURTHOUSE table) TBD. */
+    (void)tx;
+    (void)ty;
+    if (!out_key)
+        return CIV_ERR_NOENT;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+/* --- Batch 2026-10-17 fala 6 (AA+AD): icon cache + scaled dist --- */
+
+civ_error_t map_cache_civ_icons(uint16_t civ_mask, int mode)
+{
+    /* Orig Map_CacheCivIcons @ 1158:14b7 (see map.h).
+     * TODO: Orig Art_LoadFrameData + Gfx_ExtractClippedIcon + GfxPort_Close
+     * -> video/art bridge + ES:1350/DAT_1420_b12e ctx TBD. */
+    (void)civ_mask;
+    (void)mode;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t map_free_civ_icons(void)
+{
+    /* Orig Map_FreeCivIcons @ 1158:17ad (see map.h).
+     * TODO: Orig Gfx_FreeIconBuffer -> video_free_icon TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+int map_wrap_step_dist_scaled(int dx, int dy)
+{
+    /* Orig Map_WrapStepDistScaled @ 11c8:02a4 (X-only 0x50 wrap). */
+    int a = dx >= 0 ? dx : -dx;
+    int b = dy >= 0 ? dy : -dy;
+
+    if (a > 0x28)
+        a = 0x50 - a;
+    if (b < a)
+        return a * 2 + b;
+    return b * 2 + a;
+}

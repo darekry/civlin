@@ -541,4 +541,42 @@ int newgame_civ_note_player_res(void);
  * 1:1 "** Civilization Note **" (oba). Read-only literal. */
 const char *newgame_civ_note_title(void);
 
+/* --- Batch 2026-10-17 fala 5 (V+W): settler hint + icon tables ---
+ *   NewGame_MaybeShowSettlerHint @ 10e0:005b, NewGame_PatchCommandToControl
+ *   @ 10e0:06fd, NewGame_BuildIconTables @ 10e8:231f,
+ *   NewGame_RefreshCivIcons @ 10e8:31aa, NewGame_ExtractIconAt @
+ *   10e8:33b9. */
+
+/* Orig NewGame_MaybeShowSettlerHint @ 10e0:005b (settler idle hint:
+ * 8-neighbour max check + BUILDCITY center/note vs MINING (class 4) /
+ * IRRIGATE (class 1 + FUN_11f0_45db) / 0x29b2; sole caller
+ * Civ_ProcessUnitMoves @ 11f0:08ff with (civ,unit)). Map-center + modal
+ * note bridge TBD -> STUB (*out untouched). */
+civ_error_t newgame_maybe_show_settler_hint(int civ, int unit);
+
+/* Orig NewGame_PatchCommandToControl @ 10e0:06fd (help-text patch
+ * "Command-" -> "Control-" in DAT_12d8_24fa; sole caller
+ * NewGame_CustomHelpDialog @ 10e0:03a2). LIVE pure on explicit buf
+ * (hidden DGROUP -> param; Orig inner-SI quirk kept 1:1). NULL -> NOENT. */
+civ_error_t newgame_patch_command_to_control(char *buf);
+
+/* Orig NewGame_BuildIconTables @ 10e8:231f (~1.4 KB startup art/icon
+ * build: Art_LoadFrame 0xCA + SetActive + headless-gated font-config +
+ * Sys_Yield-paced slicer loops via FUN_11e8_097c + FUN_10e8_33b9 +
+ * ExtractClippedIcon into DAT_1420_93xx..98xx + ClearActive; sole caller
+ * FUN_11e0_09d0 after LoadFrameData(200)). Device chain TBD -> STUB. */
+civ_error_t newgame_build_icon_tables(void);
+
+/* Orig NewGame_RefreshCivIcons @ 10e8:31aa (LoadAdvisors tail reloader:
+ * Art_LoadFrameData(400+civ) + palette 1420:0130 + 4 handles 1420:0128 +
+ * Y-table 1420:2a52 + Mem_ReallocHandle 0x130; 5 callers
+ * wizard/government/tech/load/11f0). Art/GfxPort bridge TBD -> STUB. */
+civ_error_t newgame_refresh_civ_icons(void);
+
+/* Orig NewGame_ExtractIconAt @ 10e8:33b9 (SETRECT + ExtractClippedIcon @
+ * 11a8:05c7 on port 0x12d8; sole caller BuildIconTables loop 8x 12x12 ->
+ * DAT_1420_9340). Hidden SETRECT -> explicit (x,y,w,h) params. STUB. */
+civ_error_t newgame_extract_icon_at(int x, int y, int w, int h,
+                                    int *out_handle);
+
 #endif /* CIVLIN_NEWGAME_H */

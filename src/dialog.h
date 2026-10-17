@@ -3265,4 +3265,96 @@ civ_error_t dlg_get_window_text255(int hwnd, char *buf, int cap,
  * LIVE pure deref on explicit pointer (far -> flat). NULL -> NOENT. */
 int text_next_char_inc(const uint8_t *s);
 
+/* --- Batch 2026-10-17 fala 5 (U+V+W): center/move + modal + bars ---
+ *   Dlg_CenterMoveWindow @ 1098:0a0d, Dlg_CenterMoveWindowPadded @
+ *   1098:0aa4, Dlg_GetDesktopRect @ 1098:0bac, Dlg_ReturnZeroStub @
+ *   1098:0bcb, Dlg_ReturnFalse @ 1098:18f7, Dlg_ShowModalListBox @
+ *   1098:1909, Dlg_DispatchDefDlgProc @ 1098:1d56, Dlg_ReturnZeroByte @
+ *   1098:1f3d, Dlg_NoopSlotA/B/C @ 1098:1fe0/1fee/1ffc,
+ *   Text_ForwardEnumTail @ 1098:0dc7, Text_FillBarRange @ 10d8:0000,
+ *   Text_DrawColoredAtOrigin @ 10d8:002d, Text_FillTextBackground @
+ *   10d8:0221, Text_Noop0604 @ 10d8:0604, Text_FillBarCorners @ 10d8:0612. */
+
+/* Orig Dlg_CenterMoveWindow @ 1098:0a0d (DesktopRect + GETWINDOWRECT +
+ * CenterRect @ 11f8:0000 + default x/y when 0 + MOVEWINDOW exact w/h +
+ * GETWINDOWRECT +10; 4 callers 10e0/1170/1220/11e0; sibling of
+ * CenterTrackedWindow @ 1098:0b33) and twin Dlg_CenterMoveWindowPadded @
+ * 1098:0aa4 (same with w+1/h+1; orphan dead alternate). Win16 rect
+ * facade TBD -> STUBs (exact/padded halves LIVE via dlg_move_extent). */
+civ_error_t dlg_center_move_window(void *wnd_far, int x, int y);
+civ_error_t dlg_center_move_window_padded(void *wnd_far, int x, int y);
+
+/* Orig Dlg_GetDesktopRect @ 1098:0bac (GETDESKTOPWINDOW @ 1608:01a4 +
+ * GETWINDOWRECT; 7 callers incl. 3 center variants + Wdw*_Open).
+ * SDL_GetDisplayBounds candidate TBD -> STUB (*out untouched). */
+civ_error_t dlg_get_desktop_rect(int16_t rect[4]);
+
+/* Orig Dlg_ReturnZeroStub @ 1098:0bcb (empty + MOV AL,0; orphan; same
+ * family as Main_ReturnZeroStub @ 1008:0acb). Honest return-0 NOOP. */
+int dlg_return_zero_stub(void);
+
+/* Orig Dlg_ReturnFalse @ 1098:18f7 (XOR AX,AX; sole caller
+ * Pedia_ShowListDialog @ 1068:0026 with 7 ignored template args).
+ * LIVE const FALSE. */
+int dlg_return_false(void);
+
+/* Orig Dlg_ShowModalListBox @ 1098:1909 (modal listbox host: CreateTracked
+ * + DrawDialogFrame + GetItemRect/SETRECT + StrokeRect + port open/blits +
+ * Listbox CREATEWINDOW + LB_* SENDMESSAGE fill + subclass + pump on
+ * DAT_12d8_0030 + teardown; callers City_ShowFind @ 1068:004c +
+ * InitResStringTables @ 1068:0295). SDL dialog/listbox bridge TBD -> STUB. */
+civ_error_t dlg_show_modal_listbox(int tmpl, int frame);
+
+/* Orig Dlg_DispatchDefDlgProc @ 1098:1d56 (5-entry CS:1f1b dispatch
+ * 000F/0102/0111/0201/0202 -> 1DB9/1D88/1E2D/1EBA/1E77 else DEFDLGPROC @
+ * 1608:01a8; orphan via MAKEPROCINSTANCE; TRUE slots ReturnOne @
+ * 200a/26c1). win16_defdlgproc bridge TBD -> STUB. */
+civ_error_t dlg_dispatch_def_dlg_proc(int hdlg, int msg, int wparam);
+
+/* Orig Dlg_ReturnZeroByte @ 1098:1f3d (MOV AL,0; predecessor of
+ * FillResStringList @ 1f4f; orphan). LIVE const FALSE. */
+int dlg_return_zero_byte(void);
+
+/* Orig Dlg_NoopSlotA/B/C @ 1098:1fe0/1fee/1ffc (empty padding slots
+ * between FillResStringList and ReturnOne @ 200a; orphans). Void NOOPs. */
+void dlg_noop_slot_a(void);
+void dlg_noop_slot_b(void);
+void dlg_noop_slot_c(void);
+
+/* Orig Text_ForwardEnumTail @ 1098:0dc7 (tiny CALLF forwarder to empty
+ * Font_EnumFamiliesCallbackTail @ 1008:09d3; orphan). Transitive vacuum
+ * -> WONTFIX-Win16 void NOOP. */
+void text_forward_enum_tail(void);
+
+/* Orig Text_FillBarRange @ 10d8:0000 (range-form bar fill forwarding
+ * (x1,y1,x2,y2,color) + presets DAT_1420_2990/2992 to FillBarRectRange @
+ * 11e8:0912; 9 callers incl. labeled-bar edges + census/ship/demo rows).
+ * FillBarRect gate (land it first) -> STUB. */
+civ_error_t text_fill_bar_range(int x1, int y1, int x2, int y2, int color);
+
+/* Orig Text_DrawColoredAtOrigin @ 10d8:002d (census colored-string draw:
+ * font select + SetColor(DAT_12d8_45fd or palette[idx] when 28fc == 0) +
+ * StrCopy/PackPascal/DrawPascalAtOrigin + restore; sibling of DrawDirect
+ * @ 10d8:00e0 with MOVETO; callers census detail/foreign/city-status).
+ * font_blit_glyph/SDL_ttf bridge TBD -> STUB. */
+civ_error_t text_draw_colored_at_origin(const char *text, int color);
+
+/* Orig Text_FillTextBackground @ 10d8:0221 (font select + GETTEXTMETRICS
+ * height + MeasurePascal width + SETRECT/OFFSETRECT + StackPushCopy +
+ * FillStackRect; erase-behind-text, no TEXTOUT; orphan). Same bridge ->
+ * STUB. */
+civ_error_t text_fill_text_background(const char *text, int dx, int dy);
+
+/* Orig Text_Noop0604 @ 10d8:0604 (13 B prologue-only between MeasureWidth
+ * @ 05b8 and 0612; decompiler const return unverified, no immediates).
+ * NOT WONTFIX (return semantics unverified) -> STUB pending re-probe
+ * (working name; rename after padding-vs-accessor check). */
+civ_error_t text_noop0604(void);
+
+/* Orig Text_FillBarCorners @ 10d8:0612 (corners-form bar fill: w =
+ * (x2-x1)+1, h = (y2-y1)+1, color hi 0x14 -> FillBarRect @ 11e8:0504;
+ * orphan; sibling of FillBarRange). Wrapper STUB, extent LIVE below. */
+civ_error_t text_fill_bar_corners(int x1, int y1, int x2, int y2, int color);
+int text_bar_extent(int a, int b);
+
 #endif /* CIVLIN_DIALOG_H */

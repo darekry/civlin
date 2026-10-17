@@ -1285,4 +1285,101 @@ civ_error_t map_set_view_scale_and_origin(int16_t x, int16_t y,
 civ_error_t map_scale_rect_in_place(int16_t rect[4], int16_t div_w,
                                     int16_t div_h);
 
+/* --- Batch 2026-10-17 fala 5 (X): 1110 occupancy/owner/site ---
+ *   Map_RemoveUnitFromTile @ 1110:17bc, Map_SetUnitPresentFlag @
+ *   1110:1906, Map_ClearUnitPresentFlag @ 1110:1941, Map_HasRoad @
+ *   1110:197a, Map_GetMirroredOccupancyFlags @ 1110:19e0,
+ *   Map_SetOccupancyBits @ 1110:1a8f, Map_IsCitySiteValid @ 1110:1cd9,
+ *   Map_GetMirroredContinentId @ 1110:1d71, Map_BuildShadePattern @
+ *   1110:1e17, Map_ComposeTileIcon @ 1118:0000, Map_GetTileCacheKey @
+ *   1118:04b4. (City_FindByTileChecked @ 1110:1bab lives in game.h.) */
+
+/* Orig Map_RemoveUnitFromTile @ 1110:17bc (next == -1 -> SetTile(x+0xa0,y,
+ * civ) clearing 0x08; else Unit_UnlinkStack @ 1050:11ad chain, no tile
+ * write; callers ChooseOrder @ 1078:1480 + FoundCityIfHome @ 11c0:16a4 +
+ * 11f0 x2; inverse of PlaceUnitAt @ 1110:1767). Marker half LIVE, unlink
+ * tail STUB. */
+civ_error_t map_remove_unit_from_tile(int civ, int x, int y, int next);
+
+/* Orig Map_SetUnitPresentFlag @ 1110:1906 (tile = (old&7)|8 on the owner
+ * plane x+0xa0; callers City_DoRevolt @ 11b8:0f26 + FUN_11a0_0000 schism +
+ * 11f0) and twin Map_ClearUnitPresentFlag @ 1110:1941 (tile = old&7;
+ * orphan teardown pair). Both LIVE RMW (OOB ignored like SetTile). */
+civ_error_t map_set_unit_present_flag(int x, int y);
+civ_error_t map_clear_unit_present_flag(int x, int y);
+
+/* Orig Map_HasRoad @ 1110:197a (GetOccupancyFlags & 8; callers
+ * Path_FindCorridor @ 1128:10de x2 road-road +1 vs +3/base*3).
+ * Bit meaning per City_TileYield @ 1030:7c28 (&1 city,&2 food,&4 shield,
+ * &8 road,&0x10 holders,&0x40 pollution). LIVE. */
+int map_has_road(int x, int y);
+
+/* Orig Map_GetMirroredOccupancyFlags @ 1110:19e0 (player-view +0x50 twin
+ * of GetOccupancyFlags: tile(x+0x50,y+100) + tile(x+0x50,y+0x96)*0x10;
+ * callers City_DrawTileView @ 1110:04d0 + FUN_1118 x3 + FUN_1208_1dd7).
+ * LIVE (OOB folds to 0). */
+int map_get_mirrored_occupancy_flags(int x, int y);
+
+/* Orig Map_SetOccupancyBits @ 1110:1a8f (mask == 0 clears both; < 0x10
+ * ORs at y+100; else (mask>>4) at y+0x96; then mirror when view == player;
+ * callers SetIrrigationFlag @ 1030:7f1e + DestroyCity @ 1170:0241 +
+ * FoundCity @ 1040:0000). RMW LIVE, mirror gate explicit (no silent arch
+ * change). */
+civ_error_t map_set_occupancy_bits(int mask, int x, int y, int view_civ,
+                                   int player_civ);
+
+/* Orig Map_IsCitySiteValid @ 1110:1cd9 (class != 10, seen&1 == 0, 2 <= y
+ * <= 0x2f, (x&3)*4+(y&3) == (seed+(x>>2)*0xd+(y>>2)*0xb+8)&0x1f, occup&1
+ * == 0; callers InitCivState start-pos loop + FUN_1118_04b4 + ChooseOrder
+ * x2 + 11f0; extended form of CheckTileImproved @ 1110:1c72 &0xf).
+ * LIVE pure on explicit params. */
+int map_is_city_site_valid(int tile_class, int x, int y, int seen_byte,
+                           int seed, int occupancy);
+
+/* Orig Map_GetMirroredContinentId @ 1110:1d71 (tile(x+0x50,y+0x32);
+ * orphan twin of GetContinentId @ 1110:1d99 tile(x,y+0x32)). LIVE. */
+int map_get_mirrored_continent_id(int x, int y);
+
+/* Orig Map_BuildShadePattern @ 1110:1e17 (1330:0008 128x128 pattern:
+ * a*0x10+b per 8x8 block + CREATECOMPATIBLEDC + AllocBitmap @ 10d0:0cfa +
+ * SRCCOPY BITBLT + DELETEDC; orphan; exact use fog/shade/dither TBD vs
+ * dump, no guessing). SDL texture bridge TBD -> STUB. */
+civ_error_t map_build_shade_pattern(void);
+
+/* Orig Map_ComposeTileIcon @ 1118:0000 (cache-miss renderer: class +
+ * mirrored flags + key-bit ladder compositing terrain 95e2/98ae/9622/
+ * 972e/96ac + overlays 9358/935c/935a/938e/938c/9370[] + FillIconRect dots
+ * via CopyIconBuffer/Clipped @ 11a8:0328/076f; callers City_DrawTileView
+ * @ 1110:04d0 x2 on cache miss). Icon-buffer facade TBD -> STUB. */
+civ_error_t map_compose_tile_icon(int dst_handle, unsigned long key, int tx,
+                                  int ty);
+
+/* Orig Map_GetTileCacheKey @ 1118:04b4 (neighbour+flag fold incl.
+ * COURTHOUSE @ 1420:087a ocean jumptable, 0xa/0xb specials, 2 == grass
+ * dither, x8 and x10 shifts; sole caller City_DrawTileView @ 1110:055d).
+ * Live-map ctx bridge TBD -> STUB (no decoder guessing). */
+civ_error_t map_get_tile_cache_key(int tx, int ty, int *out_key);
+
+/* --- Batch 2026-10-17 fala 6 (AA+AD): icon cache + scaled dist ---
+ *   Map_CacheCivIcons @ 1158:14b7, Map_FreeCivIcons @ 1158:17ad,
+ *   Map_WrapStepDistScaled @ 11c8:02a4. */
+
+/* Orig Map_CacheCivIcons @ 1158:14b7 (local_a 0..4 mask loop x civs 1..7
+ * ES:1350 0xdc match/mode + 0xc4&3 remap + Art_LoadFrameData(id,0x48) +
+ * 2x SETRECT/ExtractClippedIcon -> DAT_1420_b12e + count 0xa4++; callers
+ * PalaceImprove @ 1158:041a + PalaceRebuild @ 1158:09a5). Art/extract
+ * bridge TBD -> STUB. */
+civ_error_t map_cache_civ_icons(uint16_t civ_mask, int mode);
+
+/* Orig Map_FreeCivIcons @ 1158:17ad (8x2 free b12e when 0xa4 != 0 +
+ * clear; callers 1158:07d6 + 08e7:0ff2). Frees must go via icon bridge
+ * (vacuous no-op would leak, not WONTFIX) -> STUB. */
+civ_error_t map_free_civ_icons(void);
+
+/* Orig Map_WrapStepDistScaled @ 11c8:02a4 (orphan; 2x-scaled twin of
+ * Map_WrapStepDist @ 11c8:02ec / Map_StepDist @ 11c8:025d: abs via
+ * (v^(v>>15))-(v>>15), 0x28/0x50 X-only wrap, 2*max+min keeps int
+ * precision; CIV_MAP_WRAP_W 0x50). LIVE pure. */
+int map_wrap_step_dist_scaled(int dx, int dy);
+
 #endif /* CIVLIN_MAP_H */

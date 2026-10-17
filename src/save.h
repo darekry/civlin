@@ -716,4 +716,34 @@ civ_error_t replay_show_civ_destroyed(int civ);
  * (orig wola bezwarunkowo po mem_copy_far; brak gate na rozmiar/typ). */
 int save_needs_ocean_rebuild(void);
 
+/* --- Batch 2026-10-17 fala 5 (Y): replay-save probe ---
+ *   Save_TryOpenFile @ 1140:00e6, Save_AllowFileOp @ 1140:0126. */
+
+/* Orig Save_TryOpenFile @ 1140:00e6 (fixed-flag File_Open @ 1000:2ad9
+ * probe (0x8104,0x180) on spec+8 filename; handle -> *spec iff != -1;
+ * returns inverted failure bool; sole caller Replay_OpenOrPlay @
+ * 1180:00f1; sibling of save_file_open @ 1140:0139). Save-spec layout +
+ * SDL_IO bridge TBD -> STUB (1 = fail like orig). */
+int save_try_open_file(void *spec, int flag);
+
+/* Orig Save_AllowFileOp @ 1140:0126 (always-TRUE gate on the same
+ * DS:0xB1A6 spec; caller keeps passing the spec for layout-compat).
+ * LIVE const. */
+int save_allow_file_op(const void *spec);
+
+/* --- Batch 2026-10-17 fala 6 (Z): dos-fd seek/tell ---
+ *   Save_SeekFile @ 1140:030f, Save_IsPosNonzero @ 1140:034a. */
+
+/* Orig Save_SeekFile @ 1140:030f (Dos_Seek @ 1000:161c INT21 AH=42h on
+ * *ph; returns AX != 0 failure-bool like the save_file_* family;
+ * orphan tail between save_file_open @ 1140:0139 and save_file_close @
+ * 1140:037c). dos-fd SDL_SeekIO bridge (win16_llseek, dos-fd index never
+ * POSIX-fd, DAT_1420_0010/4e7a staging) TBD -> STUB (1 = fail). */
+int save_file_seek(int dos_fd, long off, int origin);
+
+/* Orig Save_IsPosNonzero @ 1140:034a (Dos_Tell @ 1000:192e low-word != 0;
+ * the nonzero-pos check caller; orphan). SDL_TellIO TBD -> STUB (0 =
+ * unknown, never fake-nonzero). */
+int save_file_tell_nonzero(int dos_fd);
+
 #endif /* CIVLIN_SAVE_H */

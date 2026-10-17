@@ -1768,3 +1768,10 @@ int map_is_link_grid_in_bounds(int x, int y)
         return 0;
     return 1;
 }
+
+uint16_t worldgen_return_second(uint16_t a, uint16_t b)
+{
+    /* Orig WorldGen_ReturnSecond @ 1108:01a9 (first arg ignored). */
+    (void)a;
+    return b;
+}

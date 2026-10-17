@@ -194,4 +194,13 @@ const char *audio_leader_names(int index);
 
 void audio_shutdown(void);
 
+/* --- Batch 2026-10-17 fala 6 (Z): padding ---
+ *   Snd_Nop000e @ 1150:000e. */
+
+/* Orig Snd_Nop000e @ 1150:000e (11 B empty prologue/epilogue, no MOV imm;
+ * decompiler +10 return is a DS-relative artifact: +10 points mid-word
+ * into "Type?_Propulsion_Fuel"; alignment padding before the MCI cluster
+ * 001c/0066/00a0/00c9/019e). WONTFIX-Win16 NOOP. */
+civ_error_t snd_nop000e(void);
+
 #endif /* CIVLIN_AUDIO_H */

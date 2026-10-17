@@ -6074,3 +6074,477 @@ civ_error_t ship_frame_end_hook(void)
      * Ship_AnimateStarfield @ 1070:12b5; WONTFIX-Win16). */
     return CIV_OK;
 }
+
+/* --- Batch 2026-10-17 fala 5 (X): checked city find --- */
+
+int city_find_by_tile_checked(int x, int y, const int8_t *xs,
+                              const int8_t *ys, const int8_t *flags, int n,
+                              int *owner_out)
+{
+    /* Orig City_FindByTileChecked @ 1110:1bab (hidden 5500/5501/5502 +
+     * 4304/4306 -> params; owner via map_tile_owner_from_tile). */
+    int tile = map_get_tile(x + 0xA0, y);
+    int owner = (tile < 0) ? -1 : map_tile_owner_from_tile(tile);
+    int i;
+
+    if (!xs || !ys || !flags || n <= 0)
+        return -1;
+    for (i = 0; i < n && i < 0x80; i++) {
+        if (flags[i] != (int8_t)-1 && xs[i] == (int8_t)x
+            && ys[i] == (int8_t)y) {
+            if (owner_out)
+                *owner_out = owner;
+            return i;
+        }
+    }
+    /* TODO: Orig Dialog_ShowMessage @ 1220:00d2 ("CityAt Error","",100,
+     * 0x50) miss popup stays caller-side. */
+    return -1;
+}
+
+/* --- Batch 2026-10-17 fala 6 (AA+AB+AC+AD): diplo/city/popup/unit --- */
+
+civ_error_t diplo_reset_contact_state(void)
+{
+    /* Orig Diplo_ResetContactState @ 1160:207a (see game.h).
+     * TODO: Orig Diplo_CloseContactGfx + DAT_1420_2990/1358/1378 images
+     * TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t diplo_build_greeting_text(int civ, char *dst, size_t cap)
+{
+    /* Orig Diplo_BuildGreetingText @ 1160:233c (see game.h; literals
+     * "Greetings from "/"O most untrustworthy..."/honorifics/nuke kept in
+     * comment, civword/leader tables unconfirmed).
+     * TODO: Orig civ*0x20+0x2da/0x3da + 0x3a0a&8 + Rng_Range(4) + 0x4155
+     * nuke gate -> game tables + rng_range TBD. */
+    (void)civ;
+    (void)dst;
+    (void)cap;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t diplo_prompt_treaty_menu(int civ)
+{
+    /* Orig Diplo_PromptTreatyMenu @ 1160:257a (TREATY header + RunContactMenu
+     * 0x14/0x8b).
+     * TODO: Orig MenuZ modal -> dialog SDL bridge TBD. */
+    (void)civ;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t diplo_apply_peace_treaty(int civ)
+{
+    /* Orig Diplo_ApplyPeaceTreaty @ 1160:25fa (see game.h).
+     * TODO: Orig Diplo_SetPeace @ 1168:0dda + 392b stamp + 62ff/5507/b386
+     * offsets TBD. */
+    (void)civ;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t diplo_tick_contact_anim(void)
+{
+    /* Orig Diplo_TickContactAnim @ 1160:26ef (see game.h; >9-tick gate via
+     * sys_get_tick_scaled LIVE when bridged).
+     * TODO: Orig 1378:0012/1358/1370/0060/006a/0062/b14e script ctx +
+     * DrawContactFrame video bridge TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t diplo_setup_contact_portrait(int civ)
+{
+    /* Orig Diplo_SetupContactPortrait @ 1160:2a38 (see game.h).
+     * TODO: Orig Art/CURSOR/GLOBAL/Extract/palette/SHOWWINDOW bridges TBD. */
+    (void)civ;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t diplo_close_contact_gfx(void)
+{
+    /* Orig Diplo_CloseContactGfx @ 1160:2e03 (see game.h).
+     * TODO: Orig Sound_PlayId audio + Gfx_FreeIconBuffer/Close +
+     * Dlg_DestroyTracked TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t diplo_draw_contact_frame(int frame_a, int frame_b, int slot)
+{
+    /* Orig Diplo_DrawContactFrame @ 1160:2ee0 (see game.h; -1 skips).
+     * TODO: Orig ResMgr_GetById/DisposeHandle -> rsc_* + blit/present video
+     * bridge TBD. */
+    (void)frame_a;
+    (void)frame_b;
+    (void)slot;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t diplo_draw_leader_clip(int x, int y, int w, int h)
+{
+    /* Orig Diplo_DrawLeaderClip @ 1160:33fc (6-arg SETRECT + extract; the
+     * Replay_ShowCivDestroyed 1-arg call needs manual 6-arg fix per RE).
+     * TODO: Orig Gfx_ExtractClippedIcon -> video/gfx_indexed bridge TBD. */
+    (void)x;
+    (void)y;
+    (void)w;
+    (void)h;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+int diplo_calc_leader_frame(int gov_value, int has_tech_20)
+{
+    /* Orig Diplo_CalcLeaderFrame @ 1160:3487 (hidden 12d8:3b8a+civ*2 ->
+     * gov_value; Tech_HasTech(civ,0x14) -> has_tech_20). */
+    int f;
+
+    if (gov_value == 3)
+        return 3;
+    f = gov_value / 2;
+    if (has_tech_20)
+        f += 4;
+    return f;
+}
+
+civ_error_t city_process_civ_turn(int civ)
+{
+    /* Orig City_ProcessCivTurn @ 1170:0000 (see game.h; caller
+     * Game_TurnLoopTick).
+     * TODO: Orig Pic_PlayShared sweep + 5502/5507/39e5/39f3 + Util_Clamp
+     * rate adjust TBD. */
+    (void)civ;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+int tech_choose_dialog_proc(unsigned long lparam, int wparam, int umsg)
+{
+    /* Orig Tech_ChooseDialogProc @ 1170:204f (see game.h; 1 = handled).
+     * TODO: Orig DEFDLGPROC + DAT_12d8_0030 staging -> dialog_def_proc TBD. */
+    (void)lparam;
+    (void)wparam;
+    (void)umsg;
+    return 0;
+}
+
+civ_error_t status_open_result_port(int color_idx)
+{
+    /* Orig Status_OpenResultPort @ 1188:0000 (see game.h).
+     * TODO: Orig Dlg_CreateTracked + MakeBrush/FILLRECT + GfxPort_Create/
+     * SetActive + Cursor TBD. */
+    (void)color_idx;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t status_draw_world_map(void)
+{
+    /* Orig Status_DrawWorldMap @ 1188:013f (see game.h; caller menu).
+     * TODO: Orig 50x80 tile/check/wrap/scan/map-unit + PresentRect paging
+     * TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t score_draw_power_graph(void)
+{
+    /* Orig Score_DrawPowerGraph @ 1188:07ad (see game.h; triangular math
+     * LIVE in game_calc_triangular_level).
+     * TODO: Orig CREATEPEN/SELECTOBJECT/MOVETO/LINETO -> SDL_RenderDrawLines
+     * TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t score_show_wonders(void)
+{
+    /* Orig Score_ShowWonders @ 1188:0b3e (see game.h).
+     * TODO: Orig Res_GetStringCopy + City_AppendName + Hof_DrawTechIcon +
+     * FillBarRect TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t score_show_history_rank(void)
+{
+    /* Orig Score_ShowHistoryRank @ 1188:0db8 (see game.h; scoring LIVE in
+     * game_calc_triangular_level/status_draw_tech_icons).
+     * TODO: Orig per-city Pic_PlayShared + HoF points TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t diplo_play_city_effect(int map_x, int map_y)
+{
+    /* Orig Diplo_PlayCityEffect @ 11b8:0c3d (see game.h; timed anim).
+     * TODO: Orig Art 0x90 + Extract/DrawTechIcon + tick/yield + ScrollCopy/
+     * Present + StoreDC/PostSetDc TBD. */
+    (void)map_x;
+    (void)map_y;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t city_show_view(int city, int view_filter)
+{
+    /* Orig City_ShowView @ 11b0:0000 (see game.h; 6 callers incl.
+     * status_format_gold_row tail).
+     * TODO: Orig scatter grids + CreateTracked + preload + rows + cell loop
+     * + header + WaitForInput(unless -2) bridges TBD. */
+    (void)city;
+    (void)view_filter;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t city_draw_water_tile(int tx, int ty, int edge_mask)
+{
+    /* Orig City_DrawWaterTile @ 11b0:115c (table b2f4; see game.h).
+     * TODO: Orig FUN_11a8_15ce blit -> video bridge TBD. */
+    (void)tx;
+    (void)ty;
+    (void)edge_mask;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t city_draw_terrain_tile(int tx, int ty, int variant, int base)
+{
+    /* Orig City_DrawTerrainTile @ 11b0:11bf (table b344).
+     * TODO: Orig FUN_11a8_15ce -> video TBD. */
+    (void)tx;
+    (void)ty;
+    (void)variant;
+    (void)base;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t city_draw_cell_icon(int tx, int ty, int cell_code)
+{
+    /* Orig City_DrawCellIcon @ 11b0:1227 (improv b314 / unit b2c8 split).
+     * TODO: Orig Clamp + FUN_11a8_15ce -> video TBD. */
+    (void)tx;
+    (void)ty;
+    (void)cell_code;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t city_draw_production_row(int city, int x, int y, int width)
+{
+    /* Orig City_DrawProductionRow @ 11b0:1316 (see game.h).
+     * TODO: Orig Art 0xd0b + palette/port + specialist icons TBD. */
+    (void)city;
+    (void)x;
+    (void)y;
+    (void)width;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t city_preload_view_icons(int view_filter, int terrain, int city)
+{
+    /* Orig City_PreloadViewIcons @ 11b0:1653 (see game.h; Art d09/d0a/
+     * d07/d08/d06 + Tech gates).
+     * TODO: Orig FUN_11e8_0296 + ExtractClippedIcon icon cache TBD. */
+    (void)view_filter;
+    (void)terrain;
+    (void)city;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t city_free_view_icons(int view_filter, int terrain, int city)
+{
+    /* Orig City_FreeViewIcons @ 11b0:1a5f (exact free-pair of preload;
+     * must not fake-OK before preload LIVE). */
+    (void)view_filter;
+    (void)terrain;
+    (void)city;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t unit_play_scroll_anim(int civ)
+{
+    /* Orig Unit_PlayScrollAnim @ 11b0:1b63 (see game.h; sole caller
+     * Unit_DoMove).
+     * TODO: Orig Art era frames + port/palette + tick-6/click loop TBD. */
+    (void)civ;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t popup_play_forward_scroll(void)
+{
+    /* Orig Popup_PlayForwardScroll @ 11b0:1fac (lanes 1420:3fe6).
+     * TODO: Orig Art d0e/d0f + CopyPortToPort/Present + tick/click TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t popup_play_reverse_scroll(void)
+{
+    /* Orig Popup_PlayReverseScroll @ 11b0:237c (mirror of forward).
+     * TODO: Orig Art d0c/d0d + same loop TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+/* DAT_13f0_000a / DAT_13b8_0000 images for City_AbsorbHomeUnits (file
+ * scope so the image getters below can read them; overwritten next call). */
+static int s_saved_13f0_000a;
+static int s_staged_13b8_0000;
+
+civ_error_t city_absorb_home_units(uint8_t *cities, int city_idx,
+                                   int n_cities, uint8_t *units,
+                                   int n_units, int player_civ)
+{
+    /* Orig City_AbsorbHomeUnits @ 11c0:0159 (city 0x1c @5500, unit 0xc
+     * @62fc; hidden 13f0:000a/13b8:0000 -> module-static below). */
+    int owner;
+    int cx;
+    int cy;
+    int found = 0;
+    int i;
+
+    if (!cities || !units || city_idx < 0 || city_idx >= n_cities
+        || n_units <= 0)
+        return CIV_ERR_NOENT;
+    owner = cities[(size_t)city_idx * 0x1Cu + 7];
+    if (owner != player_civ)
+        return CIV_OK;
+    cx = cities[(size_t)city_idx * 0x1Cu + 0];
+    cy = cities[(size_t)city_idx * 0x1Cu + 1];
+    s_saved_13f0_000a = 0;
+    s_staged_13b8_0000 = 1;
+    for (i = 0; i < n_units; i++) {
+        uint8_t *u = units + (size_t)i * 0xCu;
+
+        if (u[2] == 0xFFu)
+            continue;
+        if ((int)u[0] != cx || (int)u[1] != cy)
+            continue;
+        if ((int)u[10] != city_idx)
+            continue;
+        if ((u[11] & 8u) == 0u)
+            continue;
+        if (!found) {
+            found = 1;
+            continue;
+        }
+        if ((cities[(size_t)city_idx * 0x1Cu + 16] & 0xFF) == 0) {
+            cities[(size_t)city_idx * 0x1Cu + 16] =
+                (uint8_t)((int)u[2] | (((u[11] & 0x20u) != 0u) ? 0x40 : 0));
+        } else if ((cities[(size_t)city_idx * 0x1Cu + 17] & 0xFF) == 0) {
+            cities[(size_t)city_idx * 0x1Cu + 17] = u[2];
+        } else {
+            break;
+        }
+        (void)unit_found_city_if_home(owner, i);
+    }
+    s_staged_13b8_0000 = 0;
+    cities[(size_t)city_idx * 0x1Cu + 2] &= (uint8_t)~0x04u;
+    return CIV_OK;
+}
+
+int city_absorb_saved_image(void)
+{
+    /* Orig DAT_13f0_000a image (see city_absorb_home_units). */
+    return s_saved_13f0_000a;
+}
+
+int city_absorb_staged_image(void)
+{
+    /* Orig DAT_13b8_0000 image (see city_absorb_home_units). */
+    return s_staged_13b8_0000;
+}
+
+int unit_pick_stack_defender(const uint8_t *units, int n_units,
+                             int unit_idx)
+{
+    /* Orig Unit_PickStackDefender @ 11c0:1947 (solo -> unit; DAT_1420_b380
+     * best staging -> return directly; IterateStack+ScoreDefender loop
+     * below in unit_iterate terms).
+     * TODO: Orig Unit_IterateStack @ 11c0:1ee1 + ScoreStackDefender @
+     * 11c0:1a81 (Map_GetTileClass + 1a3a/1a42/17d5) TBD. */
+    if (!units || n_units <= 0 || unit_idx < 0 || unit_idx >= n_units)
+        return -1;
+    if (units[(size_t)unit_idx * 0xCu + 9] == 0xFFu)
+        return unit_idx;
+    return unit_idx;
+}
+
+int unit_count_type_in_stack(const uint8_t *units, int n_units,
+                             int unit_idx, int want_type)
+{
+    /* Orig Unit_CountTypeInStack @ 11c0:1cec (DAT_13b8_0004/0002 -> params;
+     * IterateStack walk -> explicit next-chain below like 11c0:1ee1). */
+    int n = 0;
+    int cur;
+    int guard;
+
+    if (!units || n_units <= 0 || unit_idx < 0 || unit_idx >= n_units)
+        return 0;
+    for (cur = unit_idx, guard = 0;
+         cur != 0xFF && cur >= 0 && cur < n_units && guard < 10;
+         cur = units[(size_t)(size_t)cur * 0xCu + 9], guard++) {
+        n += unit_count_type_if_match(units, cur, want_type, NULL);
+    }
+    return n;
+}
+
+int unit_count_type_if_match(const uint8_t *units, int unit_idx,
+                             int want_type, int *count_io)
+{
+    /* Orig Unit_CountTypeIfMatch @ 11c0:1d32 ([BX+0x62ff] vs 13b8:0004). */
+    int hit;
+
+    if (!units || unit_idx < 0)
+        return 0;
+    hit = ((int)units[(size_t)unit_idx * 0xCu + 2] == want_type) ? 1 : 0;
+    if (count_io && hit)
+        *count_io = *count_io + 1;
+    return hit;
+}
+
+int unit_count_by_unitdef_field(const uint8_t *units, int unit_idx,
+                                const int16_t *unitdef, int stride,
+                                int field_off, int want, int *count_io)
+{
+    /* Orig Unit_CountByUnitDefField @ 11c0:1db6 ([type*0x16+0x1a4a] vs
+     * 13b8:0004; stride/off explicit, TBD vs dump). */
+    int hit = 0;
+
+    if (!units || !unitdef || unit_idx < 0 || stride <= 0 || field_off < 0)
+        return 0;
+    hit = (unitdef[(size_t)units[(size_t)unit_idx * 0xCu + 2] * (size_t)stride
+                   + (size_t)field_off] == (int16_t)want) ? 1 : 0;
+    if (count_io && hit)
+        *count_io = *count_io + 1;
+    return hit;
+}
+
+int unit_sum_stack_combat_value(const uint8_t *units, int n_units,
+                                int unit_idx, const int16_t *unitdef)
+{
+    /* Orig Unit_SumStackCombatValue @ 11c0:1e03 (DAT_13b8_0002 sum image ->
+     * return; IterateStack -> explicit chain like CountType). */
+    int sum = 0;
+    int cur;
+    int guard;
+
+    if (!units || !unitdef || n_units <= 0 || unit_idx < 0
+        || unit_idx >= n_units)
+        return 0;
+    for (cur = unit_idx, guard = 0;
+         cur != 0xFF && cur >= 0 && cur < n_units && guard < 10;
+         cur = units[(size_t)(size_t)cur * 0xCu + 9], guard++) {
+        (void)unit_sum_stack_combat_callback(units, cur, unitdef, &sum);
+    }
+    return sum;
+}
+
+int unit_sum_stack_combat_callback(const uint8_t *units, int unit_idx,
+                                   const int16_t *unitdef, int *sum_io)
+{
+    /* Orig Unit_SumStackCombatCallback @ 11c0:1e3c ([type*0x16+0x1a3a]==0
+     * -> -1, [type*0x16+0x1a4a]==5 -> += [type*0x16+0x1a48]; unitdef base
+     * 0x1a30 TBD vs dump: idx = type*11 + (off-0x1a30)/2 -> 5/12/13). */
+    int type;
+    int d = 0;
+
+    if (!units || !unitdef || unit_idx < 0)
+        return 0;
+    type = (int)units[(size_t)unit_idx * 0xCu + 2];
+    if (unitdef[(size_t)type * 11u + 5u] == 0)
+        d -= 1;
+    if (unitdef[(size_t)type * 11u + 13u] == 5)
+        d += (int)unitdef[(size_t)type * 11u + 12u];
+    if (sum_io)
+        *sum_io = *sum_io + d;
+    return d;
+}

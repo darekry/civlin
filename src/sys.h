@@ -1592,4 +1592,44 @@ civ_error_t sys_reserved_stub(void);
  * TBD -> STUB UNSUPPORTED. */
 civ_error_t sys_wait_date_delay(int delay);
 
+/* --- Batch 2026-10-17 fala 5 (U): trace + mouse pump ---
+ *   Sys_TraceBegin @ 1098:016a, Sys_TraceEnd @ 1098:0178, Sys_TraceMark @
+ *   1098:01a2, Sys_PumpMouse @ 1098:03e3. */
+
+/* Orig Sys_TraceBegin @ 1098:016a (empty 14 B; zero-arg head of the
+ * 016a/0178 pair; callers Map_RefreshTileView @ 1110:0448 + FUN_1210_09b4;
+ * decompiler string return is a stale-DS artifact). Trace/profile enter
+ * compiled-out in release -> WONTFIX-Win16 void NOOP. */
+void sys_trace_begin(void);
+
+/* Orig Sys_TraceEnd @ 1098:0178 (empty 14 B swallowing (far name,1):
+ * "RestoreBlockXY" @ 1420:2e79 + "DrawSmTiles" @ 1420:4957 tails).
+ * WONTFIX-Win16 NOOP. */
+void sys_trace_end(const char *name_far, int flag);
+
+/* Orig Sys_TraceMark @ 1098:01a2 (empty 14 B swallowing far msg: "Pre /
+ * Post DrawTilesToPort" @ 1420:48b2/48c6; sole caller FUN_1208_17da x2).
+ * WONTFIX-Win16 NOOP. */
+void sys_trace_mark(const char *msg_far);
+
+/* Orig Sys_PumpMouse @ 1098:03e3 (550 B mouse-only pump: PEEKMESSAGE
+ * 0x200-0x209 + 0x201/0x202/0x204/0x205/0x207/0x208 stores to
+ * DAT_1420_1d44/1d46/1d48 + flags 1d4a/1d4c/1d50/1d4e, else
+ * TRANSLATE/DISPATCH; orphan via MAKEPROCINSTANCE). Win16 mouse-pump
+ * facade (SDL_PumpEvents/PollEvent twin, cf. sys_pump_messages) TBD ->
+ * STUB UNSUPPORTED (*out untouched). */
+civ_error_t sys_pump_mouse(void);
+
+/* --- Batch 2026-10-17 fala 6 (Z): zeroed-alloc pair ---
+ *   Mem_AllocZeroed @ 1140:03ae, Mem_FreeHandle @ 1140:03e0. */
+
+/* Orig Mem_AllocZeroed @ 1140:03ae (GLOBALALLOC @ 1608:0000 flags 0x42 =
+ * GMEM_MOVEABLE|GMEM_ZEROINIT; *out = h; returns h == 0 failure-bool;
+ * orphan) and twin Mem_FreeHandle @ 1140:03e0 (GLOBALFREE @ 1608:0008,
+ * returns AX != 0). Selector->pointer mapping + zeroed guarantee TBD
+ * (win16_global_alloc is a malloc shim) -> STUBs (never LIVE on malloc
+ * alone, never WONTFIX). */
+int mem_alloc_zeroed(unsigned long size32, int *out_handle);
+int mem_free_handle(int h);
+
 #endif /* CIVLIN_SYS_H */

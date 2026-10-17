@@ -3986,4 +3986,179 @@ int game_calc_triangular_level(int score);
  * Ship_AnimateStarfield @ 1070:12b5 per-frame tail). WONTFIX-Win16 NOOP. */
 civ_error_t ship_frame_end_hook(void);
 
+/* --- Batch 2026-10-17 fala 5 (X): checked city find ---
+ *   City_FindByTileChecked @ 1110:1bab. */
+
+/* Orig City_FindByTileChecked @ 1110:1bab (owner = GetTileOwner @
+ * 1110:16ee; 0x80-city scan match (x,y) on DAT_1420_5500/5501/5502; miss
+ * -> Dialog_ShowMessage @ 1220:00d2 "CityAt Error" + return -1, else
+ * DAT_12d8_4304/4306 = owner + return idx; orphan, silent twin FindByTile
+ * @ 11c8:00c4). Scan kernel LIVE on explicit arrays + owner_out; dialog
+ * tail stays caller-side STUB (no fake-OK popup). */
+int city_find_by_tile_checked(int x, int y, const int8_t *xs,
+                              const int8_t *ys, const int8_t *flags, int n,
+                              int *owner_out);
+
+/* --- Batch 2026-10-17 fala 6 (AA+AB+AC+AD): diplo/city/popup/unit ---
+ *   Diplo_ResetContactState @ 1160:207a, Diplo_BuildGreetingText @
+ *   1160:233c, Diplo_PromptTreatyMenu @ 1160:257a, Diplo_ApplyPeaceTreaty @
+ *   1160:25fa, Diplo_TickContactAnim @ 1160:26ef, Diplo_SetupContactPortrait
+ *   @ 1160:2a38, Diplo_CloseContactGfx @ 1160:2e03, Diplo_DrawContactFrame @
+ *   1160:2ee0, Diplo_DrawLeaderClip @ 1160:33fc, Diplo_CalcLeaderFrame @
+ *   1160:3487, City_ProcessCivTurn @ 1170:0000, Tech_ChooseDialogProc @
+ *   1170:204f, Status_OpenResultPort @ 1188:0000, Status_DrawWorldMap @
+ *   1188:013f, Score_DrawPowerGraph @ 1188:07ad, Score_ShowWonders @
+ *   1188:0b3e, Score_ShowHistoryRank @ 1188:0db8, Diplo_PlayCityEffect @
+ *   11b8:0c3d, City_ShowView @ 11b0:0000, City_DrawWaterTile @ 11b0:115c,
+ *   City_DrawTerrainTile @ 11b0:11bf, City_DrawCellIcon @ 11b0:1227,
+ *   City_DrawProductionRow @ 11b0:1316, City_PreloadViewIcons @ 11b0:1653,
+ *   City_FreeViewIcons @ 11b0:1a5f, Unit_PlayScrollAnim @ 11b0:1b63,
+ *   Popup_PlayForwardScroll @ 11b0:1fac, Popup_PlayReverseScroll @
+ *   11b0:237c, City_AbsorbHomeUnits @ 11c0:0159, Unit_PickStackDefender @
+ *   11c0:1947, Unit_CountTypeInStack @ 11c0:1cec, Unit_CountTypeIfMatch @
+ *   11c0:1d32, Unit_CountByUnitDefField @ 11c0:1db6, Unit_SumStackCombatValue
+ *   @ 11c0:1e03, Unit_SumStackCombatCallback @ 11c0:1e3c. */
+
+/* Orig Diplo_ResetContactState @ 1160:207a (CloseContactGfx + 2990+0x10 =
+ * 1 + 1358:000a = 0xffff + 1358:0008 = 0 + 1378:0066 = 0; callers
+ * OpenContactDialog + ProcessTurn x2 + GrantTech). Inherits 2e03 bridge ->
+ * STUB. */
+civ_error_t diplo_reset_contact_state(void);
+
+/* Orig Diplo_BuildGreetingText @ 1160:233c (distrust-bit branch +
+ * Rng_Range(4) honorific + of-the + nuke suffix into 12d8:24fa; sole
+ * caller PromptContact @ 1160:2310). Civword/leader tables unconfirmed ->
+ * STUB with TODO (literals kept in comment, no invented offsets). */
+civ_error_t diplo_build_greeting_text(int civ, char *dst, size_t cap);
+
+/* Orig Diplo_PromptTreatyMenu @ 1160:257a (civ+player name copies +
+ * 1378:006a = 0xc + TREATY header + RunContactMenu(0x14,0x8b); callers
+ * OpenContactDialog x4) and Diplo_ApplyPeaceTreaty @ 1160:25fa (SetPeace
+ * (player,civ,2) + stamp g_nTurn+0x10 + chieftain auto-settle; callers
+ * OpenContactDialog x5). MenuZ modal + DGROUP city-table TBD -> STUBs. */
+civ_error_t diplo_prompt_treaty_menu(int civ);
+civ_error_t diplo_apply_peace_treaty(int civ);
+
+/* Orig Diplo_TickContactAnim @ 1160:26ef (>9-tick gate + 1378:0012 script
+ * walk + Rng fallback -> DrawContactFrame; orphan polled callback).
+ * Tick facade exists (sys_get_tick_scaled), frame present needs video ->
+ * STUB. */
+civ_error_t diplo_tick_contact_anim(void);
+
+/* Orig Diplo_SetupContactPortrait @ 1160:2a38 (cursor + leader art
+ * 005e+500/400 + 0xe dual icons + 4x3 frames + palette copy/apply +
+ * SHOWWINDOW; sole caller PromptContact @ 1160:225c), Diplo_CloseContactGfx
+ * @ 1160:2e03 (click-off + icon/port/dialog teardown; sole caller 207a),
+ * Diplo_DrawContactFrame @ 1160:2ee0 (ResMgr 34af/34b4 locks +
+ * per-half/icon blits + PresentRect, -1 skips; sole caller 26ef),
+ * Diplo_DrawLeaderClip @ 1160:33fc (6-arg SETRECT + ExtractClippedIcon;
+ * callers 2a38 x2 + Replay_ShowCivDestroyed), Diplo_PlayCityEffect @
+ * 11b8:0c3d (timed scroll anim; callers Pic_PlayShared + ScoreAdjacent).
+ * All heavy Win16/DC/palette/dialog -> STUBs with TODO. */
+civ_error_t diplo_setup_contact_portrait(int civ);
+civ_error_t diplo_close_contact_gfx(void);
+civ_error_t diplo_draw_contact_frame(int frame_a, int frame_b, int slot);
+civ_error_t diplo_draw_leader_clip(int x, int y, int w, int h);
+civ_error_t diplo_play_city_effect(int map_x, int map_y);
+
+/* Orig Diplo_CalcLeaderFrame @ 1160:3487 (12d8:3b8a+civ*2 == 3 -> 3 else
+ * gov/2, +4 if Tech_HasTech(civ,0x14); callers 2a38 + 2ee0 +
+ * RefreshCivIcons). LIVE pure on explicit gov/has-tech (hidden DGROUP ->
+ * params). */
+int diplo_calc_leader_frame(int gov_value, int has_tech_20);
+
+/* Orig City_ProcessCivTurn @ 1170:0000 (0x80-city Pic_PlayShared sweep +
+ * AI rate adjust via Clamp; sole caller TurnLoopTick @ 1088:010d).
+ * Pic_PlayShared facade TBD -> STUB. */
+civ_error_t city_process_civ_turn(int civ);
+
+/* Orig Tech_ChooseDialogProc @ 1170:204f (__stdcall DLGPROC: WM_CHAR
+ * 0xD/0x1B -> 0x65/0x66; WM_COMMAND 0x65-0x68 + Great-Library HIWORD==2
+ * gate; else DEFDLGPROC; orphan immediate for ChooseResearch/Production).
+ * DEFDLGPROC + result staging TBD -> STUB (0 = unhandled, never fake-1). */
+int tech_choose_dialog_proc(unsigned long lparam, int wparam, int umsg);
+
+/* Orig Status_OpenResultPort @ 1188:0000 (SETRECT 0x140x0x200 +
+ * CreateTracked 0x94 + MakeBrush/FILLRECT + GfxPort_Create/SetActive +
+ * Cursor; callers TopFive + Demographics + 013f/07ad/0b3e/0db8),
+ * Status_DrawWorldMap @ 1188:013f (0000(0) + 50x80 tile scan + PresentRect
+ * paging; caller menu 1048:035c), Score_DrawPowerGraph @ 1188:07ad
+ * (0000 + axes + per-civ polyline; caller ProcessGameEnd),
+ * Score_ShowWonders @ 1188:0b3e (0000(3) + 0x15-wonder list; caller menu
+ * 1048:0334), Score_ShowHistoryRank @ 1188:0db8 (0000(3) + per-city
+ * Pic_PlayShared + triangular + DrawTechIcons; caller TurnLoopTick).
+ * Port/present/font bridges TBD -> STUBs. */
+civ_error_t status_open_result_port(int color_idx);
+civ_error_t status_draw_world_map(void);
+civ_error_t score_draw_power_graph(void);
+civ_error_t score_show_wonders(void);
+civ_error_t score_show_history_rank(void);
+
+/* Orig City_ShowView @ 11b0:0000 (city idx + filter; scatter grids +
+ * CreateTracked + preload + unit/wonder rows + cell loop via Water/
+ * Terrain/Cell + sound + production row + header + PresentRect + modal
+ * unless -2; 6 callers incl. 11b8:14e5 tail). dialog/video bridge -> STUB. */
+civ_error_t city_show_view(int city, int view_filter);
+
+/* Orig City_DrawWaterTile @ 11b0:115c (table b2f4 water mask tile),
+ * City_DrawTerrainTile @ 11b0:11bf (table b344 terrain tile),
+ * City_DrawCellIcon @ 11b0:1227 (improv b314 < 0x30 / unit b2c8 >= 0x30),
+ * City_DrawProductionRow @ 11b0:1316 (Art 0xd0b + specialist icons;
+ * caller ShowView), City_PreloadViewIcons @ 11b0:1653 (Art d09/d0a/d07/
+ * d08/d06 tables; caller ShowView), City_FreeViewIcons @ 11b0:1a5f (exact
+ * free-pair; caller ShowView). Blit/Art bridges TBD -> STUBs (free must
+ * not fake-OK before preload LIVE). */
+civ_error_t city_draw_water_tile(int tx, int ty, int edge_mask);
+civ_error_t city_draw_terrain_tile(int tx, int ty, int variant, int base);
+civ_error_t city_draw_cell_icon(int tx, int ty, int cell_code);
+civ_error_t city_draw_production_row(int city, int x, int y, int width);
+civ_error_t city_preload_view_icons(int view_filter, int terrain, int city);
+civ_error_t city_free_view_icons(int view_filter, int terrain, int city);
+
+/* Orig Unit_PlayScrollAnim @ 11b0:1b63 (8-lane forward, era art d10/d11/
+ * d12; sole caller Unit_DoMove), Popup_PlayForwardScroll @ 11b0:1fac
+ * (4-lane forward, d0e/d0f; caller Pic_PlayShared), Popup_PlayReverseScroll
+ * @ 11b0:237c (4-lane reverse, d0c/d0d; caller Pic_PlayShared). Tick/click
+ * loop + port bridges TBD -> STUBs. */
+civ_error_t unit_play_scroll_anim(int civ);
+civ_error_t popup_play_forward_scroll(void);
+civ_error_t popup_play_reverse_scroll(void);
+
+/* Orig City_AbsorbHomeUnits @ 11c0:0159 (owner == player gate; 0x80 units
+ * of owner at city home: 1st arms, 2nd -> 5516 (|0x40 veteran), 3rd ->
+ * 5517, 4th break; via Unit_FoundCityIfHome; callers Pic_PlayShared +
+ * ProcessUnitMoves). LIVE 1:1 on explicit city/unit slices (0x1c/0xc
+ * layouts; 13f0:000a/13b8:0000 staging -> module-static). */
+civ_error_t city_absorb_home_units(uint8_t *cities, int city_idx,
+                                   int n_cities, uint8_t *units,
+                                   int n_units, int player_civ);
+
+/* DAT_13f0_000a / DAT_13b8_0000 images: last City_AbsorbHomeUnits staging,
+ * valid until the next call (same pattern as sort_elem_size_image). */
+int city_absorb_saved_image(void);
+int city_absorb_staged_image(void);
+
+/* Orig Unit_PickStackDefender @ 11c0:1947 (solo -> unit; else IterateStack
+ * @ 11c0:1ee1 + ScoreStackDefender @ 11c0:1a81 best; callers ChooseOrder x2
+ * + 3407) and wrappers Unit_CountTypeInStack @ 11c0:1cec (via 1d32),
+ * Unit_SumStackCombatValue @ 11c0:1e03 (via 1e3c) + callbacks
+ * Unit_CountTypeIfMatch @ 11c0:1d32 (type == want -> count++),
+ * Unit_CountByUnitDefField @ 11c0:1db6 ([type*stride+off] == want),
+ * Unit_SumStackCombatCallback @ 11c0:1e3c ([1a3a]==0 -> -1,
+ * [1a4a]==5 -> += [1a48]). LIVE pure on explicit slices (b380/b37e +
+ * 13b8 scratch -> static images + outs). */
+int unit_pick_stack_defender(const uint8_t *units, int n_units,
+                             int unit_idx);
+int unit_count_type_in_stack(const uint8_t *units, int n_units,
+                             int unit_idx, int want_type);
+int unit_count_type_if_match(const uint8_t *units, int unit_idx,
+                             int want_type, int *count_io);
+int unit_count_by_unitdef_field(const uint8_t *units, int unit_idx,
+                                const int16_t *unitdef, int stride,
+                                int field_off, int want, int *count_io);
+int unit_sum_stack_combat_value(const uint8_t *units, int n_units,
+                                int unit_idx, const int16_t *unitdef);
+int unit_sum_stack_combat_callback(const uint8_t *units, int unit_idx,
+                                   const int16_t *unitdef, int *sum_io);
+
 #endif /* CIVLIN_GAME_H */
