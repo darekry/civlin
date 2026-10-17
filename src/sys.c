@@ -3213,3 +3213,15 @@ int mem_free_handle(int h)
     (void)h;
     return 1;
 }
+
+/* --- Batch 2026-10-17 fala 7 (AG): memory stats --- */
+
+civ_error_t sys_show_memory_stats(void)
+{
+    /* Orig Sys_ShowMemoryStats @ 11e8:012a (see sys.h; string math LIVE in
+     * util_long_to_dec/util_itoa_dec when bridged).
+     * TODO: Orig GETFREESPACE -> SDL_GetSystemRAM/sys_free_space +
+     * GETFREESYSTEMRESOURCES -> sys_res_free + MESSAGEBOX ->
+     * SDL_ShowSimpleMessageBox TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}

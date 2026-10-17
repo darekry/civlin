@@ -244,6 +244,11 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `main_pump_until_quit` | STUB | 1008:0f2b, 1038:0c1d, 1098:062f, 1420:54e6, 1420:54e8 | has TODO |
 | `main_noop_stub` | LIVE | 1008:0acb, 1008:101d |  |
 | `main_beep_repeated` | STUB | 1008:103d, 1608:012c | has TODO |
+| `main_poll_key_or_click` | STUB | 11e0:095f | has TODO |
+| `main_load_menu_art` | STUB | 11e0:09d0 | has TODO |
+| `font_map_code_to_value` | LIVE | 11e8:0a3c, 11e8:0b40 |  |
+| `cursor_set_and_flag` | STUB | 1200:0078, 1208:121a |  |
+| `cursor_dirty_image` | LIVE |  |  |
 
 ### `src/civ_common.c`
 
@@ -623,6 +628,12 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `text_noop0604` | STUB | 10d8:0604 | has TODO |
 | `text_fill_bar_corners` | STUB | 10d8:0612, 11e8:0504 | has TODO |
 | `text_bar_extent` | LIVE |  |  |
+| `text_noop_width_hint` | LIVE | 11d0:0000 |  |
+| `text_load_buffer_from_parts` | STUB | 11d0:00e4, 12d8:24fa | has TODO |
+| `text_append_resource_text` | STUB | 11d0:0115 | has TODO |
+| `text_prepare_popup_message` | STUB | 11d0:01f7 | has TODO |
+| `text_expand_message_tokens` | LIVE | 11d0:022d, 12d8:24fa, 13c8:0000, 1420:42f6 |  |
+| `text_str_to_upper` | LIVE | 1100:0b9d, 11e8:09f7 |  |
 
 ### `src/game.c`
 
@@ -1092,6 +1103,25 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `unit_count_by_unitdef_field` | LIVE | 11c0:1947, 11c0:1a81, 11c0:1cec, 11c0:1d32, 11c0:1db6, 11c0:1e03, 11c0:1e3c, 11c0:1ee1, 13b8:0004 |  |
 | `unit_sum_stack_combat_value` | LIVE | 11c0:1947, 11c0:1a81, 11c0:1cec, 11c0:1d32, 11c0:1db6, 11c0:1e03, 11c0:1e3c, 11c0:1ee1 |  |
 | `unit_sum_stack_combat_callback` | LIVE | 11c0:1947, 11c0:1a81, 11c0:1cec, 11c0:1d32, 11c0:1db6, 11c0:1e03, 11c0:1e3c, 11c0:1ee1 |  |
+| `unit_filter_stack_visibility` | LIVE | 11c0:0395, 11c0:1f42 |  |
+| `unit_reset_stack_moves_if_flag` | LIVE | 11c0:1fdd |  |
+| `unit_reset_air_stack_filter` | PARTIAL | 11c0:2105, 11c0:2151 | has TODO |
+| `unit_reset_stack_and_redraw` | PARTIAL | 1110:0dba, 11c0:2105, 11c0:2151 | has TODO |
+| `unit_found_city_if_land` | PARTIAL | 11c0:223c, 11c0:2287, 11c0:22d2 | has TODO |
+| `unit_found_city_if_not_land` | PARTIAL | 11c0:2287 |  |
+| `unit_found_city_if_sea` | PARTIAL | 11c0:22d2 |  |
+| `unit_has_adjacent_unit` | LIVE | 11c0:2603 |  |
+| `unit_pick_stack_dialog` | STUB | 11c0:3023, 11c0:3407, 11c0:3644, 11c0:3702 | has TODO |
+| `unit_draw_stack_list` | STUB | 11c0:3023, 11c0:3407, 11c0:3644, 11c0:3702 | has TODO |
+| `unit_pump_stack_dialog` | STUB | 11c0:3644 | has TODO |
+| `unit_stack_dlg_proc` | LIVE | 11c0:3702 |  |
+| `unit_reveal_if_visible` | STUB | 11f0:44d4 | has TODO |
+| `unit_check_irrigate` | LIVE | 11f0:455f |  |
+| `unit_ring_find_nearest` | LIVE | 11f0:4f38 |  |
+| `ship_show_arrival_cinematic` | STUB | 11d8:0000, 11d8:087f | has TODO |
+| `ship_show_defeat_cinematic` | STUB | 11d8:087f | has TODO |
+| `ship_wait_pump_delay` | STUB | 11d8:0bd2, 11d8:0c38 | has TODO |
+| `ship_noop_stub` | LIVE | 11d8:0c38 |  |
 
 ### `src/gfx_indexed.c`
 
@@ -1225,6 +1255,8 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `menu_palace_draw_icon` | STUB | 1158:140c | has TODO |
 | `menu_palace_icon_px` | LIVE |  |  |
 | `menu_palace_icon_py` | LIVE |  |  |
+| `menu_run_radio_dialog` | STUB | 11e0:0a2a, 12b0:009c | has TODO |
+| `menu_radio_dlg_proc` | LIVE | 11e0:0b73 |  |
 
 ### `src/map.c`
 
@@ -1377,6 +1409,11 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `map_cache_civ_icons` | STUB | 1158:041a, 1158:09a5, 1158:14b7 | has TODO |
 | `map_free_civ_icons` | STUB | 08e7:0ff2, 1158:07d6, 1158:17ad | has TODO |
 | `map_wrap_step_dist_scaled` | LIVE | 11c8:025d, 11c8:02a4, 11c8:02ec |  |
+| `map_reveal_if_visible` | STUB | 1110:1461, 11f0:447f, 12d8:4300, 12d8:4302 | has TODO |
+| `tile_can_irrigate` | LIVE | 1120:02dc, 11f0:45db |  |
+| `tile_is_on_screen` | STUB | 11f0:4e26, 1208:2061, 1330:4010, 1408:00c6 | has TODO |
+| `tile_screen_px` | LIVE | 1128:177e, 11f0:4e26, 1208:2061 |  |
+| `tile_screen_py` | LIVE |  |  |
 
 ### `src/newgame.c`
 
@@ -1792,6 +1829,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `sys_pump_mouse` | STUB | 1098:03e3 | has TODO |
 | `mem_alloc_zeroed` | LIVE | 1140:03ae, 1140:03e0, 1608:0000, 1608:0008 |  |
 | `mem_free_handle` | LIVE | 1140:03e0 |  |
+| `sys_show_memory_stats` | STUB | 11e8:0000, 11e8:0075, 11e8:012a | has TODO |
 
 ### `src/title.c`
 
@@ -1988,6 +2026,24 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `gfxport_fill_tiled_icon` | STUB | 10d0:0bee, 1218:0891 | has TODO |
 | `gfxport_tile_cols` | LIVE |  |  |
 | `gfxport_tile_rows` | LIVE |  |  |
+| `art_phase_yield_stub` | LIVE | 1098:0157, 11e8:0296, 11e8:08c8 |  |
+| `art_reserved_stub` | LIVE | 11e8:08c8 |  |
+| `gfx_draw_icon_forward` | STUB | 11e8:0674, 11e8:08d6 | has TODO |
+| `gfx_return_zero` | LIVE | 11e8:0900, 11e8:0912 |  |
+| `gfx_extract_icon_slice` | STUB | 11e8:097c | has TODO |
+| `gfx_slice_left` | LIVE |  |  |
+| `gfx_slice_top` | LIVE |  |  |
+| `gfx_slice_right` | LIVE |  |  |
+| `gfx_slice_bottom` | LIVE |  |  |
+| `gfxport_set_shared_ptr` | LIVE | 1200:0000 |  |
+| `gfxport_shared_ptr_image` | LIVE |  |  |
+| `gfxport_noop_slot_a` | NOOP | 1200:0016 |  |
+| `gfxport_noop_slot_b` | NOOP | 1200:0024 |  |
+| `gfxport_noop_slot_c` | NOOP | 1200:0032 |  |
+| `gfxport_noop_slot_d` | NOOP | 1200:0040 |  |
+| `gfxport_noop_slot_e` | NOOP | 1200:004e |  |
+| `gfxport_noop_slot_f` | NOOP | 1200:005c |  |
+| `gfxport_noop_slot_g` | NOOP | 1200:006a |  |
 | `gfx_fill_stack_rect` | STUB | 1000:14f8, 1100:0876, 1608:0110 | has TODO |
 | `gfx_pre_store_stub` | LIVE | 10e8:012e, 1100:0996, 1100:0a0d, 1108:02cf, 1420:B3C2 |  |
 | `gfx_post_set_dc_stub` | LIVE | 1100:0a0d |  |

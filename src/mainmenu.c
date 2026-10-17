@@ -932,3 +932,30 @@ int menu_palace_icon_py(int y, int lvl, int extra)
     /* Orig same py = ((y+lvl+extra)*0x10)/10. */
     return ((y + lvl + extra) * 0x10) / 10;
 }
+
+/* --- Batch 2026-10-17 fala 7 (AG): radio dialog --- */
+
+civ_error_t menu_run_radio_dialog(int first_id, int last_id, int do_center,
+                                  int *out_index)
+{
+    /* Orig Menu_RunRadioDialog @ 11e0:0a2a (see mainmenu.h).
+     * TODO: Orig MAKEPROCINSTANCE/SETWINDOWLONG + CenterMoveWindow +
+     * RadioGroupSetSel + StoreDC + PEEKMESSAGE modal -> dialog SDL bridge
+     * TBD. */
+    (void)first_id;
+    (void)last_id;
+    (void)do_center;
+    if (!out_index)
+        return CIV_ERR_NOENT;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+int menu_radio_dlg_proc(int msg, int cmd, int dlg_item)
+{
+    /* Orig Menu_RadioDlgProc @ 11e0:0b73 (see mainmenu.h).
+     * TODO: Orig BEGINPAINT/DEFDLGPROC -> dialog widget bridge TBD. */
+    (void)msg;
+    (void)cmd;
+    (void)dlg_item;
+    return 0;
+}

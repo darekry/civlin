@@ -4161,4 +4161,104 @@ int unit_sum_stack_combat_value(const uint8_t *units, int n_units,
 int unit_sum_stack_combat_callback(const uint8_t *units, int unit_idx,
                                    const int16_t *unitdef, int *sum_io);
 
+/* --- Batch 2026-10-17 fala 7 (AE+AF+AH+AI): stack callbacks + dialogs ---
+ *   Unit_FilterStackVisibility @ 11c0:1f42, Unit_ResetStackMovesIfFlag @
+ *   11c0:1fdd, Unit_ResetAirStackFilter @ 11c0:2105, Unit_ResetStackAndRedraw
+ *   @ 11c0:2151, Unit_FoundCityIfLand @ 11c0:223c, Unit_FoundCityIfNotLand @
+ *   11c0:2287, Unit_FoundCityIfSea @ 11c0:22d2, Unit_HasAdjacentUnit @
+ *   11c0:2603, Unit_PickStackDialog @ 11c0:3023, Unit_DrawStackList @
+ *   11c0:3407, Unit_PumpStackDialog @ 11c0:3644, Unit_StackDlgProc @
+ *   11c0:3702, Unit_RevealIfVisible @ 11f0:44d4, Unit_CheckIrrigate @
+ *   11f0:455f, Unit_RingFindNearest @ 11f0:4f38, Ship_ShowArrivalCinematic @
+ *   11d8:0000, Ship_ShowDefeatCinematic @ 11d8:087f, Ship_WaitPumpDelay @
+ *   11d8:0bd2, Ship_NoopStub @ 11d8:0c38.
+ * (11c0:33f5 skipped: dead return-0 padding, no rename. Unit rec 0xc @
+ * 1420:62fc: +0 flags(0x01 vis/0x08 busy/0x20 veteran/0x30 keep-mask),
+ * +1 x, +2 y... note header counts +0 as flags with base 62fc; +2 type
+ * 0xff empty, +4 moves, +5 timer, +6 goal, +8 lastDir, +9 next 0xff none,
+ * +10 home. Domain filter via def table type*0x16+0x1a3a: 0 land/1 sea/2
+ * air; ocean class gate 10.) */
+
+/* Orig Unit_FilterStackVisibility @ 11c0:1f42 (IterateStack callback from
+ * Unit_UpdateVisibility @ 11c0:0395: class != 10 || domain != 0 ->
+ * flags &= ~1). LIVE pure on explicit unit/class/domain. NULL -> -1. */
+int unit_filter_stack_visibility(uint8_t *unit, int tile_class,
+                                 int def_domain);
+
+/* Orig Unit_ResetStackMovesIfFlag @ 11c0:1fdd (callback from ProcessMoves:
+ * if flags&1: clear, moves = def(1a3c)*3, timer = def(1a3e)-1 if nonzero;
+ * lastDir/goal = 0xff). LIVE pure. NULL -> NOENT. */
+civ_error_t unit_reset_stack_moves_if_flag(uint8_t *unit, int def_moves,
+                                           int def_timer);
+
+/* Orig Unit_ResetAirStackFilter @ 11c0:2105 (domain == 2 -> 2151) and
+ * Unit_ResetStackAndRedraw @ 11c0:2151 (0xc2->timer=0, 0xcb->moves reset,
+ * flags &= 0x30, goal = 0xff, redraw if player). 2151 needs
+ * Unit_DrawSingle video bridge -> both STUB for now (filter propagates). */
+civ_error_t unit_reset_air_stack_filter(uint8_t *unit, int is_player,
+                                        int def_domain, int def_moves);
+civ_error_t unit_reset_stack_and_redraw(uint8_t *unit, int is_player,
+                                        int def_moves);
+
+/* Orig Unit_FoundCityIfLand @ 11c0:223c (domain == 0 -> FoundCityIfHome),
+ * Unit_FoundCityIfNotLand @ 11c0:2287 (!= 0 -> same, from DestroyCity),
+ * Unit_FoundCityIfSea @ 11c0:22d2 (== 1 -> same). Callee
+ * unit_found_city_if_home is STUB -> propagate UNSUPPORTED. */
+civ_error_t unit_found_city_if_land(int civ, int idx, int def_domain);
+civ_error_t unit_found_city_if_not_land(int civ, int idx, int def_domain);
+civ_error_t unit_found_city_if_sea(int civ, int idx, int def_domain);
+
+/* Orig Unit_HasAdjacentUnit @ 11c0:2603 (8-neighbour scan via
+ * dx[9]/dy[9] @ 12c8/12d0, != -1 && != exclude -> 1; 3 callers).
+ * LIVE pure on explicit neighbour ids (hidden WrapX/GetUnitAt -> caller). */
+int unit_has_adjacent_unit(int exclude_unit, const int neigh[8]);
+
+/* Orig Unit_PickStackDialog @ 11c0:3023 (6306-chain count + desktop rect +
+ * tracked dialog 0x8d + DrawStackList + modal pump 3644; caller
+ * ProcessMoves) + Unit_DrawStackList @ 11c0:3407 (defender + badge + res
+ * rows) + Unit_PumpStackDialog @ 11c0:3644 (subclass + PEEKMESSAGE loop) +
+ * Unit_StackDlgProc @ 11c0:3702 (__stdcall 4-entry CS:3872 dispatch +
+ * DEFDLGPROC). Dialog/video bridges TBD -> STUBs. */
+civ_error_t unit_pick_stack_dialog(int civ, int start_unit,
+                                   int *selected_out);
+civ_error_t unit_draw_stack_list(int civ, int unit, int select);
+civ_error_t unit_pump_stack_dialog(int *out_sel);
+int unit_stack_dlg_proc(int msg, int wparam, long lparam);
+
+/* Orig Unit_RevealIfVisible @ 11f0:44d4 (civ == player || seen-bit ->
+ * RevealCenter(unit x/y); caller ProcessMoves). View bridge TBD -> STUB. */
+civ_error_t unit_reveal_if_visible(int civ, int ux, int uy, int vis_byte,
+                                   int player_civ);
+
+/* Orig Unit_CheckIrrigate @ 11f0:455f ((occ&7) -> 0; cls12b8+4 < -2 -> 2;
+ * cls == -2 && Tile_CanIrrigate -> 1 else 0; caller ChooseOrder x2).
+ * LIVE on explicit occupancy + class/neighbour fields (hidden 12b8 table
+ * + map queries -> params; neighbour kernel via tile_can_irrigate). */
+int unit_check_irrigate(int occupancy, int cls_field4, int cls_is_irr2,
+                        int center_cls, const int n_cls[4],
+                        const int n_occ[4]);
+
+/* Orig Unit_RingFindNearest @ 11f0:4f38 (orphan ring walk: next chain
+ * 0x6306 int8, skip kind == 2, circular fwd dist mod 0x80, 0x10 hops,
+ * miss -> start; batch Dlg_* proposal table-mismatched: tables are unit
+ * 0x600/0xc + 1a3a domain). LIVE pure on explicit slices. */
+int unit_ring_find_nearest(const int8_t *next, const int8_t *kinds,
+                           int n, int start);
+
+/* Orig Ship_ShowArrivalCinematic @ 11d8:0000 (arrival branch: 10 frames
+ * 0x48+i + tracked dialog + 13c8 slots + tick-12 scroll loop + player?
+ * restore+Palace : Destroy+Rebuild; caller TurnLoopTick) and
+ * Ship_ShowDefeatCinematic @ 11d8:087f (0-city defeat: tech 0x48 loop +
+ * Res 0x9D scroll + waits; caller TurnLoopTick). Video/dialog/audio/tick
+ * bridges TBD -> STUBs. */
+civ_error_t ship_show_arrival_cinematic(int civ);
+civ_error_t ship_show_defeat_cinematic(void);
+
+/* Orig Ship_WaitPumpDelay @ 11d8:0bd2 (DrainInput + Cursor + tick loop
+ * with PumpMessages/DrainMessages/quit-flag break; callers 087f x2) and
+ * Ship_NoopStub @ 11d8:0c38 (empty 14 B, orphan). Wait needs pump bridge
+ * -> STUB; noop is WONTFIX void. */
+civ_error_t ship_wait_pump_delay(long timeout_ticks, long *out_elapsed);
+civ_error_t ship_noop_stub(void);
+
 #endif /* CIVLIN_GAME_H */

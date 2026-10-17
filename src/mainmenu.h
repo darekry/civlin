@@ -480,4 +480,21 @@ civ_error_t menu_palace_draw_icon(int lvl, int sec, int x, int y, int flag);
 int menu_palace_icon_px(int x);
 int menu_palace_icon_py(int y, int lvl, int extra);
 
+/* --- Batch 2026-10-17 fala 7 (AG): radio dialog ---
+ *   Menu_RunRadioDialog @ 11e0:0a2a, Menu_RadioDlgProc @ 11e0:0b73. */
+
+/* Orig Menu_RunRadioDialog @ 11e0:0a2a (MAKEPROCINSTANCE(0b73) +
+ * SETWINDOWLONG DWL_DLGPROC + CenterMove + RadioGroupSetSel(0x66-0x6B) +
+ * SHOWWINDOW + StoreDC + 12b0:009c/009e/00a0 modal pump + restore; orphan
+ * modal; result 009c = sel-0x66). SDL modal + radio-widget bridge TBD ->
+ * STUB. */
+civ_error_t menu_run_radio_dialog(int first_id, int last_id, int do_center,
+                                  int *out_index);
+
+/* Orig Menu_RadioDlgProc @ 11e0:0b73 (__stdcall: WM_PAINT grays, WM_CTLCOLOR
+ * brush, WM_COMMAND 0x65 OK / 0x66-0x6B select + DEFDLGPROC; installed by
+ * RunRadioDialog; 6 options, difficulty NOT guessed). DEFDLGPROC bridge TBD
+ * -> STUB (0 = unhandled). */
+int menu_radio_dlg_proc(int msg, int cmd, int dlg_item);
+
 #endif /* CIVLIN_MAINMENU_H */

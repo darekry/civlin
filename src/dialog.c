@@ -3,6 +3,7 @@
 
 /* AL2: INT_MAX for help_hlp_lzss_try len cap (OS-free, no SDL). */
 #include <limits.h>
+#include <string.h>
 
 civ_error_t dialog_init(void)
 {
@@ -5884,4 +5885,83 @@ int text_bar_extent(int a, int b)
 {
     /* Orig same corners->extent (b-a)+1 (cf. dlg_move_extent padded). */
     return (b - a) + 1;
+}
+
+/* --- Batch 2026-10-17 fala 7 (AF+AH): popup text pipeline --- */
+
+civ_error_t text_noop_width_hint(int width_hint)
+{
+    /* Orig Text_NoopWidthHint @ 11d0:0000 (empty; WONTFIX-Win16). */
+    (void)width_hint;
+    return CIV_OK;
+}
+
+civ_error_t text_load_buffer_from_parts(const char *a, const char *b)
+{
+    /* Orig Text_LoadBufferFromParts @ 11d0:00e4 (see dialog.h; clears
+     * 12d8:24fa then forwards).
+     * TODO: Orig Text_AppendResourceText bridge TBD. */
+    (void)a;
+    (void)b;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t text_append_resource_text(const char *a, const char *b)
+{
+    /* Orig Text_AppendResourceText @ 11d0:0115 (see dialog.h; cap 0x1FF).
+     * TODO: Orig ResMgr_GetByName/Dispose (rsc_loader SDL_IO) +
+     * GLOBALLOCK/mem_copy_far (mem arena) TBD. */
+    (void)a;
+    (void)b;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t text_prepare_popup_message(const char *name)
+{
+    /* Orig Text_PreparePopupMessage @ 11d0:01f7 (see dialog.h).
+     * TODO: Orig LoadBuffer/ExpandTokens/WidthHint chain (parts above)
+     * TBD. */
+    (void)name;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t text_expand_message_tokens(char *msg, size_t cap,
+                                       const char needles[5][8],
+                                       const char values[5][32])
+{
+    /* Orig Text_ExpandMessageTokens @ 11d0:022d (in-place expand, 5 tokens;
+     * hidden 24fa/42f6/13c8 -> params; 512 B tail -> cap-bounded). */
+    int t;
+
+    if (!msg || !needles || !values || cap == 0)
+        return CIV_ERR_NOENT;
+    for (t = 0; t < 5; t++) {
+        char *p = util_str_str(msg, needles[t]);
+
+        while (p) {
+            size_t tail = util_str_len(p + util_str_len(needles[t]));
+            size_t head = (size_t)(p - msg);
+            size_t vlen = util_str_len(values[t]);
+
+            if (head + vlen + tail + 1u > cap)
+                return CIV_ERR_RANGE;
+            memmove(p + vlen, p + util_str_len(needles[t]), tail + 1u);
+            memcpy(p, values[t], vlen);
+            p = util_str_str(p + vlen, needles[t]);
+        }
+    }
+    return CIV_OK;
+}
+
+char *text_str_to_upper(char *s)
+{
+    /* Orig Text_StrToUpper @ 11e8:09f7 (0xFFFF passthrough kept via
+     * util_to_upper). */
+    char *p;
+
+    if (!s)
+        return NULL;
+    for (p = s; *p != '\0'; p++)
+        *p = (char)util_to_upper(*p & 0xFF);
+    return s;
 }

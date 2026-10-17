@@ -1382,4 +1382,31 @@ civ_error_t map_free_civ_icons(void);
  * precision; CIV_MAP_WRAP_W 0x50). LIVE pure. */
 int map_wrap_step_dist_scaled(int dx, int dy);
 
+/* --- Batch 2026-10-17 fala 7 (AH): reveal/irrigate/screen ---
+ *   Map_RevealIfVisible @ 11f0:447f, Tile_CanIrrigate @ 11f0:45db,
+ *   Tile_IsOnScreen @ 11f0:4e26. */
+
+/* Orig Map_RevealIfVisible @ 11f0:447f ((1<<(player&0x1f) & vis) || force
+ * -> RevealCenter(x,y); 6 callers incl. ProcessDisaster + Pic_PlayShared).
+ * RevealCenter view/scroll facade TBD -> STUB. */
+civ_error_t map_reveal_if_visible(int x, int y, int vis_byte, int player_civ,
+                                  int force);
+
+/* Orig Tile_CanIrrigate @ 11f0:45db (center class 0xb -> 1; else 4 ortho
+ * neighbours (i = 1,3,5,7): (occ&1) == 0 && (cls == 0xb || cls == 10 ||
+ * (occ&2)) -> 1; else 0; callers 1120:02dc + 455f + SettlerHint).
+ * LIVE pure on explicit classes/occupancies (hidden GetTileClass/
+ * GetOccupancyFlags + 12c8/12d0 tables -> params). */
+int tile_can_irrigate(int center_cls, const int n_cls[4],
+                      const int n_occ[4]);
+
+/* Orig Tile_IsOnScreen @ 11f0:4e26 (y OOB 0..0x31 -> 0; px = WrapX(x-vx)*
+ * 0x20-ox, py = (y-vy)*0x20-oy; Gfx_ClipTileRect @ 1208:2061; callers
+ * PlayMoveAnimation x2). Clip facade TBD -> STUB (pure part LIVE in the
+ * px/py helpers below). */
+civ_error_t tile_is_on_screen(int x, int y, int view_x, int view_y,
+                              int off_x, int off_y, int *visible_out);
+int tile_screen_px(int x, int view_x, int off_x);
+int tile_screen_py(int y, int view_y, int off_y);
+
 #endif /* CIVLIN_MAP_H */

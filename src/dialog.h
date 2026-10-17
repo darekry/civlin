@@ -3357,4 +3357,47 @@ civ_error_t text_noop0604(void);
 civ_error_t text_fill_bar_corners(int x1, int y1, int x2, int y2, int color);
 int text_bar_extent(int a, int b);
 
+/* --- Batch 2026-10-17 fala 7 (AF+AH): popup text pipeline ---
+ *   Text_NoopWidthHint @ 11d0:0000, Text_LoadBufferFromParts @ 11d0:00e4,
+ *   Text_AppendResourceText @ 11d0:0115, Text_PreparePopupMessage @
+ *   11d0:01f7, Text_ExpandMessageTokens @ 11d0:022d, Text_StrToUpper @
+ *   11e8:09f7. */
+
+/* Orig Text_NoopWidthHint @ 11d0:0000 (empty 16 B, width-hint param echoed
+ * into Dialog_ShowMessage; 6 callers incl. OpenContactDialog). Param
+ * ignored in Orig -> WONTFIX-Win16 NOOP. */
+civ_error_t text_noop_width_hint(int width_hint);
+
+/* Orig Text_LoadBufferFromParts @ 11d0:00e4 (clear 12d8:24fa + forward
+ * two far strings to 0115; callers 01f7 + CustomHelpDialog + MainRow).
+ * Forwards to AppendResourceText below -> STUB while callee STUB. */
+civ_error_t text_load_buffer_from_parts(const char *a, const char *b);
+
+/* Orig Text_AppendResourceText @ 11d0:0115 (StrCopy+Append key, StrLen cap
+ * 0x1FF, ResMgr_GetByName, GLOBALLOCK + mem_copy_far append + NUL +
+ * UNLOCK/DISPOSE; callers ChooseProduction x4 + 00e4). rsc_loader/mem
+ * bridges TBD -> STUB. */
+civ_error_t text_append_resource_text(const char *a, const char *b);
+
+/* Orig Text_PreparePopupMessage @ 11d0:01f7 (template 0x4330 via
+ * LoadBuffer + token expand + width hint 0x50; 13 callers incl. Palace,
+ * GrantTech, Quiz). Composes 3 LIVE/STUB parts above -> STUB while any
+ * part STUB. */
+civ_error_t text_prepare_popup_message(const char *name);
+
+/* Orig Text_ExpandMessageTokens @ 11d0:022d ($US/$THEM/$BUCKS/$RPLC1/
+ * $RPLC2 needles @ 1420:42f6 + values @ 13c8:0000/20/40/60/80 5x32 into
+ * 12d8:24fa in place, 512 B tail; callers ChooseProduction x4 + 01f7 +
+ * 11d8 x3 + CustomHelp). LIVE pure on explicit bufs (hidden DGROUP ->
+ * params). */
+civ_error_t text_expand_message_tokens(char *msg, size_t cap,
+                                       const char needles[5][8],
+                                       const char values[5][32]);
+
+/* Orig Text_StrToUpper @ 11e8:09f7 (strupr via Util_ToUpper per byte,
+ * returns orig ptr; callers defeat screen + ReplayEntry + DiscoveryList;
+ * distinct from Util_StrUpper @ 1100:0b9d void twin). LIVE (NULL -> NULL,
+ * orig faulted). */
+char *text_str_to_upper(char *s);
+
 #endif /* CIVLIN_DIALOG_H */

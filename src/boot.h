@@ -1649,4 +1649,33 @@ civ_error_t main_noop_stub(void);
  * SDL audio-beep facade TBD -> STUB UNSUPPORTED. */
 civ_error_t main_beep_repeated(void);
 
+/* --- Batch 2026-10-17 fala 7 (AG+AH+AI): poll/art/font/cursor ---
+ *   Main_PollKeyOrClick @ 11e0:095f, Main_LoadMenuArt @ 11e0:09d0,
+ *   Font_MapCodeToValue @ 11e8:0a3c, Cursor_SetAndFlag @ 1200:0078. */
+
+/* Orig Main_PollKeyOrClick @ 11e0:095f (PEEKMESSAGE drain; hit when MSG
+ * == 0x100 KEYDOWN or 0x201 LBUTTONDOWN; callers 091e-dupe + MainMenu
+ * idle + Ship_PollLaunchConfirm). SDL_PollEvent bridge TBD -> STUB
+ * (*out = 0, never fake hit). */
+civ_error_t main_poll_key_or_click(int *out_hit);
+
+/* Orig Main_LoadMenuArt @ 11e0:09d0 (Cursor(0x84) + Art_LoadFrameData(200)
+ * + NewGame_BuildIconTables + palette stash B388 + realloc + Close; sole
+ * caller MainMenu_WndProc menu-init). Art/GfxPort bridge TBD -> STUB. */
+civ_error_t main_load_menu_art(void);
+
+/* Orig Font_MapCodeToValue @ 11e8:0a3c (orphan 25-entry CS:0adc lookup:
+ * 1..8 -> 15,15,17,19,18,16,16,17; 200..215 -> 0..11 with 16 at 207/215;
+ * 333 -> 20; miss -> 0; distinct from DispatchFontHandler @ 11e8:0b40).
+ * LIVE pure table. */
+int font_map_code_to_value(int code);
+
+/* Orig Cursor_SetAndFlag @ 1200:0078 (Cursor_Set(id) + DAT_1420_1d52 = 1
+ * cursor-dirty marker; callers 1208:121a x2 (0x85, 0x87+dir); twin inline
+ * in the else-branch proves semantics). Cursor bridge TBD -> STUB, but
+ * the flag store is pure and kept (module-static image, overwritten next
+ * call). */
+civ_error_t cursor_set_and_flag(int cursor_id);
+int cursor_dirty_image(void);
+
 #endif /* CIVLIN_BOOT_H */

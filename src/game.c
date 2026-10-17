@@ -6548,3 +6548,251 @@ int unit_sum_stack_combat_callback(const uint8_t *units, int unit_idx,
         *sum_io = *sum_io + d;
     return d;
 }
+
+/* --- Batch 2026-10-17 fala 7 (AE+AF+AH+AI): stack callbacks + dialogs --- */
+
+int unit_filter_stack_visibility(uint8_t *unit, int tile_class,
+                                 int def_domain)
+{
+    /* Orig Unit_FilterStackVisibility @ 11c0:1f42. */
+    if (!unit)
+        return -1;
+    if (tile_class != 10 || def_domain != 0) {
+        unit[0] &= (uint8_t)~1u;
+        return 0;
+    }
+    return 1;
+}
+
+civ_error_t unit_reset_stack_moves_if_flag(uint8_t *unit, int def_moves,
+                                           int def_timer)
+{
+    /* Orig Unit_ResetStackMovesIfFlag @ 11c0:1fdd. */
+    if (!unit)
+        return CIV_ERR_NOENT;
+    if ((unit[0] & 1u) != 0u) {
+        unit[0] &= (uint8_t)~1u;
+        unit[4] = (uint8_t)(def_moves * 3);
+        if (def_timer != 0)
+            unit[5] = (uint8_t)(def_timer - 1);
+    }
+    unit[8] = 0xFFu;
+    unit[6] = 0xFFu;
+    return CIV_OK;
+}
+
+civ_error_t unit_reset_air_stack_filter(uint8_t *unit, int is_player,
+                                        int def_domain, int def_moves)
+{
+    /* Orig Unit_ResetAirStackFilter @ 11c0:2105 (filter half LIVE in the
+     * predicate; 2151 tail needs video).
+     * TODO: Orig Unit_ResetStackAndRedraw tail (Unit_DrawSingle bridge). */
+    (void)is_player;
+    (void)def_moves;
+    if (!unit)
+        return CIV_ERR_NOENT;
+    if (def_domain != 2)
+        return CIV_OK;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t unit_reset_stack_and_redraw(uint8_t *unit, int is_player,
+                                        int def_moves)
+{
+    /* Orig Unit_ResetStackAndRedraw @ 11c0:2151 (flag/moves half 1:1
+     * below; redraw gated).
+     * TODO: Orig Unit_DrawSingle @ 1110:0dba -> video bridge TBD. */
+    if (!unit)
+        return CIV_ERR_NOENT;
+    if ((unit[0] & 0xC2u) != 0u)
+        unit[5] = 0;
+    if ((unit[0] & 0xCBu) != 0u)
+        unit[4] = (uint8_t)(def_moves * 3);
+    unit[0] &= 0x30u;
+    unit[6] = 0xFFu;
+    (void)is_player;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t unit_found_city_if_land(int civ, int idx, int def_domain)
+{
+    /* Orig Unit_FoundCityIfLand @ 11c0:223c (from FoundCityIfHome branch).
+     * TODO: Orig unit_found_city_if_home tail TBD. */
+    (void)civ;
+    (void)idx;
+    if (def_domain != 0)
+        return CIV_OK;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t unit_found_city_if_not_land(int civ, int idx, int def_domain)
+{
+    /* Orig Unit_FoundCityIfNotLand @ 11c0:2287 (from DestroyCity). */
+    (void)civ;
+    (void)idx;
+    if (def_domain == 0)
+        return CIV_OK;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t unit_found_city_if_sea(int civ, int idx, int def_domain)
+{
+    /* Orig Unit_FoundCityIfSea @ 11c0:22d2 (sea branch). */
+    (void)civ;
+    (void)idx;
+    if (def_domain != 1)
+        return CIV_OK;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+int unit_has_adjacent_unit(int exclude_unit, const int neigh[8])
+{
+    /* Orig Unit_HasAdjacentUnit @ 11c0:2603 (dx/dy @ 12c8/12d0 + WrapX/
+     * GetUnitAt stay caller-side; SI 1..8 loop 1:1). */
+    int i;
+
+    if (!neigh)
+        return -1;
+    for (i = 0; i < 8; i++) {
+        if (neigh[i] != -1 && neigh[i] != exclude_unit)
+            return 1;
+    }
+    return 0;
+}
+
+civ_error_t unit_pick_stack_dialog(int civ, int start_unit,
+                                   int *selected_out)
+{
+    /* Orig Unit_PickStackDialog @ 11c0:3023 (see game.h; 27 callees).
+     * TODO: Orig dialog/video/SDL bridges + DrawStackList/PumpStackDialog
+     * below TBD. */
+    (void)civ;
+    (void)start_unit;
+    if (!selected_out)
+        return CIV_ERR_NOENT;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t unit_draw_stack_list(int civ, int unit, int select)
+{
+    /* Orig Unit_DrawStackList @ 11c0:3407 (see game.h).
+     * TODO: Orig DrawStatusBadge/DrawClipped/Res/Str bridges TBD. */
+    (void)civ;
+    (void)unit;
+    (void)select;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t unit_pump_stack_dialog(int *out_sel)
+{
+    /* Orig Unit_PumpStackDialog @ 11c0:3644 (see game.h).
+     * TODO: Orig MAKEPROCINSTANCE/SETWINDOWLONG/PEEKMESSAGE/ISDIALOGMESSAGE
+     * -> win16 + SDL_PumpEvents/PollEvent TBD. */
+    if (!out_sel)
+        return CIV_ERR_NOENT;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+int unit_stack_dlg_proc(int msg, int wparam, long lparam)
+{
+    /* Orig Unit_StackDlgProc @ 11c0:3702 (4-entry CS:3872 dispatch +
+     * DEFDLGPROC; 0x65 OK sets b376).
+     * TODO: Orig DEFDLGPROC -> dialog_def_proc TBD. */
+    (void)msg;
+    (void)wparam;
+    (void)lparam;
+    return 0;
+}
+
+civ_error_t unit_reveal_if_visible(int civ, int ux, int uy, int vis_byte,
+                                   int player_civ)
+{
+    /* Orig Unit_RevealIfVisible @ 11f0:44d4 (see game.h).
+     * TODO: Orig Map_RevealCenter view bridge TBD. */
+    (void)civ;
+    (void)ux;
+    (void)uy;
+    (void)vis_byte;
+    (void)player_civ;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+int unit_check_irrigate(int occupancy, int cls_field4, int cls_is_irr2,
+                        int center_cls, const int n_cls[4],
+                        const int n_occ[4])
+{
+    /* Orig Unit_CheckIrrigate @ 11f0:455f (hidden 12b8 table -> explicit
+     * fields; neighbour kernel via tile_can_irrigate in map.h). */
+    if ((occupancy & 7) != 0)
+        return 0;
+    if (cls_field4 < -2)
+        return 2;
+    if (cls_is_irr2 && tile_can_irrigate(center_cls, n_cls, n_occ))
+        return 1;
+    return 0;
+}
+
+int unit_ring_find_nearest(const int8_t *next, const int8_t *kinds,
+                           int n, int start)
+{
+    /* Orig Unit_RingFindNearest @ 11f0:4f38 (next int8 0x6306 chain, skip
+     * kind == 2, circular fwd dist mod 0x80, 0x10 hops, miss -> start). */
+    int cur;
+    int best = -1;
+    int best_d = 999;
+    int steps = 0;
+
+    if (!next || !kinds || n <= 0 || start < 0 || start >= n)
+        return -1;
+    cur = (int)next[start];
+    if (cur == -1)
+        return start;
+    do {
+        if (cur >= 0 && cur < n && (int)kinds[cur] != 2) {
+            int d = (start < cur) ? cur - start : 0x80 - (start - cur);
+
+            if (d < best_d) {
+                best_d = d;
+                best = cur;
+            }
+        }
+        if (cur < 0 || cur >= n)
+            break;
+        cur = (int)next[cur];
+        steps++;
+    } while (cur != start && steps < 0x10);
+    return (best < 0) ? start : best;
+}
+
+civ_error_t ship_show_arrival_cinematic(int civ)
+{
+    /* Orig Ship_ShowArrivalCinematic @ 11d8:0000 (see game.h).
+     * TODO: Orig Art/GfxPort/Dlg/Sound/tick bridges TBD. */
+    (void)civ;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t ship_show_defeat_cinematic(void)
+{
+    /* Orig Ship_ShowDefeatCinematic @ 11d8:087f (see game.h; caller sets
+     * quit = -1).
+     * TODO: Orig tech-loop + scroll + waits TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t ship_wait_pump_delay(long timeout_ticks, long *out_elapsed)
+{
+    /* Orig Ship_WaitPumpDelay @ 11d8:0bd2 (see game.h; sys_get_tick_scaled
+     * + sys_pump_messages LIVE when bridged).
+     * TODO: Orig Main_DrainMessages + Cursor_Set + DAT_1328_0012 abort TBD. */
+    (void)timeout_ticks;
+    if (!out_elapsed)
+        return CIV_ERR_NOENT;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t ship_noop_stub(void)
+{
+    /* Orig Ship_NoopStub @ 11d8:0c38 (empty; WONTFIX-Win16). */
+    return CIV_OK;
+}

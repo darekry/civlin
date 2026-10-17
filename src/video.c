@@ -2700,6 +2700,126 @@ int gfxport_tile_rows(int port_h, int cell_h)
     return port_h / cell_h + 1;
 }
 
+/* --- Batch 2026-10-17 fala 7 (AG+AH+AI): art/icon/port heads --- */
+
+civ_error_t art_phase_yield_stub(void)
+{
+    /* Orig Art_PhaseYieldStub @ 11e8:0296 (empty; WONTFIX-Win16). */
+    return CIV_OK;
+}
+
+civ_error_t art_reserved_stub(void)
+{
+    /* Orig Art_ReservedStub @ 11e8:08c8 (empty; WONTFIX-Win16). */
+    return CIV_OK;
+}
+
+civ_error_t gfx_draw_icon_forward(int a0, int a1, int a2, int a3, int a4)
+{
+    /* Orig Gfx_DrawIconForward @ 11e8:08d6 (see video.h; always 0).
+     * TODO: Orig Gfx_DrawIconClipped -> video bridge TBD. */
+    (void)a0;
+    (void)a1;
+    (void)a2;
+    (void)a3;
+    (void)a4;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+int gfx_return_zero(void)
+{
+    /* Orig Gfx_ReturnZero @ 11e8:0900. */
+    return 0;
+}
+
+civ_error_t gfx_extract_icon_slice(int p1, int p2, int p3, int p4, int p5)
+{
+    /* Orig Gfx_ExtractIconSlice @ 11e8:097c (see video.h; rect math LIVE
+     * in gfx_slice_*).
+     * TODO: Orig SETRECT + Gfx_ExtractClippedIcon icon-buffer bridge TBD. */
+    (void)p1;
+    (void)p2;
+    (void)p3;
+    (void)p4;
+    (void)p5;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+int gfx_slice_left(int p3, int p5)
+{
+    /* Orig same left = p3*2 (SI = [BP+8]*2, +[BP+0xe]*2 below in right). */
+    (void)p5;
+    return p3 * 2;
+}
+
+int gfx_slice_top(int p2, int p1)
+{
+    /* Orig same top = p2*2+p1. */
+    return p2 * 2 + p1;
+}
+
+int gfx_slice_right(int p3, int p5)
+{
+    /* Orig same right = left+p5*2. */
+    return p3 * 2 + p5 * 2;
+}
+
+int gfx_slice_bottom(int p2, int p1, int p4)
+{
+    /* Orig same bottom = top+p4*2. */
+    return p2 * 2 + p1 + p4 * 2;
+}
+
+/* DAT_1420_b398 image (shared-pic far ptr; overwritten next call). */
+static uint32_t s_gfxport_shared_ptr_b398;
+
+void gfxport_set_shared_ptr(uint32_t far_ptr)
+{
+    /* Orig GfxPort_SetSharedPtr @ 1200:0000. */
+    s_gfxport_shared_ptr_b398 = far_ptr;
+}
+
+uint32_t gfxport_shared_ptr_image(void)
+{
+    /* Orig DAT_1420_b398 image (write-only so far; reader hunt open). */
+    return s_gfxport_shared_ptr_b398;
+}
+
+void gfxport_noop_slot_a(void)
+{
+    /* Orig GfxPort_NoopSlotA @ 1200:0016 (empty). */
+}
+
+void gfxport_noop_slot_b(void)
+{
+    /* Orig GfxPort_NoopSlotB @ 1200:0024 (empty). */
+}
+
+void gfxport_noop_slot_c(void)
+{
+    /* Orig GfxPort_NoopSlotC @ 1200:0032 (empty). */
+}
+
+void gfxport_noop_slot_d(void)
+{
+    /* Orig GfxPort_NoopSlotD @ 1200:0040 (empty). */
+}
+
+void gfxport_noop_slot_e(void)
+{
+    /* Orig GfxPort_NoopSlotE @ 1200:004e (empty). */
+}
+
+void gfxport_noop_slot_f(void)
+{
+    /* Orig GfxPort_NoopSlotF @ 1200:005c (empty). */
+}
+
+void gfxport_noop_slot_g(void)
+{
+    /* Orig GfxPort_NoopSlotG @ 1200:006a (empty). */
+}
+
 /* --- Batch 2026-10-17 fala 4 (Q+R+S): fill/stroke/hooks + godpal --- */
 
 civ_error_t gfx_fill_stack_rect(const int16_t rect[4])

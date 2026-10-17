@@ -1970,4 +1970,53 @@ civ_error_t gfxport_fill_tiled_icon(int icon, int w, int h);
 int gfxport_tile_cols(int port_w, int cell_w);
 int gfxport_tile_rows(int port_h, int cell_h);
 
+/* --- Batch 2026-10-17 fala 7 (AG+AH+AI): art/icon/port heads ---
+ *   Art_PhaseYieldStub @ 11e8:0296, Art_ReservedStub @ 11e8:08c8,
+ *   Gfx_DrawIconForward @ 11e8:08d6, Gfx_ReturnZero @ 11e8:0900,
+ *   Gfx_ExtractIconSlice @ 11e8:097c, GfxPort_SetSharedPtr @ 1200:0000,
+ *   GfxPort_NoopSlotA..G @ 1200:0016..006a. */
+
+/* Orig Art_PhaseYieldStub @ 11e8:0296 (empty 13 B phase gate between
+ * Art_LoadFrameData blocks in PreloadViewIcons/BuildIconTables/Arrival;
+ * distinct from Sys_Yield @ 1098:0157 Anim_PumpIfActive; 9 xrefs) and
+ * Art_ReservedStub @ 11e8:08c8 (empty 14 B dead padding, orphan).
+ * WONTFIX-Win16 NOOPs. */
+civ_error_t art_phase_yield_stub(void);
+civ_error_t art_reserved_stub(void);
+
+/* Orig Gfx_DrawIconForward @ 11e8:08d6 (5-arg orphan forwarder to
+ * Gfx_DrawIconClipped @ 11e8:0674, always returns 0; dispatch-table slot).
+ * Clipped-icon bridge TBD -> STUB. */
+civ_error_t gfx_draw_icon_forward(int a0, int a1, int a2, int a3, int a4);
+
+/* Orig Gfx_ReturnZero @ 11e8:0900 (XOR AX,AX; 17 B gap between 08d6 and
+ * FillBarRectRange @ 11e8:0912; orphan). Honest const-0. */
+int gfx_return_zero(void);
+
+/* Orig Gfx_ExtractIconSlice @ 11e8:097c (rect math + ExtractClippedIcon on
+ * port 0x12d8:0x4466; 20 callers in BuildIconTables). Icon-buffer bridge
+ * TBD -> STUB (rect math LIVE in the helpers below). */
+civ_error_t gfx_extract_icon_slice(int p1, int p2, int p3, int p4, int p5);
+int gfx_slice_left(int p3, int p5);
+int gfx_slice_top(int p2, int p1);
+int gfx_slice_right(int p3, int p5);
+int gfx_slice_bottom(int p2, int p1, int p4);
+
+/* Orig GfxPort_SetSharedPtr @ 1200:0000 (dword far-ptr store to
+ * DAT_1420_b398; sole caller Pic_PlayShared NULL-clears around playback;
+ * reader not yet recovered = write-only so far). LIVE plain store
+ * (module-static image, overwritten next call). */
+void gfxport_set_shared_ptr(uint32_t far_ptr);
+uint32_t gfxport_shared_ptr_image(void);
+
+/* Orig GfxPort_NoopSlotA..G @ 1200:0016..006a (7x empty 0xE B slots;
+ * decompiler +10 returns are stale-DS artifacts per disasm). Void NOOPs. */
+void gfxport_noop_slot_a(void);
+void gfxport_noop_slot_b(void);
+void gfxport_noop_slot_c(void);
+void gfxport_noop_slot_d(void);
+void gfxport_noop_slot_e(void);
+void gfxport_noop_slot_f(void);
+void gfxport_noop_slot_g(void);
+
 #endif /* CIVLIN_VIDEO_H */

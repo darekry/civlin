@@ -1632,4 +1632,14 @@ civ_error_t sys_pump_mouse(void);
 int mem_alloc_zeroed(unsigned long size32, int *out_handle);
 int mem_free_handle(int h);
 
+/* --- Batch 2026-10-17 fala 7 (AG): memory stats ---
+ *   Sys_ShowMemoryStats @ 11e8:012a. */
+
+/* Orig Sys_ShowMemoryStats @ 11e8:012a ("Global: %u SYS: %u GDI: %u USER:
+ * %%" via LongToDec/IntToDec over baselines B390/B38A/B38E/B38C + MESSAGEBOX
+ * "Memory Resources Used"; orphan debug; siblings CheckFreeMemory @
+ * 11e8:0000 + CheckRuntimeMemory @ 11e8:0075). RAM/resource + message-box
+ * bridges TBD -> STUB. */
+civ_error_t sys_show_memory_stats(void);
+
 #endif /* CIVLIN_SYS_H */

@@ -2052,3 +2052,67 @@ int map_wrap_step_dist_scaled(int dx, int dy)
         return a * 2 + b;
     return b * 2 + a;
 }
+
+/* --- Batch 2026-10-17 fala 7 (AH): reveal/irrigate/screen --- */
+
+civ_error_t map_reveal_if_visible(int x, int y, int vis_byte, int player_civ,
+                                  int force)
+{
+    /* Orig Map_RevealIfVisible @ 11f0:447f (see map.h; vis @ 13e8:x*0x32+
+     * y+10, player @ 12d8:4300, force @ 12d8:4302).
+     * TODO: Orig Map_RevealCenter @ 1110:1461 view/scroll facade TBD. */
+    (void)x;
+    (void)y;
+    (void)vis_byte;
+    (void)player_civ;
+    (void)force;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+int tile_can_irrigate(int center_cls, const int n_cls[4],
+                      const int n_occ[4])
+{
+    /* Orig Tile_CanIrrigate @ 11f0:45db (4 ortho neighbours only). */
+    int k;
+
+    if (center_cls == 0x0B)
+        return 1;
+    if (!n_cls || !n_occ)
+        return 0;
+    for (k = 0; k < 4; k++) {
+        if ((n_occ[k] & 1) == 0
+            && (n_cls[k] == 0x0B || n_cls[k] == 10 || (n_occ[k] & 2) != 0))
+            return 1;
+    }
+    return 0;
+}
+
+civ_error_t tile_is_on_screen(int x, int y, int view_x, int view_y,
+                              int off_x, int off_y, int *visible_out)
+{
+    /* Orig Tile_IsOnScreen @ 11f0:4e26 (see map.h; origins @ 1330:4010/
+     * 400e + 1408:00c6/c4 stay caller-side).
+     * TODO: Orig Gfx_ClipTileRect @ 1208:2061 (SETRECT + IntersectRect) ->
+     * video_clip_rect TBD. */
+    (void)x;
+    (void)y;
+    (void)view_x;
+    (void)view_y;
+    (void)off_x;
+    (void)off_y;
+    if (!visible_out)
+        return CIV_ERR_NOENT;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+int tile_screen_px(int x, int view_x, int off_x)
+{
+    /* Orig same px half (WrapX @ 1128:177e LIVE via map_wrap_x). */
+    return map_wrap_x(x - view_x) * 0x20 - off_x;
+}
+
+int tile_screen_py(int y, int view_y, int off_y)
+{
+    /* Orig same py half. */
+    return (y - view_y) * 0x20 - off_y;
+}

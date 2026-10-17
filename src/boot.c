@@ -2777,3 +2777,62 @@ civ_error_t main_beep_repeated(void)
      * SDL_OpenAudioDeviceStream TBD. */
     return CIV_ERR_UNSUPPORTED;
 }
+
+/* --- Batch 2026-10-17 fala 7 (AG+AH+AI): poll/art/font/cursor --- */
+
+civ_error_t main_poll_key_or_click(int *out_hit)
+{
+    /* Orig Main_PollKeyOrClick @ 11e0:095f (see boot.h).
+     * TODO: Orig PEEKMESSAGE/TRANSLATE/DISPATCH -> SDL_PollEvent +
+     * main_pump_message TBD. */
+    if (!out_hit)
+        return CIV_ERR_NOENT;
+    *out_hit = 0;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t main_load_menu_art(void)
+{
+    /* Orig Main_LoadMenuArt @ 11e0:09d0 (see boot.h).
+     * TODO: Orig art_load_frame_data + newgame_build_icon_tables +
+     * gfxport_get_palette/close + mem_realloc_handle + DAT_1420_B388 TBD. */
+    return CIV_ERR_UNSUPPORTED;
+}
+
+int font_map_code_to_value(int code)
+{
+    /* Orig Font_MapCodeToValue @ 11e8:0a3c (CX = 0x19 linear scan). */
+    static const int16_t keys[25] = {
+        1, 2, 3, 4, 5, 6, 7, 8,
+        200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212,
+        213, 214, 215, 333
+    };
+    static const int16_t vals[25] = {
+        15, 15, 17, 19, 18, 16, 16, 17,
+        0, 1, 2, 3, 4, 5, 6, 16, 7, 8, 9, 10, 11, 16, 12, 13, 20
+    };
+    int i;
+
+    for (i = 0; i < 25; i++) {
+        if (keys[i] == code)
+            return (int)vals[i];
+    }
+    return 0;
+}
+
+/* DAT_1420_1d52 image (cursor-dirty marker; overwritten next call). */
+static int s_cursor_dirty_1d52;
+
+civ_error_t cursor_set_and_flag(int cursor_id)
+{
+    /* Orig Cursor_SetAndFlag @ 1200:0078 (see boot.h; flag store kept). */
+    s_cursor_dirty_1d52 = 1;
+    (void)cursor_id;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+int cursor_dirty_image(void)
+{
+    /* Orig DAT_1420_1d52 image (see cursor_set_and_flag). */
+    return s_cursor_dirty_1d52;
+}
