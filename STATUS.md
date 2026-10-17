@@ -162,8 +162,8 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `main_run_startup_sequence` | PARTIAL | 1008:0329, 1098:0b33, 1098:124f, 1098:1612, 10b0:005b, 10b0:008a, 10b0:0461, 10b8:079d, 10d0:0000, 10e8:0000, 1108:0243, 1130:000e, 11e0:0000, 11e0:0221, 1220:0156, 1420:435b | has TODO |
 | `config_prefs_defaults` | LIVE | 1008:0b4a, 1008:0bbf, 1150:00c9, 12d0:0064 |  |
 | `config_prefs_sounds_on` | LIVE |  |  |
-| `boot_video_caps_count` | LIVE | 1008:059a, 1420:0af4 |  |
-| `boot_video_caps_describe` | STUB | 1008:059a, 1420:0af4 | has TODO |
+| `boot_video_caps_count` | LIVE | 1008:059a, 1060:01c1, 1420:0af4, 1608:00f4, 1608:00f8 |  |
+| `boot_video_caps_describe` | LIVE | 1008:059a, 1420:0af4 |  |
 | `boot_shutdown_step_count` | LIVE | 1000:127f, 1000:12d6, 1000:1fc6, 1000:2098, 1008:0000, 1008:0329, 1008:062f, 1008:066d, 1008:075b, 1008:0bbf, 1008:0e12, 1008:0e99, 1038:0c1d, 1058:0d71, 1088:0b6d, 1090:0596, 1098:02d1, 1098:062f, 10b8:0000, 10d0:0172, 1100:060b, 1110:0127, 1148:0020, 1180:0000, 1190:0c92, 11e0:0221, 12b0:0004, 12b0:0006, 12d8:28fa, 12d8:4598, 12d8:460e, 1330:0004, 1420:00fe, 1420:0130, 1420:5148, 1420:514a, 1420:547e, 1420:9314, 1420:9964, 1420:9966, 1420:b388 |  |
 | `boot_shutdown_step_name` | LIVE | 1008:0bbf |  |
 | `boot_shutdown_exit_code` | LIVE | 1000:127f, 1000:12d6 |  |
@@ -1411,7 +1411,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `sys_rect_span` | LIVE | 1000:137f, 1218:0956 |  |
 | `sys_set_rect` | LIVE | 1218:0956, 1218:0a06, 1608:0100 |  |
 | `sys_inflate_rect` | LIVE | 1218:0956, 1608:010c |  |
-| `status_measure_row` | STUB | 1088:1460, 1098:0dda, 1138:0269, 11f0:4754, 1220:0b88 | has TODO |
+| `status_measure_row` | PARTIAL | 1088:1460, 1098:0dda, 1138:0269, 11f0:4754, 1218:0956, 1220:0b88 | has TODO |
 | `status_row_stride` | LIVE | 1138:0269 |  |
 | `sys_check_runtime_memory` | LIVE | 11e8:0075, 1420:43b4, 1420:4473, 1420:44ff |  |
 | `sys_check_free_memory` | LIVE | 11e8:0000, 1420:43b8 |  |

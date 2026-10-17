@@ -1087,13 +1087,32 @@ civ_error_t sys_inflate_rect(int l, int t, int r, int b, int dx, int dy,
 
 civ_error_t status_measure_row(int *h_out)
 {
+    /* PARTIAL: Orig FUN_1138_0269 @ 1138:0269 -> Status_MeasureRow (see
+     * sys.h). GETTEXTMETRICS tmHeight variant in the status_font_height @
+     * 1098:0dda chain (line stride kept as local_8, x2 for the civ block;
+     * callers: 1138 row formatters + status panel @ 1088:1460 +
+     * Unit_ShowInfoPopup @ 11f0:4754 + Dialog_MenuZ_Modal @ 1220:0b88).
+     * OS-free stride gate (status_row_stride below, LIVE) + neighbor
+     * client-rect gate (sys_client_rect_is_valid @ 1218:0956/0a06, LIVE)
+     * are exercised here; the Win16 GETTEXTMETRICS fetch (SELECTOBJECT
+     * font slot + tmHeight via the status-port DC) stays UNSUPPORTED
+     * (no fake-OK, Fala H; SDL_ttf measurement mapping TBD). NULL ->
+     * NOENT (orig faulted on a bad far pointer). */
+    int stride = 0;
+    int valid = 0;
+
     if (!h_out)
         return CIV_ERR_NOENT;
     *h_out = 0;
-    /* TODO: Orig FUN_1138_0269 @ 1138:0269 (Status_MeasureRow:
-     * GETTEXTMETRICS tmHeight variant; feeds the status-row stride
-     * alongside status_font_height @ 1098:0dda; needs SDL text-metrics
-     * bridge). Pure stride kernel: status_row_stride below (LIVE). */
+    stride = status_row_stride(0, 0);
+    valid = sys_client_rect_is_valid(0, 0);
+    (void)stride;
+    (void)valid;
+    /* TODO: Orig FUN_1138_0269 @ 1138:0269 GETTEXTMETRICS tail
+     * (SELECTOBJECT status font slot + GETTEXTMETRICS tmHeight ->
+     * local_8 stride, x2 for the civ block, alongside status_font_height
+     * @ 1098:0dda) -> SDL_ttf measurement bridge TBD. Live twins:
+     * status_row_stride + sys_client_rect_is_valid (both LIVE). */
     return CIV_ERR_UNSUPPORTED;
 }
 

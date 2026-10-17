@@ -1369,25 +1369,43 @@ int config_prefs_sounds_on(const civ_prefs_t *prefs)
 int boot_video_caps_count(void)
 {
     /* Video caps checklist @ 1420:0af4 entry count for
-     * Video_CheckDriverCaps @ 1008:059a (GETDEVICECAPS; SDL mapping via
-     * video_check_driver_caps, see video.h). Exact entry bytes not yet
-     * decoded from the dump -> 0 until the dump lands. OS-free, no
+     * Video_CheckDriverCaps @ 1008:059a (GETDEVICECAPS x4; SDL mapping via
+     * video_check_driver_caps, see video.h). Decoded 2026-10-17, ref
+     * unpacked/civ.exe read-only (disasm 1008:059a-062e pushes
+     * 0x0c/0x0e/0x26 + cond 0x18; sister WorldGen_ShowVideoCapsDialog @
+     * 1060:01c1 uses the 13-query table, see worldgen.h). OS-free, no
      * globals, no exit(), read-only. */
-    return 0;
+    return CIV_BOOT_VIDEO_CAPS_N;
 }
 
 const char *boot_video_caps_describe(int index)
 {
-    /* Checklist meaning by entry index (NULL when out of range or not
-     * yet dumped, same contract as tribe_get_name_list, see newgame.h).
-     * No entries decoded yet -> always NULL.
-     * TODO: Orig Video_CheckDriverCaps @ 1008:059a checklist @ 1420:0af4
-     * (GETDEVICECAPS entry bytes TBD from dump; WONTFIX per STATUS.md —
-     * no byte table is ported until decoded). Live twin: video_check_driver_caps
-     * (SDL renderer-caps mapping, see video.h); count side is
-     * boot_video_caps_count above (LIVE, 0 until dump). */
-    (void)index;
-    return NULL;
+    /* Checklist meaning by entry index (NULL on OOR, same contract as
+     * tribe_get_name_list, see newgame.h). OS-free 1:1 query table LIVE
+     * (order = push order in the 1008:059a disasm, ref unpacked/civ.exe
+     * read-only; labels name the GETDEVICECAPS index, checklist strings
+     * @ 1420:0af4 themselves are the sister dialog labels, see boot.h).
+     * Mono gate LIVE via video_driver_is_mono (0x26 & 0x100) + convert
+     * gate LIVE via video_driver_needs_convert (w*h == 4 || depth == 0x10
+     * && w*h == 8), see video.h. Win16 GETDC @ 1608:00f4 / RELEASEDC @
+     * 1608:00f8 fetch + SDL renderer mapping live in
+     * video_check_driver_caps (see video.h, called from video_init where
+     * the renderer exists) -> PARTIAL here, no fake-OK.
+     * TODO: Orig Video_CheckDriverCaps @ 1008:059a GETDC/GETDEVICECAPS x4
+     * + RELEASEDC device fetch tail -> SDL bridge TBD in
+     * video_check_driver_caps (full checklist bytes per STATUS.md WONTFIX
+     * stay undumped); this index table stays LIVE. No globals, no exit(),
+     * read-only. */
+    static const char *const table[CIV_BOOT_VIDEO_CAPS_N] = {
+        "width (GETDEVICECAPS 0x0c)",       /* HORZRES push @ 1008:05b0 */
+        "height (GETDEVICECAPS 0x0e)",      /* VERTRES push @ 1008:05ba */
+        "raster caps (GETDEVICECAPS 0x26)", /* RASTERCAPS push @ 1008:05ca */
+        "color depth (GETDEVICECAPS 0x18)", /* depth push @ 1008:05f6 */
+    };
+
+    if (index < 0 || index >= CIV_BOOT_VIDEO_CAPS_N)
+        return NULL;
+    return table[index];
 }
 
 /* --- Chain 2026-10-16 (16): shutdown order table @ 1008:0329 (goals 1/5).

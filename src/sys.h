@@ -533,10 +533,19 @@ civ_error_t sys_inflate_rect(int l, int t, int r, int b, int dx, int dy,
  * (derives the status-row line stride kept as local_8, x2 for the civ
  * block; callers: 1138 row formatters + status panel @ 1088:1460 +
  * Unit_ShowInfoPopup @ 11f0:4754 + Dialog_MenuZ_Modal @ 1220:0b88 via
- * status_font_height). Linux equivalent TBD (SDL_ttf measurement;
- * SDL_GetText stub). Returns CIV_OK + *h_out on success. Pure stride
- * kernel below (status_row_stride) is LIVE for procedural list layout
- * without RSC. */
+ * status_font_height). PARTIAL: OS-free stride gate (status_row_stride
+ * below, LIVE) + neighbor client-rect gate (sys_client_rect_is_valid @
+ * 1218:0956/0a06, LIVE, wave 29) are exercised here; the Win16
+ * GETTEXTMETRICS fetch (SELECTOBJECT font slot + tmHeight via the
+ * status-port DC) stays CIV_ERR_UNSUPPORTED until the SDL_ttf
+ * measurement mapping lands (no fake-OK, Fala H). NULL -> NOENT (orig
+ * faulted on a bad far pointer). Zeroes *h_out then UNSUPPORTED. Pure
+ * stride kernel below (status_row_stride) is LIVE for procedural list
+ * layout without RSC.
+ * TODO: Orig FUN_1138_0269 @ 1138:0269 GETTEXTMETRICS tail (SELECTOBJECT
+ * status font slot + GETTEXTMETRICS tmHeight -> local_8, x2 civ block,
+ * alongside status_font_height @ 1098:0dda) -> SDL_ttf bridge TBD.
+ * Live twins: status_row_stride + sys_client_rect_is_valid (both LIVE). */
 civ_error_t status_measure_row(int *h_out);
 /* Orig FUN_1138_0269 @ 1138:0269 stride half (local_8 line stride, x2
  * for the civ block in the 1138 row formatters). OS-free 1:1 on

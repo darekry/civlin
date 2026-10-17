@@ -787,15 +787,28 @@ civ_prefs_t config_prefs_defaults(void);
 int config_prefs_sounds_on(const civ_prefs_t *prefs);
 
 /* Video caps checklist @ 1420:0af4 for Video_CheckDriverCaps @ 1008:059a
- * (GETDEVICECAPS queries: resolution/raster/color-depth/palette family,
- * see video.h video_check_driver_caps; exact entry bytes not yet decoded
- * from the dump, so no byte table is ported). OS-free index shape:
- * count reports decoded entries (0 until the dump lands), describe maps
- * an entry index to its checklist meaning (NULL when out of range or not
- * yet dumped, same contract as tribe_get_name_list, see newgame.h). SDL
- * renderer-caps mapping lives in video_check_driver_caps (see video.h),
- * called from video_init where the renderer exists. No globals, no
- * exit(), read-only. */
+ * (GETDEVICECAPS x4, see video.h video_check_driver_caps; decompiled
+ * 2026-10-17, ref unpacked/civ.exe read-only NE Win3.x 832512 B:
+ * disasm 1008:059a-062e pushes 0x0c/0x0e/0x26 (+ cond 0x18) + TEST
+ * AX,0x100 mono gate (DAT_1420_17a6) + w*h convert gate (DAT_1420_17a8)
+ * + GETDC @ 1608:00f4 / RELEASEDC @ 1608:00f8 pair; checklist label
+ * strings @ 1420:0af4 ("Display / Video Driver Checklist" + "  x  " +
+ * "Screen Dimensions (pixels):   " + "Color planes:   " + "Bits per
+ * pixel: " + "Color table entries:  " + ... + "RASTER CAPABILITIES:" +
+ * flag pairs, through "* Marked options should be supported.") are the
+ * WorldGen_ShowVideoCapsDialog @ 1060:01c1 debug-dialog labels (sister,
+ * see worldgen.h/worldgen.c PARTIAL there), not fetched here).
+ * OS-free query table below is LIVE 1:1 (4 entries: 0x0c width / 0x0e
+ * height / 0x26 raster caps / 0x18 depth, same order as the pushes;
+ * mono gate LIVE via video_driver_is_mono + convert gate LIVE via
+ * video_driver_needs_convert, see video.h): count reports entries,
+ * describe maps index to its checklist meaning (NULL on OOR, same
+ * contract as tribe_get_name_list, see newgame.h). SDL renderer-caps
+ * mapping lives in video_check_driver_caps (see video.h), called from
+ * video_init where the renderer exists. Win16 GETDC/RELEASEDC fetch
+ * tail stays PARTIAL with TODO Orig in boot.c (no fake-OK). No globals,
+ * no exit(), read-only. */
+#define CIV_BOOT_VIDEO_CAPS_N 4
 int boot_video_caps_count(void);
 const char *boot_video_caps_describe(int index);
 
