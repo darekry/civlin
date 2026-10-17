@@ -923,9 +923,19 @@ civ_error_t text_draw_aligned(const char *text, const dlg_rect_t *rect,
  * dialog_client_rect/dialog_dlgunits_to_pixels above (LIVE). */
 civ_error_t dialog_get_item_rect(int dlg_id, int item_id, dlg_rect_t *out);
 
-/* Orig: Dialog_ShowMessage @ 1220:00d2 — modal message (0x88 vs 0x91
- * via DAT_1418_0008 + Dlg_CreateTracked + Dialog_MenuZ_Modal +
- * Dlg_DestroyTracked + Dialog_RefreshViews @ 1220:0eb8). SDL modal TBD. */
+/* Orig: Dialog_ShowMessage @ 1220:00d2 — modal message PARTIAL
+ * dispatcher: OS-free id/text gates LIVE 1:1 (id 0x88 vs 0x91 via
+ * dialog_show_message_id/DAT_1418_0008 + preset-size exclusion via
+ * dlg_id_needs_preset_size/dlg_preset_w/h + text via
+ * dialog_split_title_len/is_title_empty/menu_count/is_sep + MenuZ base/
+ * last/timer/cancel/id roundtrip/valid/disabled/art/cancel gates + refresh
+ * count/msg via dialog_refresh_view_count/msg); milestone-popup tail of
+ * Game_UpdateStatusPanel @ 1088:13d5 (fire via game_status_milestone_due +
+ * "00,000 citizens." @ 1420:172b) with the Dlg_CreateTracked @ 1098:124f +
+ * Dialog_MenuZ_Modal @ 1220:0156 + Dlg_DestroyTracked @ 1098:1612 +
+ * Dialog_RefreshViews @ 1220:0eb8 modal tail STUB (CIV_ERR_UNSUPPORTED,
+ * never fake CIV_OK). *out_choice preset to the cancel code (-1) on entry;
+ * NOENT on NULL, RANGE on empty text. */
 civ_error_t dialog_show_message(const char *text, int *out_choice);
 
 /* --- Dialog string lists (2026-10-16) ---

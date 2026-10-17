@@ -1358,4 +1358,46 @@ civ_error_t main_startup_pump_events(int *break_flag);
  * startup loop#2 scope). */
 int main_startup_tick_is_due(unsigned long last_scaled, unsigned long now_scaled);
 
+/* --- Chain 2026-10-17 (P0): startup anim ctx + seq-resolve + menu-text
+ * (goal P0 anim_open_sequence @ 10b0:008a) ---
+ * Orig Main_RunStartupSequence @ 11e0:0000 loop#1 intro host (civ.exe,
+ * x86:LE:16:Protected Mode; ref unpacked/civ.exe read-only NE Win3.x
+ * 832512 B): Dlg_CreateTracked @ 1098:124f (0x94,0x41) host +
+ * Anim_OpenSequence @ 10b0:008a (mem_alloc_lock 0xa6 ctx + GfxPort_Create
+ * x2 offs +9/+0x62 + DAT_1420_1f40 = ctx, see dialog.h anim_seq_ctx_size
+ * / anim_seq_port_count_off) + Dialog_MenuZ_Modal @ 1220:0156 pump shape
+ * (100 ms SETTIMER @ 1220:0202, cancel -1) over CIV_MAINMENU_TEXT @
+ * 1420:435b (file offset 0xbb35b, 6 items, verified
+ * "_Start a New Game_..._Quit"). OS-free 1:1 on explicit params (no
+ * Win16, no globals, read-only); device tails (CREATEDIALOG / GfxPort
+ * textures / RSC decode via rsc_get_indexed @ 1190:0a29) stay STUB in
+ * main_run_startup_sequence above with TODO Orig there, never fake CIV_OK.
+ * No exit(), C17. */
+
+/* Orig Anim_OpenSequence @ 10b0:008a ctx half (0xa6) + Dlg_CreateTracked
+ * @ 1098:124f ctx half (0x18) -> main_startup_anim_ctx_ok. 1:1 1 when
+ * anim_seq_ctx_size() == 0xa6 && dlg_tracked_ctx_size() == 0x18 (== also
+ * CIV_DLG_TRACKED_CTX_SIZE); 0 otherwise. Proves the intro-host backing
+ * pair before the GfxPort texture bridge. No globals. */
+int main_startup_anim_ctx_ok(void);
+
+/* Orig Anim_OpenSequence @ 10b0:008a count half (param_3 == 0 -> count
+ * recs until opcode 0 via anim_seq_count_frames, stride 0xf words; else
+ * param_3; see anim_seq_resolve_count in dialog.h) intro path ->
+ * main_startup_intro_seq_resolve. 1:1 anim_seq_resolve_count(0, counted)
+ * (intro open uses the counted path; loop#2 earth-prepare uses explicit
+ * 0x91e via main_startup_earth_seq_id, not here). counted < 0 -> -1
+ * (propagated range shape, no scan here). No globals. */
+int main_startup_intro_seq_resolve(int counted);
+
+/* Orig Main_RunStartupSequence @ 11e0:0000 menu-text shape (Util_StrCopy
+ * @ 1000:36b2 over CIV_MAINMENU_TEXT @ 1420:435b, ref unpacked/civ.exe
+ * file offset 0xbb35b, 6 items; same '_' split as Dialog_SplitMenuText @
+ * 1220:0000) -> main_startup_menu_text_ok. 1:1 1 when
+ * dialog_split_menu_count(CIV_MAINMENU_TEXT) == 6 &&
+ * mainmenu_item_count() == 6 && both agree; 0 otherwise. Shared P0->P1
+ * gate (startup dispatcher reuses the MainMenu_WndProc @ 11e0:0221 text).
+ * No Win16, no globals. */
+int main_startup_menu_text_ok(void);
+
 #endif /* CIVLIN_BOOT_H */

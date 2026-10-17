@@ -1213,11 +1213,26 @@ civ_error_t main_run_startup_sequence(void)
     /* OS-free 1:1 menu-text shape the MainMenu_WndProc @ 11e0:0221 dispatch
      * reuses after the wizard gate (CIV_MAINMENU_TEXT @ 1420:435b, ref
      * unpacked/civ.exe file offset 0xbb35b, 6 items; same '_' split as
-     * Dialog_SplitMenuText @ 1220:0000 feeding Dialog_MenuZ_Modal). */
+     * Dialog_SplitMenuText @ 1220:0000 feeding Dialog_MenuZ_Modal).
+     * P0->P1 shared gate via main_startup_menu_text_ok (LIVE below). */
     split_n = dialog_split_menu_count(CIV_MAINMENU_TEXT);
     n_items = mainmenu_item_count();
     if (split_n != 6 || n_items != split_n)
         return CIV_ERR_UNSUPPORTED;
+    if (main_startup_menu_text_ok() != 1)
+        return CIV_ERR_BAD_DATA;
+    /* OS-free 1:1 P0 anim ctx pair (Anim_OpenSequence @ 10b0:008a 0xa6 +
+     * Dlg_CreateTracked @ 1098:124f 0x18, LIVE via main_startup_anim_ctx_ok
+     * below) + intro seq-resolve counted path (param_3 == 0, LIVE via
+     * main_startup_intro_seq_resolve below; earth loop#2 uses explicit
+     * 0x91e, not here). Device tails stay STUB in anim_open_sequence with
+     * TODO Orig there. */
+    if (main_startup_anim_ctx_ok() != 1)
+        return CIV_ERR_BAD_DATA;
+    if (main_startup_intro_seq_resolve(5) != 5)
+        return CIV_ERR_BAD_DATA;
+    if (main_startup_intro_seq_resolve(-1) != -1)
+        return CIV_ERR_BAD_DATA;
     /* OS-free 1:1 P1 procedural-host gates for the 0x94 intro dialog
      * (Dlg_CreateTracked @ 1098:124f host + Dialog_MenuZ_Modal @ 1220:0156
      * widgets; ref unpacked/civ.exe strings "RanDoMRadio"/"RanDoMStatic"):
@@ -1938,4 +1953,59 @@ int main_startup_tick_is_due(unsigned long last_scaled, unsigned long now_scaled
 
     period = sys_tick_scaled_from((unsigned long)menuz_timer_interval_ms());
     return ((now_scaled - last_scaled) >= period) ? 1 : 0;
+}
+
+/* --- Chain 2026-10-17 (P0): startup anim ctx + seq-resolve + menu-text.
+ * See boot.h. OS-free 1:1 LIVE (no Win16, no globals, no exit()). Ref
+ * unpacked/civ.exe read-only NE Win3.x 832512 B. */
+
+int main_startup_anim_ctx_ok(void)
+{
+    /* Orig Anim_OpenSequence @ 10b0:008a 0xa6 ctx (mem_alloc_lock 0xa6 +
+     * DAT_1420_1f40 = ctx, see anim_seq_ctx_size in dialog.h) +
+     * Dlg_CreateTracked @ 1098:124f 0x18 ctx (see dlg_tracked_ctx_size /
+     * CIV_DLG_TRACKED_CTX_SIZE 0x18 in dialog.h). Both must hold for the
+     * 0x94/0x41 intro host backing pair. */
+    if (anim_seq_ctx_size() != 0xa6)
+        return 0;
+    if (dlg_tracked_ctx_size() != 0x18)
+        return 0;
+    if (dlg_tracked_ctx_size() != CIV_DLG_TRACKED_CTX_SIZE)
+        return 0;
+    return 1;
+}
+
+int main_startup_intro_seq_resolve(int counted)
+{
+    /* Orig Anim_OpenSequence @ 10b0:008a count half intro path (param_3 ==
+     * 0 -> counted via anim_seq_count_frames; earth loop#2 passes explicit
+     * 0x91e via main_startup_earth_seq_id, not here). Thin 1:1 delegate
+     * so the P0 bridge proves the counted shape without touching the
+     * mem_alloc_lock/GfxPort device tails (STUB in anim_open_sequence @
+     * 10b0:008a with TODO Orig there, see dialog.h). */
+    if (counted < 0)
+        return -1;
+    return anim_seq_resolve_count(0, counted);
+}
+
+int main_startup_menu_text_ok(void)
+{
+    /* Orig Main_RunStartupSequence @ 11e0:0000 menu-text shape over
+     * CIV_MAINMENU_TEXT @ 1420:435b (ref unpacked/civ.exe file offset
+     * 0xbb35b: "_Start a New Game_Load a Saved Game_Play on EARTH_
+     * Customize World_View Hall of Fame_Quit", 6 items; same '_' split as
+     * Dialog_SplitMenuText @ 1220:0000 feeding Dialog_MenuZ_Modal @
+     * 1220:0156). Both counters must agree on 6. */
+    int split_n;
+    int n_items;
+
+    split_n = dialog_split_menu_count(CIV_MAINMENU_TEXT);
+    n_items = mainmenu_item_count();
+    if (split_n != 6)
+        return 0;
+    if (n_items != 6)
+        return 0;
+    if (split_n != n_items)
+        return 0;
+    return 1;
 }

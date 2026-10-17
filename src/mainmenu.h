@@ -370,6 +370,41 @@ civ_error_t mainmenu_pump_events(int *break_flag);
  * mainmenu_should_loop / dialog_menuz_should_loop. */
 int mainmenu_tick_is_due(unsigned long last_scaled, unsigned long now_scaled);
 
+/* --- Chain 2026-10-17 (P1): MenuZ timer + tail gates (goal P1
+ * Dialog_MenuZ_Modal @ 1220:0156) ---
+ * Orig Dialog_MenuZ_Modal @ 1220:0156 modal tick/tail (civ.exe,
+ * x86:LE:16:Protected Mode; ref unpacked/civ.exe read-only NE Win3.x
+ * 832512 B): SETTIMER(hwnd,2,0x64,NULL) @ 1220:0202 (100 ms via
+ * menuz_timer_interval_ms / dialog_menuz_timer_ms; fail = 'Can''t
+ * initialize timer in MenuZ' @ 1420:4a41, file offset 0xbba41, windows.c;
+ * KILLTIMER @ 1220:0cfd on exit) paced caller-side via Sys_GetTickScaled
+ * @ 1100:02e1 (GETTICKCOUNT * 60 / 1000, see sys_tick_scaled_from in
+ * sys.h; 100 ms = 6 scaled ticks) + fala-23 tail (DAT_1418_0006 art
+ * branch via dialog_menuz_art_mode: -1 = plain, 0..2 = small pic,
+ * >= 3 = tech badge; DAT_1418_0008/DAT_12b0_00a0 exit via
+ * dialog_menuz_is_cancel: flag_0008 >= 1 && done_00a0 == -1 = cancel/back)
+ * over CIV_MAINMENU_TEXT @ 1420:435b (file offset 0xbb35b, 6 items,
+ * RanDoMRadio 500+i fan-out). OS-free 1:1 on explicit params (no Win16,
+ * no globals, read-only); device tails (CREATEDIALOG + MAKEPROCINSTANCE +
+ * GETDC/SELECTPALETTE/REALIZEPALETTE + 0xec palette + tracked-stack +
+ * RSC decode via rsc_get_indexed @ 1190:0a29) stay STUB in mainmenu_run
+ * above with TODO Orig 1220:0156 / 1098:124f, never fake CIV_OK. No
+ * exit(), C17. */
+
+/* Orig same SETTIMER 100 ms tick -> mainmenu_menuz_timer_ok. 1:1 1 when
+ * menuz_timer_interval_ms() == 100 && dialog_menuz_timer_ms() == 100 &&
+ * sys_tick_scaled_from(100) == 6; 0 otherwise. Proves the modal pacing
+ * before the PEEKMESSAGE pump bridge. No globals. */
+int mainmenu_menuz_timer_ok(void);
+
+/* Orig same fala-23 tail -> mainmenu_menuz_tail_ok. 1:1 1 when
+ * dialog_menuz_art_mode(-1) == 0 && dialog_menuz_art_mode(0) == 1 &&
+ * dialog_menuz_art_mode(3) == 2 && dialog_menuz_is_cancel(0,-1) == 0 &&
+ * dialog_menuz_is_cancel(1,-1) == 1 && dialog_menuz_is_cancel(1,0) == 0;
+ * 0 otherwise. Same triple as the inline probe in mainmenu_run (kept as
+ * the caller-side audit; this helper is the reusable gate). No globals. */
+int mainmenu_menuz_tail_ok(void);
+
 /* Orig CX = 0x44: liczba wpisow (68). */
 int menu_dispatch_count(void);
 /* Orig scan 1:1: indeks wpisu o danym id, -1 przy pudle. */

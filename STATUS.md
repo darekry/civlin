@@ -205,6 +205,9 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `main_startup_event_is_dismiss` | LIVE | 1220:0156 |  |
 | `main_startup_pump_events` | LIVE | 1098:124f, 1100:02e1, 11e0:0000, 1220:0156, 1220:0202 |  |
 | `main_startup_tick_is_due` | LIVE | 1100:02e1, 11e0:0221, 1220:0156, 1220:0202, 1220:0cfd, 1420:4a41 |  |
+| `main_startup_anim_ctx_ok` | LIVE | 1098:124f, 10b0:008a |  |
+| `main_startup_intro_seq_resolve` | LIVE | 10b0:008a |  |
+| `main_startup_menu_text_ok` | LIVE | 1000:36b2, 11e0:0000, 11e0:0221, 1220:0000, 1220:0156, 1420:435b |  |
 
 ### `src/civ_common.c`
 
@@ -304,7 +307,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `dlg_center_rect` | LIVE | 1068:0958, 1098:0a5b, 1098:0ae0, 1098:0b67, 1170:2623, 11f8:0000, 1210:0e29 |  |
 | `text_draw_aligned` | PARTIAL | 1080:0119, 1080:08e9, 1088:1554, 1098:00b5, 1098:01b0, 1098:0e0b, 1098:0ed1, 1098:103f, 1098:20f4, 10b0:0461, 10b0:137a, 10e8:0667, 1110:07c3, 1180:02d3, 1220:0889 | has TODO |
 | `dialog_get_item_rect` | PARTIAL | 1098:0d43, 1098:124f, 10e8:0000, 1100:03ff, 1220:0156 | has TODO |
-| `dialog_show_message` | STUB | 1040:068e, 1098:124f, 1098:1612, 1220:00d2, 1220:0156, 1220:0eb8, 12b0:0004 | has TODO |
+| `dialog_show_message` | PARTIAL | 1088:13d5, 1098:124f, 1098:1612, 1220:00d2, 1220:0156, 1220:0eb8, 1420:172b | has TODO |
 | `text_res_list_advance` | LIVE | 1098:1f4f, 1100:0053, 1100:078a |  |
 | `main_enqueue_res_string` | LIVE | 1008:0a8d, 1420:4473 |  |
 | `dialog_res_list_spec` | LIVE | 1068:0295 |  |
@@ -997,6 +1000,8 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `mainmenu_modal_is_done` | LIVE | 11e0:0000, 11e0:0221 |  |
 | `mainmenu_pump_events` | LIVE | 1098:124f, 1100:02e1, 1220:0156, 1220:0202 |  |
 | `mainmenu_tick_is_due` | LIVE | 1100:02e1, 1220:0156, 1220:0202, 1220:0cfd, 1420:435b, 1420:4a41 |  |
+| `mainmenu_menuz_timer_ok` | LIVE | 1100:02e1, 1220:0156, 1220:0202, 1220:0cfd, 1420:4a41 |  |
+| `mainmenu_menuz_tail_ok` | LIVE | 11e0:0221, 1220:0156 |  |
 
 ### `src/map.c`
 

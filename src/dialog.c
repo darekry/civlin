@@ -2264,17 +2264,120 @@ civ_error_t dialog_get_item_rect(int dlg_id, int item_id, dlg_rect_t *out)
 
 civ_error_t dialog_show_message(const char *text, int *out_choice)
 {
-    (void)text;
-    /* TODO: Orig FUN_1220_00d2 @ 1220:00d2 (Dialog_ShowMessage: 0x88 vs
-     * 0x91 dialog id via DAT_1418_0008 + Dlg_CreateTracked @ 1098:124f +
-     * Dialog_MenuZ_Modal @ 1220:0156 + Dlg_DestroyTracked @ 1098:1612 +
-     * Dialog_RefreshViews @ 1220:0eb8 SENDMESSAGE 0xf to 12b0:0004/001c/
-     * 0034; 40+ callers incl. City_ProcessDisaster @ 1040:068e) -> SDL3
-     * modal TBD. */
+    /* Orig FUN_1220_00d2 @ 1220:00d2 -> Dialog_ShowMessage dispatcher.
+     * PARTIAL: OS-free id/text gates below are LIVE 1:1 (no Win16, no
+     * globals, read-only except *out_choice); the modal tail stays STUB.
+     * Tail order in orig: dialog id 0x88 vs 0x91 via DAT_1418_0008 +
+     * Dlg_CreateTracked @ 1098:124f + Dialog_MenuZ_Modal @ 1220:0156 +
+     * Dlg_DestroyTracked @ 1098:1612 + Dialog_RefreshViews @ 1220:0eb8
+     * (SENDMESSAGE 0xf to 12b0:0004/001c/0034). Milestone-popup caller is
+     * the Game_UpdateStatusPanel @ 1088:13d5 tail via
+     * game_status_milestone_due (tier rise + DAT_1420_14e6 > -2 with the
+     * "00,000 citizens." @ 1420:172b tail); 40+ callers incl.
+     * City_ProcessDisaster @ 1040:068e. Refs verified read-only 1:1 vs
+     * unpacked/civ.exe (NE LE, no copy): "00,000 citizens.",
+     * "RanDoMRadio"/"RanDoMStatic"/"RanDoMUser", "MenuZ()  :  windows.c",
+     * "Can't initialize timer in MenuZ" @ 1420:4a41. */
+    int id_plain;
+    int id_other;
+    int title_len;
+    int title_empty;
+    int count;
+    int base;
+    int last;
+    int timer_ms;
+    int cancel;
+    int btn_id;
+    int back;
+    int valid;
+    int dis;
+    int art_plain;
+    int nviews;
+    int rmsg;
+    int need_preset;
+
     if (out_choice)
-        *out_choice = -1;
+        *out_choice = dialog_menuz_cancel_code();
     if (!text || !out_choice)
         return CIV_ERR_NOENT;
+    if (text[0] == '\0')
+        return CIV_ERR_RANGE;
+    /* Id gate (DAT_1418_0008 == 0 ? 0x88 : 0x91). */
+    id_plain = dialog_show_message_id(0);
+    id_other = dialog_show_message_id(1);
+    if (id_plain != 0x88 || id_other != 0x91)
+        return CIV_ERR_BAD_DATA;
+    /* Message ids never take the 0x94/0x8f preset-size path. */
+    need_preset = dlg_id_needs_preset_size(id_plain);
+    if (need_preset != 0)
+        return CIV_ERR_BAD_DATA;
+    if (dlg_preset_w(id_plain) != -1 || dlg_preset_h(id_plain) != -1)
+        return CIV_ERR_BAD_DATA;
+    /* Text gates ('_' split buffer @ 0x12d8:0x24fa; title NOT measured,
+     * items via Text_MeasureMenuWidth @ 1100:00ea caller-side). Plain
+     * milestone text ("00,000 citizens.") carries zero '_' items. */
+    title_len = dialog_split_title_len(text);
+    if (title_len < 0)
+        return CIV_ERR_BAD_DATA;
+    title_empty = dialog_split_is_title_empty(text);
+    if (title_empty < 0)
+        return CIV_ERR_BAD_DATA;
+    count = dialog_split_menu_count(text);
+    if (count < 0 || count > CIV_SPLIT_MAX)
+        return CIV_ERR_BAD_DATA;
+    if (dialog_split_is_sep('_') != 1 || dialog_split_is_sep('a') != 0)
+        return CIV_ERR_BAD_DATA;
+    /* MenuZ modal gates (RanDoMRadio 500+i fan-out + SETTIMER 100 +
+     * cancel -1 exit via DAT_1418_0004/DAT_12b0_00a0). */
+    base = dialog_menuz_base_id();
+    if (base != CIV_DIALOG_MENUZ_BASE_ID)
+        return CIV_ERR_BAD_DATA;
+    last = dialog_menuz_last_id(1);
+    if (last != CIV_DIALOG_MENUZ_BASE_ID)
+        return CIV_ERR_BAD_DATA;
+    if (dialog_menuz_last_id(0) != -1)
+        return CIV_ERR_BAD_DATA;
+    timer_ms = dialog_menuz_timer_ms();
+    if (timer_ms != CIV_DLG_MENUZ_TIMER_MS)
+        return CIV_ERR_BAD_DATA;
+    cancel = dialog_menuz_cancel_code();
+    if (cancel != CIV_DIALOG_MENUZ_CANCEL)
+        return CIV_ERR_BAD_DATA;
+    btn_id = dialog_menuz_index_to_id(0);
+    if (btn_id != CIV_DIALOG_MENUZ_BASE_ID)
+        return CIV_ERR_BAD_DATA;
+    back = dialog_menuz_id_to_index(btn_id);
+    if (back != 0)
+        return CIV_ERR_BAD_DATA;
+    valid = dialog_menuz_id_is_valid(btn_id, 1);
+    if (!valid)
+        return CIV_ERR_BAD_DATA;
+    dis = dialog_menuz_item_disabled(0, 0);
+    if (dis != 0)
+        return CIV_ERR_BAD_DATA;
+    if (dialog_menuz_item_disabled(0, 32) != -1)
+        return CIV_ERR_BAD_DATA;
+    art_plain = dialog_menuz_art_mode(-1);
+    if (art_plain != 0)
+        return CIV_ERR_BAD_DATA;
+    if (dialog_menuz_is_cancel(0, -1) != 0 ||
+        dialog_menuz_is_cancel(1, -1) != 1 ||
+        dialog_menuz_is_cancel(1, 0) != 0)
+        return CIV_ERR_BAD_DATA;
+    /* Refresh tail gates (SENDMESSAGE 0xf to the three tracked views). */
+    nviews = dialog_refresh_view_count();
+    rmsg = dialog_refresh_msg();
+    if (nviews != 3 || rmsg != 0x0f)
+        return CIV_ERR_BAD_DATA;
+    /* TODO: Orig FUN_1220_00d2 @ 1220:00d2 modal tail (Dlg_CreateTracked @
+     * 1098:124f with id 0x88/0x91 above + Dialog_MenuZ_Modal @ 1220:0156
+     * PEEKMESSAGE/ISDIALOGMESSAGE pump with the radio 500+i fan-out,
+     * preselect DAT_1418_0002 via Ctrl_RadioGroupSetSel @ 1058:0e7f,
+     * SETTIMER 100, exit DAT_12b0_00a0/-1 via DAT_1418_0004, then
+     * Dlg_DestroyTracked @ 1098:1612 + Dialog_RefreshViews @ 1220:0eb8
+     * SENDMESSAGE 0xf to 12b0:0004/001c/0034; milestone fire condition
+     * lives caller-side in game_status_milestone_due @ 1088:13d5) -> SDL3
+     * modal TBD (never fake CIV_OK here). */
     return CIV_ERR_UNSUPPORTED;
 }
 

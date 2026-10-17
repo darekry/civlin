@@ -123,6 +123,11 @@ civ_error_t mainmenu_run(civ_mainmenu_choice_t *out)
         return CIV_ERR_BAD_DATA;
     if (cancel != CIV_DIALOG_MENUZ_CANCEL)
         return CIV_ERR_BAD_DATA;
+    /* OS-free 1:1 P1 modal pacing gate (SETTIMER 0x64 = 100 ms @ 1220:0202
+     * + Sys_GetTickScaled 6 ticks; fail string @ 1420:4a41 file offset
+     * 0xbba41; LIVE via mainmenu_menuz_timer_ok below). */
+    if (mainmenu_menuz_timer_ok() != 1)
+        return CIV_ERR_BAD_DATA;
     /* OS-free 1:1 re-prompt gate (choice < 0 || choice > 3): NONE (-1,
      * cancel/back) must loop, 0 (new game) must accept; dialog twin must
      * agree (same Orig @ 11e0:0221 / @ 1220:0156 shape). */
@@ -146,6 +151,10 @@ civ_error_t mainmenu_run(civ_mainmenu_choice_t *out)
     if (dialog_menuz_is_cancel(0, -1) != 0 ||
         dialog_menuz_is_cancel(1, -1) != 1 ||
         dialog_menuz_is_cancel(1, 0) != 0)
+        return CIV_ERR_BAD_DATA;
+    /* OS-free 1:1 P1 MenuZ tail gate (fala-23 art + cancel triple, LIVE
+     * via mainmenu_menuz_tail_ok below; same Orig @ 1220:0156 as above). */
+    if (mainmenu_menuz_tail_ok() != 1)
         return CIV_ERR_BAD_DATA;
     /* OS-free 1:1 tracked-center gate @ 1098:0b33 (flags&1 path of
      * Dlg_CreateTracked @ 1098:124f via Dlg_CenterRect @ 11f8:0000; fala
@@ -763,4 +772,46 @@ int mainmenu_tick_is_due(unsigned long last_scaled, unsigned long now_scaled)
 
     period = sys_tick_scaled_from((unsigned long)menuz_timer_interval_ms());
     return ((now_scaled - last_scaled) >= period) ? 1 : 0;
+}
+
+/* --- Chain 2026-10-17 (P1): MenuZ timer + tail gates. See mainmenu.h.
+ * OS-free 1:1 LIVE (no Win16, no globals, no exit()). Ref unpacked/civ.exe
+ * read-only NE Win3.x 832512 B. */
+
+int mainmenu_menuz_timer_ok(void)
+{
+    /* Orig Dialog_MenuZ_Modal @ 1220:0156 SETTIMER(hwnd,2,0x64,NULL) @
+     * 1220:0202 (100 ms; fail = 'Can''t initialize timer in MenuZ' @
+     * 1420:4a41, file offset 0xbba41, windows.c; KILLTIMER @ 1220:0cfd)
+     * + Sys_GetTickScaled @ 1100:02e1 pacing (100 ms = 6 scaled ticks).
+     * All three halves must agree before the PEEKMESSAGE pump bridge. */
+    if (menuz_timer_interval_ms() != 100)
+        return 0;
+    if (dialog_menuz_timer_ms() != 100)
+        return 0;
+    if (sys_tick_scaled_from(100u) != 6u)
+        return 0;
+    return 1;
+}
+
+int mainmenu_menuz_tail_ok(void)
+{
+    /* Orig Dialog_MenuZ_Modal @ 1220:0156 fala-23 tail (DAT_1418_0006 art
+     * branch + DAT_1418_0008/DAT_12b0_00a0 exit): -1 = plain menu
+     * (MainMenu_WndProc @ 11e0:0221 path), 0..2 = small pic, >= 3 = tech
+     * badge; exit flag_0008 >= 1 && done_00a0 == -1 = cancel/back. Same
+     * triple as the inline probe in mainmenu_run (kept caller-side). */
+    if (dialog_menuz_art_mode(-1) != 0)
+        return 0;
+    if (dialog_menuz_art_mode(0) != 1)
+        return 0;
+    if (dialog_menuz_art_mode(3) != 2)
+        return 0;
+    if (dialog_menuz_is_cancel(0, -1) != 0)
+        return 0;
+    if (dialog_menuz_is_cancel(1, -1) != 1)
+        return 0;
+    if (dialog_menuz_is_cancel(1, 0) != 0)
+        return 0;
+    return 1;
 }
