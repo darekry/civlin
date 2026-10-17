@@ -68,9 +68,11 @@ civ_error_t worldgen_load_preset(const uint8_t *image, size_t len);
  * Preset path: 64000B image via WorldGen_CopyPreset @ 10b8:079d, then tail
  * Map_FillRect @ 1028:1d15 / Map_LabelContinents @ 1028:0a93.
  * Params: orig takes no caller buffer (preset source TBD -- RSC entry or
- * file image, NOT a caller-supplied pointer); takes void here so
- * mainmenu_dispatch can call it directly. Win16 file/resource load ->
- * stub CIV_ERR_UNSUPPORTED. */
+ * file image via Art_LoadFrame @ 10b8:0e00 frame 0x89 caller-side, NOT a
+ * caller-supplied pointer); takes void here so mainmenu_dispatch can call
+ * it directly. PARTIAL: OS-free frame/size/dialog probes LIVE 1:1 in the
+ * body (BAD_DATA on drift, no fake-OK); Win16 file/resource load + modal
+ * dialog 0x8f tail -> CIV_ERR_UNSUPPORTED. */
 civ_error_t worldgen_load_earth(void);
 
 /* OS-free customize-dialog cell math behind WorldGen_LoadEarth @
@@ -96,8 +98,9 @@ civ_error_t worldgen_custom_apply(int *settings, int row, int col);
  * Map_GenerateRandomOrLoad(1) earth-preset (frame 0x89 via
  * Art_LoadFrameData @ 10b8:079d + HMEMCPY 64000), 3 -> Map(0) custom/random
  * (ustawienia z WorldGen_LoadEarth @ 1108:0243 dialog 0x8f), inne (1/4/5)
- * -> return 1 bez mapy. Tryb OS-free w worldgen_prepare_mode ponizej
- * (LIVE); Cursor/Sound/Map tails -> STUB. */
+ * -> return 1 bez mapy. PARTIAL: OS-free dispatch probes LIVE 1:1 via
+ * worldgen_prepare_mode below (BAD_DATA on drift, no fake-OK);
+ * Cursor/Sound/Map tails -> CIV_ERR_UNSUPPORTED. */
 civ_error_t worldgen_prepare_earth(void);
 
 /* Orig WorldGen_PrepareEarth @ 1108:01bc dispatch -> worldgen_prepare_mode.

@@ -1678,10 +1678,10 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `worldgen_dir_dy_at` | LIVE |  |  |
 | `worldgen_generate_random` | LIVE | 1028:0000 |  |
 | `worldgen_load_preset` | LIVE | 1028:0000, 1028:0a93, 1028:1d15, 10b8:079d |  |
-| `worldgen_load_earth` | STUB | 1028:0a93, 1028:1d15, 10b8:079d, 10b8:0e00, 10e0:0000, 1100:03ff, 1108:0243, 11e0:0221, 1420:2e28, 1420:2e34 | has TODO |
+| `worldgen_load_earth` | PARTIAL | 1028:0a93, 1028:1d15, 10b8:079d, 10b8:0e00, 10e0:0000, 1108:0243, 11e0:0221, 1420:2e28, 1420:2e34 | has TODO |
 | `worldgen_dialog_id_to_cell` | LIVE | 10e0:0000, 1108:0243, 1420:2e28, 1420:2e34 |  |
 | `worldgen_custom_apply` | LIVE | 10e0:0000, 1100:03ff, 1108:0243, 1420:2e28, 1420:2e34 |  |
-| `worldgen_prepare_earth` | STUB | 10b8:079d, 10e8:0000, 1108:01bc, 1108:0243, 1150:00c9, 11e0:0000, 12d8:44e2 | has TODO |
+| `worldgen_prepare_earth` | PARTIAL | 10b8:079d, 10e8:0000, 1108:01bc, 1108:0243, 1150:00c9, 11e0:0000, 12d8:44e2 | has TODO |
 | `worldgen_prepare_mode` | LIVE | 1028:0000, 1108:01bc, 12d8:44e2 |  |
 | `worldgen_is_preset` | LIVE | 1028:0000 |  |
 | `worldgen_earth_frame` | LIVE | 1028:0000, 10b8:0aa8, 10b8:11bc |  |

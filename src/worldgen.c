@@ -215,24 +215,64 @@ civ_error_t worldgen_load_preset(const uint8_t *image, size_t len)
 
 civ_error_t worldgen_load_earth(void)
 {
-    /* TODO: Orig WorldGen_LoadEarth @ 1108:0243 (choice 3 Play on EARTH
-     * from MainMenu_WndProc @ 11e0:0221; dialog 0x8f with 4 rows x 3
-     * cols + help col, IDs from 0x323, help texts Temperature @
+    /* Orig WorldGen_LoadEarth @ 1108:0243 (civ.exe, x86:LE:16:Protected
+     * Mode; ref unpacked/civ.exe read-only, NE Win3.x 832512 B: choice 3
+     * Play on EARTH from MainMenu_WndProc @ 11e0:0221; dialog 0x8f with 4
+     * rows x 3 cols + help col, IDs from 0x323, help texts Temperature @
      * 1420:2e28 / Climate @ 1420:2e34 / 0x2e23 / 0x2e3c via NewGame
-     * customize @ 10e0:0000, item rects via Dialog_GetItemRect @
-     * 1100:03ff, frames via Art_LoadFrame @ 10b8:0e00; ref
-     * unpacked/civ.exe read-only). OS-free tail is LIVE since the
-     * generate_random wave: preset 64000B copy via WorldGen_CopyPreset @
-     * 10b8:079d (worldgen_copy_preset LIVE memcpyugged) + tail
-     * Map_FillRect @ 1028:1d15 / Map_LabelContinents @ 1028:0a93
-     * (worldgen_load_preset LIVE when the caller supplies the image).
-     * What stays here: preset image source TBD (RSC entry vs file read --
-     * Art_LoadFrameData(0x89) via 10b8:0aa8/11bc, see video.h; takes no
-     * caller buffer) + modal dialog 0x8f pump (Dlg_CreateTracked @
-     * 1098:124f). __far/HMEMCPY/GLOBALLOCK-0x600 plumbing maps to explicit
-     * map_buffer() offsets (no segment). Win16 resource/file load + modal
-     * -> stub CIV_ERR_UNSUPPORTED (no fake-OK). The OS-free ID->cell math
-     * lives in worldgen_dialog_id_to_cell / worldgen_custom_apply below. */
+     * customize @ 10e0:0000 + item rects via Dialog_GetItemRect @
+     * 1100:03ff, frames via Art_LoadFrame @ 10b8:0e00). PARTIAL: OS-free
+     * probes below are LIVE 1:1 (BAD_DATA on drift, no fake-OK); preset
+     * image source + modal tail stay STUB.
+     * OS-free LIVE: earth frame 0x89 via worldgen_earth_frame (caller-side
+     * decode via Art_LoadFrameData @ 10b8:079d, see video.h art chain) +
+     * 64000 B via worldgen_earth_preset_bytes + 320x200 via
+     * worldgen_earth_frame_w/h (product == preset) + is_preset(1)/!is_preset
+     * (0) gate + dialog ID->cell corners via worldgen_dialog_id_to_cell +
+     * settings preset-1 shape via worldgen_custom_apply (help col 3 leaves
+     * untouched). __far/HMEMCPY/GLOBALLOCK-0x600 plumbing maps to explicit
+     * map_buffer() offsets in worldgen_load_preset/worldgen_copy_preset
+     * (same bytes, no segment).
+     * TODO: Orig preset image load (RSC entry vs file read --
+     * Art_LoadFrame @ 10b8:0e00 frame 0x89 caller-side via
+     * art_load_frame_data, takes no caller buffer) + modal dialog 0x8f
+     * pump (Dlg_CreateTracked @ 1098:124f). Win16 resource/file load +
+     * modal -> SDL TBD -> stub CIV_ERR_UNSUPPORTED (no fake-OK). */
+    int row = -1;
+    int col = -1;
+    int settings[4] = { 1, 1, 1, 1 };
+    civ_error_t r;
+
+    if (worldgen_earth_frame() != (int)CIV_MAP_EARTH_FRAME)
+        return CIV_ERR_BAD_DATA;
+    if (worldgen_earth_frame() != 0x89)
+        return CIV_ERR_BAD_DATA;
+    if (worldgen_earth_preset_bytes() != CIV_MAP_PRESET_BYTES)
+        return CIV_ERR_BAD_DATA;
+    if (worldgen_earth_frame_w() != CIV_MAP_EARTH_W ||
+        worldgen_earth_frame_h() != CIV_MAP_EARTH_H)
+        return CIV_ERR_BAD_DATA;
+    if (worldgen_earth_frame_w() * worldgen_earth_frame_h() !=
+        (int)CIV_MAP_PRESET_BYTES)
+        return CIV_ERR_BAD_DATA;
+    if (!worldgen_is_preset(1) || worldgen_is_preset(0))
+        return CIV_ERR_BAD_DATA;
+    r = worldgen_dialog_id_to_cell(0x323, &row, &col);
+    if (r != CIV_OK || row != 0 || col != 0)
+        return CIV_ERR_BAD_DATA;
+    r = worldgen_dialog_id_to_cell(0x323 + 15, &row, &col);
+    if (r != CIV_OK || row != 3 || col != 3)
+        return CIV_ERR_BAD_DATA;
+    if (worldgen_dialog_id_to_cell(0x322, &row, &col) != CIV_ERR_RANGE)
+        return CIV_ERR_BAD_DATA;
+    r = worldgen_custom_apply(settings, 0, 0);
+    if (r != CIV_OK || settings[0] != 0)
+        return CIV_ERR_BAD_DATA;
+    r = worldgen_custom_apply(settings, 1, 3);
+    if (r != CIV_OK || settings[1] != 1)
+        return CIV_ERR_BAD_DATA;
+    if (worldgen_custom_apply(NULL, 0, 0) != CIV_ERR_NOENT)
+        return CIV_ERR_BAD_DATA;
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -279,19 +319,42 @@ civ_error_t worldgen_custom_apply(int *settings, int row, int col)
 
 civ_error_t worldgen_prepare_earth(void)
 {
-    /* TODO: Orig WorldGen_PrepareEarth @ 1108:01bc (pre-step w
-     * Main_RunStartupSequence @ 11e0:0000 loop#2, ref unpacked/civ.exe
-     * read-only: Cursor_Set(0x84) + Sound_PlayId @ 1150:00c9 (1) STOP +
+    /* Orig WorldGen_PrepareEarth @ 1108:01bc (civ.exe, x86:LE:16:Protected
+     * Mode; ref unpacked/civ.exe read-only: pre-step w
+     * Main_RunStartupSequence @ 11e0:0000 loop#2 przed NewGame_Wizard @
+     * 10e8:0000: Cursor_Set(0x84) + Sound_PlayId @ 1150:00c9 (1) STOP +
      * dispatch g_nMenuChoice @ 12d8:44e2 przez worldgen_prepare_mode
-     * ponizej (LIVE 1:1: 0 -> Map(0) random, 2 -> Map(1) earth-preset
-     * 0x89, 3 -> Map(0) custom, inne -> -1 bez mapy) do
-     * Map_GenerateRandomOrLoad @ 1028:0000; ustawienia custom z
-     * WorldGen_LoadEarth @ 1108:0243 dialog 0x8f +
-     * worldgen_dialog_id_to_cell LIVE). OS-free random tail LIVE
+     * (LIVE 1:1: 0 -> Map(0) random, 2 -> Map(1) earth-preset 0x89, 3 ->
+     * Map(0) custom, inne -> -1 bez mapy) do Map_GenerateRandomOrLoad @
+     * 1028:0000; ustawienia custom z WorldGen_LoadEarth @ 1108:0243 dialog
+     * 0x8f + worldgen_dialog_id_to_cell LIVE). PARTIAL: OS-free dispatch
+     * probes below are LIVE 1:1 (BAD_DATA on drift, no fake-OK);
+     * Cursor/Sound/Map tails stay STUB. OS-free random tail LIVE
      * (worldgen_generate_random) + preset tail LIVE (worldgen_load_preset
      * + copy_preset/copy_rect 1:1); __far scratch maps to explicit
-     * map_buffer() offsets (no segment). What stays here: Cursor/Sound/Map
-     * Win16 tails -> SDL TBD -> stub CIV_ERR_UNSUPPORTED (no fake-OK). */
+     * map_buffer() offsets (no segment).
+     * TODO: Orig Cursor_Set(0x84) + Sound_PlayId(1) STOP + Map(0/1) call +
+     * file/dialog tails -> SDL TBD -> stub CIV_ERR_UNSUPPORTED (no
+     * fake-OK). P2 new-game closure: mode math done here, wizard/map own
+     * the tails (see newgame.h/boot.h). */
+    if (worldgen_prepare_mode(0) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (worldgen_prepare_mode(2) != 1)
+        return CIV_ERR_BAD_DATA;
+    if (worldgen_prepare_mode(3) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (worldgen_prepare_mode(1) != -1)
+        return CIV_ERR_BAD_DATA;
+    if (worldgen_prepare_mode(4) != -1)
+        return CIV_ERR_BAD_DATA;
+    if (worldgen_prepare_mode(5) != -1)
+        return CIV_ERR_BAD_DATA;
+    if (!worldgen_is_preset(worldgen_prepare_mode(2)))
+        return CIV_ERR_BAD_DATA;
+    if (worldgen_is_preset(worldgen_prepare_mode(0)))
+        return CIV_ERR_BAD_DATA;
+    if (worldgen_is_preset(worldgen_prepare_mode(1)) == 0)
+        return CIV_ERR_BAD_DATA;
     return CIV_ERR_UNSUPPORTED;
 }
 
