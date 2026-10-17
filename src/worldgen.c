@@ -176,13 +176,41 @@ civ_error_t worldgen_generate_random(void)
 
 civ_error_t worldgen_load_preset(const uint8_t *image, size_t len)
 {
-    (void)image;
-    (void)len;
-    /* TODO: Map_GenerateRandomOrLoad param!=0: WorldGen_CopyPreset @ 10b8:079d
-     * (HMEMCPY 64000B, see worldgen_copy_preset) + tail Map_FillRect @
-     * 1028:1d15 / Map_LabelContinents @ 1028:0a93. Map buffer owned via
-     * map.h (parallel agent), so the copy target is not wired yet. */
-    return CIV_ERR_UNSUPPORTED;
+    /* Orig Map_GenerateRandomOrLoad @ 1028:0000 param!=0 path (civ.exe,
+     * x86:LE:16:Protected Mode; ref unpacked/civ.exe read-only, NE Win3.x
+     * 832512 B): Mem_DisposePtr + mem_alloc_lock 64000 + Art_LoadFrameData
+     * (0x89) + GLOBALLOCK -10 adjust (0x600 head) + HMEMCPY 64000 via
+     * WorldGen_CopyPreset @ 10b8:079d, then common tail Map_FillRect @
+     * 1028:1d15 (0xa0,0,0xa0,200,0 clear) + Map_LabelContinents @ 1028:0a93
+     * + DAT_1248_0000 = 1 (caller-side flag, no Linux global).
+     * OS-free 1:1 port: caller supplies the 64000B image (RSC/file decode
+     * stays caller-side: Art_LoadFrameData @ 10b8:079d via Art_LoadDiskFile
+     * @ 10b8:0aa8 / Art_LoadResPaletted @ 10b8:11bc, see video.h art chain);
+     * __far/HMEMCPY/GLOBALLOCK-0x600 selector plumbing maps to explicit
+     * map_buffer() + worldgen_copy_preset memcpy (same bytes, no segment).
+     * Tail via map_fill_rect + worldgen_label_continents (LIVE). NULL image
+     * -> NOENT, len != 64000 -> RANGE. No Win16, no globals (buffer lives
+     * in map.c .bss), no exit(). */
+    uint8_t *dst;
+    civ_error_t r;
+
+    if (!image)
+        return CIV_ERR_NOENT;
+    if (len != CIV_MAP_PRESET_BYTES)
+        return CIV_ERR_RANGE;
+    if (map_buffer_len() < CIV_MAP_PRESET_BYTES)
+        return CIV_ERR_RANGE;
+    dst = map_buffer();
+    if (!dst)
+        return CIV_ERR_NOENT;
+    r = worldgen_copy_preset(dst, image, len);
+    if (r != CIV_OK)
+        return r;
+    map_fill_rect(0xa0, 0, 0xa0, 200, 0);
+    r = worldgen_label_continents();
+    if (r != CIV_OK)
+        return r;
+    return CIV_OK;
 }
 
 civ_error_t worldgen_load_earth(void)
@@ -192,11 +220,19 @@ civ_error_t worldgen_load_earth(void)
      * cols + help col, IDs from 0x323, help texts Temperature @
      * 1420:2e28 / Climate @ 1420:2e34 / 0x2e23 / 0x2e3c via NewGame
      * customize @ 10e0:0000, item rects via Dialog_GetItemRect @
-     * 1100:03ff, frames via Art_LoadFrame @ 10b8:0e00). Preset 64000B via
-     * WorldGen_CopyPreset @ 10b8:079d + tail 1028:1d15/0a93. Preset image
-     * source TBD (RSC entry vs file read); takes no caller buffer. Win16
-     * resource/file load -> stub. The OS-free ID->cell math lives in
-     * worldgen_dialog_id_to_cell / worldgen_custom_apply below. */
+     * 1100:03ff, frames via Art_LoadFrame @ 10b8:0e00; ref
+     * unpacked/civ.exe read-only). OS-free tail is LIVE since the
+     * generate_random wave: preset 64000B copy via WorldGen_CopyPreset @
+     * 10b8:079d (worldgen_copy_preset LIVE memcpyugged) + tail
+     * Map_FillRect @ 1028:1d15 / Map_LabelContinents @ 1028:0a93
+     * (worldgen_load_preset LIVE when the caller supplies the image).
+     * What stays here: preset image source TBD (RSC entry vs file read --
+     * Art_LoadFrameData(0x89) via 10b8:0aa8/11bc, see video.h; takes no
+     * caller buffer) + modal dialog 0x8f pump (Dlg_CreateTracked @
+     * 1098:124f). __far/HMEMCPY/GLOBALLOCK-0x600 plumbing maps to explicit
+     * map_buffer() offsets (no segment). Win16 resource/file load + modal
+     * -> stub CIV_ERR_UNSUPPORTED (no fake-OK). The OS-free ID->cell math
+     * lives in worldgen_dialog_id_to_cell / worldgen_custom_apply below. */
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -244,13 +280,18 @@ civ_error_t worldgen_custom_apply(int *settings, int row, int col)
 civ_error_t worldgen_prepare_earth(void)
 {
     /* TODO: Orig WorldGen_PrepareEarth @ 1108:01bc (pre-step w
-     * Main_RunStartupSequence @ 11e0:0000 loop#2: Cursor_Set(0x84) +
-     * Sound_PlayId @ 1150:00c9 (1) STOP + dispatch g_nMenuChoice @
-     * 12d8:44e2 przez worldgen_prepare_mode ponizej do
-     * Map_GenerateRandomOrLoad @ 1028:0000 (0 = random, 1 = earth-preset
-     * 0x89; ustawienia custom z WorldGen_LoadEarth @ 1108:0243 dialog 0x8f
-     * + worldgen_dialog_id_to_cell LIVE). Cursor/Sound/Map tails Win16 ->
-     * SDL TBD. */
+     * Main_RunStartupSequence @ 11e0:0000 loop#2, ref unpacked/civ.exe
+     * read-only: Cursor_Set(0x84) + Sound_PlayId @ 1150:00c9 (1) STOP +
+     * dispatch g_nMenuChoice @ 12d8:44e2 przez worldgen_prepare_mode
+     * ponizej (LIVE 1:1: 0 -> Map(0) random, 2 -> Map(1) earth-preset
+     * 0x89, 3 -> Map(0) custom, inne -> -1 bez mapy) do
+     * Map_GenerateRandomOrLoad @ 1028:0000; ustawienia custom z
+     * WorldGen_LoadEarth @ 1108:0243 dialog 0x8f +
+     * worldgen_dialog_id_to_cell LIVE). OS-free random tail LIVE
+     * (worldgen_generate_random) + preset tail LIVE (worldgen_load_preset
+     * + copy_preset/copy_rect 1:1); __far scratch maps to explicit
+     * map_buffer() offsets (no segment). What stays here: Cursor/Sound/Map
+     * Win16 tails -> SDL TBD -> stub CIV_ERR_UNSUPPORTED (no fake-OK). */
     return CIV_ERR_UNSUPPORTED;
 }
 

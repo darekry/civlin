@@ -408,11 +408,16 @@ int unit_ai_player_turn(int civ, int unit_idx);
  * tile/unit in the affected area (exact radius TBD, see Ghidra). */
 civ_error_t unit_reveal_area(int x, int y, int civ);
 
-/* Orig: FUN_11f0_4ea0 @ 11f0:4ea0 -> sys_drain_input.
+/* Orig: FUN_11f0_4ea0 @ 11f0:4ea0 -> sys_drain_input (PARTIAL).
  * Clears 1420:1d44..1d50 + 12b0:004c and drains PEEKMESSAGE queues
  * (0x108/0x100, 0x209/0x200). Called from Civ_ProcessUnitMoves
  * (@ 11f0:06d2/0c58), menu/button/turn paths (28 callers) and the
- * 11c0:0395 visibility tail. */
+ * 11c0:0395 visibility tail. PARTIAL: OS-free range gates
+ * (sys_drain_state_words/queue_cap/reset/peek_key/mouse, all LIVE below)
+ * + SDL_PollEvent drain (bez HWND, via sys_drain_sdl_should_drop in sys.h)
+ * is LIVE; HWND routing (main vs status vs smmap vs popup DAT_1420_9948)
+ * + DGROUP stores (1420:1d44..1d50 + 12b0:004c) stay CIV_ERR_UNSUPPORTED
+ * with TODO Orig in game.c (no fake-OK). */
 civ_error_t sys_drain_input(void);
 
 /* Game_CalcProgressThreshold @ 1088:1d99 (pure 1:1): the sum over

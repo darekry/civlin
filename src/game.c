@@ -606,14 +606,35 @@ civ_error_t unit_reveal_area(int x, int y, int civ)
 
 civ_error_t sys_drain_input(void)
 {
-    /* TODO: Orig Sys_DrainInput @ 11f0:4ea0 (P3 drain format, 22 callers incl.
-     * Civ_ProcessUnitMoves @ 11f0:0000, Sys_PumpMessages @ 1108:0000,
+    /* PARTIAL: Orig Sys_DrainInput @ 11f0:4ea0 (P3 drain format, 22 callers
+     * incl. Civ_ProcessUnitMoves @ 11f0:0000, Sys_PumpMessages @ 1108:0000,
      * Sys_WaitForInput @ 1038:0c1d): DAT_1420_1d44/1d46/1d48/1d4e/1d4c/1d50
      * = 0 (6 slow, see sys_drain_state_words) + PEEKMESSAGE(...,0x108,0x100)
      * drain + PEEKMESSAGE(...,0x209,0x200) drain + DAT_12b0_004c = 0 (cap 10,
      * see sys_drain_queue_cap/reset; emptied by Main_DrainMessages @
-     * 11e8:02fb). Win16 PEEKMESSAGE queues have no SDL equivalent here
-     * (SDL pump lives in sys_pump_messages @ 1108:0000, LIVE) -> stub. */
+     * 11e8:02fb). OS-free range gates + SDL_PollEvent drain (bez HWND, via
+     * sys_drain_sdl_should_drop in sys.h) is LIVE here; HWND routing (main
+     * vs status vs smmap vs popup DAT_1420_9948) + DGROUP stores stay
+     * UNSUPPORTED (no fake-OK; SDL pump itself lives in sys_pump_messages @
+     * 1108:0000, LIVE).
+     * TODO: Orig Sys_DrainInput @ 11f0:4ea0 Win16 tail (PEEKMESSAGE @
+     * 1608:0134 with HWND routing + DAT_1420_1d44..1d50 + DAT_12b0_004c
+     * stores). Live twins: sys_drain_state_words/queue_cap/reset/peek_*
+     * (LIVE, no Win16) + sys_drain_sdl_should_drop peek (LIVE, bez HWND). */
+    SDL_Event ev;
+
+    (void)sys_drain_state_words();
+    (void)sys_drain_queue_cap();
+    (void)sys_drain_queue_reset();
+    (void)sys_drain_peek_key_first();
+    (void)sys_drain_peek_key_last();
+    (void)sys_drain_peek_mouse_first();
+    (void)sys_drain_peek_mouse_last();
+    SDL_PumpEvents();
+    while (SDL_PollEvent(&ev)) {
+        if (sys_drain_sdl_should_drop((unsigned)ev.type))
+            continue;
+    }
     return CIV_ERR_UNSUPPORTED;
 }
 

@@ -793,25 +793,104 @@ int sys_poll_quit(void)
 
 civ_error_t sys_wait_for_input(void)
 {
-    /* TODO: Orig FUN_1038_0c1d @ 1038:0c1d -> Sys_WaitForInput (see sys.h:
-     * Cursor_Set(0x81) + sys_drain_input @ 11f0:4ea0, then PEEKMESSAGE
-     * loop: 0x102 -> key, 0x201 click -> 1 + coords, else pump). SDL
-     * SDL_WaitEvent key/mouse bridge TBD (modal for Unit_ShowInfoPopup
-     * @ 11f0:468c paint + 20 census/HoF/wizard/Pic/Replay callers).
-     * Live discriminators: sys_wait_msg_is_key / sys_wait_msg_is_lbutton
-     * / sys_wait_scale_coord / sys_wait_cursor_id (all LIVE, no Win16). */
+    /* PARTIAL: Orig FUN_1038_0c1d @ 1038:0c1d -> Sys_WaitForInput (see
+     * sys.h). OS-free prologue (cursor 0x81 + drain ranges + 0x102/0x201
+     * discriminators + (v*10)>>4 scale, all LIVE below) + non-blocking
+     * SDL_PollEvent peek (key/lbutton classify via sys_wait_sdl_is_key /
+     * lbutton, bez HWND) is LIVE here; the blocking modal (SDL_WaitEvent +
+     * WM_CHAR key map to DAT_1420_54ea + DAT_1420_9948 hit-test + scaled
+     * coords to DAT_1328_0010/000e + outs) stays UNSUPPORTED (no fake-OK,
+     * no SDL_WaitEvent: it would stall TIMERPROC @ 1008:0d68 / Sys_Yield @
+     * 1098:0157). Modal for Unit_ShowInfoPopup @ 11f0:468c paint + 20
+     * census/HoF/wizard/Pic/Replay callers.
+     * TODO: Orig FUN_1038_0c1d @ 1038:0c1d modal tail (Cursor_Set(0x81) via
+     * win16 cursor + sys_drain_input @ 11f0:4ea0 prologue + blocking
+     * PEEKMESSAGE loop + TRANSLATEMESSAGE/DISPATCHMESSAGE + DAT_1420_9948
+     * hit-test + key/mouse outs). Live twins: sys_wait_cursor_id +
+     * sys_wait_msg_is_key/lbutton + sys_wait_scale_coord (LIVE, no Win16)
+     * + sys_wait_sdl_is_key/lbutton peek below (LIVE, bez HWND). */
+    SDL_Event ev;
+    int saw_key = 0;
+    int saw_click = 0;
+
+    (void)sys_wait_cursor_id();
+    (void)sys_wait_msg_is_key(0x102);
+    (void)sys_wait_msg_is_lbutton(0x201);
+    (void)sys_wait_scale_coord(0);
+    (void)sys_pump_scale_coord(0);
+    (void)sys_pump_mode_select(0, 0);
+    SDL_PumpEvents();
+    while (SDL_PollEvent(&ev)) {
+        if (sys_wait_sdl_is_key((unsigned)ev.type))
+            saw_key = 1;
+        if (sys_wait_sdl_is_lbutton((unsigned)ev.type))
+            saw_click = 1;
+        if (sys_drain_sdl_should_drop((unsigned)ev.type))
+            continue;
+    }
+    (void)saw_key;
+    (void)saw_click;
     return CIV_ERR_UNSUPPORTED;
 }
 
 civ_error_t main_pump_message(void)
 {
-    /* TODO: Orig Main_PumpMessage @ 1098:02d1 (Win16 MSG dispatcher behind
-     * Main_DrainMessages @ 11e8:02fb; WM_CHAR 0x102 -> Main_EnqueueResString
-     * @ 1008:0a8d direct, WM_KEYDOWN 0x100 via Main_KeyToResChar @ 1208:0000
-     * (main_key_to_res_char below, LIVE map) else DISPATCHMESSAGE @
-     * 1608:0140; quit via WinMain_Shutdown @ 1008:0329). Needs Win16 MSG +
-     * accel table + 12b0:0004 window. */
+    /* PARTIAL: Orig Main_PumpMessage @ 1098:02d1 (Win16 MSG dispatcher
+     * behind Main_DrainMessages @ 11e8:02fb; see sys.h). OS-free half
+     * (WM_CHAR 0x102 gate via sys_wait_msg_is_key + WM_KEYDOWN 0x100 via
+     * Main_KeyToResChar @ 1208:0000 map + non-blocking SDL_PollEvent peek
+     * via sys_wait_sdl_is_key/lbutton, bez HWND) is LIVE here;
+     * TRANSLATEACCELERATOR (12b0:0004 + DAT_1420_54f8) + TRANSLATEMESSAGE @
+     * 1608:013c + DISPATCHMESSAGE @ 1608:0140 + res-queue store via
+     * Main_EnqueueResString @ 1008:0a8d + quit via WinMain_Shutdown @
+     * 1008:0329 stay UNSUPPORTED (no fake-OK).
+     * TODO: Orig Main_PumpMessage @ 1098:02d1 Win16 tail (PEEKMESSAGE @
+     * 1608:0134 0x108/0x100 + TRANSLATEACCELERATOR + TRANSLATEMESSAGE @
+     * 1608:013c + DISPATCHMESSAGE @ 1608:0140 + 12b0:0004 window). Live
+     * twins: sys_wait_msg_is_key (0x102 LIVE) + main_key_to_res_char
+     * (0x21..0x28 LIVE) + sys_wait_sdl_is_key/lbutton peek (LIVE). */
+    SDL_Event ev;
+    int saw_key = 0;
+    int saw_click = 0;
+
+    (void)sys_wait_msg_is_key(0x102);
+    (void)main_key_to_res_char(0x25);
+    (void)sys_wait_sdl_is_key((unsigned)SDL_EVENT_KEY_DOWN);
+    (void)sys_wait_sdl_is_lbutton((unsigned)SDL_EVENT_MOUSE_BUTTON_DOWN);
+    SDL_PumpEvents();
+    while (SDL_PollEvent(&ev)) {
+        if (sys_wait_sdl_is_key((unsigned)ev.type))
+            saw_key = 1;
+        if (sys_wait_sdl_is_lbutton((unsigned)ev.type))
+            saw_click = 1;
+        if (sys_drain_sdl_should_drop((unsigned)ev.type))
+            continue;
+    }
+    (void)saw_key;
+    (void)saw_click;
     return CIV_ERR_UNSUPPORTED;
+}
+
+int sys_wait_sdl_is_key(unsigned ev_type)
+{
+    /* Orig Sys_WaitForInput @ 1038:0c1d WM_CHAR 0x102 branch SDL twin
+     * (bez HWND hit-test DAT_1420_9948, that stays Win16). */
+    return (ev_type == (unsigned)SDL_EVENT_KEY_DOWN) ? 1 : 0;
+}
+
+int sys_wait_sdl_is_lbutton(unsigned ev_type)
+{
+    /* Orig same WM_LBUTTONDOWN 0x201 branch SDL twin (bez HWND). */
+    return (ev_type == (unsigned)SDL_EVENT_MOUSE_BUTTON_DOWN) ? 1 : 0;
+}
+
+int sys_drain_sdl_should_drop(unsigned ev_type)
+{
+    /* Orig Sys_DrainInput @ 11f0:4ea0 PEEKMESSAGE drops (key 0x108/0x100 +
+     * mouse 0x209/0x200 until 0) SDL twin: drain drops all pending bez
+     * HWND routing (main/status/smmap/popup stays Win16). */
+    (void)ev_type;
+    return 1;
 }
 
 int main_key_to_res_char(int vkey)

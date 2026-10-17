@@ -56,7 +56,11 @@
 civ_error_t worldgen_generate_random(void);
 
 /* Preset load (param!=0 path: 64000B image + 1028:1d15/0a93 tail).
- * First step is WorldGen_CopyPreset @ 10b8:079d below. */
+ * First step is WorldGen_CopyPreset @ 10b8:079d below (LIVE memcpy);
+ * tail is Map_FillRect(0xa0,0,0xa0,200,0) + Map_LabelContinents @
+ * 1028:0a93 (both LIVE). Caller supplies the image (Art frame 0x89
+ * decode stays caller-side, see video.h); __far/HMEMCPY/GLOBALLOCK-0x600
+ * maps to map_buffer() offsets. NULL -> NOENT, len != 64000 -> RANGE. */
 civ_error_t worldgen_load_preset(const uint8_t *image, size_t len);
 
 /* Orig: FUN_1108_0243 @ 1108:0243 -> worldgen_load_earth (WorldGen_LoadEarth).

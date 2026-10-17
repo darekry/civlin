@@ -415,21 +415,48 @@ int sys_event_requests_quit(unsigned ev_type, int key);
  * FUN_1158_0000 / FUN_1170_21b3 / FUN_1178_0022 / FUN_1188_0b3e /
  * FUN_11b0_0000 / FUN_11d8_0000 / HoF_Show @ 1080:0119 /
  * HoF_VictoryCeremony @ 1080:06ff / NewGame_Wizard @ 10e8:0000 /
- * Pic_PlayShared @ 1030:0000 / Replay @ 1180:0000/02d3/152f. SDL event
- * bridge TBD (SDL_WaitEvent + mouse/key map); stub CIV_ERR_UNSUPPORTED.
- * No globals, no exit(). */
+ * Pic_PlayShared @ 1030:0000 / Replay @ 1180:0000/02d3/152f. PARTIAL:
+ * OS-free prologue (cursor id + drain ranges + msg discriminators +
+ * coord scale, all LIVE below) + non-blocking SDL_PollEvent peek (key /
+ * lbutton classify via sys_wait_sdl_is_key/lbutton, bez HWND) is LIVE;
+ * blocking modal (SDL_WaitEvent + WM_CHAR key map to DAT_1420_54ea +
+ * DAT_1420_9948 hit-test + scaled coords to DAT_1328_0010/000e + outs)
+ * stays CIV_ERR_UNSUPPORTED with TODO Orig in sys.c (no fake-OK, no
+ * SDL_WaitEvent: it would stall TIMERPROC @ 1008:0d68 / Sys_Yield @
+ * 1098:0157). No globals, no exit(). */
 civ_error_t sys_wait_for_input(void);
-/* Orig: Main_PumpMessage @ 1098:02d1 -> main_pump_message (STUB).
+/* Orig: Main_PumpMessage @ 1098:02d1 -> main_pump_message (PARTIAL).
  * Win16 MSG dispatcher behind Main_DrainMessages @ 11e8:02fb (drains
  * until 0): PEEKMESSAGE @ 1608:0134 (0x108/0x100) -> TRANSLATEACCELERATOR
  * -> TRANSLATEMESSAGE @ 1608:013c; WM_CHAR 0x102 -> Main_EnqueueResString
  * @ 1008:0a8d(wParam) direct; WM_KEYDOWN 0x100 -> Main_KeyToResChar @
  * 1208:0000 map then Enqueue; else DISPATCHMESSAGE @ 1608:0140; quit via
- * WinMain_Shutdown @ 1008:0329 when g_nQuitFlag == 1. Needs Win16 MSG +
- * accel table -> stub CIV_ERR_UNSUPPORTED. Distinct from sys_pump_messages
- * (Sys_PumpMessages @ 1108:0000, SDL_PumpEvents LIVE) and sys_yield
- * (Sys_Yield @ 1098:0157, anim pump). No globals, no exit(). */
+ * WinMain_Shutdown @ 1008:0329 when g_nQuitFlag == 1. PARTIAL: OS-free
+ * discriminators (sys_wait_msg_is_key 0x102 + main_key_to_res_char
+ * 0x21..0x28, both LIVE) + non-blocking SDL_PollEvent peek (key /
+ * lbutton via sys_wait_sdl_is_key/lbutton, bez HWND) is LIVE;
+ * TRANSLATEACCELERATOR + TRANSLATE/DISPATCH + 12b0:0004 window + res-queue
+ * store stay CIV_ERR_UNSUPPORTED with TODO Orig in sys.c. Distinct from
+ * sys_pump_messages (Sys_PumpMessages @ 1108:0000, SDL_PumpEvents LIVE)
+ * and sys_yield (Sys_Yield @ 1098:0157, anim pump). No globals, no exit(). */
 civ_error_t main_pump_message(void);
+/* Orig Sys_WaitForInput @ 1038:0c1d key path (WM_CHAR 0x102 -> key) SDL
+ * twin -> sys_wait_sdl_is_key. OS-free 1:1 on the SDL event type (no
+ * HWND, no hit-test): 1 when ev_type == SDL_EVENT_KEY_DOWN, else 0.
+ * Verified ref unpacked/civ.exe (0x102 branch). No SDL calls, no globals,
+ * no exit(). */
+int sys_wait_sdl_is_key(unsigned ev_type);
+/* Orig Sys_WaitForInput @ 1038:0c1d click path (WM_LBUTTONDOWN 0x201
+ * -> click) SDL twin -> sys_wait_sdl_is_lbutton. OS-free 1:1 (bez HWND
+ * hit-test DAT_1420_9948, that stays Win16): 1 when ev_type ==
+ * SDL_EVENT_MOUSE_BUTTON_DOWN, else 0. No SDL calls, no globals, no exit(). */
+int sys_wait_sdl_is_lbutton(unsigned ev_type);
+/* Orig Sys_DrainInput @ 11f0:4ea0 PEEKMESSAGE drops (key 0x108/0x100 +
+ * mouse 0x209/0x200, both drained until 0) SDL twin ->
+ * sys_drain_sdl_should_drop. OS-free 1:1 (bez HWND routing: main vs
+ * status vs smmap vs popup 9948 stays Win16): every pending SDL event is
+ * dropped, so 1 always. No SDL calls, no globals, no exit(). */
+int sys_drain_sdl_should_drop(unsigned ev_type);
 /* Orig: Main_KeyToResChar @ 1208:0000 -> main_key_to_res_char (LIVE).
  * VK 0x21..0x28 (PgUp/PgDn/End/Home/Left/Up/Right/Down) -> res id byte:
  * the low byte of the returned far pointer into the 1420:142c table

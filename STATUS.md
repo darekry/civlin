@@ -546,7 +546,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `unit_maybe_center_view` | STUB | 1110:1461, 11f0:030c, 11f0:44d4 | has TODO |
 | `unit_ai_player_turn` | LIVE | 1078:1480, 1078:4f0f, 1078:55d3, 1128:0000 |  |
 | `unit_reveal_area` | STUB | 11c0:0395, 11c0:12c8 | has TODO |
-| `sys_drain_input` | STUB | 1038:0c1d, 1108:0000, 11c0:0395, 11f0:0000, 11f0:06d2, 11f0:4ea0, 12b0:004c, 1420:1d44 | has TODO |
+| `sys_drain_input` | PARTIAL | 1038:0c1d, 1108:0000, 11c0:0395, 11f0:0000, 11f0:06d2, 11f0:4ea0, 12b0:004c, 1420:1d44 | has TODO |
 | `game_calc_progress_threshold` | LIVE | 1088:1d99 |  |
 | `unit_show_info_popup` | PARTIAL | 1098:0dda, 11f0:468c, 11f0:4754, 1218:0801, 1220:0156, 1420:62fc | has TODO |
 | `unit_popup_is_end_of_turn` | LIVE | 1000:36b2, 1018:067b, 1030:0000, 1038:0bba, 1038:0c1d, 1080:0119, 1098:0000, 1098:00b5, 1098:0dda, 1098:0e0b, 1098:1104, 10d0:0854, 10d0:09a2, 10d8:00e0, 10e8:0000, 1100:0a33, 1110:0ff6, 1110:16c0, 1110:199b, 1180:0000, 11c8:00c4, 11f0:468c, 11f0:4808, 11f0:4a76, 11f8:0080, 11f8:0278, 1218:0abf, 1420:1a3c, 1420:47dd, 1420:47e9, 1420:47f6, 1420:4803, 1420:480b, 1420:481d, 1420:482f, 1420:483c, 1420:4845 |  |
@@ -1400,8 +1400,11 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `sys_pump_messages` | LIVE | 10b0:0000, 1108:0000, 11c0:0ec2, 11e8:02fb, 1328:0012 |  |
 | `sys_event_requests_quit` | LIVE |  |  |
 | `sys_poll_quit` | LIVE | 1008:0304, 1088:0000, 1098:062f, 1220:0156, 12d8:24ee |  |
-| `sys_wait_for_input` | STUB | 1018:0380, 1018:067b, 1018:0be0, 1018:1d5b, 1018:208f, 1030:0000, 1038:0c1d, 1080:0119, 1080:06ff, 10e8:0000, 1180:0000, 11f0:468c, 11f0:4ea0 | has TODO |
-| `main_pump_message` | STUB | 1008:0329, 1008:0a8d, 1098:0157, 1098:02d1, 1108:0000, 11e8:02fb, 1208:0000, 1608:0134, 1608:013c, 1608:0140 | has TODO |
+| `sys_wait_for_input` | PARTIAL | 1008:0d68, 1018:0380, 1018:067b, 1018:0be0, 1018:1d5b, 1018:208f, 1030:0000, 1038:0c1d, 1080:0119, 1080:06ff, 1098:0157, 10e8:0000, 1180:0000, 11f0:468c, 11f0:4ea0 | has TODO |
+| `main_pump_message` | PARTIAL | 1008:0329, 1008:0a8d, 1098:0157, 1098:02d1, 1108:0000, 11e8:02fb, 1208:0000, 12b0:0004, 1608:0134, 1608:013c, 1608:0140 | has TODO |
+| `sys_wait_sdl_is_key` | LIVE | 1038:0c1d |  |
+| `sys_wait_sdl_is_lbutton` | LIVE | 1038:0c1d |  |
+| `sys_drain_sdl_should_drop` | LIVE | 11f0:4ea0 |  |
 | `main_key_to_res_char` | LIVE | 1098:02d1, 1208:0000, 1420:1400, 1420:142c |  |
 | `sys_get_client_rect` | STUB | 1000:137f, 1218:0956, 1218:0a06 | has TODO |
 | `sys_client_rect_is_valid` | LIVE | 1218:0956, 1218:0a06 |  |
@@ -1674,11 +1677,11 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `worldgen_dir_dx_at` | LIVE |  |  |
 | `worldgen_dir_dy_at` | LIVE |  |  |
 | `worldgen_generate_random` | LIVE | 1028:0000 |  |
-| `worldgen_load_preset` | STUB | 1028:0a93, 1028:1d15, 10b8:079d | has TODO |
+| `worldgen_load_preset` | LIVE | 1028:0000, 1028:0a93, 1028:1d15, 10b8:079d |  |
 | `worldgen_load_earth` | STUB | 1028:0a93, 1028:1d15, 10b8:079d, 10b8:0e00, 10e0:0000, 1100:03ff, 1108:0243, 11e0:0221, 1420:2e28, 1420:2e34 | has TODO |
 | `worldgen_dialog_id_to_cell` | LIVE | 10e0:0000, 1108:0243, 1420:2e28, 1420:2e34 |  |
 | `worldgen_custom_apply` | LIVE | 10e0:0000, 1100:03ff, 1108:0243, 1420:2e28, 1420:2e34 |  |
-| `worldgen_prepare_earth` | STUB | 1028:0000, 10b8:079d, 10e8:0000, 1108:01bc, 1108:0243, 1150:00c9, 11e0:0000, 12d8:44e2 | has TODO |
+| `worldgen_prepare_earth` | STUB | 10b8:079d, 10e8:0000, 1108:01bc, 1108:0243, 1150:00c9, 11e0:0000, 12d8:44e2 | has TODO |
 | `worldgen_prepare_mode` | LIVE | 1028:0000, 1108:01bc, 12d8:44e2 |  |
 | `worldgen_is_preset` | LIVE | 1028:0000 |  |
 | `worldgen_earth_frame` | LIVE | 1028:0000, 10b8:0aa8, 10b8:11bc |  |
