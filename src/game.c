@@ -355,9 +355,49 @@ civ_error_t game_update_power_rankings(const civ_power_state_t *states,
 
 civ_error_t game_update_status_panel(void)
 {
-    /* TODO: Game_UpdateStatusPanel @ 1088:13d5 (GfxPort blits, 1218:0956 /
-     * 0a06 frames, 11f8:0278 text, 1088:1a82/1dd0 rows, TEXTOUT x3,
-     * population milestone popup via 1220:00d2). */
+    /* Orig Game_UpdateStatusPanel @ 1088:13d5 dispatcher (body 1088:13d5-1a81;
+     * sole decompile this pass, ref unpacked/civ.exe 832512 B read-only,
+     * civ1win/ untouched; strings "00,000 citizens." @ 1420:172b +
+     * "Scientists alarmed..." @ 1420:1744 verified via strings).
+     * Regions in order: upper frame (WdwStatus_CalcUpperRect @ 1218:0956 +
+     * Status_DrawPanelFrame @ 11f8:0278 + tech-progress bar when DAT_12d8_38f0
+     * > 1) + Status_DrawTechIcons @ 1088:1a82 + lower frame
+     * (WdwStatus_CalcLowerRect @ 1218:0a06 + frame) + pop row
+     * (City_CalcPopTotal @ 11c8:0334 + TEXTOUT) + year row
+     * (Status_AppendYearText @ 1088:1dd0) + progress icon
+     * (game_status_progress_index 1:1) + pollution icons (42f0%4 + Clamp
+     * 42f0/4 1:1) + treasury row + milestone popup (Dialog_ShowMessage @
+     * 1220:00d2 1:1 gate). PARTIAL: OS-free milestone/pollution/progress
+     * gates below are LIVE 1:1 (wired for linkage, results ignored until
+     * city records + GDI land); GDI/dialog tails (Gfx_GetCurrentDC +
+     * GfxPort_SetActive @ 10d0:0956 + Text_DispatchFontHandler + SELECTOBJECT
+     * + SETBKMODE/SETTEXTALIGN + Text_GetFontHeight @ 1098:0dda +
+     * Text_SetColor @ 1098:0e0b + FILLRECT/GETSTOCKOBJECT/SETRECT + TEXTOUT
+     * x3 + Gfx_DrawTechIcon @ 11a8:0cb1 + GfxPort_PresentRect @ 10d0:0854 +
+     * GfxPort_ClearActive @ 10d0:09a2 + Gfx_StoreDC @ 1098:1104 +
+     * Dialog_ShowMessage @ 1220:00d2 modal) stay Win16.
+     * TODO: Orig Game_UpdateStatusPanel @ 1088:13d5 Win16 tail
+     * (WdwStatus_CalcUpperRect @ 1218:0956 / CalcLowerRect @ 1218:0a06 +
+     * Status_DrawPanelFrame @ 11f8:0278 + Status_DrawTechIcons @ 1088:1a82 +
+     * City_CalcPopTotal @ 11c8:0334 + Status_AppendYearText @ 1088:1dd0 +
+     * TEXTOUT x3 + Gfx_DrawTechIcon @ 11a8:0cb1 + treasury row +
+     * Dialog_ShowMessage @ 1220:00d2 milestone popup + GfxPort_PresentRect @
+     * 10d0:0854; SDL bridge via video.* / dialog.* modal TBD). */
+    (void)game_status_progress_index(0, 0, 0, 0, 0);
+    (void)game_status_pollution_icon(0);
+    (void)game_status_pollution_count(0);
+    (void)game_pollution_spread_due(0x11);
+    (void)game_pollution_alarm_due(0x0c, 7);
+    (void)game_status_milestone_due(0, 1, 0);
+    (void)city_calc_pop_total(NULL, NULL, NULL, 0, 0);
+    (void)city_format_pop_count(0, NULL, NULL, NULL, NULL, 0);
+    (void)game_append_year_text(0, NULL, 0);
+    (void)status_draw_tech_icons(0, 0, 0, 0);
+    (void)gfx_tech_icon_valid(0);
+    (void)status_tech_count_ok(0, 0);
+    (void)status_tech_height_ok(0, 0);
+    (void)status_lcg_pick(0u);
+    (void)status_lcg_next(0u);
     return CIV_ERR_UNSUPPORTED;
 }
 

@@ -239,7 +239,24 @@ civ_error_t game_update_power_rankings(const civ_power_state_t *states,
                                        int n_civs, int *scores_out,
                                        int *rank_out);
 
-/* Status bar redraw (Game_UpdateStatusPanel @ 1088:13d5). */
+/* Orig Game_UpdateStatusPanel @ 1088:13d5 (body 1088:13d5-1a81) ->
+ * game_update_status_panel. PARTIAL dispatcher: OS-free
+ * milestone/pollution/progress gates are LIVE 1:1 on explicit params (no
+ * globals, no Win16, read-only; game_status_progress_index @ 1088:1554,
+ * game_status_pollution_icon/count (42f0%4 + Clamp(42f0/4,0,3)),
+ * game_pollution_spread_due/alarm_due, game_status_milestone_due with the
+ * "00,000 citizens." @ 1420:172b tail; pop/year/tech-icon helpers
+ * city_calc_pop_total/city_format_pop_count/game_append_year_text/
+ * status_draw_tech_icons/gfx_tech_icon_valid/status_tech_count_ok/
+ * height_ok/status_lcg_pick/next wired in game.c, results ignored until
+ * city records + GDI land). GDI/dialog tails (Gfx_GetCurrentDC +
+ * GfxPort_SetActive @ 10d0:0956 + Text_DispatchFontHandler +
+ * Text_GetFontHeight @ 1098:0dda + Text_SetColor @ 1098:0e0b + frames via
+ * WdwStatus_CalcUpperRect @ 1218:0956 / CalcLowerRect @ 1218:0a06 +
+ * Status_DrawPanelFrame @ 11f8:0278 + TEXTOUT x3 + Gfx_DrawTechIcon @
+ * 11a8:0cb1 + GfxPort_PresentRect @ 10d0:0854 + Dialog_ShowMessage @
+ * 1220:00d2 milestone popup) stay CIV_ERR_UNSUPPORTED with TODO Orig in
+ * game.c (no fake-OK). Ref unpacked/civ.exe 832512 B read-only. */
 civ_error_t game_update_status_panel(void);
 
 /* Orig FUN_1088_1e32 @ 1088:1e32 head (12d8:42f0) ->

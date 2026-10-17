@@ -411,13 +411,28 @@ civ_error_t map_spot_city(int civ, int x, int y)
 civ_error_t text_draw_status_row(const char *str, const civ_rect_t *rect,
                                  int slot)
 {
-    (void)str;
-    (void)rect;
-    (void)slot;
-    /* TODO: Orig FUN_11f8_0278 @ 11f8:0278 (GDI TEXTOUT of the status
-     * row string into the 1218:0956/0a06 frame; slot selects the
-     * DAT_12d8_45f4/45fb source row + font). Needs the font/text
-     * SDL bridge. */
+    /* Orig Status_DrawPanelFrame @ 11f8:0278 (frame, not TEXTOUT) +
+     * TEXTOUT rows in Game_UpdateStatusPanel @ 1088:1479/1536 (upper +
+     * DAT_12d8_45f4 / lower + DAT_12d8_45fb via wdwstatus_calc_upper/
+     * lower @ 1218:0956/0a06). PARTIAL: OS-free arg guards LIVE below
+     * (explicit str/rect/slot, no Win16, no globals); GDI frame
+     * (FILLRECT via Gfx_MakeBrush @ 1098:00b5 + CREATEPEN white/black +
+     * MOVETO/LINETO border + SELECTOBJECT restore + DELETEOBJECT x3) +
+     * TEXTOUT -> SDL bridge TBD.
+     * Ref unpacked/civ.exe read-only (NE Win3.x, 832512 B): anchors
+     * 11f8:0278 + 1088:1479/1536 + 1218:0956/0a06.
+     * TODO: Orig FUN_11f8_0278 @ 11f8:0278 frame + Game_UpdateStatusPanel
+     * @ 1088:1479/1536 TEXTOUT SDL bridge (video.* GfxPort/Text_Draw*,
+     * font select via Text_DispatchFontHandler @ 11e8:0b40 +
+     * Text_GetFontHeight @ 1098:0dda); clip shape lives in
+     * text_status_row_needs_clip (LIVE, no fake). */
+    if (!str || !rect)
+        return CIV_ERR_NOENT;
+    if (rect->right <= rect->left || rect->bottom <= rect->top)
+        return CIV_ERR_RANGE;
+    if (slot < 0)
+        return CIV_ERR_RANGE;
+    (void)text_status_row_needs_clip(0, rect->right - rect->left);
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -513,31 +528,74 @@ civ_error_t text_draw_with_font(SDL_Window *win, SDL_Renderer *ren,
 
 civ_error_t status_format_main_row(char *dst, size_t cap)
 {
-    (void)dst;
-    (void)cap;
-    /* TODO: Orig FUN_1138_0000 @ 1138:0000 (Status_FormatMainRow: formats
-     * the main status line into 12d8:24fa via game_append_year_text @
-     * 1088:1dd0, then Text_DrawStatusRow @ 11f8:0278; needs GDI font /
-     * TEXTOUT SDL bridge). */
+    /* Orig Status_FormatMainRow @ 1138:0000 (newspaper front-page modal:
+     * dialog 0x94/0x61 via Dlg_CreateTracked @ 1098:124f + grid +
+     * headline switch Rng_Range(4) + 300-px short-form + FLASH +
+     * "10 cents" + January year via Status_AppendYearText @ 1088:1dd0 +
+     * 11d0:00e4 line; see map.h). PARTIAL: OS-free arg guards + gate
+     * wiring LIVE below (no Win16, no globals); GDI/dialog tail
+     * (Dlg_CreateTracked/GfxPort_Create + CREATEPEN/LINETO + Tech_Badge
+     * @ 1018:24c5 + Text_BuildWrappedList @ 1068:2072 + City_AppendName @
+     * 1038:0bba + Text_DrawCentered/Clipped @ 10d8:0528/01b0 +
+     * Sys_DrainInput/WaitForInput + Dlg_DestroyTracked/GfxPort_Close)
+     * TBD -> UNSUPPORTED.
+     * Ref unpacked/civ.exe read-only (NE Win3.x, 832512 B).
+     * TODO: Orig FUN_1138_0000 @ 1138:0000 dialog/SDL bridge (win16.* +
+     * video.* + dialog.* modal); Res strings 0x2fa2/Today/Times/Tribune +
+     * 0x2fcb/FLASH/cents/January live in civ1win RSC files (never faked). */
+    if (!dst)
+        return CIV_ERR_NOENT;
+    if (cap == 0)
+        return CIV_ERR_RANGE;
+    (void)status_headline_needs_short(0);
+    (void)status_main_needs_city_scan(0);
+    (void)status_main_is_cabinet(0);
+    (void)status_headline_needs_prefix(0);
+    (void)status_flash_is_flash(0);
+    (void)status_main_city_pick_ok(0, 0);
     return CIV_ERR_UNSUPPORTED;
 }
 
 civ_error_t status_format_second_row(char *dst, size_t cap)
 {
-    (void)dst;
-    (void)cap;
-    /* TODO: Orig FUN_11b0_0000 @ 11b0:0000 (Status_FormatSecondRow: second
-     * status line, second game_append_year_text caller; same 12d8:24fa +
-     * 11f8:0278 path as above). */
+    /* Orig FUN_11b0_0000 @ 11b0:0000 (city-view modal: dialog 0x94/0x41
+     * via Dlg_CreateTracked + Art_LoadFrameData + terrain/dots paint via
+     * FUN_11b0_115c/11bf/1227/1316/1653/1a5f/1fac/237c + header via
+     * City_AppendName @ 1038:0bba + Status_AppendYearText @ 1088:1dd0;
+     * see map.h). PARTIAL: OS-free arg guards + checksum gate wiring
+     * LIVE below; GDI/dialog tail TBD -> UNSUPPORTED.
+     * Ref unpacked/civ.exe read-only (NE Win3.x, 832512 B).
+     * TODO: Orig FUN_11b0_0000 @ 11b0:0000 dialog/SDL bridge (win16.* +
+     * video.* Art/GfxPort + dialog.* modal); unit/city records at
+     * 1420:5500/62fc stay caller-side (game.h). */
+    if (!dst)
+        return CIV_ERR_NOENT;
+    if (cap == 0)
+        return CIV_ERR_RANGE;
+    (void)status_second_name_checksum(NULL);
+    (void)status_second_name_checksum("");
     return CIV_ERR_UNSUPPORTED;
 }
 
 civ_error_t status_format_gold_row(char *dst, size_t cap)
 {
-    (void)dst;
-    (void)cap;
-    /* TODO: Orig FUN_11b8_14e5 @ 11b8:14e5 (Status_FormatGoldRow: gold/city
-     * row; same 12d8:24fa + 11f8:0278 path; field layout TBD). */
+    /* Orig FUN_11b8_14e5 @ 11b8:14e5 (city-founded modal: dialog
+     * 0x94/0x41 + Art_LoadFrame/Data + Palette_CopyRange + "founded" +
+     * Status_AppendYearText @ 1088:1dd0 + icon scroll via
+     * Gfx_ScrollPortCopy/Gfx_DrawTechIcon @ 10d8:03fa/11a8:0cb1 + tail
+     * FUN_11b0_0000(param, 0xfffd) when Main_DrainMessages @ 11e8:02fb
+     * == 0; see map.h). PARTIAL: OS-free arg guards + tail-gate wiring
+     * LIVE below; GDI/dialog tail TBD -> UNSUPPORTED.
+     * Ref unpacked/civ.exe read-only (NE Win3.x, 832512 B).
+     * TODO: Orig FUN_11b8_14e5 @ 11b8:14e5 dialog/SDL bridge (win16.* +
+     * video.* + dialog.* modal); Res "founded" @ 1420:41b0 lives in
+     * civ1win RSC files (never faked). */
+    if (!dst)
+        return CIV_ERR_NOENT;
+    if (cap == 0)
+        return CIV_ERR_RANGE;
+    (void)status_gold_needs_city_view(0);
+    (void)status_second_name_checksum(NULL);
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -1580,6 +1638,70 @@ int status_main_needs_city_scan(int param)
     /* Orig Status_FormatMainRow @ 1138:0000 city-scan: param < 0 (0xffff/-1/-2)
      * -> 0x80 scan (5502 != -1 + owner == player + (palace || param == -1)). */
     return (param < 0) ? 1 : 0;
+}
+
+int status_main_is_cabinet(int param)
+{
+    /* Orig Status_FormatMainRow @ 1138:0185: CMP param,-2 / JZ badge-x4
+     * (Census_DrawTechBadge @ 1018:24c5 "New Cabinet" @ 1420:2f96), else
+     * Rng_Range(3) grid lines 0x21 (1138:01a3 loop). Ref unpacked/civ.exe
+     * read-only (NE Win3.x, 832512 B). */
+    return (param == -2) ? 1 : 0;
+}
+
+int status_headline_needs_prefix(int variant)
+{
+    /* Orig Status_FormatMainRow @ 1138:03fe/041d: Rng_Range(4) switch
+     * (1138:03c0 CALL Rng_Range + 03c8 switch): cases 2/3 StrCopy prefix
+     * 0x2fb1/0x2fbd before City_AppendName @ 1038:0bba (Times/Tribune),
+     * cases 0/1 direct City_AppendName + 0x2fa2/Today append. */
+    return (variant == 2 || variant == 3) ? 1 : 0;
+}
+
+int status_flash_is_flash(int r)
+{
+    /* Orig Status_FormatMainRow @ 1138:04a7: Rng_Range(2) (1138:049e
+     * CALL) / OR AX,AX / JZ FLASH (0x2fd8) else 0x2fd1 (1138:04a9-04b3).
+     * Rng_Range(2) in {0,1} via (raw*2)>>0xf, see Rng_Range @ 11c8:003d. */
+    return (r == 0) ? 1 : 0;
+}
+
+int status_main_city_pick_ok(int has_palace, int param)
+{
+    /* Orig Status_FormatMainRow @ 1138:00df inner gate: TEST flags,1 /
+     * JNZ pick else CMP param,-1 / JNZ skip (1138:00e9-00ee): hit when
+     * (DAT_1420_54fc[city] & 1) != 0 (palace) or param == -1 (capital
+     * scan bypass). Outer valid+owner gates stay caller-side. */
+    if (has_palace != 0)
+        return 1;
+    return (param == -1) ? 1 : 0;
+}
+
+int status_gold_needs_city_view(int drain)
+{
+    /* Orig FUN_11b8_14e5 tail (city-founded modal): cVar1 =
+     * Main_DrainMessages @ 11e8:02fb; if (cVar1 == 0) FUN_11b0_0000(
+     * param, 0xfffd) city-view chain (11b8: ... CALL 11b0:0000), else
+     * return. Ref unpacked/civ.exe. */
+    return (drain == 0) ? 1 : 0;
+}
+
+unsigned status_second_name_checksum(const char *s)
+{
+    /* Orig FUN_11b0_0000 @ 11b0:0000 head: uVar2 = Util_StrLen(24fa);
+     * DAT_24fa = 0; City_AppendName; local_c = 0; while (len) local_c +=
+     * (char)24fa[i] (signed char add, wraps); Rng_Seed(local_c) before
+     * the terrain scatter (local_8/StepDist/Clamp loop). Unsigned sum
+     * preserves the byte-add shape; NULL -> 0 (orig faulted). */
+    unsigned sum = 0;
+
+    if (!s)
+        return 0;
+    while (*s != '\0') {
+        sum += (unsigned char)*s;
+        s++;
+    }
+    return sum;
 }
 
 /* --- Chain 2026-10-16 (map takeover): corridor/dir/scan/bits/center/seen/clip.

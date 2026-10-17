@@ -255,12 +255,18 @@ civ_error_t map_reveal_center(int civ, int x, int y);
  * CIV_ERR_UNSUPPORTED. No globals, no exit(), read-only. */
 civ_error_t map_spot_city(int civ, int x, int y);
 
-/* Orig: FUN_11f8_0278 @ 11f8:0278 -> Text_DrawStatusRow.
- * Status-panel text row called with the wdwstatus frame rects above
- * (upper @ 1088:1479 + DAT_12d8_45f4, lower @ 1088:1536 + DAT_12d8_45fb).
- * Params: NUL-terminated string, destination frame rect, slot selecting
- * the text row (which DAT_12d8_* source / font row). GDI TEXTOUT ->
- * SDL text render TBD. */
+/* Orig: FUN_11f8_0278 @ 11f8:0278 -> Status_DrawPanelFrame.
+ * Frame painter called with the wdwstatus rects above (upper @ 1088:1479
+ * + DAT_12d8_45f4, lower @ 1088:1536 + DAT_12d8_45fb; Ghidra name
+ * Status_DrawPanelFrame: FILLRECT via Gfx_MakeBrush + 2x CREATEPEN white/
+ * black + MOVETO/LINETO border + SELECTOBJECT restore + DELETEOBJECT x3;
+ * TEXTOUT rows live in Game_UpdateStatusPanel @ 1088:13d5 itself, not
+ * here). Params: NUL-terminated string (kept for the 1088:1479/1536 row
+ * contract; frame path ignores text), destination frame rect, slot
+ * selecting the DAT_12d8_45f4/45fb source row / font row. GDI frame +
+ * TEXTOUT -> SDL bridge TBD. Ref unpacked/civ.exe read-only (NE Win3.x,
+ * 832512 B): anchors 11f8:0278 + 1088:1479/1536. PARTIAL: rect/slot
+ * guards LIVE below, GDI tail UNSUPPORTED. */
 civ_error_t text_draw_status_row(const char *str, const civ_rect_t *rect,
                                  int slot);
 
@@ -289,28 +295,44 @@ civ_error_t text_draw_with_font(SDL_Window *win, SDL_Renderer *ren,
                                 const uint8_t *font_data, size_t font_len,
                                 const font_fnt_info_t *font_info);
 
-/* --- status-text rows (packet D 2026-10-15) ---
- * Row formatters write the NUL-terminated status line into the shared
- * 12d8:24fa line buffer (see game_append_year_text @ 1088:1dd0), then the
- * caller blits via Text_DrawStatusRow @ 11f8:0278 into the 1218:0956/0a06
- * frames. All three need the GDI font selection + TEXTOUT -> SDL text
- * bridge; stubs. */
-
-/* Orig: FUN_1138_0000 @ 1138:0000 -> Status_FormatMainRow.
- * Formats the main status line (caller of game_append_year_text @
- * 1088:1dd0 per game.h:104; year + progress text into 12d8:24fa).
+/* --- status-text rows (packet D 2026-10-15; takeover 2026-10-17) ---
+ * Row/modal formatters share the 12d8:24fa line buffer (see
+ * game_append_year_text @ 1088:1dd0), then blit via GDI (frame @
+ * 11f8:0278 + TEXTOUT in Game_UpdateStatusPanel @ 1088:13d5 / dialogs
+ * below). Ref unpacked/civ.exe read-only (NE Win3.x, 832512 B).
+ * True orig shapes (decompiled 2026-10-17, names already in Ghidra):
+ *   1138:0000 Status_FormatMainRow = newspaper front-page modal (dialog
+ *     0x94/0x61 via Dlg_CreateTracked @ 1098:124f + GfxPort_Create/
+ *     SetActive + grid CREATEPEN/LINETO + Tech_Badge @ 1018:24c5 x4 when
+ *     param == -2 else Rng_Range(3) line 0x21 + Text_BuildWrappedList @
+ *     1068:2072 + City_AppendName @ 1038:0bba headline switch Rng_Range(4)
+ *     + 300-px short-form + FLASH + 10 cents + January year via
+ *     Status_AppendYearText @ 1088:1dd0 + 11d0:00e4 line);
+ *   11b0:0000 city-view modal (dialog 0x94/0x41 via Dlg_CreateTracked +
+ *     Art_LoadFrameData + GfxPort_ApplyPalette + terrain/dots paint via
+ *     FUN_11b0_115c/11bf/1227/1316/1653/1a5f/1fac/237c + header via
+ *     City_AppendName + Status_AppendYearText + Text_DrawHeaderCentered);
+ *   11b8:14e5 city-founded modal (dialog 0x94/0x41 + Art_LoadFrame/Data +
+ *     Palette_CopyRange + "founded" + Status_AppendYearText + icon scroll
+ *     via Gfx_ScrollPortCopy/Gfx_DrawTechIcon + tail call to 11b0:0000
+ *     with 0xfffd when Main_DrainMessages == 0).
  * Orig writes the fixed 12d8:24fa buffer directly; explicit dst/cap
- * keeps the Linux side free of globals. */
+ * keeps the Linux side free of globals. PARTIAL: OS-free arg guards +
+ * gate wiring LIVE in map.c, GDI/dialog tails UNSUPPORTED + TODO Orig. */
+
+/* Orig: FUN_1138_0000 @ 1138:0000 -> Status_FormatMainRow (newspaper
+ * modal above; caller of game_append_year_text @ 1088:1dd0 + headline
+ * switch + short-form + FLASH + cents + year). */
 civ_error_t status_format_main_row(char *dst, size_t cap);
 
-/* Orig: FUN_11b0_0000 @ 11b0:0000 -> Status_FormatSecondRow.
- * Second status line (second game_append_year_text caller; same 12d8:24fa
- * buffer contract as above). Exact field layout TBD, see Ghidra. */
+/* Orig: FUN_11b0_0000 @ 11b0:0000 -> Status_FormatSecondRow (city-view
+ * modal above; second game_append_year_text caller family; same
+ * 12d8:24fa buffer contract). */
 civ_error_t status_format_second_row(char *dst, size_t cap);
 
-/* Orig: FUN_11b8_14e5 @ 11b8:14e5 -> Status_FormatGoldRow.
- * Gold/city row (third game_append_year_text caller family; same buffer).
- * Exact gold/city field layout TBD, see Ghidra. */
+/* Orig: FUN_11b8_14e5 @ 11b8:14e5 -> Status_FormatGoldRow (city-founded
+ * modal above; third game_append_year_text caller family; same buffer;
+ * tail chains into FUN_11b0_0000). */
 civ_error_t status_format_gold_row(char *dst, size_t cap);
 
 /* --- window opens / view refresh (stubs; Win16 windowing TBD) --- */
@@ -1130,6 +1152,41 @@ int status_headline_needs_short(int width);
 /* Orig city-scan (param < 0 -> 0x80 scan valid+owner+palace, -1 tez) ->
  * status_main_needs_city_scan. 1:1 param < 0. */
 int status_main_needs_city_scan(int param);
+
+/* Orig cabinet branch @ 1138:0185 (param == -2 -> New Cabinet badge x4
+ * via Census_DrawTechBadge @ 1018:24c5, else Rng_Range(3) grid lines
+ * 0x21) -> status_main_is_cabinet. 1:1 param == -2. Ref
+ * unpacked/civ.exe. No globals. */
+int status_main_is_cabinet(int param);
+
+/* Orig headline prefix @ 1138:03fe/041d (Rng_Range(4) switch: cases 2/3
+ * StrCopy prefix 0x2fb1/0x2fbd before City_AppendName @ 1038:0bba, cases
+ * 0/1 direct) -> status_headline_needs_prefix. 1:1 variant == 2 ||
+ * variant == 3 (variant is the Rng_Range(4) value 0..3). */
+int status_headline_needs_prefix(int variant);
+
+/* Orig FLASH branch @ 1138:04a7 (Rng_Range(2) == 0 -> "FLASH" @
+ * 1420:2fd8, else 0x2fd1) -> status_flash_is_flash. 1:1 r == 0 (r is
+ * the Rng_Range(2) value). */
+int status_flash_is_flash(int r);
+
+/* Orig city-pick palace gate @ 1138:00df (scan hit when (flags & 1) != 0
+ * || param == -1; flags is DAT_1420_54fc[city*7] bit0 palace) ->
+ * status_main_city_pick_ok. 1:1 has_palace || param == -1 (has_palace
+ * nonzero = palace present). */
+int status_main_city_pick_ok(int has_palace, int param);
+
+/* Orig founded tail @ 11b8:14e5 (Main_DrainMessages @ 11e8:02fb == 0 ->
+ * FUN_11b0_0000(param, 0xfffd) city-view chain, else return) ->
+ * status_gold_needs_city_view. 1:1 drain == 0. */
+int status_gold_needs_city_view(int drain);
+
+/* Orig city-name checksum @ 11b0:0000 head (sum of 12d8:24fa bytes into
+ * Rng_Seed @ 1000:1716 before the terrain scatter) ->
+ * status_second_name_checksum. 1:1 sum of (unsigned char) bytes; NULL
+ * -> 0 (orig faulted on a bad far pointer; Linux guard stays total).
+ * No globals. */
+unsigned status_second_name_checksum(const char *s);
 
 /* --- Chain 2026-10-16 (map takeover): corridor index/limit + dir inverse
  * + authoritative unit scan + occupancy bits + center origin + seen bit

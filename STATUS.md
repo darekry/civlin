@@ -529,7 +529,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `city_process_disaster` | PARTIAL | 1030:0000, 1040:068e, 1088:0000, 1110:03ae, 11c8:003d, 1220:00d2, 1420:07f0, 1420:3efe, 1420:54fc, 1420:5500, 1420:5502, 1420:5503 | has TODO |
 | `game_calc_power_score` | LIVE | 1088:108a |  |
 | `game_update_power_rankings` | LIVE | 1088:108a, 12a8:000c |  |
-| `game_update_status_panel` | STUB | 1088:13d5, 1088:1a82, 11f8:0278, 1218:0956, 1220:00d2 | has TODO |
+| `game_update_status_panel` | PARTIAL | 1088:13d5, 1088:1554, 1098:0dda, 1098:0e0b, 10d0:0854, 10d0:0956, 11a8:0cb1, 11f8:0278, 1218:0956, 1218:0a06, 1220:00d2, 1420:172b, 1420:1744 | has TODO |
 | `game_accum_pollution` | LIVE | 1028:1afd, 1088:1e32, 12d8:42f0 |  |
 | `game_do_pollution_and_wonder_race` | PARTIAL | 1028:1afd, 1088:1e32, 1170:3181, 12d8:42f0 | has TODO |
 | `game_pick_wonder_for_ai` | LIVE | 1088:1e32, 1170:05ca, 1170:3181 |  |
@@ -1030,11 +1030,11 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `map_resolve_direct` | LIVE | 1110:1c4b, 1128:0000 |  |
 | `map_reveal_center` | STUB | 1110:1461, 11f0:44d4 | has TODO |
 | `map_spot_city` | STUB | 1110:16ee, 1110:180e, 11c0:0000, 11c0:0395, 11c8:00c4, 1420:5500 | has TODO |
-| `text_draw_status_row` | STUB | 1088:1479, 1088:1536, 11f8:0278, 1218:0956 | has TODO |
+| `text_draw_status_row` | PARTIAL | 1088:13d5, 1088:1479, 1088:1536, 1098:00b5, 11f8:0278, 1218:0956 | has TODO |
 | `text_draw_with_font` | LIVE | 1008:0e99, 11f8:0278, 1218:0956 |  |
-| `status_format_main_row` | STUB | 1088:1dd0, 1138:0000, 11f8:0278, 12d8:24fa | has TODO |
-| `status_format_second_row` | STUB | 11b0:0000, 11f8:0278, 12d8:24fa | has TODO |
-| `status_format_gold_row` | STUB | 11b8:14e5, 11f8:0278, 12d8:24fa | has TODO |
+| `status_format_main_row` | PARTIAL | 1088:1dd0, 1098:124f, 1138:0000, 11d0:00e4 | has TODO |
+| `status_format_second_row` | PARTIAL | 1038:0bba, 1088:1dd0, 11b0:0000, 12d8:24fa | has TODO |
+| `status_format_gold_row` | PARTIAL | 1088:1dd0, 10d8:03fa, 11a8:0cb1, 11b8:14e5, 11e8:02fb | has TODO |
 | `map_open_main` | STUB | 1208:0af1 | has TODO |
 | `map_open_small` | STUB | 1210:025b | has TODO |
 | `map_open_status` | STUB | 1088:13d5, 1218:0386, 1218:0801 | has TODO |
@@ -1118,6 +1118,12 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `path_route_needs_fallback` | LIVE | 1128:081c |  |
 | `status_headline_needs_short` | LIVE | 1038:0bba, 1068:0958, 1138:0000 |  |
 | `status_main_needs_city_scan` | LIVE | 1138:0000 |  |
+| `status_main_is_cabinet` | LIVE | 1018:24c5, 1138:0185, 1138:01a3, 1420:2f96 |  |
+| `status_headline_needs_prefix` | LIVE | 1038:0bba, 1138:03c0, 1138:03fe |  |
+| `status_flash_is_flash` | LIVE | 1138:049e, 1138:04a7, 1138:04a9, 11c8:003d, 1420:2fd8 |  |
+| `status_main_city_pick_ok` | LIVE | 1138:00df, 1138:00e9 |  |
+| `status_gold_needs_city_view` | LIVE | 11b0:0000, 11b8:14e5, 11e8:02fb |  |
+| `status_second_name_checksum` | LIVE | 1000:1716, 11b0:0000, 12d8:24fa |  |
 | `path_corridor_visited_idx` | LIVE | 1128:10de |  |
 | `path_corridor_iter_limit` | LIVE | 1128:10de |  |
 | `map_dir_to_dxdy` | LIVE | 1110:1c4b |  |
