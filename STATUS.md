@@ -154,7 +154,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `font_fnt_glyph_len` | LIVE | 1008:0e99 |  |
 | `menu_strings_count` | LIVE | 1048:0000, 1420:435b, 14b0:0010, 14b0:0092, 14d0:0028 |  |
 | `menu_string_at` | LIVE |  |  |
-| `config_load_prefs` | STUB | 1008:0b4a, 12d0:0064, 1420:010b | has TODO |
+| `config_load_prefs` | LIVE | 1008:0b4a, 12d0:0064, 1420:010b |  |
 | `config_save_prefs` | STUB | 1000:116a, 1000:1184, 1008:0bbf, 1420:0113 | has TODO |
 | `boot_run` | LIVE | 1008:0000, 1008:0e99, 1088:0000, 1098:06f8, 11e8:0000 |  |
 | `boot_shutdown` | LIVE | 1008:0329, 1008:0d68, 12d8:28fa, 12d8:460e |  |
@@ -331,12 +331,15 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `main_enqueue_res_string` | LIVE | 1008:0a8d, 1420:4473 |  |
 | `dialog_res_list_spec` | LIVE | 1068:0295 |  |
 | `main_res_queue_full` | LIVE | 1008:0a8d, 1008:0add, 1098:02d1, 11f0:4ea0 |  |
-| `dialog_init_res_string_tables` | STUB | 1068:0295, 1098:1f4f | has TODO |
+| `dialog_res_heap_size` | LIVE | 1068:0295, 1098:1f4f |  |
+| `dialog_res_list_count` | LIVE | 1068:0295, 1098:1f4f, 1100:078a |  |
+| `text_res_list_fits` | LIVE | 1068:0295 |  |
+| `dialog_init_res_string_tables` | PARTIAL | 1068:0295, 1098:1f4f, 1100:0053 | has TODO |
 | `main_show_res_string` | STUB | 1008:0a8d, 1008:0add, 1100:078a | has TODO |
 | `text_dlg_string_source` | LIVE | 1098:2796, 1100:078a, 1100:0947 |  |
 | `text_set_dlg_item_text` | PARTIAL | 1098:2796, 1100:0000, 1100:0053, 1100:0947 | has TODO |
 | `text_draw_dlg_item_string` | PARTIAL | 1000:36b2, 1098:2796, 10f0:0066, 1100:0000, 1100:03ff, 1100:078a, 1100:0947 | has TODO |
-| `text_fill_res_string_list` | STUB | 1068:0295, 1098:1f4f, 1100:0053, 1100:078a | has TODO |
+| `text_fill_res_string_list` | PARTIAL | 1068:0295, 1098:1f4f, 1100:0053, 1100:078a | has TODO |
 | `diplo_contact_flags` | LIVE | 1168:0a07, 1168:0dda |  |
 | `diplo_is_peace` | LIVE | 1168:0a07 |  |
 | `diplo_is_contact` | LIVE |  |  |

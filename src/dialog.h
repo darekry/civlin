@@ -979,6 +979,8 @@ civ_error_t dialog_show_message(const char *text, int *out_choice);
 #define CIV_RES_UNIT_LIST 0x86
 /* Main_EnqueueResString @ 1008:0a8d ring cap (DAT_12b0_004c < 10). */
 #define CIV_RES_QUEUE_MAX 10
+/* Dialog_InitResStringTables @ 1068:0295 heap (mem_alloc_lock 0x7fff). */
+#define CIV_RES_HEAP_SIZE 0x7fff
 
 /* Orig Text_FillResStringList @ 1098:1f4f cursor half ->
  * text_res_list_advance. 1:1 pointer-pack step (*out_ptrs += 4,
@@ -1041,11 +1043,34 @@ civ_error_t dialog_res_list_spec(int index, int *res_id, int *first,
 int main_res_queue_full(size_t count);
 
 /* Orig Dialog_InitResStringTables @ 1068:0295 -> dialog_init_res_string_tables.
- * Table fill driver (spec via dialog_res_list_spec above + pack via
- * text_fill_res_string_list). Needs mem_alloc_lock 0x7fff heap + live
- * ResMgr blobs (see rsc_loader.h res_get_string_copy STUB) + the
- * FUN_1098_1909 dialog-show tail -> STUB. index 0 = all five tables. */
+ * PARTIAL dispatcher: OS-free spec/heap/count/pack-cap gates LIVE 1:1
+ * (dialog_res_list_spec + dialog_res_heap_size + dialog_res_list_count +
+ * text_res_list_advance/is_stop/fits + text_pack_pascal/payload +
+ * util_pascal_to_c @ 1100:0053/0000/00a1, probed in dialog.c); the
+ * mem_alloc_lock 0x7fff heap store + live ResMgr blobs (see rsc_loader.h
+ * res_get_string_copy STUB) + DAT_1288_* table store + the FUN_1098_1909
+ * dialog-show tail stay STUB (CIV_ERR_UNSUPPORTED, never fake CIV_OK).
+ * index 0 = all five tables, 1..5 = one table via the spec above. */
 civ_error_t dialog_init_res_string_tables(int index);
+
+/* Orig Dialog_InitResStringTables @ 1068:0295 heap half (mem_alloc_lock
+ * 0x7fff before the Text_FillResStringList x5 pack) -> dialog_res_heap_size.
+ * 1:1 0x7fff (CIV_RES_HEAP_SIZE). No Win16, no globals. */
+int dialog_res_heap_size(void);
+
+/* Orig Text_FillResStringList @ 1098:1f4f range half (first..last ids via
+ * ResMgr_GetString @ 1100:078a per id; Dialog_InitResStringTables @
+ * 1068:0295 specs e.g. 1..0x43 / 2..999) -> dialog_res_list_count.
+ * 1:1 last - first + 1, 0 when last < first (empty/inverted, caller maps
+ * to RANGE like text_fill_res_string_list below). No Win16, no globals. */
+int dialog_res_list_count(int first, int last);
+
+/* Orig same cursor+heap-cap half (*out_ptrs pack + cursor += len+1 vs the
+ * 0x7fff heap from Dialog_InitResStringTables @ 1068:0295) ->
+ * text_res_list_fits. 1:1 nonzero (1) when the text_res_list_advance step
+ * from cur_off by entry_len fits in cap (next <= cap), 0 otherwise
+ * (incl. advance RANGE). No Win16, no globals. */
+int text_res_list_fits(size_t cur_off, size_t entry_len, size_t cap);
 
 /* Orig Main_ShowResString @ 1008:0add -> main_show_res_string.
  * Per-string producer (ResMgr_GetString @ 1100:078a fetch + enqueue via
@@ -1079,9 +1104,13 @@ civ_error_t text_draw_dlg_item_string(int dlg_id, int item_id, int res_id,
                                       long fallback);
 
 /* Orig Text_FillResStringList @ 1098:1f4f -> text_fill_res_string_list.
- * Pack loop (ResMgr_GetString per id + PascalToC + LSTRLEN empty-stop +
- * cursor pack via text_res_list_advance above). Needs live ResMgr blobs
- * (see rsc_loader.h res_get_string_copy STUB) -> STUB. */
+ * PARTIAL dispatcher: OS-free pack/unpack + cap gates LIVE 1:1
+ * (text_res_list_advance/is_stop/fits + dialog_res_heap_size/count +
+ * text_pack_pascal/payload + util_pascal_to_c @ 1100:0053/0000/00a1,
+ * probed in dialog.c); the ResMgr_GetString @ 1100:078a per-id fetch
+ * (see rsc_loader.h res_get_string_copy STUB) + caller heap store stay
+ * STUB (CIV_ERR_UNSUPPORTED, never fake CIV_OK; sole caller
+ * Dialog_InitResStringTables @ 1068:0295). RANGE when last < first. */
 civ_error_t text_fill_res_string_list(int res_id, int first, int last);
 
 /* --- Chain 2026-10-16 (6): diplo turn tick + government rules (task goals 1/2) ---

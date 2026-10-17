@@ -658,9 +658,13 @@ int menu_strings_count(void);
 const char *menu_string_at(int index);
 
 /* Orig: FUN_1008_0b4a @ 1008:0b4a -> config_load_prefs (Config_LoadPrefs).
- * _LOPEN (OF_READ) + _LREAD of CIV_PREFS_FILE from the base path, then
- * option-struct fill with built-in defaults when missing/short. Prefs
- * field map not yet decoded; stub. Read-only: never creates civ.prf. */
+ * OS-free defaults half LIVE 1:1 (ref unpacked/civ.exe read-only 832512 B,
+ * "civ.prf" @ file 0xb710b/0xb7113 = 1420:010b/0113): defaults DAT_1420_17ca
+ * -> g_nOptionFlags @ 12d0:0064 (sounds on, see config_prefs_defaults);
+ * missing/short file keeps the defaults (success path -> CIV_OK). Full
+ * 26 B image shape LIVE in config_prefs_unpack; Win16 _LOPEN/_LREAD/_LCLOSE
+ * file-handle tail TBD (see boot.c TODO Orig). Read-only: never creates
+ * civ.prf. No globals, no exit(). */
 civ_error_t config_load_prefs(void);
 
 /* Orig: FUN_1008_0bbf @ 1008:0bbf -> config_save_prefs (Config_SavePrefs).
@@ -776,7 +780,8 @@ civ_error_t main_run_startup_sequence(void);
  * DAT_1228:0104, see audio.h audio_play_id + game.h); remaining civ.prf
  * field map TBD from the dump, so the struct carries only the decoded
  * flags word. OS-free 1:1; file I/O tail stays stubbed (config_load_prefs
- * / config_save_prefs above remain CIV_ERR_UNSUPPORTED, read-only). */
+ * above is LIVE on the defaults half only, config_save_prefs remains
+ * CIV_ERR_UNSUPPORTED, read-only). */
 #define CIV_PREFS_FLAG_SOUNDS_ON 0x10u /* g_nOptionFlags bit: sounds on */
 
 typedef struct civ_prefs {

@@ -82,12 +82,12 @@ civ_error_t boot_maybe_convert_artwork(void)
 
 civ_error_t boot_load_prefs(void)
 {
-    /* WinMain prefs step: Config_LoadPrefs @ 1008:0b4a (see boot.h).
-     * Linux: built-in defaults (config_prefs_defaults, sounds on); civ.prf
-     * file I/O stays in config_load_prefs STUB (read-only, never creates).
-     * Boot proceeds on defaults -> CIV_OK. */
-    (void)config_prefs_defaults();
-    return CIV_OK;
+    /* WinMain prefs step delegating to Orig FUN_1008_0b4a @ 1008:0b4a ->
+     * Config_LoadPrefs (below). Linux: built-in defaults (sounds on via
+     * config_prefs_defaults); civ.prf file I/O tail stays in
+     * config_load_prefs (read-only, never creates). Boot proceeds on
+     * defaults -> CIV_OK. */
+    return config_load_prefs();
 }
 
 civ_error_t boot_init_palette(void)
@@ -971,13 +971,25 @@ const char *menu_string_at(int index)
 
 civ_error_t config_load_prefs(void)
 {
-    /* TODO: Orig FUN_1008_0b4a @ 1008:0b4a -> Config_LoadPrefs. _LOPEN
-     * (OF_READ) "civ.prf" @ 1420:010b + _LREAD 0x1a do DAT_1420_17b2 +
-     * _LCLOSE + flags 17ca -> g_nOptionFlags @ 12d0:0064 (brak pliku =
-     * defaults). Format 26 B LIVE w config_prefs_unpack (chunki
-     * 485a/48fa/4964 + flags); Win16 file-handle mostek TBD.
-     * Read-only: never creates civ.prf. */
-    return CIV_ERR_UNSUPPORTED;
+    /* Orig FUN_1008_0b4a @ 1008:0b4a -> Config_LoadPrefs. OS-free defaults
+     * half LIVE 1:1 (ref unpacked/civ.exe read-only NE Win3.x 832512 B,
+     * strings "civ.prf" @ file 0xb710b/0xb7113 = 1420:010b/0113): orig
+     * fills DAT_1420_17ca -> g_nOptionFlags @ 12d0:0064 with built-in
+     * defaults first (sounds on, see config_prefs_defaults), then tries
+     * _LOPEN (OF_READ) + _LREAD 0x1a into DAT_1420_17b2 + _LCLOSE;
+     * missing/short file keeps the defaults and still succeeds, so the
+     * defaults path below is the success path -> CIV_OK. Full 26 B image
+     * shape LIVE in config_prefs_unpack (chunks 485a/48fa/4964 + flags).
+     * TODO: Orig FUN_1008_0b4a @ 1008:0b4a Win16 file-handle tail (_LOPEN/
+     * _LREAD/_LCLOSE via win16.* stdio bridge TBD; would return
+     * CIV_ERR_UNSUPPORTED on I/O failure once wired).
+     * Read-only: never creates civ.prf. No globals, no exit(). */
+    civ_prefs_t prefs;
+
+    prefs = config_prefs_defaults();
+    if (!config_prefs_sounds_on(&prefs))
+        return CIV_ERR_BAD_DATA;
+    return CIV_OK;
 }
 
 civ_error_t config_save_prefs(void)

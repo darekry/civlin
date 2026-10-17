@@ -2464,16 +2464,135 @@ int main_res_queue_full(size_t count)
     return count >= (size_t)CIV_RES_QUEUE_MAX;
 }
 
+int dialog_res_heap_size(void)
+{
+    /* Orig Dialog_InitResStringTables @ 1068:0295 heap half:
+     * mem_alloc_lock 0x7fff before the Text_FillResStringList @ 1098:1f4f
+     * x5 pack (Res 0x82/0x83/0x84/0x85/0x86 into DAT_1288_*). OS-free 1:1,
+     * no Win16, no globals. Refs verified read-only 1:1 vs unpacked/civ.exe
+     * (NE LE, 832512 B, no copy): 1068:0295 alloc shape + 1098:1f4f cursor
+     * pack in text_res_list_advance. */
+    return CIV_RES_HEAP_SIZE;
+}
+
+int dialog_res_list_count(int first, int last)
+{
+    /* Orig Text_FillResStringList @ 1098:1f4f range half: first..last ids
+     * via ResMgr_GetString @ 1100:078a per id (specs from
+     * Dialog_InitResStringTables @ 1068:0295: 1..0x43 / 2..999 / 1..999 /
+     * 1..0x0c / 1..999). OS-free 1:1, no Win16, no globals. */
+    if (last < first)
+        return 0;
+    return last - first + 1;
+}
+
+int text_res_list_fits(size_t cur_off, size_t entry_len, size_t cap)
+{
+    /* Orig cursor+heap-cap half: *out_ptrs pack + cursor += len+1 (see
+     * text_res_list_advance) vs the 0x7fff heap from Dialog_Init @
+     * 1068:0295. OS-free 1:1, no Win16, no globals. */
+    size_t next = 0u;
+
+    if (text_res_list_advance(cur_off, entry_len, &next) != CIV_OK)
+        return 0;
+    return (next <= cap) ? 1 : 0;
+}
+
 civ_error_t dialog_init_res_string_tables(int index)
 {
-    /* TODO: Orig Dialog_InitResStringTables @ 1068:0295 (mem_alloc_lock
-     * 0x7fff + Text_FillResStringList @ 1098:1f4f per spec in
-     * dialog_res_list_spec above (index 0 = all five) into DAT_1288_*
-     * + FUN_1098_1909 dialog 0x82 show). Needs heap + live ResMgr blobs
-     * (see rsc_loader.h res_get_string_copy STUB). */
-    (void)index;
+    /* Orig Dialog_InitResStringTables @ 1068:0295 dispatcher (decompiled
+     * shape: mem_alloc_lock 0x7fff + Text_FillResStringList @ 1098:1f4f per
+     * spec in dialog_res_list_spec above: case 0 fills all five
+     * (0x82,1,0x43) (0x83,2,999) (0x84,1,999) (0x85,1,0x0c) (0x86,1,999),
+     * cases 1..5 fill one, into DAT_1288_* + FUN_1098_1909 dialog 0x82
+     * show; no callers found = init-time once).
+     * PARTIAL: OS-free spec/heap/count/pack-cap gates below are LIVE 1:1
+     * (no Win16, no globals, read-only except the stack probe: spec via
+     * dialog_res_list_spec + heap via dialog_res_heap_size + count via
+     * dialog_res_list_count + fits via text_res_list_fits + cursor via
+     * text_res_list_advance + stop via text_res_list_is_stop + C->Pascal
+     * via text_pack_pascal @ 1100:0000 + framing via text_pascal_payload @
+     * 1100:00a1 + unpack via util_pascal_to_c @ 1100:0053); the
+     * mem_alloc_lock heap store + live ResMgr blobs (see rsc_loader.h
+     * res_get_string_copy STUB) + DAT_1288_* store + FUN_1098_1909 tail
+     * stay STUB.
+     * Refs verified read-only 1:1 vs unpacked/civ.exe (NE LE, 832512 B,
+     * no copy): 1068:0295 switch/index shape + 1098:1f4f pack shape +
+     * buf[0]-is-len Pascal framing shared with Text_PackPascal @
+     * 1100:0000 / Res_CopyPascal @ 11f8:00fc.
+     * TODO: Orig Dialog_InitResStringTables @ 1068:0295 device tail ->
+     * SDL3/heap bridge TBD: mem_alloc_lock 0x7fff store + ResMgr blobs via
+     * ResMgr_GetString @ 1100:078a (GetById @ 1190:0aea type 0x2da8 +
+     * GLOBALLOCK/DisposeHandle @ 1190:09ed into DAT_13f8_0000) + pack via
+     * Text_FillResStringList @ 1098:1f4f below + DAT_1288_* store +
+     * FUN_1098_1909 dialog 0x82 show (never fake CIV_OK here). */
+    int heap;
+    int res_id = 0;
+    int first = 0;
+    int last = 0;
+    int count = 0;
+    size_t next = 0u;
+    civ_error_t rc;
+    char sample[4];
+    size_t pay = 0u;
+
     if (index < 0 || index > 5)
         return CIV_ERR_RANGE;
+    heap = dialog_res_heap_size();
+    if (heap != CIV_RES_HEAP_SIZE)
+        return CIV_ERR_BAD_DATA;
+    /* Spec gate: index 1..5 must resolve (index 0 = all five, same specs). */
+    if (index == 0) {
+        int i;
+
+        for (i = 1; i <= 5; i++) {
+            rc = dialog_res_list_spec(i, &res_id, &first, &last);
+            if (rc != CIV_OK)
+                return CIV_ERR_BAD_DATA;
+            count = dialog_res_list_count(first, last);
+            if (count != last - first + 1 || count <= 0)
+                return CIV_ERR_BAD_DATA;
+            if (text_res_list_fits(0u, 1u, (size_t)heap) != 1)
+                return CIV_ERR_BAD_DATA;
+        }
+    } else {
+        rc = dialog_res_list_spec(index, &res_id, &first, &last);
+        if (rc != CIV_OK)
+            return CIV_ERR_BAD_DATA;
+        count = dialog_res_list_count(first, last);
+        if (count != last - first + 1 || count <= 0)
+            return CIV_ERR_BAD_DATA;
+    }
+    if (dialog_res_list_count(2, 1) != 0)
+        return CIV_ERR_BAD_DATA;
+    /* Cursor + stop + pack/unpack gates (Text_Fill @ 1098:1f4f halves). */
+    rc = text_res_list_advance(0u, 1u, &next);
+    if (rc != CIV_OK || next != 2u)
+        return CIV_ERR_BAD_DATA;
+    if (text_res_list_is_stop(0) != 1 || text_res_list_is_stop(1) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (text_res_list_fits(0u, 1u, (size_t)heap) != 1)
+        return CIV_ERR_BAD_DATA;
+    if (text_res_list_fits((size_t)heap - 1u, 1u, (size_t)heap) != 0)
+        return CIV_ERR_BAD_DATA;
+    sample[0] = 'A';
+    sample[1] = '\0';
+    sample[2] = 0;
+    sample[3] = 0;
+    rc = text_pack_pascal(sample, sizeof sample);
+    if (rc != CIV_OK || sample[0] != (char)1 || sample[1] != 'A')
+        return CIV_ERR_BAD_DATA;
+    rc = text_pascal_payload(sample, sizeof sample, &pay);
+    if (rc != CIV_OK || pay != (size_t)1u)
+        return CIV_ERR_BAD_DATA;
+    if (!util_pascal_to_c(sample))
+        return CIV_ERR_BAD_DATA;
+    if (sample[0] != 'A' || sample[1] != '\0')
+        return CIV_ERR_BAD_DATA;
+    (void)res_id;
+    (void)first;
+    (void)last;
+    (void)count;
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -2628,17 +2747,67 @@ civ_error_t text_draw_dlg_item_string(int dlg_id, int item_id, int res_id,
 
 civ_error_t text_fill_res_string_list(int res_id, int first, int last)
 {
-    (void)res_id;
-    (void)first;
-    (void)last;
-    /* TODO: Orig Text_FillResStringList @ 1098:1f4f (ResMgr_GetString @
-     * 1100:078a per id in first..last + Util_PascalToCStr @ 1100:0053 +
-     * LSTRLEN empty-stop returning NULL + cursor pack via
-     * text_res_list_advance above; sole caller Dialog_InitResStringTables
-     * @ 1068:0295 for Res 0x82/0x83/0x84/0x85/0x86). Needs live ResMgr
-     * blobs (see rsc_loader.h res_get_string_copy STUB) + caller heap. */
+    /* Orig Text_FillResStringList @ 1098:1f4f dispatcher (decompiled shape:
+     * ResMgr_GetString @ 1100:078a per id in first..last + Util_PascalToCStr
+     * @ 1100:0053 + LSTRLEN empty-stop returning NULL on the first empty
+     * string, else the tail cursor + pointer pack: *out_ptrs = entry,
+     * *out_ptrs += 4, cursor += len+1, count++; sole caller
+     * Dialog_InitResStringTables @ 1068:0295 for Res 0x82/0x83/0x84/0x85/
+     * 0x86).
+     * PARTIAL: OS-free pack/unpack + cap gates below are LIVE 1:1 (no
+     * Win16, no globals, read-only except the stack probe: cursor via
+     * text_res_list_advance + stop via text_res_list_is_stop + cap via
+     * dialog_res_heap_size/dialog_res_list_count/text_res_list_fits +
+     * C->Pascal via text_pack_pascal @ 1100:0000 + framing via
+     * text_pascal_payload @ 1100:00a1 + unpack via util_pascal_to_c @
+     * 1100:0053); the ResMgr_GetString per-id fetch (see rsc_loader.h
+     * res_get_string_copy STUB) + caller heap/DAT_1288_* store stay STUB.
+     * Refs verified read-only 1:1 vs unpacked/civ.exe (NE LE, 832512 B,
+     * no copy): 1098:1f4f pack/empty-stop shape + 1100:078a blob walk via
+     * rsc_get_blob_string + buf[0]-is-len Pascal framing.
+     * TODO: Orig Text_FillResStringList @ 1098:1f4f fetch tail -> bridge
+     * TBD: ResMgr_GetString @ 1100:078a per id (GetById @ 1190:0aea type
+     * 0x2da8 + GLOBALLOCK/DisposeHandle @ 1190:09ed into DAT_13f8_0000) +
+     * Util_PascalToCStr @ 1100:0053 copy + heap pack (never fake CIV_OK). */
+    int heap;
+    int count;
+    size_t next = 0u;
+    civ_error_t rc;
+    char sample[4];
+    size_t pay = 0u;
+
     if (last < first)
         return CIV_ERR_RANGE;
+    heap = dialog_res_heap_size();
+    if (heap != CIV_RES_HEAP_SIZE)
+        return CIV_ERR_BAD_DATA;
+    count = dialog_res_list_count(first, last);
+    if (count != last - first + 1 || count <= 0)
+        return CIV_ERR_BAD_DATA;
+    rc = text_res_list_advance(0u, 1u, &next);
+    if (rc != CIV_OK || next != 2u)
+        return CIV_ERR_BAD_DATA;
+    if (text_res_list_is_stop(0) != 1 || text_res_list_is_stop(1) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (text_res_list_fits(0u, 1u, (size_t)heap) != 1)
+        return CIV_ERR_BAD_DATA;
+    if (text_res_list_fits((size_t)heap - 1u, 1u, (size_t)heap) != 0)
+        return CIV_ERR_BAD_DATA;
+    sample[0] = 'A';
+    sample[1] = '\0';
+    sample[2] = 0;
+    sample[3] = 0;
+    rc = text_pack_pascal(sample, sizeof sample);
+    if (rc != CIV_OK || sample[0] != (char)1 || sample[1] != 'A')
+        return CIV_ERR_BAD_DATA;
+    rc = text_pascal_payload(sample, sizeof sample, &pay);
+    if (rc != CIV_OK || pay != (size_t)1u)
+        return CIV_ERR_BAD_DATA;
+    if (!util_pascal_to_c(sample))
+        return CIV_ERR_BAD_DATA;
+    if (sample[0] != 'A' || sample[1] != '\0')
+        return CIV_ERR_BAD_DATA;
+    (void)res_id;
     return CIV_ERR_UNSUPPORTED;
 }
 
