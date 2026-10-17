@@ -1406,8 +1406,11 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `sys_wait_sdl_is_lbutton` | LIVE | 1038:0c1d |  |
 | `sys_drain_sdl_should_drop` | LIVE | 11f0:4ea0 |  |
 | `main_key_to_res_char` | LIVE | 1098:02d1, 1208:0000, 1420:1400, 1420:142c |  |
-| `sys_get_client_rect` | STUB | 1000:137f, 1218:0956, 1218:0a06 | has TODO |
+| `sys_get_client_rect` | PARTIAL | 1000:137f, 1218:0956, 1218:0a06, 1608:000c, 1608:0010, 1608:0100, 1608:010c | has TODO |
 | `sys_client_rect_is_valid` | LIVE | 1218:0956, 1218:0a06 |  |
+| `sys_rect_span` | LIVE | 1000:137f, 1218:0956 |  |
+| `sys_set_rect` | LIVE | 1218:0956, 1218:0a06, 1608:0100 |  |
+| `sys_inflate_rect` | LIVE | 1218:0956, 1608:010c |  |
 | `status_measure_row` | STUB | 1088:1460, 1098:0dda, 1138:0269, 11f0:4754, 1220:0b88 | has TODO |
 | `status_row_stride` | LIVE | 1138:0269 |  |
 | `sys_check_runtime_memory` | LIVE | 11e8:0075, 1420:43b4, 1420:4473, 1420:44ff |  |
@@ -1724,7 +1727,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `worldgen_label_is_land_pass` | LIVE | 1028:0a93 |  |
 | `worldgen_probe_font_height` | LIVE | 1060:0000, 1060:01c1 |  |
 | `worldgen_probe_font_weight` | LIVE |  |  |
-| `worldgen_probe_custom_font` | STUB | 1060:0000, 1060:01c1, 1098:124f | has TODO |
+| `worldgen_probe_custom_font` | PARTIAL | 1060:0000, 1060:01c1 | has TODO |
 | `worldgen_scatter_count` | LIVE | 1028:0000 |  |
 | `worldgen_scatter_is_resample` | LIVE |  |  |
 | `worldgen_scatter_tile_action` | LIVE | 1028:05e7, 11e8:0dcf |  |
@@ -1733,4 +1736,4 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `worldgen_video_caps_query_count` | LIVE | 1060:01c1 |  |
 | `worldgen_video_caps_query_at` | LIVE |  |  |
 | `worldgen_video_caps_needs_raster_ext` | LIVE |  |  |
-| `worldgen_show_video_caps_dialog` | STUB | 1060:0000, 1060:005b, 1060:01c1, 1098:0e0b, 1098:124f, 11e8:0b40 | has TODO |
+| `worldgen_show_video_caps_dialog` | PARTIAL | 1038:0c1d, 1060:0000, 1060:005b, 1060:00d1, 1060:01c1, 1098:124f, 1098:1612 | has TODO |

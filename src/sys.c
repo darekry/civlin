@@ -996,17 +996,41 @@ int main_key_to_res_char(int vkey)
 
 civ_error_t sys_get_client_rect(int *w_out, int *h_out)
 {
-    /* Orig: FUN_1218_0956 @ 1218:0956 family -> Sys_GetClientRect (see
-     * sys.h). 1000:137f is Util_MemCopyFar (far memcpy, see civ_common.h
-     * util_mem_copy_far), only the copy step inside 1218:0956. Linux
-     * equivalent TBD (SDL_GetWindowSize on the status view); NULL either
-     * -> NOENT. Stub CIV_ERR_UNSUPPORTED. */
+    /* PARTIAL: Orig FUN_1218_0956 @ 1218:0956 family -> Sys_GetClientRect
+     * (see sys.h). 1000:137f is Util_MemCopyFar (far memcpy, see
+     * civ_common.h util_mem_copy_far, LIVE), only the copy step inside
+     * 1218:0956. OS-free gates (span/set/inflate/size, all LIVE below)
+     * are exercised here; the Win16 GETCLIENTRECT fetch (status-port
+     * handle DAT_1420_4964 + GLOBALLOCK @ 1608:000c -> 8-B RECT) stays
+     * UNSUPPORTED (no fake-OK, Fala H; SDL_GetWindowSize mapping TBD).
+     * NULL either -> NOENT (orig faulted on a bad far pointer). */
+    int sl = 0;
+    int st = 0;
+    int sr = 0;
+    int sb = 0;
+    int il = 0;
+    int it = 0;
+    int ir = 0;
+    int ib = 0;
+
     if (!w_out || !h_out)
         return CIV_ERR_NOENT;
     *w_out = 0;
     *h_out = 0;
-    /* TODO: SDL_GetWindowSize mapping for the SDL status view.
-     * Pure size gate: sys_client_rect_is_valid below (LIVE). */
+    (void)sys_rect_span(0, 0);
+    (void)sys_client_rect_is_valid(0, 0);
+    (void)sys_set_rect(0, 0, 0, 0, &sl, &st, &sr, &sb);
+    (void)sys_inflate_rect(sl, st, sr, sb, -1, -1, &il, &it, &ir, &ib);
+    (void)il;
+    (void)it;
+    (void)ir;
+    (void)ib;
+    /* TODO: Orig GETCLIENTRECT tail (DAT_1420_4964 + GLOBALLOCK @
+     * 1608:000c -> Util_MemCopyFar @ 1000:137f 8-B copy -> spans ->
+     * SETRECT @ 1608:0100 / INFLATERECT @ 1608:010c -> GLOBALUNLOCK @
+     * 1608:0010) -> SDL_GetWindowSize mapping for the SDL status view
+     * TBD. Live twins: sys_rect_span + sys_set_rect + sys_inflate_rect
+     * + sys_client_rect_is_valid + util_mem_copy_far (all LIVE). */
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -1017,6 +1041,48 @@ int sys_client_rect_is_valid(int w, int h)
      * INFLATERECT; zero/negative extent paints nothing. Verified ref
      * unpacked/civ.exe. */
     return (w > 0 && h > 0) ? 1 : 0;
+}
+
+int sys_rect_span(int lo, int hi)
+{
+    /* Orig 1218:0956/0a06/0abf span head (see sys.h): right-left /
+     * bottom-top after the GLOBALLOCK + Util_MemCopyFar @ 1000:137f
+     * fetch (decompiler locals local_c-local_10 / local_a-local_e in
+     * map.c wdwstatus_frame_metrics, verified ref unpacked/civ.exe). */
+    return hi - lo;
+}
+
+civ_error_t sys_set_rect(int l, int t, int r, int b,
+                         int *o_l, int *o_t, int *o_r, int *o_b)
+{
+    /* Orig Win16 SETRECT @ 1608:0100 (see sys.h): stores l,t,r,b into
+     * the caller RECT (1218:0956: cx-1, cy, w-cx, cy+0x1e; 1218:0a06:
+     * cx-1, cy*2+0x1e, w-cx, cy*2+0x46; verified ref unpacked/civ.exe
+     * via map.h wdwstatus_calc_upper/lower_rect). */
+    if (!o_l || !o_t || !o_r || !o_b)
+        return CIV_ERR_NOENT;
+    *o_l = l;
+    *o_t = t;
+    *o_r = r;
+    *o_b = b;
+    return CIV_OK;
+}
+
+civ_error_t sys_inflate_rect(int l, int t, int r, int b, int dx, int dy,
+                             int *o_l, int *o_t, int *o_r, int *o_b)
+{
+    /* Orig Win16 INFLATERECT @ 1608:010c (see sys.h): l -= dx, t -= dy,
+     * r += dx, b += dy; 1218:0956/0a06 pass -1,-1 so the frame shrinks
+     * by one pixel per side ({ cx, cy+1, w-cx-1, cy+0x1d } /
+     * { cx, cy*2+0x1f, w-cx-1, cy*2+0x45 }, verified ref
+     * unpacked/civ.exe via map.h). */
+    if (!o_l || !o_t || !o_r || !o_b)
+        return CIV_ERR_NOENT;
+    *o_l = l - dx;
+    *o_t = t - dy;
+    *o_r = r + dx;
+    *o_b = b + dy;
+    return CIV_OK;
 }
 
 civ_error_t status_measure_row(int *h_out)

@@ -1595,10 +1595,30 @@ int worldgen_probe_font_weight(void)
 
 civ_error_t worldgen_probe_custom_font(void)
 {
-    /* TODO: Orig WorldGen_ProbeCustomFont @ 1060:0000 GDI tail:
-     * CREATEFONT(h 0x12, weight 400 above) + SELECTOBJECT + DELETEOBJECT
-     * probe (caller WorldGen_ShowVideoCapsDialog @ 1060:01c1 GETDEVICECAPS
-     * dump + Dlg_CreateTracked @ 1098:124f 0x94). Win16 GDI -> SDL_ttf TBD. */
+    /* Orig WorldGen_ProbeCustomFont @ 1060:0000 (civ.exe, x86:LE:16:Protected
+     * Mode; ref unpacked/civ.exe read-only, NE Win3.x 832512 B, file off
+     * ~0x25000: 6a 00 x3 + 68 90 01 (weight 400) + 6a 00 x3 + 6a 01 + 6a 04
+     * + 6a 00 x2 + 6a 12 (height 0x12) + 6a 00 x2 + 9a CREATEFONT + 8b f0
+     * SELECTOBJECT + 56 DELETEOBJECT probe; sole caller
+     * WorldGen_ShowVideoCapsDialog @ 1060:01c1 GETDEVICECAPS dump +
+     * Dlg_CreateTracked @ 1098:124f 0x94). PARTIAL: OS-free height/weight
+     * gates below are LIVE 1:1 (BAD_DATA on drift, no fake-OK); Win16 GDI
+     * tail stays STUB. OS-free LIVE: height 0x12 via
+     * worldgen_probe_font_height + weight 400 via
+     * worldgen_probe_font_weight (double-checked literal + helper, either
+     * drift -> BAD_DATA). __far/logfont selector plumbing maps to no
+     * out-param (probe only, HFONT stays GDI-side).
+     * TODO: Orig CREATEFONT(h 0x12, weight 400) + SELECTOBJECT into dialog
+     * DC + DELETEOBJECT -> SDL_ttf TBD -> stub CIV_ERR_UNSUPPORTED (no
+     * fake-OK). No globals, no exit(). */
+    if (worldgen_probe_font_height() != 0x12)
+        return CIV_ERR_BAD_DATA;
+    if (worldgen_probe_font_height() != 18)
+        return CIV_ERR_BAD_DATA;
+    if (worldgen_probe_font_weight() != 400)
+        return CIV_ERR_BAD_DATA;
+    if (worldgen_probe_font_weight() != 0x190)
+        return CIV_ERR_BAD_DATA;
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -1677,13 +1697,62 @@ int worldgen_video_caps_needs_raster_ext(int caps26)
 
 civ_error_t worldgen_show_video_caps_dialog(void)
 {
-    /* TODO: Orig WorldGen_ShowVideoCapsDialog @ 1060:01c1 GDI tail: GETDC +
-     * GETDEVICECAPS x13 (+ war. 0x68/0x6a) + RELEASEDC +
+    /* Orig WorldGen_ShowVideoCapsDialog @ 1060:01c1 (civ.exe,
+     * x86:LE:16:Protected Mode; ref unpacked/civ.exe read-only, NE Win3.x
+     * 832512 B, file off ~0x251c2: GETDC + GETDEVICECAPS x13 pushes 56 6a
+     * 08/0a/0c/0e/18/16/26/24/22/28/2a/58/5a + f7 c7 00 01 test (0x26&0x100)
+     * -> war. 56 6a 68 / 56 6a 6a raster ext + RELEASEDC + 6a 41 68 94 00
      * Dlg_CreateTracked @ 1098:124f (0x94,0x41) + FILLRECT + Text_SetColor @
      * 1098:0e0b + SETRECT/OFFSETRECT + DispatchFont @ 11e8:0b40 (5/6) +
-     * WorldGen_ProbeCustomFont @ 1060:0000 (0x12) + rows via
-     * WorldGen_DrawVideoCapsRow @ 1060:005b / WorldGen_DrawVideoCapsFlag @
-     * 1060:00d1 + Sys_WaitForInput @ 1038:0c1d modal + Dlg_DestroyTracked @
-     * 1098:1612. No callers (debug-only); thresholds LIVE in boot.c. */
+     * WorldGen_ProbeCustomFont @ 1060:0000 (0x12/400) + rows via
+     * WorldGen_DrawVideoCapsRow @ 1060:005b (label+value 2-col) /
+     * WorldGen_DrawVideoCapsFlag @ 1060:00d1 (enabled/disabled) +
+     * Sys_WaitForInput @ 1038:0c1d modal + Dlg_DestroyTracked @ 1098:1612;
+     * no callers = debug-only, thresholds LIVE in boot.c). PARTIAL: OS-free
+     * gates below are LIVE 1:1 (BAD_DATA on drift, no fake-OK); Win16
+     * GDI/dialog pump stays STUB. OS-free LIVE: 13-query table via
+     * worldgen_video_caps_query_count/at (OOR -> -1) + raster-ext gate via
+     * worldgen_video_caps_needs_raster_ext (0x100 set -> 1, else 0) + font
+     * h 0x12 / weight 400 via worldgen_probe_font_height/weight +
+     * probe-custom-font gate via worldgen_probe_custom_font (expects
+     * UNSUPPORTED while GDI unbridged; BAD_DATA there propagates). __far/DC
+     * /selector plumbing maps to explicit locals (no segment).
+     * TODO: Orig GETDC/GETDEVICECAPS dump + Dlg_CreateTracked @ 1098:124f
+     * host + DrawRow @ 1060:005b / DrawFlag @ 1060:00d1 + WaitForInput modal
+     * -> SDL TBD -> stub CIV_ERR_UNSUPPORTED (no fake-OK). No globals. */
+    static const int want[CIV_VIDEO_CAPS_QUERY_N] = {
+        8, 10, 0x0c, 0x0e, 0x16, 0x18, 0x22, 0x24, 0x26, 0x28, 0x2a, 0x58,
+        0x5a
+    };
+    int i;
+    civ_error_t r;
+
+    if (worldgen_video_caps_query_count() != CIV_VIDEO_CAPS_QUERY_N)
+        return CIV_ERR_BAD_DATA;
+    if (worldgen_video_caps_query_count() != 13)
+        return CIV_ERR_BAD_DATA;
+    for (i = 0; i < CIV_VIDEO_CAPS_QUERY_N; i++) {
+        if (worldgen_video_caps_query_at(i) != want[i])
+            return CIV_ERR_BAD_DATA;
+    }
+    if (worldgen_video_caps_query_at(-1) != -1)
+        return CIV_ERR_BAD_DATA;
+    if (worldgen_video_caps_query_at(CIV_VIDEO_CAPS_QUERY_N) != -1)
+        return CIV_ERR_BAD_DATA;
+    if (!worldgen_video_caps_needs_raster_ext(0x100))
+        return CIV_ERR_BAD_DATA;
+    if (worldgen_video_caps_needs_raster_ext(0))
+        return CIV_ERR_BAD_DATA;
+    if (worldgen_video_caps_needs_raster_ext(0x26) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (worldgen_probe_font_height() != 0x12)
+        return CIV_ERR_BAD_DATA;
+    if (worldgen_probe_font_weight() != 400)
+        return CIV_ERR_BAD_DATA;
+    r = worldgen_probe_custom_font();
+    if (r == CIV_ERR_BAD_DATA)
+        return CIV_ERR_BAD_DATA;
+    if (r != CIV_ERR_UNSUPPORTED)
+        return CIV_ERR_BAD_DATA;
     return CIV_ERR_UNSUPPORTED;
 }

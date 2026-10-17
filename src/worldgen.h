@@ -572,9 +572,14 @@ int worldgen_label_is_land_pass(int pass, int tile_is_ocean);
 int worldgen_probe_font_height(void);
 int worldgen_probe_font_weight(void);
 
-/* Orig same GDI tail -> worldgen_probe_custom_font. CREATEFONT/
- * SELECTOBJECT/DELETEOBJECT -> SDL_ttf TBD; stub CIV_ERR_UNSUPPORTED.
- * No globals, no exit(). */
+/* Orig WorldGen_ProbeCustomFont @ 1060:0000 -> worldgen_probe_custom_font.
+ * CREATEFONT(h 0x12, weight 400) + SELECTOBJECT + DELETEOBJECT probe,
+ * sole caller WorldGen_ShowVideoCapsDialog @ 1060:01c1. PARTIAL: OS-free
+ * height/weight gates via worldgen_probe_font_height/weight LIVE 1:1 below
+ * (BAD_DATA on drift, no fake-OK); Win16 GDI tail (CREATEFONT via
+ * CreateFontIndirect + SELECTOBJECT into dialog DC 0x94 + DELETEOBJECT)
+ * -> CIV_ERR_UNSUPPORTED. __far/selector plumbing maps to no out-param
+ * (probe only). No globals, no exit(). */
 civ_error_t worldgen_probe_custom_font(void);
 
 /* --- Chain 2026-10-16 (27): Scatter + SeedOneIsland-loop + VideoCaps +
@@ -683,10 +688,18 @@ int worldgen_video_caps_query_at(int index);
  * worldgen_video_caps_needs_raster_ext. 1:1 nonzero (1) gdy (caps26&0x100). */
 int worldgen_video_caps_needs_raster_ext(int caps26);
 
-/* Orig WorldGen_ShowVideoCapsDialog @ 1060:01c1 GDI tail (GETDC/GETDEVICECAPS
- * dump + Dlg_CreateTracked 0x94 + ProbeCustomFont + WaitForInput) -> STUB.
- * Progi pamieci LIVE w boot.h (boot_free_memory_is_low + boot_runtime_*).
- * No globals, no exit(). */
+/* Orig WorldGen_ShowVideoCapsDialog @ 1060:01c1 ->
+ * worldgen_show_video_caps_dialog. GETDC + GETDEVICECAPS x13 (+ war.
+ * 0x68/0x6a gdy 0x26&0x100) + RELEASEDC + Dlg_CreateTracked @ 1098:124f
+ * (0x94,0x41) + rows via WorldGen_DrawVideoCapsRow @ 1060:005b (label+value
+ * 2-col) / WorldGen_DrawVideoCapsFlag @ 1060:00d1 (enabled/disabled) +
+ * ProbeCustomFont @ 1060:0000 (h 0x12 w 400) + Sys_WaitForInput @ 1038:0c1d
+ * modal + Dlg_DestroyTracked @ 1098:1612. PARTIAL: OS-free caps-table /
+ * raster-gate / font gates via worldgen_video_caps_query_count/at,
+ * worldgen_video_caps_needs_raster_ext, worldgen_probe_font_height/weight
+ * LIVE 1:1 below (BAD_DATA on drift, no fake-OK); Win16 GDI/dialog pump
+ * tail -> CIV_ERR_UNSUPPORTED. Progi pamieci LIVE w boot.h
+ * (boot_free_memory_is_low + boot_runtime_*). No globals, no exit(). */
 civ_error_t worldgen_show_video_caps_dialog(void);
 
 #endif /* CIVLIN_WORLDGEN_H */

@@ -483,13 +483,21 @@ int main_key_to_res_char(int vkey);
  * struct copy, see civ_common.h util_mem_copy_far, then SETRECT/
  * INFLATERECT/GLOBALUNLOCK out). NOTE: 1000:137f is NOT the rect helper
  * (verified 2026-10-15: LDS SI/LES DI + REP MOVSW/MOVSB far memcpy, 116
- * xrefs) — it only serves the copy step inside 1218:0956. Linux
- * equivalent TBD (SDL_GetWindowSize on the status view). Params are the
+ * xrefs) — it only serves the copy step inside 1218:0956. PARTIAL:
+ * OS-free gates (span/set/inflate/size below, all LIVE 1:1) are exercised
+ * here; the Win16 GETCLIENTRECT fetch (handle -> RECT via the status-port
+ * handle DAT_1420_4964 + GLOBALLOCK) stays CIV_ERR_UNSUPPORTED until the
+ * SDL status-view mapping lands (no fake-OK, Fala H). Params are the
  * client width/height outputs; NULL either -> NOENT (orig faulted on a
- * bad far pointer). Zeroes outputs then stub CIV_ERR_UNSUPPORTED until
- * the SDL status-view mapping lands. Pure size gate below
+ * bad far pointer). Zeroes outputs then UNSUPPORTED. Pure size gate below
  * (sys_client_rect_is_valid) is LIVE for the procedural menu path
- * (skip draw when no area, no RSC needed). */
+ * (skip draw when no area, no RSC needed).
+ * TODO: Orig GETCLIENTRECT tail (status-port handle DAT_1420_4964 +
+ * GLOBALLOCK @ 1608:000c -> 8-B RECT via Util_MemCopyFar @ 1000:137f ->
+ * spans -> SETRECT @ 1608:0100 / INFLATERECT @ 1608:010c -> GLOBALUNLOCK @
+ * 1608:0010) -> SDL_GetWindowSize mapping for the SDL status view TBD.
+ * Live twins: sys_rect_span + sys_set_rect + sys_inflate_rect (LIVE) +
+ * sys_client_rect_is_valid (LIVE) + util_mem_copy_far (LIVE). */
 civ_error_t sys_get_client_rect(int *w_out, int *h_out);
 /* Orig FUN_1218_0956 @ 1218:0956 / FUN_1218_0a06 @ 1218:0a06 size gate
  * (GLOBALLOCK client extent before SETRECT/INFLATERECT; zero/negative
@@ -497,6 +505,29 @@ civ_error_t sys_get_client_rect(int *w_out, int *h_out);
  * 1 when w > 0 && h > 0, else 0. Verified ref unpacked/civ.exe.
  * No DOS, no Win16, no globals, no exit(). Procedural menu guard. */
 int sys_client_rect_is_valid(int w, int h);
+/* Orig 1218:0956/0a06/0abf client-span head (decompiled in map.c
+ * wdwstatus_frame_metrics: iVar1 = (local_c - local_10) = right-left,
+ * iVar2 base = (local_a - local_e) = bottom-top, from the 8-B RECT fetched
+ * via GLOBALLOCK + Util_MemCopyFar @ 1000:137f). OS-free 1:1 on explicit
+ * lo/hi: hi - lo (covers both w = right-left and h = bottom-top spans).
+ * Verified ref unpacked/civ.exe (same signed subtraction as the orig
+ * decompiler; spans >= 0 on the status port, caller validates via
+ * sys_client_rect_is_valid). No DOS, no Win16, no globals, no exit(). */
+int sys_rect_span(int lo, int hi);
+/* Orig Win16 SETRECT @ 1608:0100 (far-pascal push order in 1218:0956:
+ * rect seg/off, cx-1, cy, w-cx, cy+0x1e; in 1218:0a06: cx-1, cy*2+0x1e,
+ * w-cx, cy*2+0x46). OS-free 1:1 store on explicit outs: *o_* = in.
+ * NULL any out -> NOENT (orig faulted on a bad far pointer), else CIV_OK.
+ * No DOS, no Win16, no globals, no exit(). */
+civ_error_t sys_set_rect(int l, int t, int r, int b,
+                         int *o_l, int *o_t, int *o_r, int *o_b);
+/* Orig Win16 INFLATERECT @ 1608:010c (l -= dx, t -= dy, r += dx, b += dy;
+ * 1218:0956/0a06 call with dx = dy = -1, i.e. l+1, t+1, r-1, b-1, see
+ * map.h wdwstatus_calc_upper/lower_rect finals). OS-free 1:1 on explicit
+ * ints. NULL any out -> NOENT (orig faulted), else CIV_OK. No DOS,
+ * no Win16, no globals, no exit(). */
+civ_error_t sys_inflate_rect(int l, int t, int r, int b, int dx, int dy,
+                             int *o_l, int *o_t, int *o_r, int *o_b);
 /* Orig: FUN_1138_0269 @ 1138:0269 -> Status_MeasureRow.
  * GETTEXTMETRICS variant in the status_font_height @ 1098:0dda chain
  * (derives the status-row line stride kept as local_8, x2 for the civ
