@@ -265,7 +265,9 @@ civ_error_t font_fon_parse(const uint8_t *data, size_t len,
  * CIVBABYLON/CIVZULU/CIVEGYPT/CIVENGLISH/CIVGREEK/CIVRUSSIAN/CIVGERMAN/
  * CIVCHINESE/CIVFRENCH/CIVROMAN/CIVINDIAN/CIVAMERICAN/CIVAZTEC/CIVMONGOL/
  * CIVTIMES10/12/14/18/24/30/36 seen in the 0x600 fontdir dump; do not
- * hardcode here, ENUMFONTFAMILIES order TBD from Ghidra). */
+ * hardcode here, ENUMFONTFAMILIES order TBD from Ghidra). Guard half LIVE
+ * 1:1 via sys_font_face_index_ok @ 1008:0e99 (see sys.h; ref unpacked/
+ * civfonts.fon read-only 244224 B); the string store stays TBD -> STUB. */
 int font_face_count(const font_fon_info_t *info);
 const char *font_face_list(const font_fon_info_t *info, int index);
 
@@ -512,9 +514,12 @@ civ_error_t font_fnt_row_ptr(const uint8_t *data, size_t len,
 
 /* Orig Font_EnumFamiliesCallback @ 1008:0e12 slot-install side ->
  * font_install_slot. STUB: slot 0..0x1d (array DAT_1420_5484, 0x1e per
- * Font_FreeSlots @ 1008:062f, was FUN_1008_062f) LIVE-validated, < 0 /
- * >= 0x1e -> RANGE; GDI CREATEFONTINDIRECT/ADDFONTRESOURCE install ->
- * CIV_ERR_UNSUPPORTED (mostek wg projektu powyżej). No globals, no exit().
+ * Font_FreeSlots @ 1008:062f, was FUN_1008_062f) LIVE-validated via
+ * sys_font_slot_ok @ 1008:062f (see sys.h; ref unpacked/civ.exe read-only
+ * 832512 B loop SI 0..0x1d), < 0 / >= 0x1e -> RANGE; GDI
+ * CREATEFONTINDIRECT/ADDFONTRESOURCE install (DAT_1420_5484 store) ->
+ * CIV_ERR_UNSUPPORTED (mostek wg projektu powyżej, store TBD). No globals,
+ * no exit().
  * Slotów realnie 0x1e = 30 (pętla free w Font_FreeSlots); text_font_table
  * @ 11e8:0d1d używa 25 id -> 20 różnych slotów 0x00..0x14 (aliasy
  * 2->0x0f, 3->0x11, 7->0x10, 207->0x10, 213->0x10, patrz dialog.h

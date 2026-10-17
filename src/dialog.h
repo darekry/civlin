@@ -58,10 +58,14 @@ void dialog_shutdown(void);
 
 /* Modal choice dialog (Dialog_MenuZ_Modal @ 1220:0156). PARTIAL dispatcher:
  * OS-free gates LIVE 1:1 (count via dialog_split_menu_count @ 1220:0000,
- * preselect via dialog_menuz_preselect_ok, id math via
- * dialog_menuz_id_to_index/index_to_id/id_is_valid, disable via
- * dialog_menuz_item_disabled, timer 100 via dialog_menuz_timer_ms,
- * cancel -1 via dialog_menuz_cancel_code); the PEEKMESSAGE/ISDIALOGMESSAGE
+ * title via dialog_split_title_len/is_title_empty, preselect via
+ * dialog_menuz_preselect_ok, id math via
+ * dialog_menuz_id_to_index/index_to_id/id_is_valid (+ base/last),
+ * disable via dialog_menuz_item_disabled, timer 100 via
+ * dialog_menuz_timer_ms, cancel -1 via dialog_menuz_cancel_code/is_cancel,
+ * art via dialog_menuz_art_mode, measure via dialog_menu_track_max/
+ * dialog_menu_title_base/dialog_split_default_w/is_sep, re-prompt via
+ * dialog_menuz_should_loop); the PEEKMESSAGE/ISDIALOGMESSAGE
  * modal pump stays CIV_ERR_UNSUPPORTED (never fake CIV_OK).
  * items_text is the '_' buffer (title + items, e.g. text @ 1420:435b;
  * leading '_' = empty title); title is the SDL display title; preselect is
@@ -648,7 +652,7 @@ civ_error_t help_open_topic(const char *topic);
  *   0xa6 ctx + GETCLIENTRECT + Sys_GetTickScaled @ 1100:02e1 base +
  *   max-end scan + GfxPort_Create x2 (offs +9/+0x62) + FUN_1000_14f8 /
  *   FUN_1100_0876 setup + DAT_1420_1f40 = ctx. Win16/GfxPort -> SDL TBD;
- *   PARTIAL dispatcher (OS-free count/resolve/ctx/max + active/full
+ *   PARTIAL dispatcher (OS-free count/resolve/stride/ctx/max + active/full
  *   phase lifecycle + tick (clamp/rebase/due/store/finish/ret) + full
  *   opcode 1..0xe families (palette/slot/store/callback/anim/frame/
  *   scroll/text/present/animate/sound + 11/14 period) + palette bodies
@@ -2791,6 +2795,13 @@ int anim_seq_resolve_count(int param_3, int counted);
  * 1:1 0xa6 (sibling of CIV_DLG_TRACKED_CTX_SIZE 0x18 + ANIM_SLOT_SIZE
  * 0x14 + ANIM_DISSOLVE_CTX_SIZE 0x79c above). No globals. */
 int anim_seq_ctx_size(void);
+
+/* Orig Anim_OpenSequence @ 10b0:008a timeline stride (+0xf words per frame
+ * rec, [0] = opcode; count half scans with this stride until opcode 0;
+ * see anim_seq_count_frames + anim_open_sequence PARTIAL) ->
+ * anim_seq_rec_stride. 1:1 0xf words. No Win16, no globals. Refs verified
+ * read-only 1:1 vs unpacked/civ.exe (NE LE, no copy). */
+int anim_seq_rec_stride(void);
 
 /* Orig Anim_OpenSequence @ 10b0:008a GfxPort pair (GfxPort_Create x2 at
  * ctx offs +9/+0x62; see anim_open_sequence PARTIAL dispatcher) ->

@@ -524,13 +524,19 @@ int font_face_count(const font_fon_info_t *info)
 
 const char *font_face_list(const font_fon_info_t *info, int index)
 {
-    /* Orig ENUMFONTFAMILIES @ 1008:0e99 family-name side. OS-free stub:
-     * index -> family name once the fontdir-string order (CIVBABYLON..
-     * CIVTIMES36 at file 0x600 + resident "FONTRES", 21 faces) is wired
-     * to the enumeration order; NULL until then (same contract as
-     * tribe_get_name_list / boot_video_caps_describe). NULL info or
-     * out-of-range -> NULL. No SDL, no globals, no exit(), read-only. */
-    if (!info || index < 0 || index >= (int)info->face_count)
+    /* Orig ENUMFONTFAMILIES @ 1008:0e99 family-name side (ref unpacked/
+     * civfonts.fon read-only 244224 B: RT_FONT 0x8008 x21, fontdir file
+     * 0x600 nfonts 21, names CIVBABYLON..CIVTIMES36 at 0x676..0x1054).
+     * OS-free guard half LIVE 1:1 via sys_font_face_index_ok @ 1008:0e99
+     * (see sys.h/sys.c; 1 when 0 <= index < face_count, else 0); the
+     * family-string store (fontdir order vs ENUMFONTFAMILIES order) stays
+     * TBD -> NULL until wired (same contract as tribe_get_name_list /
+     * boot_video_caps_describe). NULL info -> NULL. No SDL, no globals,
+     * no exit(), read-only.
+     * TODO: Orig Font_EnumFamiliesInit @ 1008:0e99 string store (wire
+     * fontdir face strings in ENUMFONTFAMILIES order; GDI callback filter
+     * dwType&1 + match Util_CompareBounded @ 1000:3744 stays out). */
+    if (!info || !sys_font_face_index_ok((int)info->face_count, index))
         return NULL;
     /* TODO: wire fontdir face strings in ENUMFONTFAMILIES order. */
     return NULL;
@@ -675,10 +681,20 @@ civ_error_t font_fnt_row_ptr(const uint8_t *data, size_t len,
  * no exit(). */
 civ_error_t font_install_slot(int slot)
 {
-    if (slot < 0 || slot >= CIV_FONT_SLOT_MAX)
+    /* Orig Font_EnumFamiliesCallback @ 1008:0e12 slot-install side (ref
+     * unpacked/civ.exe read-only NE Win3.x 832512 B: Font_FreeSlots @
+     * 1008:062f loop SI 0..0x1d over DAT_1420_5484, 0x1e entries;
+     * CIV_FONT_SLOT_MAX == SYS_FONT_SLOT_MAX == 0x1e; install/select shape
+     * per boot.h chain-13/14). OS-free range half LIVE 1:1 via
+     * sys_font_slot_ok (see sys.h/sys.c); the GDI CREATEFONTINDIRECT/
+     * ADDFONTRESOURCE store (DAT_1420_5484 image) has no Linux equivalent
+     * -> CIV_ERR_UNSUPPORTED (no fake-OK). No globals, no exit().
+     * TODO: Orig CREATEFONTINDIRECT install into the face-slot table
+     * (DAT_1420_5484 image) + ADDFONTRESOURCE(CIV_FONT_FILE @
+     * 1420:00a4/00fe) bridge TBD (bundled-FNT raster first, no fontconfig,
+     * no FNT->TTF, no SDL_ttf here; see boot.h chain-13/14). */
+    if (!sys_font_slot_ok(slot))
         return CIV_ERR_RANGE;
-    /* TODO: CREATEFONTINDIRECT install into the face-slot table
-     * (DAT_1420_5484 image) + ADDFONTRESOURCE(CIV_FONT_FILE) bridge. */
     return CIV_ERR_UNSUPPORTED;
 }
 

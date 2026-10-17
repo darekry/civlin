@@ -200,6 +200,25 @@ civ_error_t dialog_menuz(const char *title, const char *items_text,
         dialog_menuz_is_cancel(1, -1) != 1 ||
         dialog_menuz_is_cancel(1, 0) != 0)
         return CIV_ERR_BAD_DATA;
+    /* Split/measure tail gates (Dialog_SplitMenuText @ 1220:0000 + width
+     * max via Text_MeasureMenuWidth @ 1100:00ea + DAT_1418_000e default
+     * 0x96 + re-prompt gate in MainMenu_WndProc @ 11e0:0221): OS-free
+     * 1:1, no Win16, no globals. Title NOT measured (items only); empty
+     * title leaves max alone, non-empty sets 0x96. Refs verified
+     * read-only 1:1 vs unpacked/civ.exe (NE LE, no copy): '_' split
+     * buffer @ 0x12d8:0x24fa + 0x18 slots cap + timer/cancel strings
+     * above. */
+    if (dialog_split_default_w() != CIV_SPLIT_DEFAULT_W)
+        return CIV_ERR_BAD_DATA;
+    if (dialog_menu_track_max(0, title_len) != ((title_len > 0) ? title_len : 0))
+        return CIV_ERR_BAD_DATA;
+    if (dialog_menu_title_base(title_empty == 0, 0) !=
+        ((title_empty == 0) ? CIV_SPLIT_DEFAULT_W : 0))
+        return CIV_ERR_BAD_DATA;
+    if (dialog_split_is_sep('_') != 1 || dialog_split_is_sep('a') != 0)
+        return CIV_ERR_BAD_DATA;
+    if (dialog_menuz_should_loop(4) != 1 || dialog_menuz_should_loop(1) != 0)
+        return CIV_ERR_BAD_DATA;
     /* TODO: Orig Dialog_MenuZ_Modal @ 1220:0156 (body ..0d37): int
      * __cdecl16far (char*,u2,u2,u2,u2,u2,char,u4) -> index DAT_12b0_009c;
      * Dialog_SplitMenuText @ 1220:0000 (wired above via
@@ -955,6 +974,9 @@ civ_error_t anim_open_sequence(void)
     /* ctx half (mem_alloc_lock 0xa6 size, storage stays device-side). */
     ctx = anim_seq_ctx_size();
     if (ctx != CIV_ANIM_SEQ_CTX_SIZE)
+        return CIV_ERR_BAD_DATA;
+    /* stride half (0xf words per frame rec, [0] = opcode; scan step). */
+    if (anim_seq_rec_stride() != 0x0f)
         return CIV_ERR_BAD_DATA;
     /* max half (max of rec[7] longs + 1; empty -> 1). */
     max_end = anim_seq_max_end(sample_ends, 2u);
@@ -5049,6 +5071,16 @@ int anim_seq_ctx_size(void)
 {
     /* Orig Anim_OpenSequence @ 10b0:008a: mem_alloc_lock 0xa6 ctx. */
     return CIV_ANIM_SEQ_CTX_SIZE;
+}
+
+int anim_seq_rec_stride(void)
+{
+    /* Orig Anim_OpenSequence @ 10b0:008a timeline stride: +0xf words per
+     * frame rec ([0] = opcode; count half scans with this stride until
+     * opcode 0, see anim_seq_count_frames). OS-free 1:1, no Win16, no
+     * globals. Refs verified read-only 1:1 vs unpacked/civ.exe (NE LE,
+     * no copy). */
+    return 0x0f;
 }
 
 int anim_seq_port_count(void)

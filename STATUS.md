@@ -495,6 +495,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `dlg_preset_h` | LIVE |  |  |
 | `anim_seq_resolve_count` | LIVE | 10b0:008a |  |
 | `anim_seq_ctx_size` | LIVE | 10b0:008a |  |
+| `anim_seq_rec_stride` | LIVE | 10b0:008a |  |
 | `anim_seq_port_count` | LIVE | 10b0:008a, 10b0:0287, 10d0:0000 |  |
 | `anim_seq_port_off` | LIVE | 10b0:008a, 10d0:0000 |  |
 | `anim_tick_is_due` | LIVE | 10b0:0461 |  |
