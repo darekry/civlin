@@ -204,6 +204,10 @@ civ_error_t boot_init_unit_font_tables(void)
         return CIV_ERR_BAD_DATA;
     if (boot_unit_font_icon_len() != 28)
         return CIV_ERR_BAD_DATA;
+    if (boot_unit_font_target_small_len() != 6)
+        return CIV_ERR_BAD_DATA;
+    if (boot_unit_font_target_big_len() != 64)
+        return CIV_ERR_BAD_DATA;
     if (boot_unit_font_needs_alt(0) != 0)
         return CIV_ERR_BAD_DATA;
     if (boot_unit_font_needs_alt(1) != 1)
@@ -2298,5 +2302,88 @@ civ_error_t text_draw_pascal_at_origin(const char *pascal, int color)
     (void)color;
     if (!pascal)
         return CIV_ERR_NOENT;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+/* --- Chain 2026-10-17 (boot-text-1068): 10e8:2d46 copy sizes + 1068:258f/255a
+ * boot probes (see boot.h). Ref unpacked/civ.exe read-only NE Win3.x 832512 B
+ * (MZ + e_lfanew 0x60 -> NE; FIRSTMOVE @ 0xbb5fc / PILLAGE @ 0xbb606;
+ * "TextBoxDrawAndClose()  :  dialogs.c" @ 0xb8286); no bytes copied.
+ * OS-free LIVE 1:1 below (no far, no GLOBALLOCK, no GDI, no globals, no
+ * exit(), read-only); device tails stay STUB/PARTIAL with TODO Orig. */
+
+int boot_unit_font_target_small_len(void)
+{
+    /* Orig Init_UnitFontTables @ 10e8:2d46 head (Util_MemCopyFar 0x2a02
+     * 6 B local_28, decompiled 2026-10-16): target-table span only (the far
+     * source bytes + GLOBALLOCK carve stay STUB in
+     * boot_init_unit_font_tables with TODO Orig there). */
+    return 6;
+}
+
+int boot_unit_font_target_big_len(void)
+{
+    /* Orig same head (Util_MemCopyFar 0x2a12 64 B local_68): same span-only
+     * contract as above. */
+    return 64;
+}
+
+civ_error_t boot_draw_aligned_list(int handle, int mode)
+{
+    /* Orig Text_DrawAlignedList @ 1068:258f dispatcher (SELECTOBJECT slot
+     * DAT_12d8_0024 + SETBKMODE(1) + GLOBALLOCK handle + per-row MemMove +
+     * Text_MeasureMenuWidth @ 1100:00ea + align 1/2/3 + TEXTOUT @ 1608:01cc;
+     * canonical owner dialog.h text_draw_aligned_list, untouched here).
+     * PARTIAL: OS-free layout probes below are LIVE 1:1 via the dialog-owned
+     * helpers (text_aligned_list_x/row_y/should_stop/needs_unlock +
+     * text_wrapped_list_cap, see dialog.h; same probe pattern as
+     * text_draw_shadowed_centered above); the GDI tail stays STUB.
+     * TODO: Orig Text_DrawAlignedList @ 1068:258f GDI tail (SELECTOBJECT slot
+     * DAT_12d8_0024 + SETBKMODE(1) + GLOBALLOCK handle + per-row
+     * Text_MeasureMenuWidth @ 1100:00ea + TEXTOUT @ 1608:01cc + UNLOCK/SELECT
+     * restore) -> SDL_ttf bridge TBD (canonical impl lives in dialog.c). */
+    (void)handle;
+    (void)mode;
+    if (text_aligned_list_x(0, 100, 10, 1) != 45)
+        return CIV_ERR_BAD_DATA;
+    if (text_aligned_list_x(0, 100, 10, 2) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (text_aligned_list_x(0, 100, 10, 3) != 90)
+        return CIV_ERR_BAD_DATA;
+    if (text_aligned_list_x(0, 100, 10, 9) != -1)
+        return CIV_ERR_BAD_DATA;
+    if (text_aligned_list_row_y(10, 5, 3) != 25)
+        return CIV_ERR_BAD_DATA;
+    if (text_aligned_list_should_stop(0, 1) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (text_aligned_list_should_stop(1, 1) != 1)
+        return CIV_ERR_BAD_DATA;
+    if (text_aligned_list_should_stop(0, 0) != 1)
+        return CIV_ERR_BAD_DATA;
+    if (text_aligned_list_needs_unlock(0) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (text_wrapped_list_cap() != 64)
+        return CIV_ERR_BAD_DATA;
+    return CIV_ERR_UNSUPPORTED;
+}
+
+civ_error_t boot_draw_aligned_list_free(int handle, int mode)
+{
+    /* Orig Text_DrawAlignedListFree @ 1068:255a (Debug_LogTrace
+     * "TextBoxDrawAndClose ... dialogs" @ file 0xb8286 + List(handle, mode)
+     * + GLOBALFREE handle when != 0; canonical owner dialog.h
+     * text_draw_aligned_list_free, untouched here). PARTIAL: free-gate probe
+     * LIVE via text_aligned_list_needs_unlock; trace + List + GLOBALFREE
+     * tail stays STUB.
+     * TODO: Orig Text_DrawAlignedListFree @ 1068:255a trace + List + GLOBALFREE
+     * tail -> SDL_ttf + heap-owner TBD (canonical impl lives in dialog.c). */
+    int gate;
+
+    (void)mode;
+    gate = text_aligned_list_needs_unlock(handle);
+    if (handle == 0 && gate != 0)
+        return CIV_ERR_BAD_DATA;
+    if (handle != 0 && gate != 1)
+        return CIV_ERR_BAD_DATA;
     return CIV_ERR_UNSUPPORTED;
 }

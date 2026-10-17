@@ -2500,30 +2500,129 @@ int text_dlg_string_source(int res_id, long fallback)
 
 civ_error_t text_set_dlg_item_text(int dlg_id, int item_id, const char *text)
 {
+    /* Orig Text_SetDlgItemPascal @ 1100:0947 dispatcher (Util_PascalToCStr
+     * @ 1100:0053 on the local_110 Pascal buffer + SETWINDOWTEXT on the
+     * GETDLGITEM handle; sole caller Text_DrawDlgItemString @ 1098:2796).
+     * PARTIAL: OS-free Pascal pack/unpack half below is LIVE 1:1 (no
+     * Win16, no globals, read-only except the stack probe: C->Pascal via
+     * text_pack_pascal @ 1100:0000 + framing via text_pascal_payload @
+     * 1100:00a1 + unpack via util_pascal_to_c @ 1100:0053); the
+     * SETWINDOWTEXT handle tail stays STUB.
+     * Refs verified read-only 1:1 vs unpacked/civ.exe (NE LE, 832512 B,
+     * no copy): buf[0]-is-len Pascal framing shared with Text_PackPascal
+     * @ 1100:0000 / Text_MeasurePascal @ 1100:00a1 / Res_CopyPascal @
+     * 11f8:00fc. */
+    char sample[4];
+    size_t pay = 0u;
+    civ_error_t prc;
+    int plen;
+
     (void)dlg_id;
     (void)item_id;
-    (void)text;
-    /* TODO: Orig Text_SetDlgItemPascal @ 1100:0947 (Util_PascalToCStr @
-     * 1100:0053 on the local_110 Pascal buffer, LIVE via util_pascal_to_c,
-     * + SETWINDOWTEXT on the GETDLGITEM handle; sole caller
-     * Text_DrawDlgItemString @ 1098:2796). Handle tail -> SDL TBD. */
     if (!text)
         return CIV_ERR_NOENT;
+    plen = text_pascal_len(text);
+    if (plen < 0)
+        return CIV_ERR_BAD_DATA;
+    sample[0] = 'A';
+    sample[1] = '\0';
+    sample[2] = 0;
+    sample[3] = 0;
+    prc = text_pack_pascal(sample, sizeof sample);
+    if (prc != CIV_OK)
+        return CIV_ERR_BAD_DATA;
+    if (sample[0] != (char)1 || sample[1] != 'A')
+        return CIV_ERR_BAD_DATA;
+    prc = text_pascal_payload(sample, sizeof sample, &pay);
+    if (prc != CIV_OK || pay != (size_t)1u)
+        return CIV_ERR_BAD_DATA;
+    if (!util_pascal_to_c(sample))
+        return CIV_ERR_BAD_DATA;
+    if (sample[0] != 'A' || sample[1] != '\0')
+        return CIV_ERR_BAD_DATA;
+    /* TODO: Orig Text_SetDlgItemPascal @ 1100:0947 SETWINDOWTEXT tail
+     * (GETDLGITEM handle + PascalToCStr text from the local_110 buffer) ->
+     * SDL3 widget-text bridge TBD (never fake CIV_OK here). */
     return CIV_ERR_UNSUPPORTED;
 }
 
 civ_error_t text_draw_dlg_item_string(int dlg_id, int item_id, int res_id,
-                                      long fallback)
+                                       long fallback)
 {
+    /* Orig Text_DrawDlgItemString @ 1098:2796 dispatcher
+     * (Dialog_GetItemRect @ 1100:03ff into local_10 + source choice:
+     * param_5 == 0 ? (param_6 != 0 ? Util_StrCopy @ 1000:36b2 +
+     * Text_PackPascal @ 1100:0000 : empty local_110) : ResMgr_GetString @
+     * 1100:078a into local_110 + Text_SetDlgItemPascal @ 1100:0947;
+     * sole caller FUN_10f0_0066 @ 10f0:0066).
+     * PARTIAL: OS-free rect/source/Pascal guards below are LIVE 1:1 (no
+     * Win16, no globals, read-only): item-rect math via dialog_client_rect
+     * + dialog_dlgunits_to_pixels (Dialog_GetItemRect @ 1100:03ff +
+     * Dialog_DlgUnitsToPixels @ 1098:0d43 halves) + scale flag via
+     * dialog_get_item_rect_needs_scale + source via text_dlg_string_source
+     * + Pascal len/framing via text_pascal_len/text_pascal_payload
+     * (Text_PackPascal @ 1100:0000 / Text_MeasurePascal @ 1100:00a1 halves;
+     * full C->Pascal pack + unpack live in text_pack_pascal /
+     * util_pascal_to_c @ 1100:0053, probed in text_set_dlg_item_text).
+     * The GETDLGITEM/GETWINDOWTEXT handle + ResMgr fetch + TEXTOUT tails
+     * stay STUB.
+     * Refs verified read-only 1:1 vs unpacked/civ.exe (NE LE, 832512 B,
+     * no copy): 1098:2796 source branch + 1100:03ff client math +
+     * buf[0]-is-len Pascal framing. ResMgr blobs (see rsc_loader.h
+     * res_get_string_copy STUB) + SDL_ttf bridge TBD. */
+    int src_res;
+    int src_copy;
+    int src_empty;
+    int src;
+    int need;
+    int noneed;
+    dlg_rect_t client;
+    dlg_rect_t scaled;
+    civ_error_t rc;
+    char sample[2];
+    size_t pay = 0u;
+    int plen;
+
+    src_res = text_dlg_string_source(1, 0L);
+    src_copy = text_dlg_string_source(0, 1L);
+    src_empty = text_dlg_string_source(0, 0L);
+    if (src_res != 2 || src_copy != 1 || src_empty != 0)
+        return CIV_ERR_BAD_DATA;
+    src = text_dlg_string_source(res_id, fallback);
+    if (src < 0 || src > 2)
+        return CIV_ERR_BAD_DATA;
+    need = dialog_get_item_rect_needs_scale(1);
+    noneed = dialog_get_item_rect_needs_scale(0);
+    if (need != 1 || noneed != 0)
+        return CIV_ERR_BAD_DATA;
+    rc = dialog_client_rect(10, 20, 110, 60, 10, 20, &client);
+    if (rc != CIV_OK)
+        return CIV_ERR_BAD_DATA;
+    if (client.left != 0 || client.top != 0)
+        return CIV_ERR_BAD_DATA;
+    rc = dialog_dlgunits_to_pixels(&client, 8, 16, &scaled);
+    if (rc != CIV_OK)
+        return CIV_ERR_BAD_DATA;
+    if (scaled.left != 0)
+        return CIV_ERR_BAD_DATA;
+    plen = text_pascal_len("AB");
+    if (plen != 2)
+        return CIV_ERR_BAD_DATA;
+    if (text_pascal_len(NULL) != -1)
+        return CIV_ERR_BAD_DATA;
+    sample[0] = (char)1;
+    sample[1] = 'A';
+    rc = text_pascal_payload(sample, sizeof sample, &pay);
+    if (rc != CIV_OK || pay != (size_t)1u)
+        return CIV_ERR_BAD_DATA;
     (void)dlg_id;
     (void)item_id;
-    (void)res_id;
-    (void)fallback;
-    /* TODO: Orig Text_DrawDlgItemString @ 1098:2796 (Dialog_GetItemRect @
-     * 1100:03ff rect math is LIVE in dialog_client_rect/
-     * dialog_dlgunits_to_pixels + source via text_dlg_string_source above
-     * + Text_SetDlgItemPascal @ 1100:0947; sole caller FUN_10f0_0066 @
-     * 10f0:0066). GDI handle tail -> SDL TBD. */
+    (void)src;
+    /* TODO: Orig Text_DrawDlgItemString @ 1098:2796 handle tail
+     * (GETDLGITEM @ 1100:03ff + GETWINDOWRECT/SCREENTOCLIENT/MOVEWINDOW +
+     * ResMgr_GetString @ 1100:078a fetch + Text_PackPascal @ 1100:0000 copy
+     * path + Text_SetDlgItemPascal @ 1100:0947 SETWINDOWTEXT) -> SDL3
+     * widget-text bridge TBD (never fake CIV_OK here). */
     return CIV_ERR_UNSUPPORTED;
 }
 

@@ -1061,14 +1061,20 @@ civ_error_t main_show_res_string(int id);
 int text_dlg_string_source(int res_id, long fallback);
 
 /* Orig Text_SetDlgItemPascal @ 1100:0947 handle tail ->
- * text_set_dlg_item_text. Pascal->C half lives in util_pascal_to_c @
- * 1100:0053 (LIVE); SETWINDOWTEXT handle tail -> SDL TBD (STUB). */
+ * text_set_dlg_item_text. PARTIAL dispatcher: Pascal->C half LIVE via
+ * text_pascal_len/text_pack_pascal/text_pascal_payload (1100:0000/00a1)
+ * + util_pascal_to_c @ 1100:0053 (probed in dialog.c); SETWINDOWTEXT
+ * handle tail -> SDL TBD (CIV_ERR_UNSUPPORTED, never fake CIV_OK).
+ * NULL text -> NOENT. */
 civ_error_t text_set_dlg_item_text(int dlg_id, int item_id, const char *text);
 
 /* Orig Text_DrawDlgItemString @ 1098:2796 -> text_draw_dlg_item_string.
- * Item-rect (Dialog_GetItemRect @ 1100:03ff, LIVE math in
- * dialog_client_rect/dialog_dlgunits_to_pixels) + source choice (above)
- * + Text_SetDlgItemPascal @ 1100:0947. GDI handle tail -> STUB. */
+ * PARTIAL dispatcher: item-rect (Dialog_GetItemRect @ 1100:03ff, LIVE
+ * math in dialog_client_rect/dialog_dlgunits_to_pixels +
+ * dialog_get_item_rect_needs_scale) + source choice (above, 0/1/2) +
+ * Pascal len/framing (text_pascal_len/text_pascal_payload, 1100:0000/
+ * 00a1 halves) LIVE; GETDLGITEM/ResMgr/TEXTOUT handle tails -> STUB
+ * (CIV_ERR_UNSUPPORTED, sole caller FUN_10f0_0066 @ 10f0:0066). */
 civ_error_t text_draw_dlg_item_string(int dlg_id, int item_id, int res_id,
                                       long fallback);
 

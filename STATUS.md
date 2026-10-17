@@ -223,6 +223,10 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `text_draw_shadowed_centered` | PARTIAL | 10d8:02df, 10d8:046e, 10d8:0495, 10d8:05b8, 11e8:0b40 | has TODO |
 | `text_measure_width` | LIVE | 10d8:05b8, 1100:0000, 1100:00a1 |  |
 | `text_draw_pascal_at_origin` | STUB | 10d8:002d, 10d8:00e0, 1100:0000, 1100:0053, 1100:017b | has TODO |
+| `boot_unit_font_target_small_len` | LIVE | 10e8:2d46 |  |
+| `boot_unit_font_target_big_len` | LIVE | 10e8:2d46 |  |
+| `boot_draw_aligned_list` | PARTIAL | 1068:258f, 1100:00ea, 1608:01cc | has TODO |
+| `boot_draw_aligned_list_free` | PARTIAL | 1068:255a | has TODO |
 
 ### `src/civ_common.c`
 
@@ -330,8 +334,8 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `dialog_init_res_string_tables` | STUB | 1068:0295, 1098:1f4f | has TODO |
 | `main_show_res_string` | STUB | 1008:0a8d, 1008:0add, 1100:078a | has TODO |
 | `text_dlg_string_source` | LIVE | 1098:2796, 1100:078a, 1100:0947 |  |
-| `text_set_dlg_item_text` | STUB | 1098:2796, 1100:0053, 1100:0947 | has TODO |
-| `text_draw_dlg_item_string` | STUB | 1098:2796, 10f0:0066, 1100:03ff, 1100:0947 | has TODO |
+| `text_set_dlg_item_text` | PARTIAL | 1098:2796, 1100:0000, 1100:0053, 1100:0947 | has TODO |
+| `text_draw_dlg_item_string` | PARTIAL | 1000:36b2, 1098:2796, 10f0:0066, 1100:0000, 1100:03ff, 1100:078a, 1100:0947 | has TODO |
 | `text_fill_res_string_list` | STUB | 1068:0295, 1098:1f4f, 1100:0053, 1100:078a | has TODO |
 | `diplo_contact_flags` | LIVE | 1168:0a07, 1168:0dda |  |
 | `diplo_is_peace` | LIVE | 1168:0a07 |  |

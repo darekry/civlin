@@ -1466,4 +1466,50 @@ int text_measure_width(const uint8_t *data, size_t len, const font_fnt_info_t *i
 /* Orig Text_DrawPascalAtOrigin @ 1100:017b -> text_draw_pascal_at_origin. STUB: pascal is buf[0]-is-len Pascal (see text_pack_pascal in dialog.h); SETBKMODE/SETTEXTALIGN/TEXTOUT tail -> CIV_ERR_UNSUPPORTED with TODO Orig. NULL -> NOENT. */
 civ_error_t text_draw_pascal_at_origin(const char *pascal, int color);
 
+/* --- Chain 2026-10-17 (boot-text-1068): Text_DrawAlignedList @ 1068:258f +
+ * Free @ 1068:255a boot-owned probes + 10e8:2d46 copy-size halves (goal;
+ * boot-owned only, dialog untouched) ---
+ * Orig (civ.exe NE Win3.x, ref unpacked/civ.exe read-only 832512 B, MZ at
+ * +0 e_lfanew 0x60 -> NE; no bytes copied):
+ *   Text_DrawAlignedList @ 1068:258f (SELECTOBJECT slot DAT_12d8_0024 +
+ *     SETBKMODE(1) + GLOBALLOCK handle + per-row Util_MemMove into 256 B
+ *     stack buf + Text_MeasureMenuWidth @ 1100:00ea + align 1/2/3 (same as
+ *     text_align_x @ 1098:0ed1) + TEXTOUT @ 1608:01cc + UNLOCK/restore;
+ *     callers Dialog_MenuZ_Modal @ 1220:0156 WM_PAINT redraw, mode 2 = left).
+ *   Text_DrawAlignedListFree @ 1068:255a (Debug_LogTrace "TextBoxDrawAndClose
+ *     ... dialogs" @ file 0xb8286 + List(handle, mode) + GLOBALFREE handle
+ *     when != 0).
+ *   Init_UnitFontTables @ 10e8:2d46 head copies (Util_MemCopyFar 0x2a02 6 B
+ *     local_28 + 0x2a12 64 B local_68; strings FIRSTMOVE @ file 0xbb5fc /
+ *     PILLAGE @ 0xbb606).
+ * Split (AGENTS.md triage): canonical 1068 symbols (text_draw_aligned_list /
+ *   text_draw_aligned_list_free + text_aligned_list_x/row_y/should_stop/
+ *   needs_unlock + text_wrapped_list_cap) stay owned by dialog.h/dialog.c
+ *   (untouched by this change, no duplicate symbols here); the boot twins
+ *   below are PARTIAL probes over those LIVE dialog helpers (same pattern as
+ *   text_draw_shadowed_centered above probing dialog-owned text_centered_x /
+ *   text_shadow_pos / text_measure_scaled) with the SELECTOBJECT/TEXTOUT/
+ *   GLOBALFREE device tails STUB + TODO Orig (no fake-OK). Copy-size halves
+ *   are LIVE 1:1 constants (6 / 64, sizes only, no far bytes guessed). No
+ *   Win16, no globals, no exit(), read-only. */
+
+/* Orig Init_UnitFontTables @ 10e8:2d46 head-copy size (Util_MemCopyFar 0x2a02
+ * 6 B local_28) -> boot_unit_font_target_small_len. 1:1 6. */
+int boot_unit_font_target_small_len(void);
+/* Orig Init_UnitFontTables @ 10e8:2d46 head-copy size (Util_MemCopyFar 0x2a12
+ * 64 B local_68) -> boot_unit_font_target_big_len. 1:1 64. */
+int boot_unit_font_target_big_len(void);
+
+/* Orig Text_DrawAlignedList @ 1068:258f dispatcher -> boot_draw_aligned_list.
+ * PARTIAL: OS-free layout probes LIVE via dialog-owned text_aligned_list_x /
+ * row_y / should_stop / needs_unlock + text_wrapped_list_cap (see dialog.h);
+ * SELECTOBJECT/SETBKMODE/GLOBALLOCK/MeasureMenuWidth/TEXTOUT GDI tail STUB ->
+ * CIV_ERR_UNSUPPORTED with TODO Orig. */
+civ_error_t boot_draw_aligned_list(int handle, int mode);
+/* Orig Text_DrawAlignedListFree @ 1068:255a dispatcher ->
+ * boot_draw_aligned_list_free. PARTIAL: OS-free free-gate probe LIVE via
+ * text_aligned_list_needs_unlock (handle != 0); trace + List + GLOBALFREE
+ * tail STUB -> CIV_ERR_UNSUPPORTED with TODO Orig. */
+civ_error_t boot_draw_aligned_list_free(int handle, int mode);
+
 #endif /* CIVLIN_BOOT_H */
