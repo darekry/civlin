@@ -421,13 +421,51 @@ civ_error_t worldgen_customize(void)
 
 civ_error_t worldgen_customize_dialog(void)
 {
-    /* TODO: Orig FUN_1060_xxxx @ 1060:xxxx (WorldGen_CustomizeDialog):
-     * Customize-World editor host. Needs the modal Dlg_CreateTracked @
-     * 1098:124f host (+ Dlg_DestroyTracked @ 1098:1612 teardown) driving
-     * the Ctrl_* @ 1058 controls (RANDOMRADIOPROC @ 1058:06ab,
-     * RANDOMSTATICPROC @ 1058:081a, RANDOMUSERPROC @ 1058:0921,
-     * REGIONPROC @ 1058:09f6; cf. dialog module, not redeclared here to
-     * keep parallel slices disjoint). Win16 USER/GDI modal -> SDL TBD. */
+    /* Orig WorldGen_CustomizeDialog host driving Ctrl_* @ 1058 (civ.exe,
+     * x86:LE:16:Protected Mode; ref unpacked/civ.exe read-only, NE Win3.x
+     * 832512 B: RANDOMRADIOPROC @ 1058:06ab, RANDOMSTATICPROC @ 1058:081a,
+     * RANDOMUSERPROC @ 1058:0921, REGIONPROC @ 1058:09f6 strings present;
+     * classes via Ctrl_RegisterCustomClasses @ 1058:0b4d, owned by the
+     * dialog module -- not redeclared here to keep parallel slices
+     * disjoint, see dialog.h). PARTIAL: OS-free ID->cell/settings gates
+     * below are LIVE 1:1 (BAD_DATA on drift, no fake-OK); Win16 modal pump
+     * stays STUB. OS-free LIVE: dialog ID->cell corners via
+     * worldgen_dialog_id_to_cell (0x323 -> row 0 col 0, 0x323+15 -> row 3
+     * col 3, 0x322 -> RANGE) + settings write via worldgen_custom_apply
+     * (choice col < 3 stores, help col 3 leaves untouched, NULL -> NOENT,
+     * OOR row/col -> RANGE). __far/selector plumbing maps to explicit
+     * out-params (no segment).
+     * TODO: Orig modal host Dlg_CreateTracked @ 1098:124f (+
+     * Dlg_DestroyTracked @ 1098:1612 teardown) + Ctrl_RegisterCustomClasses
+     * @ 1058:0b4d fan-out + PEEKMESSAGE/ISDIALOGMESSAGE pump -> SDL TBD ->
+     * stub CIV_ERR_UNSUPPORTED (no fake-OK). No globals, no exit(). */
+    int row = -1;
+    int col = -1;
+    int settings[4] = { 1, 1, 1, 1 };
+    civ_error_t r;
+
+    r = worldgen_dialog_id_to_cell(0x323, &row, &col);
+    if (r != CIV_OK || row != 0 || col != 0)
+        return CIV_ERR_BAD_DATA;
+    r = worldgen_dialog_id_to_cell(0x323 + 15, &row, &col);
+    if (r != CIV_OK || row != 3 || col != 3)
+        return CIV_ERR_BAD_DATA;
+    if (worldgen_dialog_id_to_cell(0x322, &row, &col) != CIV_ERR_RANGE)
+        return CIV_ERR_BAD_DATA;
+    if (worldgen_dialog_id_to_cell(0x323, NULL, &col) != CIV_ERR_NOENT)
+        return CIV_ERR_BAD_DATA;
+    r = worldgen_custom_apply(settings, 0, 0);
+    if (r != CIV_OK || settings[0] != 0)
+        return CIV_ERR_BAD_DATA;
+    r = worldgen_custom_apply(settings, 1, 3);
+    if (r != CIV_OK || settings[1] != 1)
+        return CIV_ERR_BAD_DATA;
+    if (worldgen_custom_apply(NULL, 0, 0) != CIV_ERR_NOENT)
+        return CIV_ERR_BAD_DATA;
+    if (worldgen_custom_apply(settings, 4, 0) != CIV_ERR_RANGE)
+        return CIV_ERR_BAD_DATA;
+    if (worldgen_custom_apply(settings, 0, 4) != CIV_ERR_RANGE)
+        return CIV_ERR_BAD_DATA;
     return CIV_ERR_UNSUPPORTED;
 }
 

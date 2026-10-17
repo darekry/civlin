@@ -1354,8 +1354,8 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `util_progress` | LIVE |  |  |
 | `debug_print` | LIVE | 1000:19d8, 1000:1a3c, 1000:2c9c, 1000:2e85, 1190:17d0, 1420:4cd0 |  |
 | `debug_print_line` | LIVE | 1000:2cd8, 1000:2e85, 1000:3088, 1000:3722, 1190:17d0, 1420:4cd0 |  |
-| `file_write_buffered` | STUB | 1000:2c9c, 1000:2cba, 1000:2e85, 1000:3fc4, 1420:4cd0 | has TODO |
-| `file_put_char_buffered` | STUB | 1000:2152, 1000:2cd8, 1000:3fc4, 1420:4cd0 | has TODO |
+| `file_write_buffered` | LIVE | 1000:2c9c, 1000:2cba, 1000:2e85, 1000:3fc4, 1420:4cd0 |  |
+| `file_put_char_buffered` | LIVE | 1000:2152, 1000:2cd8, 1000:3fc4 |  |
 | `file_emit_char` | LIVE | 1000:2cba, 1000:2cd8, 1000:2e85 |  |
 | `file_buffered_is_direct` | LIVE | 1000:2152, 1000:2cd8, 1000:2e85, 1420:4cd0 |  |
 | `file_is_text_mode` | LIVE | 1000:1750, 1000:33c0, 1000:3e70, 1000:3fc4 |  |
@@ -1370,7 +1370,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `dos_seek_origin_ok` | LIVE | 1000:151a, 1000:161c |  |
 | `dos_read` | LIVE | 1000:151a, 1000:1566, 1000:1750, 1000:33c0, 1140:019d, 1420:4fc4 |  |
 | `dos_read_is_blocked` | LIVE | 1000:151a, 1000:1566, 1000:1750, 1420:4fc4 |  |
-| `dos_unlink` | STUB | 1000:151a, 1000:19a6 | has TODO |
+| `dos_unlink` | LIVE | 1000:151a, 1000:19a6, 1000:1f5c, 1000:2098 |  |
 | `dos_file_attr` | LIVE | 1000:151a, 1000:1f5c, 1000:2ad9 |  |
 | `dos_file_attr_func_ok` | LIVE | 1000:1f5c, 1000:2ad9 |  |
 | `dos_close` | LIVE | 1000:151a, 1000:1f7c, 1000:1fa6 |  |
@@ -1688,7 +1688,7 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `worldgen_earth_preset_bytes` | LIVE | 10b8:079d |  |
 | `worldgen_copy_preset` | LIVE | 1028:0000, 10b8:0000, 10b8:079d, 1420:20a9 |  |
 | `worldgen_customize` | STUB |  | has TODO |
-| `worldgen_customize_dialog` | STUB | 1058:06ab, 1058:081a, 1058:0921, 1058:09f6, 1058:0b4d, 1098:124f, 1098:1612 | has TODO |
+| `worldgen_customize_dialog` | PARTIAL | 1058:06ab, 1058:081a, 1058:0921, 1058:09f6, 1058:0b4d, 1098:124f, 1098:1612 | has TODO |
 | `worldgen_seed_one_island` | LIVE | 1028:0945 |  |
 | `worldgen_paint_blob` | LIVE | 1028:09ef |  |
 | `worldgen_label_continents` | LIVE | 1028:0a93, 1028:12c6, 1028:1ca7, 1028:1d15 |  |

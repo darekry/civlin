@@ -124,26 +124,37 @@ int debug_print_line(const char *s)
 
 civ_error_t file_write_buffered(const uint8_t *src, size_t len)
 {
-    (void)src;
-    (void)len;
-    /* TODO: Orig FUN_1000_2e85 @ 1000:2e85 (File_WriteBuffered: Borland
-     * buffered fwrite with 0x4e4e fd flags, 1420:4cd0 FILE struct, DOS
-     * write via Dos_Write @ 1000:3fc4 INT 21h, overflow via File_EmitChar @
-     * 1000:2cba). Needs DOS fd table + stream struct. Live twin:
-     * file_write_chunk (fwrite, LIVE) + pure kernel
-     * file_buffered_is_direct (LIVE, no DOS). */
-    return CIV_ERR_UNSUPPORTED;
+    /* Orig FUN_1000_2e85 @ 1000:2e85 (File_WriteBuffered: Borland buffered
+     * fwrite with 0x4e4e fd flags, 1420:4cd0 FILE struct, DOS write via
+     * Dos_Write @ 1000:3fc4 INT 21h, overflow via File_EmitChar @ 1000:2cba;
+     * verified ref unpacked/civ.exe). Linux LIVE via buffered stdio to
+     * stdout (fwrite twin file_write_chunk, LIVE; flag dispatch lives in
+     * file_buffered_is_direct / file_is_text_mode, LIVE, no DOS). Borland
+     * FILE @ 1420:4cd0 + DOS fd table have no Linux equivalent, stdout
+     * buffering is the portable twin. NOENT on NULL src with len > 0
+     * (orig faulted), CIV_OK on full write (len == 0 no-op), IO on
+     * short/error. No globals (stdout only), no exit(). */
+    size_t n;
+
+    if (!src)
+        return (len > 0) ? CIV_ERR_NOENT : CIV_OK;
+    if (len == 0)
+        return CIV_OK;
+    n = fwrite(src, 1, len, stdout);
+    return (n == len) ? CIV_OK : CIV_ERR_IO;
 }
 
 civ_error_t file_put_char_buffered(int c)
 {
-    (void)c;
-    /* TODO: Orig FUN_1000_2cd8 @ 1000:2cd8 (File_PutCharBuffered: flag
-     * 8/0x90/0x200 dispatch, flush via File_Flush @ 1000:2152, DOS via
-     * Dos_Write @ 1000:3fc4). Needs 1420:4cd0 stream + DOS. Live twin:
-     * file_write_chunk single byte (fwrite, LIVE); pure kernels
-     * file_buffered_is_direct / file_is_text_mode (LIVE, no DOS). */
-    return CIV_ERR_UNSUPPORTED;
+    /* Orig FUN_1000_2cd8 @ 1000:2cd8 (File_PutCharBuffered: flag 8/0x90/
+     * 0x200 dispatch, \n 0x0a / \r 0x0d handling, flush via File_Flush @
+     * 1000:2152, DOS via Dos_Write @ 1000:3fc4; verified ref
+     * unpacked/civ.exe). Linux LIVE via buffered stdio to stdout (fputc;
+     * flag dispatch lives in file_buffered_is_direct / file_is_text_mode,
+     * flush is libc buffering). CIV_OK on success, IO on EOF/error.
+     * No globals (stdout only), no exit(). Live twin: file_write_chunk
+     * single byte. */
+    return (fputc(c, stdout) == EOF) ? CIV_ERR_IO : CIV_OK;
 }
 
 civ_error_t file_emit_char(char c)
@@ -360,13 +371,18 @@ int dos_read_is_blocked(unsigned flags)
 civ_error_t dos_unlink(const char *path)
 {
     /* Orig FUN_1000_19a6 @ 1000:19a6 (Dos_Unlink: INT 21h AH=0x41,
-     * DS:DX=path). Linux LIVE via remove (unlink twin). No globals. */
+     * DS:DX=path; CF=1 -> Dos_MapError @ 1000:151a, else 0; verified ref
+     * unpacked/civ.exe). Linux LIVE via remove (unlink twin, same
+     * File_CloseEntry @ 1000:2098 tmp-unlink tail shape as dos_file_attr
+     * @ 1000:1f5c stat/chmod above). NULL path -> NOENT (orig faulted);
+     * empty path falls through to remove -> ENOENT -> NOENT via mapping.
+     * CIV_OK on deletion, else dos_map_error(errno) staging (ENOENT ->
+     * NOENT, ENOMEM -> NOMEM, else IO). No globals, no exit(). */
     if (!path)
         return CIV_ERR_NOENT;
-    /* TODO: Orig FUN_1000_19a6 @ 1000:19a6 (Dos_Unlink: INT 21h AH=0x41,
-     * DS:DX=path). No live twin at this layer (Linux twin would be
-     * unlink(); callers use the save_file_* POSIX path instead). */
-    return CIV_ERR_UNSUPPORTED;
+    if (remove(path) == 0)
+        return CIV_OK;
+    { int e = errno; (void)dos_map_error(e); return dos_error_from_errno(e); }
 }
 
 civ_error_t dos_file_attr(const char *path, int func, int attrs)
