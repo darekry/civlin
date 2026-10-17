@@ -1459,8 +1459,13 @@ int text_pascal_len(const char *s);
 int text_font_slot_for_id(int id);
 int text_font_height_for_id(int id);
 
-/* Orig Text_* @ 10d8 GDI ogony -> STUBs (TEXTOUT/MOVETO/SELECTOBJECT +
- * SETBKMODE + Text_SetColor @ 1098:0e0b -> SDL_ttf TBD). NULL text -> NOENT. */
+/* Orig Text_* @ 10d8 GDI ogony -> PARTIAL dispatchers (OS-free Pascal/
+ * measure/scale/center/shadow/color guards LIVE via text_pascal_len/
+ * text_pascal_payload/text_measure_scaled/text_centered_x/text_shadow_*
+ * /text_resolve_color/text_dispatch_font; TEXTOUT/MOVETO/SELECTOBJECT/
+ * CLIP + SETBKMODE + Text_SetColor @ 1098:0e0b tails STUB ->
+ * CIV_ERR_UNSUPPORTED with TODO Orig in dialog.c, SDL_ttf TBD).
+ * NULL text -> NOENT. */
 civ_error_t text_draw_shadowed(const char *text, int x, int y, int color,
                                int shadow);
 civ_error_t text_draw_at(const char *text, int x, int y, int color);

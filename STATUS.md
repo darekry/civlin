@@ -217,6 +217,9 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `boot_unit_font_icon_len` | LIVE |  |  |
 | `boot_unit_font_needs_alt` | LIVE |  |  |
 | `boot_unit_font_best_pick` | LIVE | 10e8:2cc1 |  |
+| `boot_unit_font_palette_bytes` | LIVE | 10e8:2cc1, 10e8:2d46 |  |
+| `boot_unit_font_palette_lock_ok` | LIVE | 10e8:2cc1 |  |
+| `boot_unit_font_replace_color` | LIVE | 1098:0157, 10e8:2d46, 11a8:022f |  |
 | `text_draw_shadowed_centered` | PARTIAL | 10d8:02df, 10d8:046e, 10d8:0495, 10d8:05b8, 11e8:0b40 | has TODO |
 | `text_measure_width` | LIVE | 10d8:05b8, 1100:0000, 1100:00a1 |  |
 | `text_draw_pascal_at_origin` | STUB | 10d8:002d, 10d8:00e0, 1100:0000, 1100:0053, 1100:017b | has TODO |
@@ -381,11 +384,11 @@ Ekran main menu = `dialog_menuz` (STUB) + `dlg_create_tracked` (STUB) nad
 | `text_pack_pascal` | LIVE | 1100:0000, 1100:0053, 11f8:00fc, 11f8:014a |  |
 | `text_pascal_payload` | LIVE | 1100:0000, 1100:00a1 |  |
 | `text_draw_shadowed` | PARTIAL | 1098:0e0b, 10d8:02df, 11e8:0b40, 1220:0f2f | has TODO |
-| `text_draw_at` | STUB | 1098:0e0b, 10d8:01fa | has TODO |
-| `text_draw_clipped` | STUB | 10d8:00e0, 10d8:01b0 | has TODO |
-| `text_draw_direct` | STUB | 10d8:00e0, 1100:0000, 1100:017b | has TODO |
-| `text_draw_centered` | STUB | 10d8:0528, 10d8:05b8 | has TODO |
-| `text_draw_header_centered` | STUB | 10d8:046e, 10d8:0495 | has TODO |
+| `text_draw_at` | PARTIAL | 1098:0e0b, 10d8:01fa, 10d8:02df, 11e8:0b40, 1220:0f2f | has TODO |
+| `text_draw_clipped` | PARTIAL | 10d8:00e0, 10d8:01b0, 11e8:0b40, 1220:0f2f | has TODO |
+| `text_draw_direct` | PARTIAL | 1000:36b2, 1098:0e0b, 10d8:00e0, 1100:0000, 1100:017b | has TODO |
+| `text_draw_centered` | PARTIAL | 10d8:01b0, 10d8:0528, 10d8:05b8, 1100:0000, 1100:00a1 | has TODO |
+| `text_draw_header_centered` | PARTIAL | 10d8:046e, 10d8:0495, 10d8:05b8, 11e8:0b40 | has TODO |
 | `text_select_font` | PARTIAL | 1008:0e12, 1098:0186, 1098:0194, 1100:0a33, 11e8:0b40, 11e8:0cb0 | has TODO |
 | `text_font_pre_apply` | NOOP | 1098:0186, 11e8:0cb0 |  |
 | `text_font_post_apply` | NOOP | 1098:0194, 11e8:0d0e |  |

@@ -1452,6 +1452,12 @@ int boot_unit_font_icon_len(void);
 int boot_unit_font_needs_alt(int convert_17a8);
 /* Orig same best-match core (Gfx_CalcColorDistSq @ 10e8:2cc1 min over 0x40) -> boot_unit_font_best_pick. 1:1 index of min dist (first wins ties, like orig keeping < only); pal is 64x3 borrowed bytes, target is 3 B. NULL either -> -1; n <= 0 -> -1. No Win16. */
 int boot_unit_font_best_pick(const uint8_t *pal, int n, const uint8_t target[3]);
+/* Orig Init_UnitFontTables @ 10e8:2d46 GLOBALLOCK DAT_1420_b388 size side -> boot_unit_font_palette_bytes. 1:1 0x40 entries x 3 B (RGB triples behind the lock; ref unpacked/civ.exe read-only NE Win3.x 832512 B, strings FIRSTMOVE @ 0xbb5fc / PILLAGE @ 0xbb606). No Win16 handle here, just the byte span. */
+int boot_unit_font_palette_bytes(void);
+/* Orig same GLOBALLOCK DAT_1420_b388 success shape -> boot_unit_font_palette_lock_ok. 1:1 lock-ok = pal != NULL && len >= 0x40*3 (the 0x40 RGB triples the 8+8+16 best-match loops scan via Gfx_CalcColorDistSq @ 10e8:2cc1); 0 otherwise (NULL/short = failed lock). No Win16, no globals. */
+int boot_unit_font_palette_lock_ok(const uint8_t *pal, size_t len);
+/* Orig Gfx_ReplaceIconColor @ 11a8:022f scan half (caller Init_UnitFontTables @ 10e8:2d46 8x28 + Sys_Yield @ 1098:0157) -> boot_unit_font_replace_color. 1:1 w*h byte scan old -> new on an explicit caller buffer (icon bytes are palette indices, no BITBLT/GLOBALLOCK handle here): NULL px -> NOENT; n == 0 -> CIV_OK (empty scan); else replaces every old_c with new_c (including old == new no-op) -> CIV_OK. No Win16, no globals, read-only except px. GDI handle/selector tail stays STUB in boot_init_unit_font_tables with TODO Orig there. */
+civ_error_t boot_unit_font_replace_color(uint8_t *px, size_t n, uint8_t old_c, uint8_t new_c);
 
 /* Orig Text_DrawShadowedCentered @ 10d8:0495 dispatcher -> text_draw_shadowed_centered. PARTIAL: OS-free centered_x (x-w/2 via text_centered_x) + shadow_pos (via text_shadow_pos) + measure scale (via text_measure_scaled) probes LIVE; SELECTOBJECT/DispatchFont/TEXTOUT GDI tail STUB -> CIV_ERR_UNSUPPORTED with TODO Orig. NULL text -> NOENT. */
 civ_error_t text_draw_shadowed_centered(const char *text, int x, int y, int color, int shadow);

@@ -164,23 +164,25 @@ civ_error_t boot_init_unit_font_tables(void)
 {
     /* Orig: FUN_10e8_2d46 @ 10e8:2d46 -> Init_UnitFontTables (decompiled
      * 2026-10-16, ref unpacked/civ.exe read-only NE Win3.x 832512 B,
-     * strings FIRSTMOVE/PILLAGE). Sibling of NewGame_Wizard @ 10e8:0000:
-     * Util_MemCopyFar 0x2a02 (6 B local_28) + 0x2a12 (64 B local_68) +
-     * GLOBALLOCK DAT_1420_b388 palette, then 8x FIRSTMOVE (idx 0..7) + 8x
-     * PILLAGE (idx 2..9) best-match loops over 0x40 entries via
-     * Gfx_CalcColorDistSq @ 10e8:2cc1 (LIVE in video.h/video.c: RGB
-     * squared distance) keeping the min, then the same 16 B key-remap
-     * as Game_InitGlobalTables @ 11e8:0337 (see boot_key_remap_value),
-     * then 16x font-map best-match when DAT_1420_17a8 == 0 else fixed
-     * 16 B (ff,fb,f9,1,5,4,fc,6,fa,2,3,fb,7,f8,f8,0), then 8x28 icon
-     * recolor via Gfx_ReplaceIconColor @ 11a8:022f + Sys_Yield @
-     * 1098:0157. PARTIAL dispatcher: OS-free counts/branch/fixed-images/
-     * best-pick probes below are LIVE 1:1 (no far, no GLOBALLOCK); far-ptr
-     * + GLOBALLOCK + GDI recolor tails stay STUB -> CIV_ERR_UNSUPPORTED.
+     * strings FIRSTMOVE @ 0xbb5fc / PILLAGE @ 0xbb606). Sibling of
+     * NewGame_Wizard @ 10e8:0000: Util_MemCopyFar 0x2a02 (6 B local_28) +
+     * 0x2a12 (64 B local_68) + GLOBALLOCK DAT_1420_b388 palette, then 8x
+     * FIRSTMOVE (idx 0..7) + 8x PILLAGE (idx 2..9) best-match loops over
+     * 0x40 entries via Gfx_CalcColorDistSq @ 10e8:2cc1 (LIVE in
+     * video.h/video.c: RGB squared distance) keeping the min, then the
+     * same 16 B key-remap as Game_InitGlobalTables @ 11e8:0337 (see
+     * boot_key_remap_value), then 16x font-map best-match when
+     * DAT_1420_17a8 == 0 else fixed 16 B (ff,fb,f9,1,5,4,fc,6,fa,2,3,fb,
+     * 7,f8,f8,0), then 8x28 icon recolor via Gfx_ReplaceIconColor @
+     * 11a8:022f + Sys_Yield @ 1098:0157. PARTIAL dispatcher: OS-free
+     * counts/branch/fixed-images/best-pick/lock-ok/replace-scan probes
+     * below are LIVE 1:1 (no far, no handle); far-ptr + GLOBALLOCK handle
+     * + GDI device recolor tails stay STUB -> CIV_ERR_UNSUPPORTED.
      * Read-only; no globals; no exit().
      * TODO: Orig FUN_10e8_2d46 @ 10e8:2d46 (0x2a02/0x2a12 target-table
-     * bytes + b388 palette carve + icon-recolor SDL bridge via
-     * Gfx_ReplaceIconColor @ 11a8:022f). */
+     * bytes + b388 palette handle carve via GLOBALLOCK @ 1608:000c +
+     * icon-recolor GDI bridge via Gfx_ReplaceIconColor @ 11a8:022f +
+     * Sys_Yield @ 1098:0157 pump). */
     int i;
     uint8_t probe_pal[64][3];
     uint8_t probe_tgt[3];
@@ -232,6 +234,32 @@ civ_error_t boot_init_unit_font_tables(void)
     probe_best = boot_unit_font_best_pick(&probe_pal[0][0], 64, probe_tgt);
     if (probe_best != 0)
         return CIV_ERR_BAD_DATA;
+    /* Tail halves (LIVE OS-free 1:1, ref unpacked/civ.exe read-only NE
+     * Win3.x 832512 B, strings FIRSTMOVE @ 0xbb5fc / PILLAGE @ 0xbb606):
+     * GLOBALLOCK DAT_1420_b388 lock-ok shape + Gfx_ReplaceIconColor @
+     * 11a8:022f 8x28 scan shape. Fail = BAD_DATA so a drift is loud.
+     * Win16 handle/selector + GDI device tails stay STUB below. */
+    if (boot_unit_font_palette_bytes() != 0x40 * 3)
+        return CIV_ERR_BAD_DATA;
+    if (boot_unit_font_palette_lock_ok(&probe_pal[0][0],
+                                       sizeof(probe_pal)) != 1)
+        return CIV_ERR_BAD_DATA;
+    if (boot_unit_font_palette_lock_ok(NULL, sizeof(probe_pal)) != 0)
+        return CIV_ERR_BAD_DATA;
+    {
+        uint8_t icon[28];
+        civ_error_t rc;
+
+        for (i = 0; i < 28; i++)
+            icon[i] = 0xAAu;
+        rc = boot_unit_font_replace_color(icon, sizeof(icon), 0xAAu, 0xBBu);
+        if (rc != CIV_OK)
+            return CIV_ERR_BAD_DATA;
+        for (i = 0; i < 28; i++) {
+            if (icon[i] != 0xBBu)
+                return CIV_ERR_BAD_DATA;
+        }
+    }
     return CIV_ERR_UNSUPPORTED;
 }
 
@@ -2157,6 +2185,49 @@ int boot_unit_font_best_pick(const uint8_t *pal, int n, const uint8_t target[3])
         }
     }
     return best;
+}
+
+int boot_unit_font_palette_bytes(void)
+{
+    /* Orig Init_UnitFontTables @ 10e8:2d46 GLOBALLOCK DAT_1420_b388 size
+     * side (ref unpacked/civ.exe read-only NE Win3.x 832512 B, strings
+     * FIRSTMOVE @ 0xbb5fc / PILLAGE @ 0xbb606): the 8+8+16 best-match
+     * loops scan 0x40 RGB triples via Gfx_CalcColorDistSq @ 10e8:2cc1,
+     * so the lock must expose 0x40*3 bytes. No Win16 handle here. */
+    return 0x40 * 3;
+}
+
+int boot_unit_font_palette_lock_ok(const uint8_t *pal, size_t len)
+{
+    /* Orig same GLOBALLOCK DAT_1420_b388 success shape (handle lock gives
+     * the 0x40 RGB triples; orig then keeps the strict min per pick).
+     * 1:1 lock-ok = non-NULL view holding the full span (short/NULL =
+     * failed lock, 0). No Win16, no globals. */
+    if (!pal)
+        return 0;
+    if (len < (size_t)(0x40 * 3))
+        return 0;
+    return 1;
+}
+
+civ_error_t boot_unit_font_replace_color(uint8_t *px, size_t n, uint8_t old_c,
+                                         uint8_t new_c)
+{
+    /* Orig Gfx_ReplaceIconColor @ 11a8:022f scan half (caller
+     * Init_UnitFontTables @ 10e8:2d46 8x28 + Sys_Yield @ 1098:0157; icon
+     * bytes are palette indices, ref unpacked/civ.exe read-only). 1:1
+     * w*h byte scan old -> new on the explicit caller buffer (orig
+     * pointer pair + length; Sys_Yield pump stays caller-side STUB).
+     * No Win16, no globals. */
+    size_t i;
+
+    if (!px)
+        return CIV_ERR_NOENT;
+    for (i = 0; i < n; i++) {
+        if (px[i] == old_c)
+            px[i] = new_c;
+    }
+    return CIV_OK;
 }
 
 civ_error_t text_draw_shadowed_centered(const char *text, int x, int y,

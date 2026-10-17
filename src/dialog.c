@@ -3206,63 +3206,237 @@ civ_error_t text_draw_shadowed(const char *text, int x, int y, int color,
 
 civ_error_t text_draw_at(const char *text, int x, int y, int color)
 {
-    (void)x;
-    (void)y;
-    (void)color;
-    /* TODO: Orig Text_DrawAt @ 10d8:01fa (wrapper DrawShadowed(...,0)) ->
-     * same SDL_ttf tail as text_draw_shadowed. */
+    /* Orig Text_DrawAt @ 10d8:01fa dispatcher (thin wrapper
+     * Text_DrawShadowed @ 10d8:02df with shadow 0: GfxPort_SelectForCoords
+     * @ 1220:0f2f + DispatchFont @ 11e8:0b40 + SELECTOBJECT + GETTEXTMETRICS
+     * + SETBKMODE(1) + Text_SetColor @ 1098:0e0b + TEXTOUT main only).
+     * PARTIAL: OS-free Pascal/shadow/color guards below are LIVE 1:1 (no
+     * Win16, no globals, read-only); the TEXTOUT tail stays STUB.
+     * Refs verified read-only 1:1 vs unpacked/civ.exe (NE LE, 832512 B,
+     * no copy): Orig 10d8:01fa wrapper shape (shadow 0) + 10d8:02df shadow
+     * (x+dx,y+1) + PackPascal @ 1100:0000 len half via text_pascal_len. */
+    int plen;
+    int dx0;
+    int dx1;
+    int sx;
+    int sy;
+    civ_error_t rcp;
+    int cres;
+    int cmono;
+
     if (!text)
         return CIV_ERR_NOENT;
+    plen = text_pascal_len(text);
+    if (plen < 0)
+        return CIV_ERR_BAD_DATA;
+    if (text_shadowed_needs_shadow(0, 0) != 0)
+        return CIV_ERR_BAD_DATA;
+    if (text_shadowed_needs_shadow(1, 1) != 0)
+        return CIV_ERR_BAD_DATA;
+    dx0 = text_shadow_offset(0x11);
+    dx1 = text_shadow_offset(0x12);
+    if (dx0 != 0 || dx1 != 1)
+        return CIV_ERR_BAD_DATA;
+    rcp = text_shadow_pos(x, y, 0x12, &sx, &sy);
+    if (rcp != CIV_OK || sx != x + 1 || sy != y + 1)
+        return CIV_ERR_BAD_DATA;
+    cres = text_resolve_color(0, color, 7);
+    cmono = text_resolve_color(1, color, 7);
+    if (cres != color || cmono != 7)
+        return CIV_ERR_BAD_DATA;
+    if (text_measure_scaled(16) != 10)
+        return CIV_ERR_BAD_DATA;
+    /* TODO: Orig Text_DrawAt @ 10d8:01fa TEXTOUT tail (same SDL_ttf tail
+     * as Text_DrawShadowed @ 10d8:02df with shadow 0: SELECTOBJECT font
+     * via Text_DispatchFontHandler @ 11e8:0b40 + SETBKMODE(1) +
+     * Text_SetColor @ 1098:0e0b + TEXTOUT at (x,y)) -> SDL_ttf bridge TBD
+     * (never fake CIV_OK here). */
     return CIV_ERR_UNSUPPORTED;
 }
 
 civ_error_t text_draw_clipped(const char *text, int x, int y, int color)
 {
-    (void)x;
-    (void)y;
-    (void)color;
-    /* TODO: Orig Text_DrawClipped @ 10d8:01b0 (SelectForCoords +
-     * DispatchFont + DrawDirect @ 10d8:00e0) -> SDL_ttf TBD. */
+    /* Orig Text_DrawClipped @ 10d8:01b0 dispatcher (GfxPort_SelectForCoords
+     * @ 1220:0f2f + Text_DispatchFontHandler @ 11e8:0b40 + Text_DrawDirect
+     * @ 10d8:00e0 MOVETO/emit path).
+     * PARTIAL: OS-free Pascal/font/color guards below are LIVE 1:1 (no
+     * Win16, no globals, read-only); the CLIP + TEXTOUT tail stays STUB.
+     * Refs verified read-only 1:1 vs unpacked/civ.exe (NE LE, 832512 B,
+     * no copy): Orig 10d8:01b0 clip wrapper + 10d8:00e0 emit (PackPascal @
+     * 1100:0000 + DrawPascalAtOrigin @ 1100:017b). */
+    int plen;
+    int slot = 0;
+    int fh = 0;
+    civ_error_t drc;
+    int cres;
+    int cmono;
+
     if (!text)
         return CIV_ERR_NOENT;
+    plen = text_pascal_len(text);
+    if (plen < 0)
+        return CIV_ERR_BAD_DATA;
+    drc = text_dispatch_font(1, &slot, &fh);
+    if (drc != CIV_OK || slot < 0 || fh <= 0)
+        return CIV_ERR_BAD_DATA;
+    if (text_font_slot_for_id(1) != slot)
+        return CIV_ERR_BAD_DATA;
+    cres = text_resolve_color(0, color, 7);
+    cmono = text_resolve_color(1, color, 7);
+    if (cres != color || cmono != 7)
+        return CIV_ERR_BAD_DATA;
+    if (text_measure_scaled(16) != 10)
+        return CIV_ERR_BAD_DATA;
+    (void)x;
+    (void)y;
+    /* TODO: Orig Text_DrawClipped @ 10d8:01b0 CLIP + TEXTOUT tail
+     * (GfxPort_SelectForCoords @ 1220:0f2f clip select + SELECTOBJECT font
+     * + Text_DrawDirect @ 10d8:00e0 emit via Text_PackPascal @ 1100:0000 +
+     * Text_DrawPascalAtOrigin @ 1100:017b SETBKMODE(1)/SETTEXTALIGN(1) +
+     * TEXTOUT) -> SDL_ttf + clip-rect bridge TBD (never fake CIV_OK). */
     return CIV_ERR_UNSUPPORTED;
 }
 
 civ_error_t text_draw_direct(const char *text, int x, int y, int color)
 {
-    (void)x;
-    (void)y;
-    (void)color;
-    /* TODO: Orig Text_DrawDirect @ 10d8:00e0 (Text_SetColor + SELECTOBJECT
-     * + MOVETO + PackPascal @ 1100:0000 + DrawPascalAtOrigin @ 1100:017b)
-     * -> SDL_ttf TBD. */
+    /* Orig Text_DrawDirect @ 10d8:00e0 dispatcher (Text_SetColor @
+     * 1098:0e0b + SELECTOBJECT font + MOVETO + Util_StrCopy @ 1000:36b2 +
+     * Text_PackPascal @ 1100:0000 + Text_DrawPascalAtOrigin @ 1100:017b).
+     * PARTIAL: OS-free Pascal/color/scale guards below are LIVE 1:1 (no
+     * Win16, no globals, read-only except the stack probe); the MOVETO +
+     * TEXTOUT emit tail stays STUB.
+     * Refs verified read-only 1:1 vs unpacked/civ.exe (NE LE, 832512 B,
+     * no copy): Orig 10d8:00e0 emit shape + PackPascal len half (buf[0] =
+     * len, cap 255) + MeasurePascal framing (len = buf[0]) + (w*10)/0x10
+     * scale. */
+    int plen;
+    int cres;
+    int cmono;
+    int scaled;
+    char probe[2];
+    size_t pay = 0u;
+    civ_error_t prc;
+    int slot = 0;
+    int fh = 0;
+    civ_error_t drc;
+
     if (!text)
         return CIV_ERR_NOENT;
+    plen = text_pascal_len(text);
+    if (plen < 0)
+        return CIV_ERR_BAD_DATA;
+    cres = text_resolve_color(0, color, 7);
+    cmono = text_resolve_color(1, color, 7);
+    if (cres != color || cmono != 7)
+        return CIV_ERR_BAD_DATA;
+    scaled = text_measure_scaled(16);
+    if (scaled != 10)
+        return CIV_ERR_BAD_DATA;
+    probe[0] = (char)1;
+    probe[1] = 'A';
+    prc = text_pascal_payload(probe, sizeof probe, &pay);
+    if (prc != CIV_OK || pay != (size_t)1u)
+        return CIV_ERR_BAD_DATA;
+    drc = text_dispatch_font(1, &slot, &fh);
+    if (drc != CIV_OK || slot < 0 || fh <= 0)
+        return CIV_ERR_BAD_DATA;
+    (void)x;
+    (void)y;
+    /* TODO: Orig Text_DrawDirect @ 10d8:00e0 MOVETO + TEXTOUT tail
+     * (Text_SetColor @ 1098:0e0b + SELECTOBJECT font via
+     * Text_DispatchFontHandler @ 11e8:0b40 + MOVETO + Text_PackPascal @
+     * 1100:0000 + Text_DrawPascalAtOrigin @ 1100:017b SETBKMODE(1)/
+     * SETTEXTALIGN(1) + TEXTOUT at 0,0 + restore) -> SDL_ttf bridge TBD
+     * (never fake CIV_OK here). */
     return CIV_ERR_UNSUPPORTED;
 }
 
 civ_error_t text_draw_centered(const char *text, int x, int y, int color)
 {
-    (void)x;
-    (void)y;
-    (void)color;
-    /* TODO: Orig Text_DrawCentered @ 10d8:0528 (MeasureWidth @ 10d8:05b8 +
-     * x-w/2 via text_centered_x + DrawClipped) -> SDL_ttf TBD. */
+    /* Orig Text_DrawCentered @ 10d8:0528 dispatcher (Text_MeasureWidth @
+     * 10d8:05b8 Util_StrCopy + PackPascal @ 1100:0000 + MeasurePascal @
+     * 1100:00a1 + (w*10)/0x10 + x-w/2 via text_centered_x +
+     * Text_DrawClipped @ 10d8:01b0).
+     * PARTIAL: OS-free Pascal/measure/center guards below are LIVE 1:1
+     * (no Win16, no globals, read-only); the CLIP + TEXTOUT tail stays
+     * STUB.
+     * Refs verified read-only 1:1 vs unpacked/civ.exe (NE LE, 832512 B,
+     * no copy): Orig 10d8:0528 measure + x-w/2 + clipped shape. */
+    int plen;
+    int cx;
+    int cx0;
+    int cres;
+    int cmono;
+
     if (!text)
         return CIV_ERR_NOENT;
+    plen = text_pascal_len(text);
+    if (plen < 0)
+        return CIV_ERR_BAD_DATA;
+    cx = text_centered_x(x, 16);
+    if (cx != x - 8)
+        return CIV_ERR_BAD_DATA;
+    cx0 = text_centered_x(x, 0);
+    if (cx0 != x)
+        return CIV_ERR_BAD_DATA;
+    if (text_measure_scaled(16) != 10)
+        return CIV_ERR_BAD_DATA;
+    cres = text_resolve_color(0, color, 7);
+    cmono = text_resolve_color(1, color, 7);
+    if (cres != color || cmono != 7)
+        return CIV_ERR_BAD_DATA;
+    (void)y;
+    /* TODO: Orig Text_DrawCentered @ 10d8:0528 CLIP + TEXTOUT tail
+     * (Text_MeasureWidth @ 10d8:05b8 GETTEXTEXTENT width + x-w/2 +
+     * Text_DrawClipped @ 10d8:01b0 SelectForCoords/DispatchFont/Direct
+     * emit) -> SDL_ttf + clip-rect bridge TBD (never fake CIV_OK). */
     return CIV_ERR_UNSUPPORTED;
 }
 
 civ_error_t text_draw_header_centered(const char *text, int x, int y,
                                       int color)
 {
-    (void)x;
-    (void)y;
-    (void)color;
-    /* TODO: Orig Text_DrawHeaderCentered @ 10d8:046e (wrapper
-     * DrawShadowedCentered @ 10d8:0495(...,0), tytuł 0xa0,2) -> SDL_ttf. */
+    /* Orig Text_DrawHeaderCentered @ 10d8:046e dispatcher (wrapper
+     * Text_DrawShadowedCentered @ 10d8:0495 with shadow 0: DispatchFont @
+     * 11e8:0b40 + MeasureWidth @ 10d8:05b8 + x-w/2 + DrawShadowed; title
+     * 0xa0,2 shape).
+     * PARTIAL: OS-free Pascal/center/shadow guards below are LIVE 1:1 (no
+     * Win16, no globals, read-only); the shadow + TEXTOUT tail stays STUB.
+     * Refs verified read-only 1:1 vs unpacked/civ.exe (NE LE, 832512 B,
+     * no copy): Orig 10d8:046e/0495 centered-shadow shape. */
+    int plen;
+    int cx;
+    int sx;
+    int sy;
+    civ_error_t rcp;
+    int cres;
+    int cmono;
+
     if (!text)
         return CIV_ERR_NOENT;
+    plen = text_pascal_len(text);
+    if (plen < 0)
+        return CIV_ERR_BAD_DATA;
+    cx = text_centered_x(x, 16);
+    if (cx != x - 8)
+        return CIV_ERR_BAD_DATA;
+    rcp = text_shadow_pos(cx, y, 0x12, &sx, &sy);
+    if (rcp != CIV_OK || sx != cx + 1 || sy != y + 1)
+        return CIV_ERR_BAD_DATA;
+    if (text_shadow_offset(0x11) != 0 || text_shadow_offset(0x12) != 1)
+        return CIV_ERR_BAD_DATA;
+    if (text_shadowed_needs_shadow(0, 0) != 0)
+        return CIV_ERR_BAD_DATA;
+    cres = text_resolve_color(0, color, 7);
+    cmono = text_resolve_color(1, color, 7);
+    if (cres != color || cmono != 7)
+        return CIV_ERR_BAD_DATA;
+    if (text_measure_scaled(16) != 10)
+        return CIV_ERR_BAD_DATA;
+    /* TODO: Orig Text_DrawHeaderCentered @ 10d8:046e shadow + TEXTOUT tail
+     * (Text_DrawShadowedCentered @ 10d8:0495 DispatchFont + MeasureWidth +
+     * x-w/2 + Text_DrawShadowed @ 10d8:02df shadow TEXTOUT at (x+dx,y+1)
+     * + main TEXTOUT at (x,y)) -> SDL_ttf bridge TBD (never fake CIV_OK). */
     return CIV_ERR_UNSUPPORTED;
 }
 
